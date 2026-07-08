@@ -14,4 +14,11 @@ public class UserAnimeEntryRepository(AnimeTrackerDbContext db) : IUserAnimeEntr
         db.UserAnimeEntries.AsNoTracking()
             .Include(e => e.Anime)
             .ToListAsync(ct);
+
+    public async Task<(int PendingCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default)
+    {
+        var pendingCount = await db.UserAnimeEntries.AsNoTracking().CountAsync(e => e.PendingSync, ct);
+        var lastSyncedAt = await db.UserAnimeEntries.AsNoTracking().MaxAsync(e => (DateTimeOffset?)e.LastSyncedAt, ct);
+        return (pendingCount, lastSyncedAt);
+    }
 }

@@ -83,7 +83,16 @@ public class ReconciliationService(
             .OrderByDescending(d => d.ComputedAt)
             .FirstOrDefaultAsync(ct);
 
-        return diff is null ? null : ToDto(diff);
+        if (diff is null)
+            return null;
+
+        var animeIds = diff.Entries.Select(e => e.AnimeId).ToList();
+        var titles = await db.AnimeMetadata.AsNoTracking()
+            .Where(a => animeIds.Contains(a.Id))
+            .Select(a => new { a.Id, a.Title, a.PictureUrl })
+            .ToDictionaryAsync(a => a.Id, ct);
+
+        return ToDto(diff, titles.ToDictionary(kv => kv.Key, kv => (kv.Value.Title, kv.Value.PictureUrl)));
     }
 
     public async Task<bool> AcceptPendingDiffAsync(CancellationToken ct = default)
@@ -144,10 +153,15 @@ public class ReconciliationService(
         RewatchCount = remote.RewatchCount,
     };
 
-    private static PendingReconciliationDiffDto ToDto(PendingReconciliationDiff diff) => new(
+    private static PendingReconciliationDiffDto ToDto(
+        PendingReconciliationDiff diff, IReadOnlyDictionary<int, (string Title, string? PictureUrl)> titles) => new(
         diff.Id,
         diff.ComputedAt,
-        diff.Entries.Select(e => new PendingReconciliationDiffEntryDto(
-            e.AnimeId, e.ChangeType.ToString(), e.Status.ToString(), e.EpisodesWatched, e.MyScore, e.StartedAt, e.CompletedAt, e.RewatchCount))
-            .ToList());
+        diff.Entries.Select(e =>
+        {
+            var (title, pictureUrl) = titles.TryGetValue(e.AnimeId, out var found) ? found : (e.AnimeId.ToString(), null);
+            return new PendingReconciliationDiffEntryDto(
+                e.AnimeId, title, pictureUrl, e.ChangeType.ToString(), e.Status.ToString(),
+                e.EpisodesWatched, e.MyScore, e.StartedAt, e.CompletedAt, e.RewatchCount);
+        }).ToList());
 }

@@ -6,8 +6,11 @@ import type {
   MainDashboardDto,
   MalAuthStatus,
   MyListItemDto,
+  PendingReconciliationDiffDto,
   ProfileDto,
+  ReconciliationResultDto,
   SeasonPageDto,
+  SyncStatusDto,
   TopAnimeItemDto,
   UserAnimeEntryDto,
   UserAnimeEntryEditRequest,
@@ -94,4 +97,39 @@ export function getAnimeDetail(animeId: number): Promise<AnimeDetailDto> {
 
 export function refreshAnime(animeId: number): Promise<void> {
   return fetchVoid(`/api/anime/${animeId}/refresh`, { method: 'POST' })
+}
+
+export function getSyncStatus(): Promise<SyncStatusDto> {
+  return fetchJson<SyncStatusDto>('/api/sync/status')
+}
+
+export function syncNow(): Promise<{ pushed: number }> {
+  return fetchJson<{ pushed: number }>('/api/sync/now', { method: 'POST' })
+}
+
+export function runReconciliation(): Promise<ReconciliationResultDto> {
+  return fetchJson<ReconciliationResultDto>('/api/sync/reconcile', { method: 'POST' })
+}
+
+// 204 (no pending diff) resolves to null rather than throwing.
+export async function getPendingReconciliationDiff(): Promise<PendingReconciliationDiffDto | null> {
+  const res = await fetch('/api/sync/reconcile/pending')
+  if (res.status === 204) return null
+  if (!res.ok) throw new Error(`/api/sync/reconcile/pending responded with ${res.status}`)
+  return res.json() as Promise<PendingReconciliationDiffDto>
+}
+
+// 404 (nothing pending to accept/cancel) resolves to false rather than throwing.
+export async function acceptReconciliationDiff(): Promise<boolean> {
+  const res = await fetch('/api/sync/reconcile/accept', { method: 'POST' })
+  if (res.status === 404) return false
+  if (!res.ok) throw new Error(`/api/sync/reconcile/accept responded with ${res.status}`)
+  return true
+}
+
+export async function cancelReconciliationDiff(): Promise<boolean> {
+  const res = await fetch('/api/sync/reconcile/cancel', { method: 'POST' })
+  if (res.status === 404) return false
+  if (!res.ok) throw new Error(`/api/sync/reconcile/cancel responded with ${res.status}`)
+  return true
 }

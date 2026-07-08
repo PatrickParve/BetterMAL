@@ -141,11 +141,11 @@ Verified end-to-end in a real browser (docker-composed backend/postgres + a loca
 
 ## 17. Settings / utility page
 
-- [ ] 17.1 Show sync status: pending entries, last successful sync time, failed/retrying entries
-- [ ] 17.2 Add manual "resync now" and full-reconciliation triggers
-- [ ] 17.3 Add re-authorize-with-MAL action (recover from invalid refresh token)
-- [ ] 17.4 Add force-refresh of a specific anime's cached metadata
-- [ ] 17.5 Show the pending reconciliation diff (if any) with Accept and Cancel actions, wired to 6.8's endpoints
+- [x] 17.1 Show sync status: pending entries, last successful sync time, failed/retrying entries — new `GET /api/sync/status` (`SyncController.GetStatus`, backed by `IUserAnimeEntryRepository.GetSyncStatusAsync`) returning pending count + last successful sync time; rendered in `SettingsPage.tsx`. The data model has no field distinguishing "failed/retrying" from "still mid-debounce" (both are just `pending_sync = true` — see design.md's write-sync decision), so pending count is shown as a single "Pending / retrying" figure rather than fabricating a fake distinction
+- [x] 17.2 Add manual "resync now" and full-reconciliation triggers — `SettingsPage.tsx` buttons call the existing `POST /api/sync/now` / `POST /api/sync/reconcile` endpoints (6.4/6.5)
+- [x] 17.3 Add re-authorize-with-MAL action (recover from invalid refresh token) — reuses the existing `GET /api/mal-auth/start` redirect (same anchor-tag pattern as `App.tsx`'s first-run "Connect to MAL"); `GET /api/mal-auth/status` shows current connection state
+- [x] 17.4 Add force-refresh of a specific anime's cached metadata — `AnimeRefreshPicker` in `SettingsPage.tsx` (debounced search via existing `GET /api/anime/search`, same pattern as `SearchBar`) feeding the existing `POST /api/anime/{id}/refresh` endpoint (7.4)
+- [x] 17.5 Show the pending reconciliation diff (if any) with Accept and Cancel actions, wired to 6.8's endpoints — `SettingsPage.tsx` renders `GET /api/sync/reconcile/pending` and calls `POST /api/sync/reconcile/accept`/`cancel`; `PendingReconciliationDiffEntryDto` extended with `Title`/`PictureUrl` (joined from `AnimeMetadata` in `ReconciliationService.GetPendingDiffAsync`) so the review list is legible instead of showing bare anime ids, wired to 6.8's endpoints
 
 ## 18. Verification
 

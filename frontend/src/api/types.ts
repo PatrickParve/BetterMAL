@@ -218,6 +218,39 @@ export type ProfileDto = {
   iLikedItTheyDidnt: OpinionDivergenceItemDto[]
 }
 
+export type SyncStatusDto = {
+  pendingCount: number
+  lastSyncedAt: string | null
+}
+
+export type ReconciliationResultDto = {
+  added: number
+  updated: number
+  unchanged: number
+  skippedPending: number
+}
+
+export type ReconciliationDiffChangeType = 'Added' | 'Updated'
+
+export type PendingReconciliationDiffEntryDto = {
+  animeId: number
+  title: string
+  pictureUrl: string | null
+  changeType: ReconciliationDiffChangeType
+  status: WatchStatus
+  episodesWatched: number
+  myScore: number | null
+  startedAt: string | null
+  completedAt: string | null
+  rewatchCount: number
+}
+
+export type PendingReconciliationDiffDto = {
+  id: number
+  computedAt: string
+  entries: PendingReconciliationDiffEntryDto[]
+}
+
 export type AnimeDetailDto = {
   animeId: number
   title: string

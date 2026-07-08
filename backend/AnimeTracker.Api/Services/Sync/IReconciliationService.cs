@@ -7,6 +7,8 @@ public record ReconciliationResult(int Added, int Updated, int Unchanged, int Sk
 
 public record PendingReconciliationDiffEntryDto(
     int AnimeId,
+    string Title,
+    string? PictureUrl,
     string ChangeType,
     string Status,
     int EpisodesWatched,

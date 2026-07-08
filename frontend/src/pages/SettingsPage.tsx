@@ -1,5 +1,305 @@
-import { PagePlaceholder } from './PagePlaceholder.tsx'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  acceptReconciliationDiff,
+  cancelReconciliationDiff,
+  getMalAuthStatus,
+  getPendingReconciliationDiff,
+  getSyncStatus,
+  refreshAnime,
+  runReconciliation,
+  searchAnime,
+  syncNow,
+} from '../api/client.ts'
+import type {
+  AnimeSearchResult,
+  MalAuthStatus,
+  PendingReconciliationDiffDto,
+  SyncStatusDto,
+  WatchStatus,
+} from '../api/types.ts'
+import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
+import { useClickOutside } from '../hooks/useClickOutside.ts'
+import './SettingsPage.css'
 
+const STATUS_LABELS: Record<WatchStatus, string> = {
+  Watching: 'Watching',
+  OnHold: 'On hold',
+  PlanToWatch: 'Plan to watch',
+  Completed: 'Completed',
+  Dropped: 'Dropped',
+}
+
+function formatTimestamp(value: string | null): string {
+  if (!value) return 'Never'
+  return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+// Operational/settings page: sync status + manual triggers, pending
+// reconciliation-diff review, MAL re-authorization, and on-demand
+// force-refresh of a single anime's cached metadata. Every action here is a
+// thin wrapper around endpoints that already exist (sections 6/7) — this page
+// is the missing UI surface for them.
 export function SettingsPage() {
-  return <PagePlaceholder title="Settings" />
+  const [status, setStatus] = useState<SyncStatusDto | null>(null)
+  const [diff, setDiff] = useState<PendingReconciliationDiffDto | null>(null)
+  const [authStatus, setAuthStatus] = useState<MalAuthStatus | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const [resyncing, setResyncing] = useState(false)
+  const [reconciling, setReconciling] = useState(false)
+  const [reviewing, setReviewing] = useState(false)
+  const [diffError, setDiffError] = useState<string | null>(null)
+
+  const load = useCallback(() => {
+    return Promise.all([
+      getSyncStatus()
+        .then(setStatus)
+        .catch(() => setStatus(null)),
+      getPendingReconciliationDiff()
+        .then(setDiff)
+        .catch(() => setDiff(null)),
+      getMalAuthStatus()
+        .then(setAuthStatus)
+        .catch(() => setAuthStatus(null)),
+    ])
+  }, [])
+
+  useEffect(() => {
+    load().finally(() => setLoading(false))
+  }, [load])
+
+  async function handleResyncNow() {
+    if (resyncing) return
+    setResyncing(true)
+    try {
+      await syncNow()
+      await load()
+    } catch {
+      // Leave the page showing whatever status was already there.
+    } finally {
+      setResyncing(false)
+    }
+  }
+
+  async function handleReconcileNow() {
+    if (reconciling) return
+    setReconciling(true)
+    try {
+      await runReconciliation()
+      await load()
+    } catch {
+      // Leave the page showing whatever status was already there.
+    } finally {
+      setReconciling(false)
+    }
+  }
+
+  async function handleAcceptDiff() {
+    if (reviewing) return
+    setReviewing(true)
+    setDiffError(null)
+    try {
+      await acceptReconciliationDiff()
+      await load()
+    } catch {
+      setDiffError('Could not apply the diff. Please try again.')
+    } finally {
+      setReviewing(false)
+    }
+  }
+
+  async function handleCancelDiff() {
+    if (reviewing) return
+    setReviewing(true)
+    setDiffError(null)
+    try {
+      await cancelReconciliationDiff()
+      await load()
+    } catch {
+      setDiffError('Could not discard the diff. Please try again.')
+    } finally {
+      setReviewing(false)
+    }
+  }
+
+  if (loading) {
+    return <p className="settings-page__loading">Loading…</p>
+  }
+
+  return (
+    <div className="settings-page">
+      <h1>Settings</h1>
+
+      <section className="settings-box">
+        <h2>Sync status</h2>
+        {status ? (
+          <dl className="settings-stats">
+            <div className="settings-stats__row">
+              <dt>Pending / retrying</dt>
+              <dd>{status.pendingCount}</dd>
+            </div>
+            <div className="settings-stats__row">
+              <dt>Last successful sync</dt>
+              <dd>{formatTimestamp(status.lastSyncedAt)}</dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="settings-box__empty">Couldn't load sync status.</p>
+        )}
+        <div className="settings-box__buttons">
+          <button type="button" onClick={handleResyncNow} disabled={resyncing}>
+            {resyncing ? 'Resyncing…' : 'Resync now'}
+          </button>
+          <button type="button" onClick={handleReconcileNow} disabled={reconciling}>
+            {reconciling ? 'Reconciling…' : 'Run full reconciliation'}
+          </button>
+        </div>
+      </section>
+
+      {diff && (
+        <section className="settings-box">
+          <h2>Pending reconciliation diff</h2>
+          <p className="settings-box__hint">Computed {formatTimestamp(diff.computedAt)} — review before applying.</p>
+          <ul className="settings-diff-list">
+            {diff.entries.map((entry) => (
+              <li key={entry.animeId} className="settings-diff-row">
+                {entry.pictureUrl ? (
+                  <img src={entry.pictureUrl} alt="" className="settings-diff-row__picture" />
+                ) : (
+                  <div
+                    className="settings-diff-row__picture settings-diff-row__picture--placeholder"
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="settings-diff-row__title">{entry.title}</span>
+                <span className="settings-diff-row__detail">
+                  {entry.changeType === 'Added' ? 'New entry' : 'Updated'} — {STATUS_LABELS[entry.status]},{' '}
+                  {entry.episodesWatched} ep{entry.myScore !== null ? `, score ${entry.myScore}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {diffError && <p className="settings-box__error">{diffError}</p>}
+          <div className="settings-box__buttons">
+            <button type="button" onClick={handleCancelDiff} disabled={reviewing}>
+              Cancel
+            </button>
+            <button type="button" onClick={handleAcceptDiff} disabled={reviewing}>
+              {reviewing ? 'Applying…' : 'Accept'}
+            </button>
+          </div>
+        </section>
+      )}
+
+      <section className="settings-box">
+        <h2>MyAnimeList connection</h2>
+        <p className="settings-box__hint">{authStatus?.connected ? 'Connected.' : 'Not connected.'}</p>
+        <a className="settings-box__link" href="/api/mal-auth/start">
+          Re-authorize with MAL
+        </a>
+      </section>
+
+      <section className="settings-box">
+        <h2>Force-refresh anime metadata</h2>
+        <AnimeRefreshPicker />
+      </section>
+    </div>
+  )
+}
+
+// Search-and-pick input feeding the existing single-anime refresh endpoint —
+// same debounced search backing the navbar's SearchBar, just without
+// navigation on selection.
+function AnimeRefreshPicker() {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<AnimeSearchResult[]>([])
+  const [open, setOpen] = useState(false)
+  const [selected, setSelected] = useState<AnimeSearchResult | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const debouncedQuery = useDebouncedValue(query.trim(), 250)
+
+  useClickOutside(containerRef, () => setOpen(false))
+
+  useEffect(() => {
+    if (debouncedQuery.length === 0) {
+      setResults([])
+      setOpen(false)
+      return
+    }
+
+    const controller = new AbortController()
+    searchAnime(debouncedQuery, controller.signal)
+      .then((matches) => {
+        setResults(matches)
+        setOpen(true)
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        setResults([])
+      })
+
+    return () => controller.abort()
+  }, [debouncedQuery])
+
+  function pick(result: AnimeSearchResult) {
+    setSelected(result)
+    setQuery(result.title)
+    setOpen(false)
+    setMessage(null)
+  }
+
+  async function handleRefresh() {
+    if (!selected || refreshing) return
+    setRefreshing(true)
+    setMessage(null)
+    try {
+      await refreshAnime(selected.id)
+      setMessage(`Refreshed "${selected.title}".`)
+    } catch {
+      setMessage(`Couldn't refresh "${selected.title}". Please try again.`)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  return (
+    <div className="settings-refresh-picker">
+      <div className="settings-refresh-picker__search" ref={containerRef}>
+        <input
+          type="search"
+          placeholder="Search anime…"
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setSelected(null)
+          }}
+          onFocus={() => results.length > 0 && setOpen(true)}
+          aria-label="Search anime to refresh"
+        />
+        {open && results.length > 0 && (
+          <ul className="settings-refresh-picker__dropdown">
+            {results.map((result) => (
+              <li key={result.id}>
+                <button type="button" onClick={() => pick(result)}>
+                  {result.pictureUrl && <img src={result.pictureUrl} alt="" />}
+                  <span>{result.title}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <button
+        type="button"
+        className="settings-refresh-picker__button"
+        onClick={handleRefresh}
+        disabled={!selected || refreshing}
+      >
+        {refreshing ? 'Refreshing…' : 'Refresh'}
+      </button>
+      {message && <p className="settings-box__hint">{message}</p>}
+    </div>
+  )
 }
