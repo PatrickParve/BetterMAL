@@ -1,7 +1,9 @@
 import type {
+  AiringWeekDto,
   AnimeSearchResult,
   MainDashboardDto,
   MalAuthStatus,
+  SeasonPageDto,
   UserAnimeEntryDto,
   UserAnimeEntryEditRequest,
 } from './types.ts'
@@ -30,4 +32,24 @@ export function updateEntry(animeId: number, request: UserAnimeEntryEditRequest)
 
 export function getDashboard(): Promise<MainDashboardDto> {
   return fetchJson<MainDashboardDto>('/api/dashboard')
+}
+
+// `week` is any ISO date (yyyy-MM-dd) inside the desired week; omit for the
+// current week.
+export function getAiringWeek(week?: string): Promise<AiringWeekDto> {
+  const query = week ? `?week=${encodeURIComponent(week)}` : ''
+  return fetchJson<AiringWeekDto>(`/api/airing${query}`)
+}
+
+export function getSeasonPage(
+  year: number,
+  season: string,
+  params: { sort: string; offset: number; limit: number },
+): Promise<SeasonPageDto> {
+  const query = new URLSearchParams({
+    sort: params.sort,
+    offset: String(params.offset),
+    limit: String(params.limit),
+  })
+  return fetchJson<SeasonPageDto>(`/api/season/${year}/${season}?${query.toString()}`)
 }

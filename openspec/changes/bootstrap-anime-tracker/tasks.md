@@ -96,17 +96,17 @@
 
 ## 12. Airing page (`airing-schedule`)
 
-- [ ] 12.1 Build the weekly time-slot view of my list (title + episode number, local time)
-- [ ] 12.2 Group shows by converted local day; support navigation to other weeks
-- [ ] 12.3 Lay out seven day-columns (day-label headers, variable slot counts of time + small image + title + ep number); show empty day-columns and a centered "nothing airing this week" message when the week is empty
+- [x] 12.1 Build the weekly time-slot view of my list (title + episode number, local time)
+- [x] 12.2 Group shows by converted local day; support navigation to other weeks
+- [x] 12.3 Lay out seven day-columns (day-label headers, variable slot counts of time + small image + title + ep number); show empty day-columns and a centered "nothing airing this week" message when the week is empty
 
 ## 13. Season page (`season-browser`)
 
-- [ ] 13.1 Build the season view listing all anime for a season (not just my list)
-- [ ] 13.2 Fetch a season live on first visit, then serve from cache indefinitely once that season has fully finished airing; support changing season
-- [ ] 13.3 Add filters (popularity, score, alphabetical, my score) and infinite scroll
-- [ ] 13.4 Season card shows title, picture, episode count (`?` when unknown), and type
-- [ ] 13.5 For the current and upcoming season only, re-fetch lean listing fields on the first visit of a new local calendar day since the last fetch; same-day revisits serve from cache (uses 19.5/7.8's lean upsert)
+- [x] 13.1 Build the season view listing all anime for a season (not just my list)
+- [x] 13.2 Fetch a season live on first visit, then serve from cache indefinitely once that season has fully finished airing; support changing season
+- [x] 13.3 Add filters (popularity, score, alphabetical, my score) and infinite scroll
+- [x] 13.4 Season card shows title, picture, episode count (`?` when unknown), and type
+- [x] 13.5 For the current and upcoming season only, re-fetch lean listing fields on the first visit of a new local calendar day since the last fetch; same-day revisits serve from cache (uses 19.5/7.8's lean upsert)
 
 ## 14. My list & top anime pages (`library-views`)
 

@@ -33,4 +33,16 @@ public interface IBroadcastLocalTimeConverter
     /// (not currently airing, or no broadcast day/time cached). Backs the
     /// currently-watching next-episode countdown.</summary>
     DateTimeOffset? NextBroadcastInstant(AnimeMetadata anime, DateTimeOffset afterUtc);
+
+    /// <summary>The Monday that starts the local (Europe/Helsinki) week
+    /// containing referenceDate. Backs the airing-schedule week grouping,
+    /// where callers need the actual local calendar date behind a resolved
+    /// day-of-week slot, not just the day-of-week itself.</summary>
+    DateOnly GetStartOfWeek(DateOnly referenceDate);
+
+    /// <summary>The local (Europe/Helsinki) calendar date for instantUtc.
+    /// Backs "what day is it locally right now" checks — the airing
+    /// schedule's default week and the season page's once-per-local-day
+    /// re-fetch both need this rather than the UTC calendar date.</summary>
+    DateOnly GetLocalDate(DateTimeOffset instantUtc);
 }

@@ -73,6 +73,11 @@ public class BroadcastLocalTimeConverter : IBroadcastLocalTimeConverter
         return null;
     }
 
+    public DateOnly GetStartOfWeek(DateOnly referenceDate) => StartOfWeek(referenceDate);
+
+    public DateOnly GetLocalDate(DateTimeOffset instantUtc) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instantUtc, LocalZone).DateTime);
+
     private static DateOnly StartOfWeek(DateOnly date)
     {
         var daysSinceMonday = ((int)date.DayOfWeek + 6) % 7;

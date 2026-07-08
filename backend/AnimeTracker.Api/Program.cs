@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
+using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Import;
@@ -8,6 +9,7 @@ using AnimeTracker.Api.Services.Mal.Auth;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Search;
+using AnimeTracker.Api.Services.Season;
 using AnimeTracker.Api.Services.Sync;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
@@ -28,6 +30,7 @@ builder.Services.AddScoped<IAnimeMetadataRepository, AnimeMetadataRepository>();
 builder.Services.AddScoped<IUserAnimeEntryRepository, UserAnimeEntryRepository>();
 builder.Services.AddScoped<IActivityLogRepository, ActivityLogRepository>();
 builder.Services.AddScoped<ITopAnimeSelectionRepository, TopAnimeSelectionRepository>();
+builder.Services.AddScoped<ISeasonRepository, SeasonRepository>();
 
 // --- MAL API integration ---
 builder.Services.Configure<MalOptions>(builder.Configuration.GetSection(MalOptions.SectionName));
@@ -79,6 +82,12 @@ builder.Services.AddScoped<IAnimeSearchService, AnimeSearchService>();
 
 // --- Main dashboard ---
 builder.Services.AddScoped<IMainDashboardService, MainDashboardService>();
+
+// --- Airing schedule ---
+builder.Services.AddScoped<IAiringScheduleService, AiringScheduleService>();
+
+// --- Season browsing ---
+builder.Services.AddScoped<ISeasonBrowseService, SeasonBrowseService>();
 
 var app = builder.Build();
 

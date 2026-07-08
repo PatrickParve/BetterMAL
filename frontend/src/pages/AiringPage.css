@@ -1,0 +1,148 @@
+.airing-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.airing-page__header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.airing-page__header h1 {
+  margin: 0;
+}
+
+.airing-page__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.airing-page__nav button {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.airing-page__nav button:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.airing-page__nav button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.airing-page__range {
+  font-size: 14px;
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.airing-page__empty {
+  padding: 48px 0;
+  text-align: center;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.airing-page__grid {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.airing-day {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.airing-day__header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  text-align: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.airing-day__slots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 8px;
+}
+
+.airing-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.airing-slot:hover {
+  background: var(--code-bg);
+}
+
+.airing-slot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.airing-slot__thumb {
+  width: 28px;
+  height: 38px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--code-bg);
+  flex: 0 0 auto;
+}
+
+.airing-slot__thumb--placeholder {
+  border: 1px solid var(--border);
+}
+
+.airing-slot__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.airing-slot__time {
+  color: var(--text);
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+
+.airing-slot__title {
+  color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 800px) {
+  .airing-page__grid {
+    flex-direction: column;
+  }
+}

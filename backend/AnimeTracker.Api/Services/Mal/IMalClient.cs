@@ -10,7 +10,11 @@ public interface IMalClient
 {
     // --- Public/read endpoints (client-id only) ---
     Task<MalPagedResponse<MalAnimeListEdge>> SearchAnimeAsync(string query, int limit = 5, CancellationToken ct = default);
-    Task<MalPagedResponse<MalAnimeListEdge>> GetSeasonAsync(int year, string season, int limit = 100, string? sort = null, CancellationToken ct = default);
+    Task<MalPagedResponse<MalAnimeListEdge>> GetSeasonAsync(int year, string season, int limit = 100, int offset = 0, string? sort = null, CancellationToken ct = default);
+
+    /// <summary>Pages through an entire season's listing (season browsing needs
+    /// the whole season, not one page, to cache it).</summary>
+    Task<List<MalAnimeListEdge>> GetFullSeasonAsync(int year, string season, string? sort = null, CancellationToken ct = default);
     Task<MalPagedResponse<MalAnimeListEdge>> GetRankingAsync(string rankingType = "all", int limit = 100, CancellationToken ct = default);
     Task<MalAnimeNode> GetAnimeDetailsAsync(int animeId, IReadOnlyCollection<string>? fields = null, CancellationToken ct = default);
 

@@ -29,12 +29,34 @@ public class MalClient(HttpClient http) : IMalClient
             $"anime?q={Uri.EscapeDataString(query)}&limit={limit}&fields={DefaultAnimeFields}",
             MalAuthMode.ClientId, ct);
 
-    public Task<MalPagedResponse<MalAnimeListEdge>> GetSeasonAsync(int year, string season, int limit = 100, string? sort = null, CancellationToken ct = default)
+    public Task<MalPagedResponse<MalAnimeListEdge>> GetSeasonAsync(int year, string season, int limit = 100, int offset = 0, string? sort = null, CancellationToken ct = default)
     {
-        var url = $"anime/season/{year}/{Uri.EscapeDataString(season)}?limit={limit}&fields={DefaultAnimeFields}";
+        var url = $"anime/season/{year}/{Uri.EscapeDataString(season)}?limit={limit}&offset={offset}&fields={DefaultAnimeFields}";
         if (!string.IsNullOrEmpty(sort))
             url += $"&sort={Uri.EscapeDataString(sort)}";
         return GetAsync<MalPagedResponse<MalAnimeListEdge>>(url, MalAuthMode.ClientId, ct);
+    }
+
+    /// <summary>Pages through the full season listing (the season browser
+    /// caches an entire season at once, not one page at a time).</summary>
+    public async Task<List<MalAnimeListEdge>> GetFullSeasonAsync(int year, string season, string? sort = null, CancellationToken ct = default)
+    {
+        const int pageSize = 100;
+        var all = new List<MalAnimeListEdge>();
+        var offset = 0;
+
+        while (true)
+        {
+            var page = await GetSeasonAsync(year, season, pageSize, offset, sort, ct);
+            all.AddRange(page.Data);
+
+            if (page.Paging?.Next is null || page.Data.Count == 0)
+                break;
+
+            offset += pageSize;
+        }
+
+        return all;
     }
 
     public Task<MalPagedResponse<MalAnimeListEdge>> GetRankingAsync(string rankingType = "all", int limit = 100, CancellationToken ct = default) =>

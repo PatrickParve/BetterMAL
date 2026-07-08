@@ -75,3 +75,43 @@ export type MainDashboardDto = {
   airingToday: AiringTodayItemDto[]
   currentSeason: CurrentSeasonItemDto[]
 }
+
+export type AiringSlotDto = {
+  animeId: number
+  title: string
+  pictureUrl: string | null
+  localTime: string
+  episodeNumber: number | null
+}
+
+export type AiringDayDto = {
+  localDate: string
+  dayOfWeek: string
+  slots: AiringSlotDto[]
+}
+
+export type AiringWeekDto = {
+  weekStart: string
+  weekEnd: string
+  days: AiringDayDto[]
+}
+
+export type SeasonAnimeItemDto = {
+  animeId: number
+  title: string
+  pictureUrl: string | null
+  totalEpisodes: number | null
+  mediaType: string | null
+  malScore: number | null
+  popularityRank: number | null
+  myScore: number | null
+}
+
+export type SeasonPageDto = {
+  year: number
+  season: string
+  items: SeasonAnimeItemDto[]
+  offset: number
+  limit: number
+  totalCount: number
+}
