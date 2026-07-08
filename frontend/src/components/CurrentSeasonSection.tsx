@@ -63,7 +63,6 @@ export function CurrentSeasonSection({ items }: CurrentSeasonSectionProps) {
           {sortedItems.map((item) => (
             <AnimeCard key={item.animeId} animeId={item.animeId} title={item.title} pictureUrl={item.pictureUrl}>
               <ProgressBar watched={item.episodesWatched} total={item.totalEpisodes} />
-              <ScoreValue value={item.malScore} />
             </AnimeCard>
           ))}
         </div>

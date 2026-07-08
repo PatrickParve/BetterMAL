@@ -32,14 +32,14 @@ export function Navbar() {
       </div>
 
       <div className="navbar__links navbar__links--right">
-        <NavLink to="/profile" className={linkClassName}>
-          Profile
-        </NavLink>
         <button type="button" className="navbar__toggle" onClick={toggle} aria-pressed={hidden}>
           {hidden ? 'Show scores' : 'Hide scores'}
         </button>
         <NavLink to="/settings" className="navbar__settings" aria-label="Settings">
           <GearIcon />
+        </NavLink>
+        <NavLink to="/profile" className={linkClassName}>
+          Profile
         </NavLink>
       </div>
     </header>

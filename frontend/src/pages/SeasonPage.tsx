@@ -135,7 +135,6 @@ export function SeasonPage() {
               <span className="season-card__meta">
                 {item.mediaType ? item.mediaType.toUpperCase() : 'Unknown'} · {item.totalEpisodes ?? '?'} ep
               </span>
-              <ScoreValue value={item.malScore} />
             </AnimeCard>
           ))}
         </div>
