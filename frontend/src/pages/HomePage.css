@@ -1,0 +1,9 @@
+.home-page {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.dashboard-section h2 {
+  margin-bottom: 12px;
+}

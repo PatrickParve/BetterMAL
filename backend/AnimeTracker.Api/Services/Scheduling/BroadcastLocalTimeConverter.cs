@@ -47,6 +47,32 @@ public class BroadcastLocalTimeConverter : IBroadcastLocalTimeConverter
         return null;
     }
 
+    public DateTimeOffset? NextBroadcastInstant(AnimeMetadata anime, DateTimeOffset afterUtc)
+    {
+        if (anime.AiringStatus != "currently_airing")
+            return null;
+
+        var afterLocal = TimeZoneInfo.ConvertTime(afterUtc, LocalZone);
+        var startDate = DateOnly.FromDateTime(afterLocal.DateTime);
+
+        for (var i = 0; i <= 7; i++)
+        {
+            var candidateDate = startDate.AddDays(i);
+            var slot = ResolveForDate(anime.BroadcastDayOfWeek, anime.BroadcastTime, candidateDate);
+            if (slot is null)
+                continue;
+
+            var localWallClock = DateTime.SpecifyKind(candidateDate.ToDateTime(slot.Time), DateTimeKind.Unspecified);
+            var instantUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localWallClock, LocalZone), TimeSpan.Zero);
+            if (instantUtc <= afterUtc)
+                continue;
+
+            return instantUtc;
+        }
+
+        return null;
+    }
+
     private static DateOnly StartOfWeek(DateOnly date)
     {
         var daysSinceMonday = ((int)date.DayOfWeek + 6) % 7;

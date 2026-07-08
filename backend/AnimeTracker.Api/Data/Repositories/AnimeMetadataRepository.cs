@@ -14,4 +14,9 @@ public class AnimeMetadataRepository(AnimeTrackerDbContext db) : IAnimeMetadataR
         db.AnimeMetadata.AsNoTracking()
             .Include(a => a.UserEntry)
             .ToListAsync(ct);
+
+    public Task<List<AnimeTitleProjection>> GetSearchIndexAsync(CancellationToken ct = default) =>
+        db.AnimeMetadata.AsNoTracking()
+            .Select(a => new AnimeTitleProjection(a.Id, a.Title, a.PictureUrl))
+            .ToListAsync(ct);
 }

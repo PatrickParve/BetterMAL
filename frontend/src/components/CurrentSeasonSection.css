@@ -1,0 +1,33 @@
+.current-season__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.current-season__header h2 {
+  margin: 0;
+}
+
+.current-season__sort {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.current-season__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.current-season__empty {
+  color: var(--text);
+  opacity: 0.75;
+  font-size: 14px;
+}

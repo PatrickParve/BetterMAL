@@ -62,6 +62,20 @@
   box-sizing: border-box;
 }
 
+.page-content {
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 24px;
+  text-align: left;
+}
+
+.page-placeholder {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--text);
+}
+
 body {
   margin: 0;
 }

@@ -74,25 +74,25 @@
 
 ## 9. Frontend shell, navbar & search (`navigation-and-search`)
 
-- [ ] 9.1 Scaffold the React app with routing for all pages
-- [ ] 9.2 Build the navbar: left buttons (Home, Seasonal, Top, Airing), right controls (Profile, hide/unhide toggle, Settings gear icon)
-- [ ] 9.3 Build centered type-ahead search: debounced, local-cache-first using word-boundary prefix matching (title start or any word start), live API fallback when nothing matches locally, dropdown of up to 5 with picture + title
-- [ ] 9.4 Create a reusable clickable anime card component linking to the anime detail page (used everywhere)
-- [ ] 9.5 Build the reusable editor overlay/modal used for all edit and add-to-list actions (opens on top of the page, closes on Esc/click-outside), with fields for episodes watched, status, score, and rewatch count — no start/finish date fields
+- [x] 9.1 Scaffold the React app with routing for all pages — `react-router-dom` added; `AppShell.tsx` routes `/`, `/season`, `/top`, `/airing`, `/my-list`, `/profile`, `/settings`, `/anime/:id` to placeholder pages, ready for sections 11–17 to fill in
+- [x] 9.2 Build the navbar: left buttons (Home, Seasonal, Top, Airing), right controls (Profile, hide/unhide toggle, Settings gear icon) — `components/Navbar/Navbar.tsx`
+- [x] 9.3 Build centered type-ahead search: debounced, local-cache-first using word-boundary prefix matching (title start or any word start), live API fallback when nothing matches locally, dropdown of up to 5 with picture + title — `components/SearchBar.tsx` backed by a new `GET /api/anime/search` endpoint (`AnimeSearchController`/`AnimeSearchService`) doing the local-prefix-then-live-fallback matching server-side; live-fallback failures degrade to no results rather than a 500
+- [x] 9.4 Create a reusable clickable anime card component linking to the anime detail page (used everywhere) — `components/AnimeCard.tsx`; ready for sections 11/13/14/16 to consume, not yet wired into any page
+- [x] 9.5 Build the reusable editor overlay/modal used for all edit and add-to-list actions (opens on top of the page, closes on Esc/click-outside), with fields for episodes watched, status, score, and rewatch count — no start/finish date fields — `components/EntryEditorOverlay.tsx` + `context/EntryEditorContext.tsx` (`useEntryEditor().openEditor(...)`), backed by the existing entry-edit endpoint; ready for sections 11/14/16 to open it, not yet triggered by any page
 
 ## 10. Global score visibility (`score-visibility`)
 
-- [ ] 10.1 Add global hide/unhide state wired to the navbar toggle
-- [ ] 10.2 Render MAL scores blurred when hidden without leaking the value into the DOM text
-- [ ] 10.3 Add per-score in-place reveal that is transient and re-hides on navigation
+- [x] 10.1 Add global hide/unhide state wired to the navbar toggle — `context/ScoreVisibilityContext.tsx`, toggle button in the navbar
+- [x] 10.2 Render MAL scores blurred when hidden without leaking the value into the DOM text — `components/ScoreValue.tsx`; verified in a real browser that the numeric value is absent from DOM text while hidden
+- [x] 10.3 Add per-score in-place reveal that is transient and re-hides on navigation — local `revealed` state in `ScoreValue`, naturally resets on route unmount; verified end-to-end (hide → reveal → navigate away and back → re-hidden)
 
 ## 11. Main page (`main-dashboard`)
 
-- [ ] 11.1 Build "Currently watching" as a horizontal card carousel with left/right arrows; clicking a card opens the detail page; a plus control next to the episode count increments episodes (applies edit/sync rules)
-- [ ] 11.2 Build "Airing today" section (my list only, filtered by converted local broadcast day)
-- [ ] 11.3 Build "Current season" section (my list airing this season) with filters (popularity, MAL score, alphabetical, my score) and per-card progress bar (`watched/total` or `watched/?`)
-- [ ] 11.4 Show a next-episode countdown ("Next ep: in X days, Y h") on each currently-watching card, computed from the cached broadcast schedule via the JST→local converter; omit it when there is no known upcoming broadcast
-- [ ] 11.5 Add the "Airing today" empty state (small "nothing airing today" message) and render each row as a small image + "time: Title"
+- [x] 11.1 Build "Currently watching" as a horizontal card carousel with left/right arrows; clicking a card opens the detail page; a plus control next to the episode count increments episodes (applies edit/sync rules) — `GET /api/dashboard` (`MainDashboardService`) + `components/CurrentlyWatchingCarousel.tsx`
+- [x] 11.2 Build "Airing today" section (my list only, filtered by converted local broadcast day) — `components/AiringTodayList.tsx`, backed by the dashboard endpoint's `airingToday` list (uses `IBroadcastLocalTimeConverter.ResolveForDate`)
+- [x] 11.3 Build "Current season" section (my list airing this season) with filters (popularity, MAL score, alphabetical) and per-card progress bar (`watched/total` or `watched/?`) — `components/CurrentSeasonSection.tsx` + shared `components/ProgressBar.tsx`; "this season" = my-list anime with `AiringStatus == currently_airing`
+- [x] 11.4 Show a next-episode countdown ("Next ep: in X days, Y h") on each currently-watching card, computed from the cached broadcast schedule via the JST→local converter; omit it when there is no known upcoming broadcast — `IBroadcastLocalTimeConverter.NextBroadcastInstant` (new), consumed by `MainDashboardService`
+- [x] 11.5 Add the "Airing today" empty state (small "nothing airing today" message) and render each row as a small image + "time: Title" — done in `AiringTodayList.tsx`
 
 ## 12. Airing page (`airing-schedule`)
 

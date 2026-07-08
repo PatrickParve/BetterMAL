@@ -1,0 +1,35 @@
+.score-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.score-value--hidden {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.score-value__blur {
+  letter-spacing: 1px;
+  color: var(--text);
+  opacity: 0.6;
+}
+
+.score-value__reveal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  opacity: 0.7;
+
+  &:hover {
+    opacity: 1;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}

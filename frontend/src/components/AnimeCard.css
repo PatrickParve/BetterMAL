@@ -1,0 +1,45 @@
+.anime-card {
+  position: relative;
+  width: 160px;
+}
+
+.anime-card__link {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.anime-card__link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.anime-card__picture {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--code-bg);
+}
+
+.anime-card__picture--placeholder {
+  border: 1px solid var(--border);
+}
+
+.anime-card__title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-h);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.anime-card__actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}

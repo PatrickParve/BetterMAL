@@ -1,0 +1,57 @@
+.entry-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.entry-editor__title {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.entry-editor__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.entry-editor__field select,
+.entry-editor__field input {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.entry-editor__error {
+  color: #e5484d;
+  font-size: 14px;
+  margin: 0;
+}
+
+.entry-editor__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.entry-editor__buttons button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.entry-editor__save {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}

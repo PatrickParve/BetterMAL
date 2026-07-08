@@ -1,11 +1,13 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
+using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Import;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Auth;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Sync;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
@@ -71,6 +73,12 @@ builder.Services.AddHostedService<MetadataRefreshBackgroundService>();
 
 // --- Timezone conversion ---
 builder.Services.AddSingleton<IBroadcastLocalTimeConverter, BroadcastLocalTimeConverter>();
+
+// --- Search ---
+builder.Services.AddScoped<IAnimeSearchService, AnimeSearchService>();
+
+// --- Main dashboard ---
+builder.Services.AddScoped<IMainDashboardService, MainDashboardService>();
 
 var app = builder.Build();
 

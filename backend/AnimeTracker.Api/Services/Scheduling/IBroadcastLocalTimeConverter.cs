@@ -27,4 +27,10 @@ public interface IBroadcastLocalTimeConverter
     /// within the week containing weekReferenceDate, or null if it has no
     /// known broadcast slot. Backs weekly-schedule grouping.</summary>
     LocalBroadcastSlot? ResolveForWeek(AnimeMetadata anime, DateOnly weekReferenceDate);
+
+    /// <summary>The next UTC instant at or after afterUtc that this anime's
+    /// broadcast slot airs, or null when there is no known upcoming broadcast
+    /// (not currently airing, or no broadcast day/time cached). Backs the
+    /// currently-watching next-episode countdown.</summary>
+    DateTimeOffset? NextBroadcastInstant(AnimeMetadata anime, DateTimeOffset afterUtc);
 }

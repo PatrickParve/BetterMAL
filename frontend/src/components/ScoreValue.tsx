@@ -1,0 +1,55 @@
+import { useState } from 'react'
+import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
+import './ScoreValue.css'
+
+type ScoreValueProps = {
+  value: number | null | undefined
+  placeholder?: string
+}
+
+// Renders a MAL score respecting the global hide toggle. While hidden and not
+// individually revealed, the numeric value is never placed in the DOM at all —
+// only the blur placeholder and reveal control are rendered — so it can't leak
+// via devtools/text-selection. `revealed` is local state, so it naturally
+// resets (re-hides) whenever the surrounding page unmounts on navigation.
+export function ScoreValue({ value, placeholder = '—' }: ScoreValueProps) {
+  const { hidden } = useScoreVisibility()
+  const [revealed, setRevealed] = useState(false)
+
+  if (value == null) return <span className="score-value">{placeholder}</span>
+
+  if (!hidden || revealed) {
+    return <span className="score-value">{value.toFixed(2)}</span>
+  }
+
+  return (
+    <span className="score-value score-value--hidden">
+      <span className="score-value__blur" aria-hidden="true">
+        ••••
+      </span>
+      <button
+        type="button"
+        className="score-value__reveal"
+        onClick={(event) => {
+          // ScoreValue often sits inside a clickable AnimeCard link — stop
+          // the click from bubbling into a navigation/card action.
+          event.preventDefault()
+          event.stopPropagation()
+          setRevealed(true)
+        }}
+        aria-label="Reveal score"
+      >
+        <EyeIcon />
+      </button>
+    </span>
+  )
+}
+
+function EyeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M1,12 C1,12 5,5 12,5 C19,5 23,12 23,12 C23,12 19,19 12,19 C5,19 1,12 1,12 Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
