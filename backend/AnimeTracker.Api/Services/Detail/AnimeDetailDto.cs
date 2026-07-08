@@ -10,6 +10,7 @@ namespace AnimeTracker.Api.Services.Detail;
 public record AnimeDetailDto(
     int AnimeId,
     string Title,
+    string? EnglishTitle,
     string? PictureUrl,
     double? MalScore,
     int? PopularityRank,
@@ -19,6 +20,8 @@ public record AnimeDetailDto(
     DateOnly? AiredFrom,
     DateOnly? AiredTo,
     string? Studio,
+    string? Source,
+    int? AverageEpisodeDurationSeconds,
     List<string>? Genres,
     string? Synopsis,
     string? Background,
@@ -31,6 +34,7 @@ public record AnimeDetailDto(
     public static AnimeDetailDto FromEntity(AnimeMetadata anime) => new(
         anime.Id,
         anime.Title,
+        anime.EnglishTitle,
         anime.PictureUrl,
         anime.MalScore,
         anime.PopularityRank,
@@ -40,6 +44,8 @@ public record AnimeDetailDto(
         anime.AiredFrom,
         anime.AiredTo,
         anime.Studio,
+        anime.Source,
+        anime.AverageEpisodeDurationSeconds,
         anime.Genres,
         anime.Synopsis,
         anime.Background,

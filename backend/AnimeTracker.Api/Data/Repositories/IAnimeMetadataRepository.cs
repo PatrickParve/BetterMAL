@@ -14,4 +14,4 @@ public interface IAnimeMetadataRepository
     Task<List<AnimeTitleProjection>> GetSearchIndexAsync(CancellationToken ct = default);
 }
 
-public record AnimeTitleProjection(int Id, string Title, string? PictureUrl);
+public record AnimeTitleProjection(int Id, string Title, string? EnglishTitle, string? PictureUrl);

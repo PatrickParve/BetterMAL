@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getAiringWeek } from '../api/client.ts'
 import type { AiringWeekDto } from '../api/types.ts'
+import { pickDisplayTitle } from '../utils/anime.ts'
 import './AiringPage.css'
 
 function isoDateWeeksFromToday(offsetWeeks: number): string {
@@ -75,7 +76,7 @@ export function AiringPage() {
                         <span className="airing-slot__info">
                           <span className="airing-slot__time">{slot.localTime}</span>
                           <span className="airing-slot__title">
-                            {slot.title}
+                            {pickDisplayTitle(slot.title, slot.englishTitle)}
                             {slot.episodeNumber !== null && ` #${slot.episodeNumber}`}
                           </span>
                         </span>

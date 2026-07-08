@@ -21,7 +21,7 @@ public partial class AnimeSearchService(
             .OrderByDescending(a => a.Title.StartsWith(query, StringComparison.OrdinalIgnoreCase))
             .ThenBy(a => a.Title, StringComparer.OrdinalIgnoreCase)
             .Take(limit)
-            .Select(a => new AnimeSearchResultDto(a.Id, a.Title, a.PictureUrl))
+            .Select(a => new AnimeSearchResultDto(a.Id, a.Title, a.EnglishTitle, a.PictureUrl))
             .ToList();
 
         if (localMatches.Count > 0)
@@ -38,6 +38,7 @@ public partial class AnimeSearchService(
                 .Select(edge => new AnimeSearchResultDto(
                     edge.Node.Id,
                     edge.Node.Title,
+                    edge.Node.AlternativeTitles?.En,
                     edge.Node.MainPicture?.Medium ?? edge.Node.MainPicture?.Large))
                 .ToList();
         }

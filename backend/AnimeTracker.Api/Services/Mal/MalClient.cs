@@ -17,12 +17,17 @@ public class MalClient(HttpClient http) : IMalClient
     // most returned anime aren't in my list and rarely change once finished
     // airing. Deliberately excludes genres/synopsis/background/related_anime.
     private const string DefaultAnimeFields =
-        "id,title,main_picture,mean,media_type,status,num_episodes,start_date,end_date,studios,broadcast,popularity";
+        "id,title,alternative_titles{en},main_picture,mean,media_type,status,num_episodes,start_date,end_date,studios,broadcast,popularity";
 
     // Full/rich detail fields — used only for a specific anime's own detail
     // fetch (initial import, nightly tiered my-list refresh, on-demand
     // refresh, or first detail-page visit), never for a listing page.
-    private const string FullDetailAnimeFields = DefaultAnimeFields + ",genres,synopsis,background,related_anime";
+    private const string FullDetailAnimeFields = DefaultAnimeFields + ",genres,synopsis,background,related_anime,average_episode_duration,source";
+
+    // list_status sub-fields for the user animelist — without these, MAL omits
+    // list_status entirely and every imported entry looks like "plan to watch".
+    private const string UserAnimeListFields = DefaultAnimeFields +
+        ",list_status{status,score,num_episodes_watched,start_date,finish_date,num_times_rewatched,is_rewatching}";
 
     public Task<MalPagedResponse<MalAnimeListEdge>> SearchAnimeAsync(string query, int limit = 5, CancellationToken ct = default) =>
         GetAsync<MalPagedResponse<MalAnimeListEdge>>(
@@ -72,7 +77,7 @@ public class MalClient(HttpClient http) : IMalClient
 
     public Task<MalPagedResponse<MalUserAnimeListEdge>> GetUserAnimeListAsync(string? status = null, int limit = 100, int offset = 0, CancellationToken ct = default)
     {
-        var url = $"users/@me/animelist?fields={DefaultAnimeFields}&limit={limit}&offset={offset}";
+        var url = $"users/@me/animelist?fields={UserAnimeListFields}&nsfw=true&limit={limit}&offset={offset}";
         if (!string.IsNullOrEmpty(status))
             url += $"&status={Uri.EscapeDataString(status)}";
         return GetAsync<MalPagedResponse<MalUserAnimeListEdge>>(url, MalAuthMode.Bearer, ct);

@@ -36,6 +36,9 @@ public class BroadcastLocalTimeConverter : IBroadcastLocalTimeConverter
 
     public LocalBroadcastSlot? ResolveForWeek(AnimeMetadata anime, DateOnly weekReferenceDate)
     {
+        if (anime.AiringStatus != "currently_airing")
+            return null;
+
         var weekStart = StartOfWeek(weekReferenceDate);
         for (var i = 0; i < 7; i++)
         {

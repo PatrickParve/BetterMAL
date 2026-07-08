@@ -20,6 +20,7 @@ public class MainDashboardService(
             .Select(e => new CurrentlyWatchingItemDto(
                 e.AnimeId,
                 e.Anime.Title,
+                e.Anime.EnglishTitle,
                 e.Anime.PictureUrl,
                 e.EpisodesWatched,
                 e.Anime.TotalEpisodes,
@@ -30,7 +31,7 @@ public class MainDashboardService(
             .Select(e => (Entry: e, Slot: broadcastConverter.ResolveForDate(e.Anime.BroadcastDayOfWeek, e.Anime.BroadcastTime, today)))
             .Where(x => x.Slot is not null)
             .OrderBy(x => x.Slot!.Time)
-            .Select(x => new AiringTodayItemDto(x.Entry.AnimeId, x.Entry.Anime.Title, x.Entry.Anime.PictureUrl, x.Slot!.Time.ToString("HH:mm")))
+            .Select(x => new AiringTodayItemDto(x.Entry.AnimeId, x.Entry.Anime.Title, x.Entry.Anime.EnglishTitle, x.Entry.Anime.PictureUrl, x.Slot!.Time.ToString("HH:mm")))
             .ToList();
 
         var currentSeason = entries
@@ -39,6 +40,7 @@ public class MainDashboardService(
             .Select(e => new CurrentSeasonItemDto(
                 e.AnimeId,
                 e.Anime.Title,
+                e.Anime.EnglishTitle,
                 e.Anime.PictureUrl,
                 e.EpisodesWatched,
                 e.Anime.TotalEpisodes,

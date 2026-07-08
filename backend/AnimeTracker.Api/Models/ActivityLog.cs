@@ -22,4 +22,9 @@ public class ActivityLog
 
     public ActivityChangeType ChangeType { get; set; }
     public string? ChangeDetail { get; set; }
+
+    /// <summary>Episodes-watched value before this change, when ChangeType is
+    /// EpisodeIncremented — lets a reader determine increase vs decrease
+    /// without re-deriving it from surrounding rows.</summary>
+    public int? PreviousEpisodesWatched { get; set; }
 }

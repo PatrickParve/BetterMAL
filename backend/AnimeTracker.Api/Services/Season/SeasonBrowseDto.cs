@@ -3,6 +3,7 @@ namespace AnimeTracker.Api.Services.Season;
 public record SeasonAnimeItemDto(
     int AnimeId,
     string Title,
+    string? EnglishTitle,
     string? PictureUrl,
     int? TotalEpisodes,
     string? MediaType,

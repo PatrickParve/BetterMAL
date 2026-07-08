@@ -4,6 +4,7 @@ import { searchAnime } from '../api/client.ts'
 import type { AnimeSearchResult } from '../api/types.ts'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
 import { useClickOutside } from '../hooks/useClickOutside.ts'
+import { pickDisplayTitle } from '../utils/anime.ts'
 import './SearchBar.css'
 
 // Centered navbar type-ahead: debounced, local-cache-first with word-boundary
@@ -66,7 +67,7 @@ export function SearchBar() {
             <li key={result.id}>
               <button type="button" className="search-bar__result" onClick={() => goToAnime(result.id)}>
                 {result.pictureUrl && <img src={result.pictureUrl} alt="" className="search-bar__thumb" />}
-                <span>{result.title}</span>
+                <span>{pickDisplayTitle(result.title, result.englishTitle)}</span>
               </button>
             </li>
           ))}

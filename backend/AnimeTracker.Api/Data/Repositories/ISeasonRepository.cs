@@ -5,6 +5,7 @@ public enum SeasonSortKey { Popularity, MalScore, Alphabetical, MyScore }
 public record SeasonAnimeItem(
     int AnimeId,
     string Title,
+    string? EnglishTitle,
     string? PictureUrl,
     int? TotalEpisodes,
     string? MediaType,

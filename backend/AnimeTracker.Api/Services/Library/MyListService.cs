@@ -12,6 +12,7 @@ public class MyListService(IUserAnimeEntryRepository entryRepository) : IMyListS
             .Select(e => new MyListItemDto(
                 e.AnimeId,
                 e.Anime.Title,
+                e.Anime.EnglishTitle,
                 e.Anime.PictureUrl,
                 e.Anime.MediaType,
                 e.Anime.TotalEpisodes,

@@ -2,29 +2,41 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getTopAnime, updateEntry } from '../api/client.ts'
 import type { TopAnimeItemDto } from '../api/types.ts'
+import { Pagination } from '../components/Pagination.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
+import { pickDisplayTitle } from '../utils/anime.ts'
 import './TopAnimePage.css'
+
+const PAGE_SIZE = 50
 
 // Top anime page: the global MAL ranking (not just my list), re-fetched at
 // most once per local day on visit. Each row's action is conditional — Add
 // when the anime isn't in my list yet (adds it as Plan to watch and flips in
 // place to Edit), Edit otherwise — both open the same overlay used
-// everywhere else in the app.
+// everywhere else in the app. The ranking covers up to 500 rows, paginated
+// client-side at 50/page.
 export function TopAnimePage() {
   const [items, setItems] = useState<TopAnimeItemDto[]>([])
   const [loading, setLoading] = useState(true)
   const [pendingId, setPendingId] = useState<number | null>(null)
+  const [page, setPage] = useState(1)
   const { openEditor } = useEntryEditor()
 
   useEffect(() => {
     getTopAnime()
-      .then(setItems)
+      .then((data) => {
+        setItems(data)
+        setPage(1)
+      })
       .catch(() => {
         // Page just stays empty; nothing else to react to here.
       })
       .finally(() => setLoading(false))
   }, [])
+
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
+  const pageItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   function setEntry(animeId: number, entry: TopAnimeItemDto['entry']) {
     setItems((prev) => prev.map((item) => (item.animeId === animeId ? { ...item, entry } : item)))
@@ -47,7 +59,7 @@ export function TopAnimePage() {
     if (!item.entry) return
     openEditor({
       animeId: item.animeId,
-      animeTitle: item.title,
+      animeTitle: pickDisplayTitle(item.title, item.englishTitle),
       totalEpisodes: item.totalEpisodes,
       entry: item.entry,
       onSaved: (saved) => setEntry(item.animeId, saved),
@@ -56,7 +68,12 @@ export function TopAnimePage() {
 
   return (
     <div className="top-anime-page">
-      <h1>Top anime</h1>
+      <div className="top-anime-page__header">
+        <h1>Top anime</h1>
+        {items.length > 0 && (
+          <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} variant="arrows" />
+        )}
+      </div>
 
       {loading ? (
         <p className="top-anime-page__loading">Loading…</p>
@@ -64,7 +81,7 @@ export function TopAnimePage() {
         <p className="top-anime-page__empty">No ranking data yet.</p>
       ) : (
         <ol className="top-anime-page__list">
-          {items.map((item) => (
+          {pageItems.map((item) => (
             <li key={item.animeId} className="top-anime-row">
               <span className="top-anime-row__rank">#{item.rank}</span>
               <Link to={`/anime/${item.animeId}`} className="top-anime-row__link">
@@ -73,7 +90,7 @@ export function TopAnimePage() {
                 ) : (
                   <div className="top-anime-row__picture top-anime-row__picture--placeholder" aria-hidden="true" />
                 )}
-                <span className="top-anime-row__title">{item.title}</span>
+                <span className="top-anime-row__title">{pickDisplayTitle(item.title, item.englishTitle)}</span>
               </Link>
               <span className="top-anime-row__my-score">{item.entry?.myScore ?? '—'}</span>
               <span className="top-anime-row__mal-score">
@@ -96,6 +113,12 @@ export function TopAnimePage() {
             </li>
           ))}
         </ol>
+      )}
+
+      {items.length > 0 && (
+        <div className="top-anime-page__footer">
+          <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+        </div>
       )}
     </div>
   )

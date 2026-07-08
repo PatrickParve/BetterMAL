@@ -8,7 +8,9 @@ namespace AnimeTracker.Api.Controllers;
 public class SyncController(
     IEntryPushService pushService,
     IReconciliationService reconciliationService,
-    IUserAnimeEntryRepository entryRepository) : ControllerBase
+    IUserAnimeEntryRepository entryRepository,
+    IResyncTrigger resyncTrigger,
+    IResyncProgressTracker resyncProgress) : ControllerBase
 {
     /// <summary>Sync status for the settings page: how many entries are
     /// currently pending/retrying, and when the most recent push succeeded.</summary>
@@ -63,5 +65,32 @@ public class SyncController(
     {
         var cancelled = await reconciliationService.CancelPendingDiffAsync(ct);
         return cancelled ? NoContent() : NotFound();
+    }
+
+    /// <summary>Kicks off the one-time corrective full re-sync (settings page):
+    /// re-fetches full detail for every anime in the MAL list and upserts
+    /// AnimeMetadata + UserAnimeEntry, correcting rows imported before
+    /// list_status/nsfw/English-title/duration/source were fetched correctly.
+    /// Runs in the background (~1 req/s per anime) — poll the status endpoint
+    /// below rather than waiting on this call.</summary>
+    [HttpPost("api/sync/resync-from-mal")]
+    public IActionResult TriggerResyncFromMal()
+    {
+        resyncTrigger.Signal();
+        return Accepted(resyncProgress.Snapshot);
+    }
+
+    /// <summary>Progress of the corrective full re-sync, for the settings
+    /// page's progress indicator.</summary>
+    [HttpGet("api/sync/resync-from-mal/status")]
+    public IActionResult GetResyncFromMalStatus()
+    {
+        var snapshot = resyncProgress.Snapshot;
+        return Ok(new
+        {
+            phase = snapshot.Phase.ToString(),
+            synced = snapshot.Synced,
+            total = snapshot.Total,
+        });
     }
 }

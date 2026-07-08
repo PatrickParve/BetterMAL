@@ -47,6 +47,12 @@
   text-align: center;
 }
 
+.season-page__jump {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .season-page__sort {
   font: inherit;
   font-size: 14px;

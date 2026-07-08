@@ -74,6 +74,12 @@ builder.Services.AddScoped<IReconciliationService, ReconciliationService>();
 builder.Services.AddHostedService<PendingSyncRetryBackgroundService>();
 builder.Services.AddHostedService<ReconciliationBackgroundService>();
 
+// --- Corrective full re-sync (one-time, manually triggered) ---
+builder.Services.AddSingleton<IResyncProgressTracker, ResyncProgressTracker>();
+builder.Services.AddSingleton<IResyncTrigger, ResyncTrigger>();
+builder.Services.AddScoped<IResyncService, ResyncService>();
+builder.Services.AddHostedService<ResyncBackgroundService>();
+
 // --- Metadata & score refresh ---
 builder.Services.AddScoped<IMetadataRefreshService, MetadataRefreshService>();
 builder.Services.AddHostedService<MetadataRefreshBackgroundService>();

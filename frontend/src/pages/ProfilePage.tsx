@@ -5,6 +5,7 @@ import type { OpinionDivergenceItemDto, ProfileDto } from '../api/types.ts'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { EditHistoryOverlay } from '../components/EditHistoryOverlay.tsx'
 import { TopAnimeSelectionOverlay } from '../components/TopAnimeSelectionOverlay.tsx'
+import { pickDisplayTitle } from '../utils/anime.ts'
 import './ProfilePage.css'
 
 const STAT_LABELS: { key: keyof ProfileDto['stats']; label: string }[] = [
@@ -54,7 +55,7 @@ function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
             ) : (
               <div className="profile-list-row__picture profile-list-row__picture--placeholder" aria-hidden="true" />
             )}
-            <span className="profile-list-row__title">{item.title}</span>
+            <span className="profile-list-row__title">{pickDisplayTitle(item.title, item.englishTitle)}</span>
           </Link>
           <span className="profile-list-row__trailing">
             Me {item.myScore} · MAL <ScoreValue value={item.malScore} />
@@ -158,7 +159,7 @@ export function ProfilePage() {
                       />
                     )}
                     <span className="profile-list-row__info">
-                      <span className="profile-list-row__title">{item.animeTitle}</span>
+                      <span className="profile-list-row__title">{pickDisplayTitle(item.animeTitle, item.animeEnglishTitle)}</span>
                       <span className="profile-list-row__meta">
                         {CHANGE_TYPE_LABELS[item.changeType] ?? item.changeType}
                         {item.changeDetail ? ` — ${item.changeDetail}` : ''}
@@ -198,7 +199,7 @@ export function ProfilePage() {
                       aria-hidden="true"
                     />
                   )}
-                  <span className="profile-list-row__title">{item.title}</span>
+                  <span className="profile-list-row__title">{pickDisplayTitle(item.title, item.englishTitle)}</span>
                 </Link>
                 <span className="profile-list-row__trailing">{item.myScore}</span>
               </li>

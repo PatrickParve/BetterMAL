@@ -86,6 +86,7 @@ public static class MalMappingExtensions
     public static void ApplyTo(this MalAnimeNode node, AnimeMetadata target, DateTimeOffset now)
     {
         target.Title = node.Title;
+        target.EnglishTitle = string.IsNullOrWhiteSpace(node.AlternativeTitles?.En) ? null : node.AlternativeTitles.En;
         target.PictureUrl = node.MainPicture?.Large ?? node.MainPicture?.Medium;
         target.MalScore = node.Mean;
         target.MediaType = node.MediaType;
@@ -100,6 +101,8 @@ public static class MalMappingExtensions
         target.Genres = node.Genres?.Select(g => g.Name).ToList();
         target.Synopsis = node.Synopsis;
         target.Background = node.Background;
+        target.AverageEpisodeDurationSeconds = node.AverageEpisodeDuration;
+        target.Source = node.Source;
 
         var prequel = node.RelatedAnime?.FirstOrDefault(r => r.RelationType == "prequel");
         target.PrequelMalId = prequel?.Node.Id;
@@ -131,6 +134,7 @@ public static class MalMappingExtensions
     public static void ApplyLeanTo(this MalAnimeNode node, AnimeMetadata target, DateTimeOffset now)
     {
         target.Title = node.Title;
+        target.EnglishTitle = string.IsNullOrWhiteSpace(node.AlternativeTitles?.En) ? null : node.AlternativeTitles.En;
         target.PictureUrl = node.MainPicture?.Large ?? node.MainPicture?.Medium;
         target.MalScore = node.Mean;
         target.MediaType = node.MediaType;
@@ -142,16 +146,25 @@ public static class MalMappingExtensions
     /// <summary>Builds a user-list entry from MAL's list-status shape (e.g. from
     /// import or reconciliation) — always PendingSync=false since the data came
     /// from MAL and there is nothing to push back.</summary>
-    public static UserAnimeEntry ToUserAnimeEntry(int animeId, MalListStatus? status, DateTimeOffset now) => new()
+    public static UserAnimeEntry ToUserAnimeEntry(int animeId, MalListStatus? status, DateTimeOffset now)
     {
-        AnimeId = animeId,
-        Status = status?.Status?.ToWatchStatus() ?? WatchStatus.PlanToWatch,
-        EpisodesWatched = status?.NumEpisodesWatched ?? 0,
-        MyScore = status?.Score is null or 0 ? null : status.Score,
-        StartedAt = ParseMalDate(status?.StartDate),
-        CompletedAt = ParseMalDate(status?.FinishDate),
-        RewatchCount = status?.NumTimesRewatched ?? 0,
-        PendingSync = false,
-        LastSyncedAt = now,
-    };
+        var entry = new UserAnimeEntry { AnimeId = animeId, PendingSync = false };
+        status.ApplyTo(entry, now);
+        return entry;
+    }
+
+    /// <summary>Copies MAL list-status fields onto an existing user-list entry —
+    /// the update-in-place counterpart of <see cref="ToUserAnimeEntry"/>, so a
+    /// corrective re-sync can refresh an already-imported entry the same way
+    /// import builds a new one. Does not touch PendingSync — callers guard that.</summary>
+    public static void ApplyTo(this MalListStatus? status, UserAnimeEntry target, DateTimeOffset now)
+    {
+        target.Status = status?.Status?.ToWatchStatus() ?? WatchStatus.PlanToWatch;
+        target.EpisodesWatched = status?.NumEpisodesWatched ?? 0;
+        target.MyScore = status?.Score is null or 0 ? null : status.Score;
+        target.StartedAt = ParseMalDate(status?.StartDate);
+        target.CompletedAt = ParseMalDate(status?.FinishDate);
+        target.RewatchCount = status?.NumTimesRewatched ?? 0;
+        target.LastSyncedAt = now;
+    }
 }

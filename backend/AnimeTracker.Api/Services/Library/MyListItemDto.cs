@@ -8,6 +8,7 @@ namespace AnimeTracker.Api.Services.Library;
 public record MyListItemDto(
     int AnimeId,
     string Title,
+    string? EnglishTitle,
     string? PictureUrl,
     string? MediaType,
     int? TotalEpisodes,

@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AnimeCard } from './AnimeCard.tsx'
 import { ProgressBar } from './ProgressBar.tsx'
-import { ScoreValue } from './ScoreValue.tsx'
 import type { CurrentSeasonItemDto } from '../api/types.ts'
 import './CurrentSeasonSection.css'
 
@@ -61,7 +60,13 @@ export function CurrentSeasonSection({ items }: CurrentSeasonSectionProps) {
       ) : (
         <div className="current-season__grid">
           {sortedItems.map((item) => (
-            <AnimeCard key={item.animeId} animeId={item.animeId} title={item.title} pictureUrl={item.pictureUrl}>
+            <AnimeCard
+              key={item.animeId}
+              animeId={item.animeId}
+              title={item.title}
+              englishTitle={item.englishTitle}
+              pictureUrl={item.pictureUrl}
+            >
               <ProgressBar watched={item.episodesWatched} total={item.totalEpisodes} />
             </AnimeCard>
           ))}

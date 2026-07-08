@@ -29,6 +29,7 @@ public class AiringScheduleService(
             slotsByDate[localDate].Add(new AiringSlotDto(
                 entry.AnimeId,
                 entry.Anime.Title,
+                entry.Anime.EnglishTitle,
                 entry.Anime.PictureUrl,
                 slot.Time.ToString("HH:mm"),
                 ComputeEpisodeNumber(entry.Anime, localDate)));

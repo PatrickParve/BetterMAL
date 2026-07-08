@@ -41,6 +41,9 @@ namespace AnimeTracker.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("PreviousEpisodesWatched")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("Timestamp")
                         .HasColumnType("timestamp with time zone");
 
@@ -67,6 +70,9 @@ namespace AnimeTracker.Api.Migrations
                     b.Property<string>("AiringStatus")
                         .HasColumnType("text");
 
+                    b.Property<int?>("AverageEpisodeDurationSeconds")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Background")
                         .HasColumnType("text");
 
@@ -75,6 +81,9 @@ namespace AnimeTracker.Api.Migrations
 
                     b.Property<TimeOnly?>("BroadcastTime")
                         .HasColumnType("time without time zone");
+
+                    b.Property<string>("EnglishTitle")
+                        .HasColumnType("text");
 
                     b.PrimitiveCollection<List<string>>("Genres")
                         .HasColumnType("text[]");
@@ -107,6 +116,9 @@ namespace AnimeTracker.Api.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("SequelTitle")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Source")
                         .HasColumnType("text");
 
                     b.Property<string>("Studio")

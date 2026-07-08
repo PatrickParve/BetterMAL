@@ -4,16 +4,19 @@ import {
   cancelReconciliationDiff,
   getMalAuthStatus,
   getPendingReconciliationDiff,
+  getResyncFromMalStatus,
   getSyncStatus,
   refreshAnime,
   runReconciliation,
   searchAnime,
   syncNow,
+  triggerResyncFromMal,
 } from '../api/client.ts'
 import type {
   AnimeSearchResult,
   MalAuthStatus,
   PendingReconciliationDiffDto,
+  ResyncStatusDto,
   SyncStatusDto,
   WatchStatus,
 } from '../api/types.ts'
@@ -43,12 +46,14 @@ export function SettingsPage() {
   const [status, setStatus] = useState<SyncStatusDto | null>(null)
   const [diff, setDiff] = useState<PendingReconciliationDiffDto | null>(null)
   const [authStatus, setAuthStatus] = useState<MalAuthStatus | null>(null)
+  const [resyncStatus, setResyncStatus] = useState<ResyncStatusDto | null>(null)
   const [loading, setLoading] = useState(true)
 
   const [resyncing, setResyncing] = useState(false)
   const [reconciling, setReconciling] = useState(false)
   const [reviewing, setReviewing] = useState(false)
   const [diffError, setDiffError] = useState<string | null>(null)
+  const [startingFullResync, setStartingFullResync] = useState(false)
 
   const load = useCallback(() => {
     return Promise.all([
@@ -61,12 +66,27 @@ export function SettingsPage() {
       getMalAuthStatus()
         .then(setAuthStatus)
         .catch(() => setAuthStatus(null)),
+      getResyncFromMalStatus()
+        .then(setResyncStatus)
+        .catch(() => setResyncStatus(null)),
     ])
   }, [])
 
   useEffect(() => {
     load().finally(() => setLoading(false))
   }, [load])
+
+  // Poll while a full re-sync is in flight (~1 anime/sec, so several minutes) —
+  // stops as soon as the backend reports it's no longer running.
+  useEffect(() => {
+    if (resyncStatus?.phase !== 'Running') return
+    const id = setInterval(() => {
+      getResyncFromMalStatus()
+        .then(setResyncStatus)
+        .catch(() => {})
+    }, 2000)
+    return () => clearInterval(id)
+  }, [resyncStatus?.phase])
 
   async function handleResyncNow() {
     if (resyncing) return
@@ -78,6 +98,18 @@ export function SettingsPage() {
       // Leave the page showing whatever status was already there.
     } finally {
       setResyncing(false)
+    }
+  }
+
+  async function handleResyncFromMal() {
+    if (startingFullResync || resyncStatus?.phase === 'Running') return
+    setStartingFullResync(true)
+    try {
+      setResyncStatus(await triggerResyncFromMal())
+    } catch {
+      // Leave whatever status was already there; the button stays retryable.
+    } finally {
+      setStartingFullResync(false)
     }
   }
 
@@ -152,6 +184,31 @@ export function SettingsPage() {
           </button>
           <button type="button" onClick={handleReconcileNow} disabled={reconciling}>
             {reconciling ? 'Reconciling…' : 'Run full reconciliation'}
+          </button>
+        </div>
+      </section>
+
+      <section className="settings-box">
+        <h2>Correct imported data</h2>
+        <p className="settings-box__hint">
+          One-time corrective re-sync: re-fetches your full MyAnimeList and corrects status, score, and episode
+          counts, and backfills English title, duration, and source. Takes several minutes; entries with unsynced
+          local edits are left untouched.
+        </p>
+        {resyncStatus && resyncStatus.phase !== 'NotStarted' && (
+          <p className="settings-box__hint">
+            {resyncStatus.phase === 'Running'
+              ? `Resyncing… ${resyncStatus.synced}/${resyncStatus.total}`
+              : `Last run complete: ${resyncStatus.synced}/${resyncStatus.total} processed.`}
+          </p>
+        )}
+        <div className="settings-box__buttons">
+          <button
+            type="button"
+            onClick={handleResyncFromMal}
+            disabled={startingFullResync || resyncStatus?.phase === 'Running'}
+          >
+            {resyncStatus?.phase === 'Running' ? 'Resyncing…' : 'Run corrective re-sync'}
           </button>
         </div>
       </section>

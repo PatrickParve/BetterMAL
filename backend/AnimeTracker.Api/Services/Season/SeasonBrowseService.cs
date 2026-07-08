@@ -20,7 +20,7 @@ public class SeasonBrowseService(
 
         var (items, totalCount) = await seasonRepository.GetPageAsync(year, season, ParseSort(sortKey), offset, limit, ct);
         var dtoItems = items
-            .Select(i => new SeasonAnimeItemDto(i.AnimeId, i.Title, i.PictureUrl, i.TotalEpisodes, i.MediaType, i.MalScore, i.PopularityRank, i.MyScore))
+            .Select(i => new SeasonAnimeItemDto(i.AnimeId, i.Title, i.EnglishTitle, i.PictureUrl, i.TotalEpisodes, i.MediaType, i.MalScore, i.PopularityRank, i.MyScore))
             .ToList();
 
         return new SeasonPageDto(year, season, dtoItems, offset, limit, totalCount);
@@ -66,16 +66,23 @@ public class SeasonBrowseService(
 
         foreach (var edge in edges)
         {
-            if (existingAnime.TryGetValue(edge.Node.Id, out var tracked))
+            AnimeMetadata tracked;
+            if (existingAnime.TryGetValue(edge.Node.Id, out var existing))
             {
-                edge.Node.ApplyLeanTo(tracked, now);
+                edge.Node.ApplyLeanTo(existing, now);
+                tracked = existing;
             }
             else
             {
-                var created = edge.Node.ToLeanAnimeMetadata(now);
-                db.AnimeMetadata.Add(created);
-                existingAnime[edge.Node.Id] = created;
+                tracked = edge.Node.ToLeanAnimeMetadata(now);
+                db.AnimeMetadata.Add(tracked);
+                existingAnime[edge.Node.Id] = tracked;
             }
+
+            // ApplyLeanTo deliberately skips detail-page fields, but AiredFrom is
+            // the same value regardless of source, so it's safe to set here —
+            // required so a listing can be classified to its premiere season.
+            tracked.AiredFrom = MalMappingExtensions.ParseMalDate(edge.Node.StartDate);
         }
 
         var existingListingIds = (await db.SeasonAnimeListings
@@ -85,8 +92,17 @@ public class SeasonBrowseService(
 
         foreach (var animeId in animeIds)
         {
-            if (!existingListingIds.Contains(animeId))
-                db.SeasonAnimeListings.Add(new SeasonAnimeListing { Year = year, Season = season, AnimeId = animeId });
+            if (existingListingIds.Contains(animeId))
+                continue;
+
+            // Unknown start dates fall back to shown (matches the read-time filter);
+            // known dates outside this season are excluded so an anime is only ever
+            // listed under its premiere season.
+            var airedFrom = existingAnime[animeId].AiredFrom;
+            if (airedFrom is { } date && SeasonCalendar.GetSeasonFor(date) != (year, season))
+                continue;
+
+            db.SeasonAnimeListings.Add(new SeasonAnimeListing { Year = year, Season = season, AnimeId = animeId });
         }
 
         var fetchLog = await db.SeasonFetchLogs.FirstOrDefaultAsync(f => f.Year == year && f.Season == season, ct);

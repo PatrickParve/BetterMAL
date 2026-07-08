@@ -15,7 +15,7 @@ public class TopAnimeService(
     IBroadcastLocalTimeConverter broadcastConverter,
     ILogger<TopAnimeService> logger) : ITopAnimeService
 {
-    private const int RankingSize = 100;
+    private const int RankingSize = 500;
 
     public async Task<List<TopAnimeItemDto>> GetRankingAsync(CancellationToken ct = default)
     {
@@ -27,6 +27,7 @@ public class TopAnimeService(
                 r.Rank,
                 r.AnimeId,
                 r.Anime.Title,
+                r.Anime.EnglishTitle,
                 r.Anime.PictureUrl,
                 r.Anime.TotalEpisodes,
                 r.Anime.MalScore,

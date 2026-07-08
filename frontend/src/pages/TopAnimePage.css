@@ -4,6 +4,22 @@
   gap: 20px;
 }
 
+.top-anime-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.top-anime-page__header h1 {
+  margin: 0;
+}
+
+.top-anime-page__footer {
+  display: flex;
+  justify-content: center;
+}
+
 .top-anime-page__list {
   list-style: none;
   margin: 0;

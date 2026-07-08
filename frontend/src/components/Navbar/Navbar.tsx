@@ -5,8 +5,9 @@ import './Navbar.css'
 
 const NAV_LINKS: { to: string; label: string; end?: boolean }[] = [
   { to: '/', label: 'Home', end: true },
-  { to: '/season', label: 'Seasonal' },
+  { to: '/my-list', label: 'My List' },
   { to: '/top', label: 'Top' },
+  { to: '/season', label: 'Season' },
   { to: '/airing', label: 'Airing' },
 ]
 

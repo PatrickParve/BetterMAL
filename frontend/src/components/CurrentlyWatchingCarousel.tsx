@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimeCard } from './AnimeCard.tsx'
 import { updateEntry } from '../api/client.ts'
 import type { CurrentlyWatchingItemDto } from '../api/types.ts'
+import { pickDisplayTitle } from '../utils/anime.ts'
 import './CurrentlyWatchingCarousel.css'
 
 type CurrentlyWatchingCarouselProps = {
@@ -18,6 +19,23 @@ const SCROLL_AMOUNT = 340
 export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange }: CurrentlyWatchingCarouselProps) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [pendingId, setPendingId] = useState<number | null>(null)
+  const [overflowing, setOverflowing] = useState(false)
+
+  // Arrows only make sense when the row actually overflows — recompute on
+  // resize (font/zoom/window changes) and whenever the item count changes.
+  useEffect(() => {
+    const node = trackRef.current
+    if (!node) return
+
+    function updateOverflow() {
+      setOverflowing(node!.scrollWidth > node!.clientWidth)
+    }
+
+    updateOverflow()
+    const observer = new ResizeObserver(updateOverflow)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [items])
 
   if (items.length === 0) return null
 
@@ -42,9 +60,11 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange }: Cu
     <section className="dashboard-section">
       <h2>Currently watching</h2>
       <div className="carousel">
-        <button type="button" className="carousel__arrow" onClick={() => scroll(-1)} aria-label="Scroll left">
-          ‹
-        </button>
+        {overflowing && (
+          <button type="button" className="carousel__arrow" onClick={() => scroll(-1)} aria-label="Scroll left">
+            ‹
+          </button>
+        )}
         <div className="carousel__track" ref={trackRef}>
           {items.map((item) => {
             const atMax = item.totalEpisodes !== null && item.episodesWatched >= item.totalEpisodes
@@ -53,6 +73,7 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange }: Cu
                 key={item.animeId}
                 animeId={item.animeId}
                 title={item.title}
+                englishTitle={item.englishTitle}
                 pictureUrl={item.pictureUrl}
                 className="carousel__card"
                 actions={
@@ -61,7 +82,7 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange }: Cu
                     className="carousel__increment"
                     disabled={pendingId === item.animeId || atMax}
                     onClick={() => increment(item)}
-                    aria-label={`Increment episodes watched for ${item.title}`}
+                    aria-label={`Increment episodes watched for ${pickDisplayTitle(item.title, item.englishTitle)}`}
                   >
                     +
                   </button>
@@ -79,9 +100,11 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange }: Cu
             )
           })}
         </div>
-        <button type="button" className="carousel__arrow" onClick={() => scroll(1)} aria-label="Scroll right">
-          ›
-        </button>
+        {overflowing && (
+          <button type="button" className="carousel__arrow" onClick={() => scroll(1)} aria-label="Scroll right">
+            ›
+          </button>
+        )}
       </div>
     </section>
   )

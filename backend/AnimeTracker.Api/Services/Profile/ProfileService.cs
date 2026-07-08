@@ -9,6 +9,12 @@ public class ProfileService(
     ITopAnimeSelectionRepository topAnimeSelectionRepository) : IProfileService
 {
     private const int RecentActivityCount = 20;
+
+    // The feed only keeps additions and genuine episode increases (collapsing
+    // consecutive same-anime increments), so a much larger raw window is
+    // pulled before filtering/collapsing down to RecentActivityCount.
+    private const int RecentActivityFetchWindow = 200;
+
     private const int TopAnimeMinimumSize = 10;
 
     // No per-anime episode duration is cached (MAL's field isn't fetched
@@ -19,14 +25,14 @@ public class ProfileService(
     public async Task<ProfileDto> GetProfileAsync(CancellationToken ct = default)
     {
         var entries = await entryRepository.GetAllAsync(ct);
-        var recentActivity = await activityLogRepository.GetRecentAsync(RecentActivityCount, ct);
+        var recentActivityWindow = await activityLogRepository.GetRecentAsync(RecentActivityFetchWindow, ct);
         var selectedAnimeIds = await topAnimeSelectionRepository.GetSelectedAnimeIdsAsync(ct);
 
         var (theyLikedItIDidnt, iLikedItTheyDidnt) = BuildOpinionDivergence(entries);
 
         return new ProfileDto(
             BuildStats(entries),
-            recentActivity.Select(ToActivityFeedItem).ToList(),
+            BuildActivityFeed(recentActivityWindow),
             BuildTopAnimeSection(entries, selectedAnimeIds),
             BuildScoreDistribution(entries),
             theyLikedItIDidnt,
@@ -40,7 +46,52 @@ public class ProfileService(
     }
 
     private static ActivityFeedItemDto ToActivityFeedItem(ActivityLog log) =>
-        new(log.Id, log.Timestamp, log.AnimeId, log.Anime.Title, log.Anime.PictureUrl, log.ChangeType, log.ChangeDetail);
+        new(log.Id, log.Timestamp, log.AnimeId, log.Anime.Title, log.Anime.EnglishTitle, log.Anime.PictureUrl, log.ChangeType, log.ChangeDetail);
+
+    // window is most-recent-first. Keep only additions and genuine episode
+    // increases, collapsing a run of consecutive same-anime increases (in this
+    // filtered order) into just the newest one.
+    private static List<ActivityFeedItemDto> BuildActivityFeed(List<ActivityLog> window)
+    {
+        var feed = new List<ActivityFeedItemDto>();
+
+        foreach (var log in window)
+        {
+            if (log.ChangeType == ActivityChangeType.EpisodeIncremented)
+            {
+                if (!IsGenuineIncrease(log))
+                    continue;
+
+                if (feed.Count > 0 && feed[^1].ChangeType == ActivityChangeType.EpisodeIncremented && feed[^1].AnimeId == log.AnimeId)
+                    continue;
+            }
+            else if (log.ChangeType != ActivityChangeType.Added)
+            {
+                continue;
+            }
+
+            feed.Add(ToActivityFeedItem(log));
+            if (feed.Count == RecentActivityCount)
+                break;
+        }
+
+        return feed;
+    }
+
+    // Pre-migration rows have no PreviousEpisodesWatched; treated as a
+    // best-effort increase since direction can't be reconstructed for them.
+    private static bool IsGenuineIncrease(ActivityLog log) =>
+        log.PreviousEpisodesWatched is not { } previous
+        || (ParseNewEpisodesWatched(log) is { } newEpisodesWatched && newEpisodesWatched > previous);
+
+    private static int? ParseNewEpisodesWatched(ActivityLog log)
+    {
+        const string prefix = "Episode ";
+        return log.ChangeDetail is { } detail && detail.StartsWith(prefix, StringComparison.Ordinal)
+            && int.TryParse(detail[prefix.Length..], out var newEpisodesWatched)
+            ? newEpisodesWatched
+            : null;
+    }
 
     private static AnimeStatsDto BuildStats(List<UserAnimeEntry> entries)
     {
@@ -100,7 +151,7 @@ public class ProfileService(
 
             tieBreakSlots = slotsRemaining;
             candidates = tier
-                .Select(e => new TopAnimeCandidateDto(e.AnimeId, e.Anime.Title, e.Anime.PictureUrl, e.MyScore!.Value))
+                .Select(e => new TopAnimeCandidateDto(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.MyScore!.Value))
                 .ToList();
 
             var candidateIds = candidates.Select(c => c.AnimeId).ToHashSet();
@@ -114,7 +165,7 @@ public class ProfileService(
             var fillSet = fillIds.ToHashSet();
             items.AddRange(candidates
                 .Where(c => fillSet.Contains(c.AnimeId))
-                .Select(c => new TopAnimeEntryDto(c.AnimeId, c.Title, c.PictureUrl, c.MyScore)));
+                .Select(c => new TopAnimeEntryDto(c.AnimeId, c.Title, c.EnglishTitle, c.PictureUrl, c.MyScore)));
             slotsRemaining = 0;
             break;
         }
@@ -127,7 +178,7 @@ public class ProfileService(
     }
 
     private static TopAnimeEntryDto ToTopAnimeEntry(UserAnimeEntry e) =>
-        new(e.AnimeId, e.Anime.Title, e.Anime.PictureUrl, e.MyScore!.Value);
+        new(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.MyScore!.Value);
 
     private static ScoreDistributionDto BuildScoreDistribution(List<UserAnimeEntry> entries)
     {
@@ -164,5 +215,5 @@ public class ProfileService(
     }
 
     private static OpinionDivergenceItemDto ToDivergenceItem(UserAnimeEntry e) =>
-        new(e.AnimeId, e.Anime.Title, e.Anime.PictureUrl, e.MyScore!.Value, e.Anime.MalScore!.Value);
+        new(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.MyScore!.Value, e.Anime.MalScore!.Value);
 }

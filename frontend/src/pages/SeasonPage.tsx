@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { getSeasonPage } from '../api/client.ts'
 import type { SeasonAnimeItemDto } from '../api/types.ts'
 import { AnimeCard } from '../components/AnimeCard.tsx'
-import { ScoreValue } from '../components/ScoreValue.tsx'
 import './SeasonPage.css'
 
 const SEASON_ORDER = ['winter', 'spring', 'summer', 'fall'] as const
@@ -17,6 +17,10 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 ]
 
 const PAGE_SIZE = 24
+
+// Earliest year selectable in the quick-jump dropdown — anime predate this,
+// but a bounded range keeps the <select> from growing unbounded.
+const EARLIEST_YEAR = 1960
 
 function currentSeasonTarget(): { year: number; season: SeasonName } {
   const now = new Date()
@@ -35,12 +39,31 @@ function seasonLabel(season: SeasonName): string {
   return season.charAt(0).toUpperCase() + season.slice(1)
 }
 
+function isSeasonName(value: string | null): value is SeasonName {
+  return value !== null && (SEASON_ORDER as readonly string[]).includes(value)
+}
+
+function isSortKey(value: string | null): value is SortKey {
+  return value !== null && SORT_OPTIONS.some((option) => option.value === value)
+}
+
 // Season page: all anime airing in the selected season (not just my list),
 // with a sort/filter control and hand-rolled infinite scroll via an
-// IntersectionObserver sentinel below the grid.
+// IntersectionObserver sentinel below the grid. Year/season/sort live in the
+// URL (not component state) so the selection survives back-navigation from
+// an anime detail page, and default to the current season when absent.
 export function SeasonPage() {
-  const [target, setTarget] = useState(currentSeasonTarget)
-  const [sort, setSort] = useState<SortKey>('popularity')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const fallback = useMemo(currentSeasonTarget, [])
+
+  const yearParam = Number(searchParams.get('year'))
+  const seasonParam = searchParams.get('season')
+  const sortParam = searchParams.get('sort')
+
+  const year = Number.isInteger(yearParam) && yearParam > 0 ? yearParam : fallback.year
+  const season = isSeasonName(seasonParam) ? seasonParam : fallback.season
+  const sort = isSortKey(sortParam) ? sortParam : 'popularity'
+
   const [items, setItems] = useState<SeasonAnimeItemDto[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -48,6 +71,27 @@ export function SeasonPage() {
   const requestIdRef = useRef(0)
 
   const hasMore = items.length < totalCount
+  const yearOptions = useMemo(() => {
+    const latest = Math.max(year, fallback.year) + 1
+    return Array.from({ length: latest - EARLIEST_YEAR + 1 }, (_, i) => latest - i)
+  }, [year, fallback.year])
+
+  function setTarget(next: { year: number; season: SeasonName }) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      params.set('year', String(next.year))
+      params.set('season', next.season)
+      return params
+    })
+  }
+
+  function setSort(next: SortKey) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      params.set('sort', next)
+      return params
+    })
+  }
 
   // Season or sort changed: start over from page one.
   useEffect(() => {
@@ -55,7 +99,7 @@ export function SeasonPage() {
     setItems([])
     setTotalCount(0)
     setLoading(true)
-    getSeasonPage(target.year, target.season, { sort, offset: 0, limit: PAGE_SIZE })
+    getSeasonPage(year, season, { sort, offset: 0, limit: PAGE_SIZE })
       .then((page) => {
         if (requestIdRef.current !== requestId) return
         setItems(page.items)
@@ -67,7 +111,7 @@ export function SeasonPage() {
       .finally(() => {
         if (requestIdRef.current === requestId) setLoading(false)
       })
-  }, [target.year, target.season, sort])
+  }, [year, season, sort])
 
   // Infinite scroll: load the next page once the sentinel enters view.
   useEffect(() => {
@@ -84,7 +128,7 @@ export function SeasonPage() {
       if (loading || !hasMore) return
       const requestId = requestIdRef.current
       setLoading(true)
-      getSeasonPage(target.year, target.season, { sort, offset: items.length, limit: PAGE_SIZE })
+      getSeasonPage(year, season, { sort, offset: items.length, limit: PAGE_SIZE })
         .then((page) => {
           if (requestIdRef.current !== requestId) return
           setItems((prev) => [...prev, ...page.items])
@@ -95,22 +139,48 @@ export function SeasonPage() {
           if (requestIdRef.current === requestId) setLoading(false)
         })
     }
-  }, [items, loading, hasMore, target, sort])
+  }, [items, loading, hasMore, year, season, sort])
 
   return (
     <div className="season-page">
       <div className="season-page__header">
         <h1>Seasonal anime</h1>
         <div className="season-page__nav">
-          <button type="button" onClick={() => setTarget((t) => shiftSeason(t.year, t.season, -1))} aria-label="Previous season">
+          <button type="button" onClick={() => setTarget(shiftSeason(year, season, -1))} aria-label="Previous season">
             &lsaquo;
           </button>
           <span className="season-page__label">
-            {seasonLabel(target.season)} {target.year}
+            {seasonLabel(season)} {year}
           </span>
-          <button type="button" onClick={() => setTarget((t) => shiftSeason(t.year, t.season, 1))} aria-label="Next season">
+          <button type="button" onClick={() => setTarget(shiftSeason(year, season, 1))} aria-label="Next season">
             &rsaquo;
           </button>
+        </div>
+        <div className="season-page__jump">
+          <select
+            className="season-page__sort"
+            value={season}
+            onChange={(event) => setTarget({ year, season: event.target.value as SeasonName })}
+            aria-label="Jump to season"
+          >
+            {SEASON_ORDER.map((option) => (
+              <option key={option} value={option}>
+                {seasonLabel(option)}
+              </option>
+            ))}
+          </select>
+          <select
+            className="season-page__sort"
+            value={year}
+            onChange={(event) => setTarget({ year: Number(event.target.value), season })}
+            aria-label="Jump to year"
+          >
+            {yearOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
         </div>
         <select
           className="season-page__sort"
@@ -131,7 +201,13 @@ export function SeasonPage() {
       ) : (
         <div className="season-page__grid">
           {items.map((item) => (
-            <AnimeCard key={item.animeId} animeId={item.animeId} title={item.title} pictureUrl={item.pictureUrl}>
+            <AnimeCard
+              key={item.animeId}
+              animeId={item.animeId}
+              title={item.title}
+              englishTitle={item.englishTitle}
+              pictureUrl={item.pictureUrl}
+            >
               <span className="season-card__meta">
                 {item.mediaType ? item.mediaType.toUpperCase() : 'Unknown'} · {item.totalEpisodes ?? '?'} ep
               </span>

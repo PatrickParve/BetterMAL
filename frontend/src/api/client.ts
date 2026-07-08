@@ -9,6 +9,7 @@ import type {
   PendingReconciliationDiffDto,
   ProfileDto,
   ReconciliationResultDto,
+  ResyncStatusDto,
   SeasonPageDto,
   SyncStatusDto,
   TopAnimeItemDto,
@@ -132,4 +133,14 @@ export async function cancelReconciliationDiff(): Promise<boolean> {
   if (res.status === 404) return false
   if (!res.ok) throw new Error(`/api/sync/reconcile/cancel responded with ${res.status}`)
   return true
+}
+
+// One-time corrective re-sync: kicks off a background run (~1 req/s per
+// anime) rather than waiting on it; poll getResyncFromMalStatus for progress.
+export function triggerResyncFromMal(): Promise<ResyncStatusDto> {
+  return fetchJson<ResyncStatusDto>('/api/sync/resync-from-mal', { method: 'POST' })
+}
+
+export function getResyncFromMalStatus(): Promise<ResyncStatusDto> {
+  return fetchJson<ResyncStatusDto>('/api/sync/resync-from-mal/status')
 }

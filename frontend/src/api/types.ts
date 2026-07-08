@@ -26,6 +26,7 @@ export type UserAnimeEntryEditRequest = {
 export type AnimeSearchResult = {
   id: number
   title: string
+  englishTitle: string | null
   pictureUrl: string | null
 }
 
@@ -47,6 +48,7 @@ export type NextEpisodeEtaDto = {
 export type CurrentlyWatchingItemDto = {
   animeId: number
   title: string
+  englishTitle: string | null
   pictureUrl: string | null
   episodesWatched: number
   totalEpisodes: number | null
@@ -56,6 +58,7 @@ export type CurrentlyWatchingItemDto = {
 export type AiringTodayItemDto = {
   animeId: number
   title: string
+  englishTitle: string | null
   pictureUrl: string | null
   localTime: string
 }
@@ -63,6 +66,7 @@ export type AiringTodayItemDto = {
 export type CurrentSeasonItemDto = {
   animeId: number
   title: string
+  englishTitle: string | null
   pictureUrl: string | null
   episodesWatched: number
   totalEpisodes: number | null
@@ -79,6 +83,7 @@ export type MainDashboardDto = {
 export type AiringSlotDto = {
   animeId: number
   title: string
+  englishTitle: string | null
   pictureUrl: string | null
   localTime: string
   episodeNumber: number | null
@@ -99,6 +104,7 @@ export type AiringWeekDto = {
 export type SeasonAnimeItemDto = {
   animeId: number
   title: string
+  englishTitle: string | null
   pictureUrl: string | null
   totalEpisodes: number | null
   mediaType: string | null
@@ -119,6 +125,7 @@ export type SeasonPageDto = {
 export type MyListItemDto = {
   animeId: number
   title: string
+  englishTitle: string | null
   pictureUrl: string | null
   mediaType: string | null
   totalEpisodes: number | null
@@ -130,6 +137,7 @@ export type TopAnimeItemDto = {
   rank: number
   animeId: number
   title: string
+  englishTitle: string | null
   pictureUrl: string | null
   totalEpisodes: number | null
   malScore: number | null
@@ -149,6 +157,7 @@ export type ActivityFeedItemDto = {
   timestamp: string
   animeId: number
   animeTitle: string
+  animeEnglishTitle: string | null
   pictureUrl: string | null
   changeType: ActivityChangeType
   changeDetail: string | null
@@ -170,6 +179,7 @@ export type AnimeStatsDto = {
 export type TopAnimeEntryDto = {
   animeId: number
   title: string
+  englishTitle: string | null
   pictureUrl: string | null
   myScore: number
 }
@@ -177,6 +187,7 @@ export type TopAnimeEntryDto = {
 export type TopAnimeCandidateDto = {
   animeId: number
   title: string
+  englishTitle: string | null
   pictureUrl: string | null
   myScore: number
 }
@@ -204,6 +215,7 @@ export type ScoreDistributionDto = {
 export type OpinionDivergenceItemDto = {
   animeId: number
   title: string
+  englishTitle: string | null
   pictureUrl: string | null
   myScore: number
   malScore: number
@@ -221,6 +233,14 @@ export type ProfileDto = {
 export type SyncStatusDto = {
   pendingCount: number
   lastSyncedAt: string | null
+}
+
+export type ResyncPhase = 'NotStarted' | 'Running' | 'Complete'
+
+export type ResyncStatusDto = {
+  phase: ResyncPhase
+  synced: number
+  total: number
 }
 
 export type ReconciliationResultDto = {
@@ -254,6 +274,7 @@ export type PendingReconciliationDiffDto = {
 export type AnimeDetailDto = {
   animeId: number
   title: string
+  englishTitle: string | null
   pictureUrl: string | null
   malScore: number | null
   popularityRank: number | null
@@ -263,6 +284,8 @@ export type AnimeDetailDto = {
   airedFrom: string | null
   airedTo: string | null
   studio: string | null
+  source: string | null
+  averageEpisodeDurationSeconds: number | null
   genres: string[] | null
   synopsis: string | null
   background: string | null

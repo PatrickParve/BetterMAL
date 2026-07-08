@@ -5,6 +5,7 @@ import type { AnimeDetailDto, WatchStatus } from "../api/types.ts";
 import { ProgressBar } from "../components/ProgressBar.tsx";
 import { ScoreValue } from "../components/ScoreValue.tsx";
 import { useEntryEditor } from "../context/EntryEditorContext.tsx";
+import { pickDisplayTitle } from "../utils/anime.ts";
 import "./AnimeDetailPage.css";
 
 const STATUS_LABELS: Record<WatchStatus, string> = {
@@ -15,8 +16,16 @@ const STATUS_LABELS: Record<WatchStatus, string> = {
   Dropped: "Dropped",
 };
 
+const AIRING_STATUS_LABELS: Record<string, string> = {
+  currently_airing: "Currently airing",
+  finished_airing: "Finished airing",
+  not_yet_aired: "Not yet aired",
+};
+
+const NO_INFO = "No info";
+
 function formatDate(value: string | null): string {
-  if (!value) return "?";
+  if (!value) return NO_INFO;
   return new Date(value).toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
@@ -24,11 +33,29 @@ function formatDate(value: string | null): string {
   });
 }
 
+function formatAiringStatus(status: string | null): string {
+  if (!status) return NO_INFO;
+  return AIRING_STATUS_LABELS[status] ?? status;
+}
+
+// MAL sends raw source values like "light_novel" — prettify to "Light novel".
+function formatSource(source: string | null): string {
+  if (!source) return NO_INFO;
+  const spaced = source.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+function formatDuration(seconds: number | null): string {
+  if (!seconds) return NO_INFO;
+  return `${Math.round(seconds / 60)} min`;
+}
+
 // Single anime detail page: large picture + progress/edit on the left, a
 // "rank & MAL score" box and a "my score & rewatches" box side by side, an
-// info box, and a synopsis/background box on the right. External MAL/AniList
-// links are plain URL templates from the id (no API call); prequel/sequel
-// buttons only render when those relations exist on the cached record.
+// info box, and a synopsis/background box on the right. The external
+// MyAnimeList link is a plain URL template from the id (no API call);
+// prequel/sequel buttons only render when those relations exist on the
+// cached record.
 export function AnimeDetailPage() {
   const { id } = useParams();
   const animeId = Number(id);
@@ -65,7 +92,7 @@ export function AnimeDetailPage() {
     if (!detail) return;
     openEditor({
       animeId: detail.animeId,
-      animeTitle: detail.title,
+      animeTitle: pickDisplayTitle(detail.title, detail.englishTitle),
       totalEpisodes: detail.totalEpisodes,
       entry: detail.entry,
       onSaved: (saved) =>
@@ -91,7 +118,7 @@ export function AnimeDetailPage() {
     <div className="anime-detail-page">
       <div className="anime-detail-page__top">
         <div>
-          <h1>{detail.title}</h1>
+          <h1>{pickDisplayTitle(detail.title, detail.englishTitle)}</h1>
         </div>
 
         {(detail.prequelMalId || detail.sequelMalId) && (
@@ -187,14 +214,24 @@ export function AnimeDetailPage() {
               <div>
                 <dt>Type</dt>
                 <dd>
-                  {detail.mediaType
-                    ? detail.mediaType.toUpperCase()
-                    : "Unknown"}
+                  {detail.mediaType ? detail.mediaType.toUpperCase() : NO_INFO}
                 </dd>
               </div>
               <div>
+                <dt>Status</dt>
+                <dd>{formatAiringStatus(detail.airingStatus)}</dd>
+              </div>
+              <div>
+                <dt>Source</dt>
+                <dd>{formatSource(detail.source)}</dd>
+              </div>
+              <div>
+                <dt>Duration</dt>
+                <dd>{formatDuration(detail.averageEpisodeDurationSeconds)}</dd>
+              </div>
+              <div>
                 <dt>Studio</dt>
-                <dd>{detail.studio ?? "—"}</dd>
+                <dd>{detail.studio ?? NO_INFO}</dd>
               </div>
               <div>
                 <dt>Aired</dt>
@@ -207,7 +244,7 @@ export function AnimeDetailPage() {
                 <dd>
                   {detail.genres && detail.genres.length > 0
                     ? detail.genres.join(", ")
-                    : "—"}
+                    : NO_INFO}
                 </dd>
               </div>
               <div className="anime-detail-page__external-links">
@@ -217,13 +254,6 @@ export function AnimeDetailPage() {
                   rel="noreferrer"
                 >
                   MyAnimeList
-                </a>
-                <a
-                  href={`https://anilist.co/anime/${detail.animeId}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  AniList
                 </a>
               </div>
             </dl>

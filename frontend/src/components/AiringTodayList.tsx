@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { AiringTodayItemDto } from '../api/types.ts'
+import { pickDisplayTitle } from '../utils/anime.ts'
 import './AiringTodayList.css'
 
 type AiringTodayListProps = {
@@ -25,7 +26,7 @@ export function AiringTodayList({ items }: AiringTodayListProps) {
                   <div className="airing-today__thumb airing-today__thumb--placeholder" aria-hidden="true" />
                 )}
                 <span>
-                  {item.localTime}: {item.title}
+                  {item.localTime}: {pickDisplayTitle(item.title, item.englishTitle)}
                 </span>
               </Link>
             </li>

@@ -7,6 +7,7 @@ public class MalAnimeNode
 {
     public int Id { get; set; }
     public string Title { get; set; } = "";
+    public MalAlternativeTitles? AlternativeTitles { get; set; }
     public MalMainPicture? MainPicture { get; set; }
     public double? Mean { get; set; }
     public string? MediaType { get; set; } // tv, movie, ova, ona, special, music, unknown
@@ -21,7 +22,14 @@ public class MalAnimeNode
     public List<MalGenre>? Genres { get; set; }
     public string? Synopsis { get; set; }
     public string? Background { get; set; }
+    public int? AverageEpisodeDuration { get; set; } // seconds
+    public string? Source { get; set; } // e.g. manga, original, light_novel
     public List<MalRelatedAnimeEdge>? RelatedAnime { get; set; }
+}
+
+public class MalAlternativeTitles
+{
+    public string? En { get; set; }
 }
 
 public class MalMainPicture

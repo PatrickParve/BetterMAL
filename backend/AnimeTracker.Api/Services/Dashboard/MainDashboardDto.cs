@@ -5,6 +5,7 @@ public record NextEpisodeEtaDto(int Days, int Hours);
 public record CurrentlyWatchingItemDto(
     int AnimeId,
     string Title,
+    string? EnglishTitle,
     string? PictureUrl,
     int EpisodesWatched,
     int? TotalEpisodes,
@@ -13,12 +14,14 @@ public record CurrentlyWatchingItemDto(
 public record AiringTodayItemDto(
     int AnimeId,
     string Title,
+    string? EnglishTitle,
     string? PictureUrl,
     string LocalTime);
 
 public record CurrentSeasonItemDto(
     int AnimeId,
     string Title,
+    string? EnglishTitle,
     string? PictureUrl,
     int EpisodesWatched,
     int? TotalEpisodes,

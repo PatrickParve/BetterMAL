@@ -19,6 +19,7 @@ public record ActivityFeedItemDto(
     DateTimeOffset Timestamp,
     int AnimeId,
     string AnimeTitle,
+    string? AnimeEnglishTitle,
     string? PictureUrl,
     ActivityChangeType ChangeType,
     string? ChangeDetail);
@@ -26,12 +27,14 @@ public record ActivityFeedItemDto(
 public record TopAnimeEntryDto(
     int AnimeId,
     string Title,
+    string? EnglishTitle,
     string? PictureUrl,
     int MyScore);
 
 public record TopAnimeCandidateDto(
     int AnimeId,
     string Title,
+    string? EnglishTitle,
     string? PictureUrl,
     int MyScore);
 
@@ -52,6 +55,7 @@ public record ScoreDistributionDto(List<ScoreDistributionBucketDto> Buckets, dou
 public record OpinionDivergenceItemDto(
     int AnimeId,
     string Title,
+    string? EnglishTitle,
     string? PictureUrl,
     int MyScore,
     double MalScore);

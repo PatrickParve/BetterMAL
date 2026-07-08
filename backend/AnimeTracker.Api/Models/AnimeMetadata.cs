@@ -8,6 +8,7 @@ public class AnimeMetadata
     public int Id { get; set; } // MAL anime id
 
     public required string Title { get; set; }
+    public string? EnglishTitle { get; set; }
     public string? PictureUrl { get; set; }
     public double? MalScore { get; set; }
     public string? MediaType { get; set; } // tv, movie, ova, ona, special, music, unknown
@@ -26,6 +27,8 @@ public class AnimeMetadata
     public List<string>? Genres { get; set; }
     public string? Synopsis { get; set; }
     public string? Background { get; set; }
+    public int? AverageEpisodeDurationSeconds { get; set; }
+    public string? Source { get; set; } // e.g. manga, original, light_novel
 
     // Related-anime links (rich/full detail only). MAL can report several
     // related entries per relation type, but the detail page shows at most

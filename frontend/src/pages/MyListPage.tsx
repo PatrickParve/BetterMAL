@@ -5,6 +5,7 @@ import type { MyListItemDto, WatchStatus } from '../api/types.ts'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
+import { pickDisplayTitle } from '../utils/anime.ts'
 import './MyListPage.css'
 
 type SortKey = 'alphabetical' | 'malScore' | 'myScore'
@@ -80,7 +81,7 @@ export function MyListPage() {
   function openEdit(item: MyListItemDto) {
     openEditor({
       animeId: item.animeId,
-      animeTitle: item.title,
+      animeTitle: pickDisplayTitle(item.title, item.englishTitle),
       totalEpisodes: item.totalEpisodes,
       entry: item.entry,
       onSaved: handleSaved(item.animeId),
@@ -98,7 +99,7 @@ export function MyListPage() {
             <div className="my-list-row__picture my-list-row__picture--placeholder" aria-hidden="true" />
           )}
           <span className="my-list-row__info">
-            <span className="my-list-row__title">{item.title}</span>
+            <span className="my-list-row__title">{pickDisplayTitle(item.title, item.englishTitle)}</span>
             <span className="my-list-row__type">{item.mediaType ? item.mediaType.toUpperCase() : 'Unknown'}</span>
           </span>
         </Link>

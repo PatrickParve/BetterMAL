@@ -9,6 +9,8 @@ public static class SeasonCalendar
     public static (int Year, string Season) GetSeasonFor(DateOnly localDate) =>
         (localDate.Year, Order[(localDate.Month - 1) / 3]);
 
+    public static int GetSeasonIndex(string season) => Array.IndexOf(Order, season);
+
     public static (int Year, string Season) GetNextSeason(int year, string season)
     {
         var index = Array.IndexOf(Order, season);

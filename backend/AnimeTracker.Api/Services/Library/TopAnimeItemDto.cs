@@ -9,6 +9,7 @@ public record TopAnimeItemDto(
     int Rank,
     int AnimeId,
     string Title,
+    string? EnglishTitle,
     string? PictureUrl,
     int? TotalEpisodes,
     double? MalScore,
