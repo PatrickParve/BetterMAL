@@ -15,6 +15,15 @@ public class MalPaging
 public class MalAnimeListEdge
 {
     public MalAnimeNode Node { get; set; } = null!;
+
+    /// <summary>Only populated by the ranking endpoint; null everywhere else
+    /// (search, season, user list).</summary>
+    public MalRankingInfo? Ranking { get; set; }
+}
+
+public class MalRankingInfo
+{
+    public int Rank { get; set; }
 }
 
 public class MalUserAnimeListEdge

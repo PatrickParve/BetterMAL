@@ -115,3 +115,23 @@ export type SeasonPageDto = {
   limit: number
   totalCount: number
 }
+
+export type MyListItemDto = {
+  animeId: number
+  title: string
+  pictureUrl: string | null
+  mediaType: string | null
+  totalEpisodes: number | null
+  malScore: number | null
+  entry: UserAnimeEntryDto
+}
+
+export type TopAnimeItemDto = {
+  rank: number
+  animeId: number
+  title: string
+  pictureUrl: string | null
+  totalEpisodes: number | null
+  malScore: number | null
+  entry: UserAnimeEntryDto | null
+}

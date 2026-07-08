@@ -3,7 +3,9 @@ import type {
   AnimeSearchResult,
   MainDashboardDto,
   MalAuthStatus,
+  MyListItemDto,
   SeasonPageDto,
+  TopAnimeItemDto,
   UserAnimeEntryDto,
   UserAnimeEntryEditRequest,
 } from './types.ts'
@@ -52,4 +54,12 @@ export function getSeasonPage(
     limit: String(params.limit),
   })
   return fetchJson<SeasonPageDto>(`/api/season/${year}/${season}?${query.toString()}`)
+}
+
+export function getMyList(): Promise<MyListItemDto[]> {
+  return fetchJson<MyListItemDto[]>('/api/my-list')
+}
+
+export function getTopAnime(): Promise<TopAnimeItemDto[]> {
+  return fetchJson<TopAnimeItemDto[]>('/api/top-anime')
 }

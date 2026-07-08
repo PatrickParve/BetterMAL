@@ -13,6 +13,8 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<PendingReconciliationDiff> PendingReconciliationDiffs => Set<PendingReconciliationDiff>();
     public DbSet<PendingReconciliationDiffEntry> PendingReconciliationDiffEntries => Set<PendingReconciliationDiffEntry>();
     public DbSet<SeasonFetchLog> SeasonFetchLogs => Set<SeasonFetchLog>();
+    public DbSet<TopAnimeRankingEntry> TopAnimeRankingEntries => Set<TopAnimeRankingEntry>();
+    public DbSet<TopAnimeFetchLog> TopAnimeFetchLogs => Set<TopAnimeFetchLog>();
     public DbSet<SeasonAnimeListing> SeasonAnimeListings => Set<SeasonAnimeListing>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -73,6 +75,15 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
         modelBuilder.Entity<SeasonAnimeListing>(entity =>
         {
             entity.HasKey(e => new { e.Year, e.Season, e.AnimeId });
+            entity.HasOne(e => e.Anime)
+                .WithMany()
+                .HasForeignKey(e => e.AnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TopAnimeRankingEntry>(entity =>
+        {
+            entity.HasKey(e => e.AnimeId);
             entity.HasOne(e => e.Anime)
                 .WithMany()
                 .HasForeignKey(e => e.AnimeId)

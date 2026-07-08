@@ -110,13 +110,13 @@
 
 ## 14. My list & top anime pages (`library-views`)
 
-- [ ] 14.1 Build the My list page: one list grouped/ordered Watching → On hold → Plan to watch → Completed → Dropped, each showing picture, title, type, progress, my score
-- [ ] 14.2 Show rank numbers (`#1`) on the left when My list is sorted by score
-- [ ] 14.3 Build the Top anime page: ranked rows (number, picture, title, my score, right-aligned MAL score)
-- [ ] 14.4 Add the MAL score column (hide-toggle aware) and an edit button (opens the editor overlay) to each My list row
-- [ ] 14.5 Add My list status filter tabs (All, Watching, Completed, Plan to watch, On hold, Dropped) and a quick-filter control (MAL score, my score, alphabetical)
-- [ ] 14.6 Add the conditional Top anime list-action button per row — "Add" when the anime is not in my list (adds it with status Plan to watch, then flips in place to "Edit"), "Edit" (opens the editor overlay on the same page) when it is
-- [ ] 14.7 Re-fetch the Top Anime ranking's lean listing fields on the first visit of a new local calendar day since the last fetch; same-day revisits serve from cache; never proactively fetched if never visited
+- [x] 14.1 Build the My list page: one list grouped/ordered Watching → On hold → Plan to watch → Completed → Dropped, each showing picture, title, type, progress, my score
+- [x] 14.2 Show rank numbers (`#1`) on the left when My list is sorted by score
+- [x] 14.3 Build the Top anime page: ranked rows (number, picture, title, my score, right-aligned MAL score)
+- [x] 14.4 Add the MAL score column (hide-toggle aware) and an edit button (opens the editor overlay) to each My list row
+- [x] 14.5 Add My list status filter tabs (All, Watching, Completed, Plan to watch, On hold, Dropped) and a quick-filter control (MAL score, my score, alphabetical)
+- [x] 14.6 Add the conditional Top anime list-action button per row — "Add" when the anime is not in my list (adds it with status Plan to watch, then flips in place to "Edit"), "Edit" (opens the editor overlay on the same page) when it is
+- [x] 14.7 Re-fetch the Top Anime ranking's lean listing fields on the first visit of a new local calendar day since the last fetch; same-day revisits serve from cache; never proactively fetched if never visited
 
 ## 15. Profile page (`profile-stats`)
 
