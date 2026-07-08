@@ -7,4 +7,8 @@ namespace AnimeTracker.Api.Data.Repositories;
 public interface IActivityLogRepository
 {
     Task<List<ActivityLog>> GetRecentAsync(int count, CancellationToken ct = default);
+
+    /// <summary>Full history, most recent first — backs the "Latest updates"
+    /// box's edit-history overlay.</summary>
+    Task<List<ActivityLog>> GetAllAsync(CancellationToken ct = default);
 }

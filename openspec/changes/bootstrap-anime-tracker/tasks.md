@@ -120,13 +120,13 @@
 
 ## 15. Profile page (`profile-stats`)
 
-- [ ] 15.1 Compute and display anime stats from local DB (Days, Mean Score, Watching, Completed, On-Hold, Dropped, Plan to Watch, Total Entries, Rewatched, Episodes)
-- [ ] 15.2 Build the "Latest updates" feed from `ActivityLog`, most recent first
-- [ ] 15.3 Build "My top anime" with the minimum-of-10 fill rule (all 10s uncapped; fill the remainder up to 10 by next-highest score as the default)
-- [ ] 15.4 Build all-anime score distribution (count per score value + overall mean)
-- [ ] 15.5 Build opinion-divergence lists ("They liked it, I didn't" ≥3 below MAL; "I liked it, they didn't" MAL <7 and mine ≥2 above)
-- [ ] 15.6 Add the "My top anime" edit control (top-right) opening a selection view over the tied next-highest-scored anime; persist the manual choice and have it take precedence over the default fill (see 19.3)
-- [ ] 15.7 Make the "Latest updates" box scrollable and add its top-right control opening a full edit-history overlay (closes on Esc/click-outside)
+- [x] 15.1 Compute and display anime stats from local DB (Days, Mean Score, Watching, Completed, On-Hold, Dropped, Plan to Watch, Total Entries, Rewatched, Episodes) — `GET /api/profile` (`ProfileService.BuildStats`); "Days" approximates using a flat 24 min/episode assumption since no per-anime duration is cached anywhere in the app
+- [x] 15.2 Build the "Latest updates" feed from `ActivityLog`, most recent first — `ProfileService` (recent slice via existing `IActivityLogRepository.GetRecentAsync`), rendered in `ProfilePage.tsx`
+- [x] 15.3 Build "My top anime" with the minimum-of-10 fill rule (all 10s uncapped; fill the remainder up to 10 by next-highest score as the default) — `ProfileService.BuildTopAnimeSection`
+- [x] 15.4 Build all-anime score distribution (count per score value + overall mean) — `ProfileService.BuildScoreDistribution`, rendered as a bar chart in `ProfilePage.tsx`
+- [x] 15.5 Build opinion-divergence lists ("They liked it, I didn't" ≥3 below MAL; "I liked it, they didn't" MAL <7 and mine ≥2 above) — `ProfileService.BuildOpinionDivergence`
+- [x] 15.6 Add the "My top anime" edit control (top-right) opening a selection view over the tied next-highest-scored anime; persist the manual choice and have it take precedence over the default fill (see 19.3) — `TopAnimeSelectionOverlay.tsx`, reuses the existing `GET`/`PUT /api/top-anime/selection` endpoints; under-filled manual selections are topped up from the same deterministic default so the list still reaches 10 when possible
+- [x] 15.7 Make the "Latest updates" box scrollable and add its top-right control opening a full edit-history overlay (closes on Esc/click-outside) — scrollable `.activity-feed` list; `EditHistoryOverlay.tsx` backed by new `GET /api/profile/activity` (`IActivityLogRepository.GetAllAsync`), reuses the shared `Modal` component (extended with an optional wider `className` variant)
 
 ## 16. Single anime page (`anime-detail`)
 

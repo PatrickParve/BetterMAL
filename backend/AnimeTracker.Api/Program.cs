@@ -8,6 +8,7 @@ using AnimeTracker.Api.Services.Library;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Auth;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Services.Profile;
 using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Season;
@@ -94,6 +95,9 @@ builder.Services.AddScoped<ISeasonBrowseService, SeasonBrowseService>();
 // --- Library views (my list / top anime) ---
 builder.Services.AddScoped<IMyListService, MyListService>();
 builder.Services.AddScoped<ITopAnimeService, TopAnimeService>();
+
+// --- Profile stats ---
+builder.Services.AddScoped<IProfileService, ProfileService>();
 
 var app = builder.Build();
 

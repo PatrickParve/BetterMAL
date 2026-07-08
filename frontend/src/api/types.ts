@@ -135,3 +135,85 @@ export type TopAnimeItemDto = {
   malScore: number | null
   entry: UserAnimeEntryDto | null
 }
+
+export type ActivityChangeType =
+  | 'Added'
+  | 'StatusChanged'
+  | 'EpisodeIncremented'
+  | 'ScoreChanged'
+  | 'Completed'
+  | 'RewatchCountChanged'
+
+export type ActivityFeedItemDto = {
+  id: number
+  timestamp: string
+  animeId: number
+  animeTitle: string
+  pictureUrl: string | null
+  changeType: ActivityChangeType
+  changeDetail: string | null
+}
+
+export type AnimeStatsDto = {
+  days: number
+  meanScore: number | null
+  watching: number
+  completed: number
+  onHold: number
+  dropped: number
+  planToWatch: number
+  totalEntries: number
+  rewatched: number
+  episodes: number
+}
+
+export type TopAnimeEntryDto = {
+  animeId: number
+  title: string
+  pictureUrl: string | null
+  myScore: number
+}
+
+export type TopAnimeCandidateDto = {
+  animeId: number
+  title: string
+  pictureUrl: string | null
+  myScore: number
+}
+
+// Items is the resolved "My top anime" list. Candidates/tieBreakSlots are
+// only populated when the fill boundary lands mid-tier (an actual tie to
+// break) — that's what the selection overlay (15.6) is built from.
+export type TopAnimeSectionDto = {
+  items: TopAnimeEntryDto[]
+  tieBreakSlots: number
+  candidates: TopAnimeCandidateDto[]
+  selectedAnimeIds: number[]
+}
+
+export type ScoreDistributionBucketDto = {
+  score: number
+  count: number
+}
+
+export type ScoreDistributionDto = {
+  buckets: ScoreDistributionBucketDto[]
+  meanScore: number | null
+}
+
+export type OpinionDivergenceItemDto = {
+  animeId: number
+  title: string
+  pictureUrl: string | null
+  myScore: number
+  malScore: number
+}
+
+export type ProfileDto = {
+  stats: AnimeStatsDto
+  recentActivity: ActivityFeedItemDto[]
+  topAnime: TopAnimeSectionDto
+  scoreDistribution: ScoreDistributionDto
+  theyLikedItIDidnt: OpinionDivergenceItemDto[]
+  iLikedItTheyDidnt: OpinionDivergenceItemDto[]
+}

@@ -11,4 +11,10 @@ public class ActivityLogRepository(AnimeTrackerDbContext db) : IActivityLogRepos
             .OrderByDescending(l => l.Timestamp)
             .Take(count)
             .ToListAsync(ct);
+
+    public Task<List<ActivityLog>> GetAllAsync(CancellationToken ct = default) =>
+        db.ActivityLogs.AsNoTracking()
+            .Include(l => l.Anime)
+            .OrderByDescending(l => l.Timestamp)
+            .ToListAsync(ct);
 }

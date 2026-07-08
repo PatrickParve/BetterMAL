@@ -1,9 +1,11 @@
 import type {
+  ActivityFeedItemDto,
   AiringWeekDto,
   AnimeSearchResult,
   MainDashboardDto,
   MalAuthStatus,
   MyListItemDto,
+  ProfileDto,
   SeasonPageDto,
   TopAnimeItemDto,
   UserAnimeEntryDto,
@@ -14,6 +16,11 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   const res = await fetch(input, init)
   if (!res.ok) throw new Error(`${input} responded with ${res.status}`)
   return res.json() as Promise<T>
+}
+
+async function fetchVoid(input: string, init?: RequestInit): Promise<void> {
+  const res = await fetch(input, init)
+  if (!res.ok) throw new Error(`${input} responded with ${res.status}`)
 }
 
 export function getMalAuthStatus(): Promise<MalAuthStatus> {
@@ -62,4 +69,20 @@ export function getMyList(): Promise<MyListItemDto[]> {
 
 export function getTopAnime(): Promise<TopAnimeItemDto[]> {
   return fetchJson<TopAnimeItemDto[]>('/api/top-anime')
+}
+
+export function getProfile(): Promise<ProfileDto> {
+  return fetchJson<ProfileDto>('/api/profile')
+}
+
+export function getActivityHistory(): Promise<ActivityFeedItemDto[]> {
+  return fetchJson<ActivityFeedItemDto[]>('/api/profile/activity')
+}
+
+export function putTopAnimeSelection(animeIds: number[]): Promise<void> {
+  return fetchVoid('/api/top-anime/selection', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ animeIds }),
+  })
 }

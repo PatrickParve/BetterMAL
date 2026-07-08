@@ -1,0 +1,245 @@
+.profile-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.profile-page__top-row {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.profile-page__divergence-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 1024px) {
+  .profile-page__top-row,
+  .profile-page__divergence-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.profile-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.profile-box h2 {
+  margin: 0;
+}
+
+.profile-box__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.profile-box__control {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.profile-box__control:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.profile-stats {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-stats__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+}
+
+.profile-stats__row dt {
+  color: var(--text);
+}
+
+.profile-stats__row dd {
+  margin: 0;
+  color: var(--text-h);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-distribution {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.score-distribution__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.score-distribution__label {
+  width: 16px;
+  flex: 0 0 auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+.score-distribution__bar-track {
+  flex: 1 1 auto;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  overflow: hidden;
+}
+
+.score-distribution__bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.score-distribution__count {
+  width: 28px;
+  flex: 0 0 auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-distribution__mean {
+  margin: 0;
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+.activity-feed,
+.top-anime-mini-list,
+.divergence-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.activity-feed {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.profile-list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.profile-list-row__rank {
+  width: 28px;
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--text-h);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-list-row__link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.profile-list-row__link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.profile-list-row__picture {
+  width: 32px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--code-bg);
+  flex: 0 0 auto;
+}
+
+.profile-list-row__picture--placeholder {
+  border: 1px solid var(--border);
+}
+
+.profile-list-row__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.profile-list-row__title {
+  color: var(--text-h);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-list-row__meta {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-list-row__trailing {
+  flex: 0 0 auto;
+  font-size: 13px;
+  text-align: right;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+
+.profile-page__section-empty {
+  padding: 16px 0;
+  text-align: center;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.profile-page__loading,
+.profile-page__empty {
+  padding: 48px 0;
+  text-align: center;
+  color: var(--text);
+  opacity: 0.75;
+}

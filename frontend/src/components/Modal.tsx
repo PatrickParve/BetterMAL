@@ -5,12 +5,13 @@ type ModalProps = {
   onClose: () => void
   children: ReactNode
   labelledBy?: string
+  className?: string
 }
 
 // Generic "opens on top of the page, closes on Esc/click-outside" overlay —
 // shared by the entry editor and any future overlay (edit-history, top-anime
 // selection) that needs the same open/close behavior.
-export function Modal({ onClose, children, labelledBy }: ModalProps) {
+export function Modal({ onClose, children, labelledBy, className }: ModalProps) {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') onClose()
@@ -25,7 +26,7 @@ export function Modal({ onClose, children, labelledBy }: ModalProps) {
 
   return (
     <div className="modal-backdrop" onMouseDown={handleBackdropClick}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
+      <div className={className ? `modal ${className}` : 'modal'} role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
         {children}
       </div>
     </div>
