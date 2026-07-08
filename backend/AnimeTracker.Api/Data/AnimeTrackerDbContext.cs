@@ -1,0 +1,66 @@
+using AnimeTracker.Api.Models;
+using Microsoft.EntityFrameworkCore;
+
+namespace AnimeTracker.Api.Data;
+
+public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> options) : DbContext(options)
+{
+    public DbSet<AnimeMetadata> AnimeMetadata => Set<AnimeMetadata>();
+    public DbSet<UserAnimeEntry> UserAnimeEntries => Set<UserAnimeEntry>();
+    public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
+    public DbSet<OAuthToken> OAuthTokens => Set<OAuthToken>();
+    public DbSet<TopAnimeSelection> TopAnimeSelections => Set<TopAnimeSelection>();
+    public DbSet<PendingReconciliationDiff> PendingReconciliationDiffs => Set<PendingReconciliationDiff>();
+    public DbSet<PendingReconciliationDiffEntry> PendingReconciliationDiffEntries => Set<PendingReconciliationDiffEntry>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AnimeMetadata>(entity =>
+        {
+            // Id is the MAL anime id, supplied by the application — not DB-generated.
+            entity.Property(e => e.Id).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<UserAnimeEntry>(entity =>
+        {
+            entity.HasKey(e => e.AnimeId);
+            entity.HasOne(e => e.Anime)
+                .WithOne(a => a.UserEntry)
+                .HasForeignKey<UserAnimeEntry>(e => e.AnimeId);
+            entity.Property(e => e.Status).HasConversion<string>();
+        });
+
+        modelBuilder.Entity<ActivityLog>(entity =>
+        {
+            entity.HasOne(e => e.Anime)
+                .WithMany()
+                .HasForeignKey(e => e.AnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.Property(e => e.ChangeType).HasConversion<string>();
+            entity.HasIndex(e => e.Timestamp);
+        });
+
+        modelBuilder.Entity<TopAnimeSelection>(entity =>
+        {
+            entity.HasKey(e => e.AnimeId);
+            entity.HasOne(e => e.Anime)
+                .WithMany()
+                .HasForeignKey(e => e.AnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PendingReconciliationDiff>(entity =>
+        {
+            entity.HasMany(e => e.Entries)
+                .WithOne(e => e.Diff)
+                .HasForeignKey(e => e.PendingReconciliationDiffId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PendingReconciliationDiffEntry>(entity =>
+        {
+            entity.Property(e => e.Status).HasConversion<string>();
+            entity.Property(e => e.ChangeType).HasConversion<string>();
+        });
+    }
+}

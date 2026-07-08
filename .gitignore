@@ -1,0 +1,23 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# .NET
+backend/**/bin/
+backend/**/obj/
+*.user
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+npm-debug.log*
+
+# Editor / OS
+.vs/
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
