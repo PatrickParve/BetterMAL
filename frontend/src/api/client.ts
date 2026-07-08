@@ -1,6 +1,7 @@
 import type {
   ActivityFeedItemDto,
   AiringWeekDto,
+  AnimeDetailDto,
   AnimeSearchResult,
   MainDashboardDto,
   MalAuthStatus,
@@ -85,4 +86,12 @@ export function putTopAnimeSelection(animeIds: number[]): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ animeIds }),
   })
+}
+
+export function getAnimeDetail(animeId: number): Promise<AnimeDetailDto> {
+  return fetchJson<AnimeDetailDto>(`/api/anime/${animeId}`)
+}
+
+export function refreshAnime(animeId: number): Promise<void> {
+  return fetchVoid(`/api/anime/${animeId}/refresh`, { method: 'POST' })
 }

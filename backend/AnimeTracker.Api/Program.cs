@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Dashboard;
+using AnimeTracker.Api.Services.Detail;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Import;
 using AnimeTracker.Api.Services.Library;
@@ -98,6 +99,9 @@ builder.Services.AddScoped<ITopAnimeService, TopAnimeService>();
 
 // --- Profile stats ---
 builder.Services.AddScoped<IProfileService, ProfileService>();
+
+// --- Single anime detail page ---
+builder.Services.AddScoped<IAnimeDetailService, AnimeDetailService>();
 
 var app = builder.Build();
 

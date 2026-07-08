@@ -217,3 +217,25 @@ export type ProfileDto = {
   theyLikedItIDidnt: OpinionDivergenceItemDto[]
   iLikedItTheyDidnt: OpinionDivergenceItemDto[]
 }
+
+export type AnimeDetailDto = {
+  animeId: number
+  title: string
+  pictureUrl: string | null
+  malScore: number | null
+  popularityRank: number | null
+  mediaType: string | null
+  airingStatus: string | null
+  totalEpisodes: number | null
+  airedFrom: string | null
+  airedTo: string | null
+  studio: string | null
+  genres: string[] | null
+  synopsis: string | null
+  background: string | null
+  prequelMalId: number | null
+  prequelTitle: string | null
+  sequelMalId: number | null
+  sequelTitle: string | null
+  entry: UserAnimeEntryDto | null
+}

@@ -130,12 +130,14 @@
 
 ## 16. Single anime page (`anime-detail`)
 
-- [ ] 16.1 Build the detail view (picture, title, MAL score respecting hide toggle, my status, type, aired-from/to, studio)
-- [ ] 16.2 Add external MAL and AniList links built from the MAL id (URL templates, no API call)
-- [ ] 16.3 Add the progress bar (`watched/total` or `watched/?`) with status and an edit button that opens the overlay editor (episodes, rewatch count, score; no start/finish date fields; applies edit/sync rules)
-- [ ] 16.4 Add the on-demand refresh action for this anime
-- [ ] 16.5 Lay out the detail header: large picture on the left, two side-by-side boxes ("rank + MAL score", "my score + rewatch count"), an info box (type, studio, aired-from/to, genre, other short fields), and a synopsis/background box
-- [ ] 16.6 Show prequel/sequel link buttons in the top-right, only when the related anime exist, linking to their detail pages (see 19.2)
+- [x] 16.1 Build the detail view (picture, title, MAL score respecting hide toggle, my status, type, aired-from/to, studio) — `GET /api/anime/{id}` (`AnimeDetailService`) + `pages/AnimeDetailPage.tsx`; on first visit to an anime that's only ever been lean-fetched (Season/Top-Anime browsing), the service triggers a one-time live full-detail fetch via the existing `IMetadataRefreshService.RefreshOneAsync`, mirroring the season page's visit-triggered pattern
+- [x] 16.2 Add external MAL and AniList links built from the MAL id (URL templates, no API call) — plain `<a>` templates in `AnimeDetailPage.tsx`, no backend involvement
+- [x] 16.3 Add the progress bar (`watched/total` or `watched/?`) with status and an edit button that opens the overlay editor (episodes, rewatch count, score; no start/finish date fields; applies edit/sync rules) — reuses `ProgressBar` + `useEntryEditor().openEditor(...)`; works in both edit (in my list) and add (not in my list yet) modes
+- [x] 16.4 Add the on-demand refresh action for this anime — "Refresh data" button calls the existing `POST /api/anime/{id}/refresh` endpoint (7.4) then reloads the page's data
+- [x] 16.5 Lay out the detail header: large picture on the left, two side-by-side boxes ("rank + MAL score", "my score + rewatch count"), an info box (type, studio, aired-from/to, genre, other short fields), and a synopsis/background box — `AnimeDetailPage.tsx` + `AnimeDetailPage.css`
+- [x] 16.6 Show prequel/sequel link buttons in the top-right, only when the related anime exist, linking to their detail pages (see 19.2) — verified in a real browser both with and without related anime present
+
+Verified end-to-end in a real browser (docker-composed backend/postgres + a local Vite dev server): rich detail-only fields (genres/synopsis/background/studio/aired dates) populate live on first visit and persist (`LastSyncedAt` moves off its lean-fetch default); the edit overlay opens with episodes/status/score/rewatch fields and no date fields; the hide-scores toggle blurs the MAL score in the rank box without leaking the value into the DOM; the prequel button renders and links correctly when a prequel exists; an unknown id renders a graceful "Couldn't load this anime." message instead of crashing.
 
 ## 17. Settings / utility page
 
