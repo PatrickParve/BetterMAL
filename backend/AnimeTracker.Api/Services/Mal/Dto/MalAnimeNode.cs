@@ -18,6 +18,7 @@ public class MalAnimeNode
     public List<MalStudio>? Studios { get; set; }
     public MalBroadcast? Broadcast { get; set; }
     public int? Popularity { get; set; }
+    public MalStartSeason? StartSeason { get; set; }
     public MalListStatus? MyListStatus { get; set; }
     public List<MalGenre>? Genres { get; set; }
     public string? Synopsis { get; set; }
@@ -30,6 +31,15 @@ public class MalAnimeNode
 public class MalAlternativeTitles
 {
     public string? En { get; set; }
+}
+
+/// <summary>MAL's authoritative season classification for an anime — the field
+/// MAL itself uses to build its per-season listings. Can differ from the quarter
+/// the start_date falls in (e.g. an early-June premiere filed under summer).</summary>
+public class MalStartSeason
+{
+    public int Year { get; set; }
+    public string Season { get; set; } = ""; // winter, spring, summer, fall
 }
 
 public class MalMainPicture

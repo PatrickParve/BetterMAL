@@ -14,15 +14,12 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
     public async Task<(List<SeasonAnimeItem> Items, int TotalCount)> GetPageAsync(
         int year, string season, SeasonSortKey sort, int offset, int limit, CancellationToken ct = default)
     {
-        var seasonIndex = SeasonCalendar.GetSeasonIndex(season);
-
+        // Listing membership is authoritative: SeasonBrowseService already files
+        // each anime under MAL's own start_season, which can differ from the quarter
+        // its start_date falls in (e.g. an early-June premiere MAL lists as summer).
+        // Re-deriving the season from AiredFrom here would wrongly drop those.
         var query = db.SeasonAnimeListings.AsNoTracking()
             .Where(l => l.Year == year && l.Season == season)
-            // Heals already-cached pollution (e.g. a long-runner listed under every
-            // season it aired through): keep only listings whose anime premiered in
-            // this season, falling back to shown when the start date is unknown.
-            .Where(l => l.Anime.AiredFrom == null
-                || (l.Anime.AiredFrom.Value.Year == year && (l.Anime.AiredFrom.Value.Month - 1) / 3 == seasonIndex))
             .Select(l => new
             {
                 l.Anime.Id,
@@ -43,7 +40,12 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
             SeasonSortKey.MalScore => query.OrderByDescending(a => a.MalScore ?? -1).ThenBy(a => a.Title),
             SeasonSortKey.MyScore => query.OrderByDescending(a => a.MyScore ?? -1).ThenBy(a => a.Title),
             SeasonSortKey.Alphabetical => query.OrderBy(a => a.Title),
-            _ => query.OrderBy(a => a.PopularityRank ?? int.MaxValue).ThenBy(a => a.Title),
+            // PopularityRank 0/null means "unranked" on MAL — sort those last, then
+            // by ascending rank (1 = most popular), then title.
+            _ => query
+                .OrderBy(a => a.PopularityRank == null || a.PopularityRank == 0 ? 1 : 0)
+                .ThenBy(a => a.PopularityRank)
+                .ThenBy(a => a.Title),
         };
 
         var page = await query.Skip(offset).Take(limit).ToListAsync(ct);

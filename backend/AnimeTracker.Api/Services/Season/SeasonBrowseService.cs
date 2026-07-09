@@ -59,6 +59,9 @@ public class SeasonBrowseService(
     {
         var edges = await malClient.GetFullSeasonAsync(year, season, ct: ct);
         var animeIds = edges.Select(e => e.Node.Id).Distinct().ToList();
+        var startSeasonById = edges
+            .GroupBy(e => e.Node.Id)
+            .ToDictionary(g => g.Key, g => g.First().Node.StartSeason);
 
         var existingAnime = await db.AnimeMetadata
             .Where(a => animeIds.Contains(a.Id))
@@ -95,11 +98,15 @@ public class SeasonBrowseService(
             if (existingListingIds.Contains(animeId))
                 continue;
 
-            // Unknown start dates fall back to shown (matches the read-time filter);
-            // known dates outside this season are excluded so an anime is only ever
-            // listed under its premiere season.
-            var airedFrom = existingAnime[animeId].AiredFrom;
-            if (airedFrom is { } date && SeasonCalendar.GetSeasonFor(date) != (year, season))
+            // MAL's own start_season is authoritative — an anime belongs to the
+            // season MAL files it under, which can differ from the quarter its
+            // start_date falls in (e.g. an early-June premiere MAL lists as summer).
+            // Only exclude when MAL explicitly classifies it under a *different*
+            // season (e.g. a continuing long-runner from a past season); a missing
+            // start_season falls back to trusting the season endpoint that returned it.
+            var startSeason = startSeasonById.GetValueOrDefault(animeId);
+            if (startSeason is not null &&
+                (startSeason.Year != year || !string.Equals(startSeason.Season, season, StringComparison.OrdinalIgnoreCase)))
                 continue;
 
             db.SeasonAnimeListings.Add(new SeasonAnimeListing { Year = year, Season = season, AnimeId = animeId });

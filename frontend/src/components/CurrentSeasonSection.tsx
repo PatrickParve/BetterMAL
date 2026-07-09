@@ -12,11 +12,17 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'alphabetical', label: 'Alphabetical' },
 ]
 
+// MAL popularity is a rank (1 = most popular); 0 or null means "unranked", which
+// must sort last rather than ahead of rank 1.
+function popularityKey(rank: number | null | undefined): number {
+  return rank == null || rank === 0 ? Number.MAX_SAFE_INTEGER : rank
+}
+
 function sortItems(items: CurrentSeasonItemDto[], sort: SortKey): CurrentSeasonItemDto[] {
   const sorted = [...items]
   switch (sort) {
     case 'popularity':
-      sorted.sort((a, b) => (a.popularityRank ?? Number.MAX_SAFE_INTEGER) - (b.popularityRank ?? Number.MAX_SAFE_INTEGER))
+      sorted.sort((a, b) => popularityKey(a.popularityRank) - popularityKey(b.popularityRank))
       break
     case 'malScore':
       sorted.sort((a, b) => (b.malScore ?? -1) - (a.malScore ?? -1))
