@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { searchAnime } from '../api/client.ts'
 import type { AnimeSearchResult } from '../api/types.ts'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
@@ -7,15 +7,19 @@ import { useClickOutside } from '../hooks/useClickOutside.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
 import './SearchBar.css'
 
-// Centered navbar type-ahead: debounced, local-cache-first with word-boundary
-// prefix matching, live-fallback for uncached titles — all handled server-side
-// by GET /api/anime/search; this component just debounces and renders results.
+// Centered navbar type-ahead: debounced. Ranking (local cache merged with live
+// MAL, prefix matches first, ordered by popularity, `"…"` for exact) is all
+// handled server-side by GET /api/anime/search; this component just debounces
+// and renders the top matches. Enter (or the magnifier button) submits to the
+// full /search results page.
 export function SearchBar() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<AnimeSearchResult[]>([])
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
   const debouncedQuery = useDebouncedValue(query.trim(), 250)
 
   useClickOutside(containerRef, () => setOpen(false))
@@ -41,10 +45,24 @@ export function SearchBar() {
     return () => controller.abort()
   }, [debouncedQuery])
 
+  // Keep the input in sync with the URL while on the search page itself, so a
+  // reload or a direct link (e.g. /search?q=foo) shows the term that's live.
+  const urlQuery = searchParams.get('q') ?? ''
+  useEffect(() => {
+    if (location.pathname === '/search') setQuery(urlQuery)
+  }, [location.pathname, urlQuery])
+
   function goToAnime(id: number) {
     setOpen(false)
     setQuery('')
     navigate(`/anime/${id}`)
+  }
+
+  function submitSearch() {
+    const q = query.trim()
+    if (q.length === 0) return
+    setOpen(false)
+    navigate(`/search?q=${encodeURIComponent(q)}`)
   }
 
   return (
@@ -57,10 +75,14 @@ export function SearchBar() {
         onChange={(event) => setQuery(event.target.value)}
         onFocus={() => results.length > 0 && setOpen(true)}
         onKeyDown={(event) => {
+          if (event.key === 'Enter') submitSearch()
           if (event.key === 'Escape') setOpen(false)
         }}
         aria-label="Search anime"
       />
+      <button type="button" className="search-bar__submit" aria-label="Search" onClick={submitSearch}>
+        <SearchIcon />
+      </button>
       {open && results.length > 0 && (
         <ul className="search-bar__dropdown">
           {results.map((result) => (
@@ -74,5 +96,14 @@ export function SearchBar() {
         </ul>
       )}
     </div>
+  )
+}
+
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <line x1="15.5" y1="15.5" x2="21" y2="21" />
+    </svg>
   )
 }

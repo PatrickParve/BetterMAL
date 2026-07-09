@@ -122,6 +122,26 @@ export type SeasonPageDto = {
   totalCount: number
 }
 
+export type SearchAnimeItemDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  totalEpisodes: number | null
+  mediaType: string | null
+  malScore: number | null
+  popularityRank: number | null
+  myScore: number | null
+}
+
+export type SearchPageDto = {
+  query: string
+  items: SearchAnimeItemDto[]
+  offset: number
+  limit: number
+  totalCount: number
+}
+
 export type MyListItemDto = {
   animeId: number
   title: string

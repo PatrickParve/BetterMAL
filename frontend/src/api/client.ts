@@ -10,6 +10,7 @@ import type {
   ProfileDto,
   ReconciliationResultDto,
   ResyncStatusDto,
+  SearchPageDto,
   SeasonPageDto,
   SyncStatusDto,
   TopAnimeItemDto,
@@ -34,6 +35,19 @@ export function getMalAuthStatus(): Promise<MalAuthStatus> {
 
 export function searchAnime(query: string, signal?: AbortSignal): Promise<AnimeSearchResult[]> {
   return fetchJson<AnimeSearchResult[]>(`/api/anime/search?q=${encodeURIComponent(query)}`, { signal })
+}
+
+export function getSearchPage(
+  query: string,
+  params: { sort: string; offset: number; limit: number },
+): Promise<SearchPageDto> {
+  const search = new URLSearchParams({
+    q: query,
+    sort: params.sort,
+    offset: String(params.offset),
+    limit: String(params.limit),
+  })
+  return fetchJson<SearchPageDto>(`/api/anime/search/page?${search.toString()}`)
 }
 
 export function updateEntry(animeId: number, request: UserAnimeEntryEditRequest): Promise<UserAnimeEntryDto> {

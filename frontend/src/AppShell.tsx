@@ -10,6 +10,7 @@ import { MyListPage } from './pages/MyListPage.tsx'
 import { ProfilePage } from './pages/ProfilePage.tsx'
 import { SettingsPage } from './pages/SettingsPage.tsx'
 import { AnimeDetailPage } from './pages/AnimeDetailPage.tsx'
+import { SearchPage } from './pages/SearchPage.tsx'
 
 // Mounted once the "Connect to MAL" gate in App.tsx confirms a token is on
 // file. Providers here (score visibility, entry editor) are app-wide, not
@@ -30,6 +31,7 @@ export function AppShell() {
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/anime/:id" element={<AnimeDetailPage />} />
+            <Route path="/search" element={<SearchPage />} />
             <Route path="*" element={<HomePage />} />
           </Routes>
         </main>
