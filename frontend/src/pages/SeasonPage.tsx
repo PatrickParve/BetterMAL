@@ -20,7 +20,7 @@ const PAGE_SIZE = 24
 
 // Earliest year selectable in the quick-jump dropdown — anime predate this,
 // but a bounded range keeps the <select> from growing unbounded.
-const EARLIEST_YEAR = 1960
+const EARLIEST_YEAR = 1989
 
 function currentSeasonTarget(): { year: number; season: SeasonName } {
   const now = new Date()
