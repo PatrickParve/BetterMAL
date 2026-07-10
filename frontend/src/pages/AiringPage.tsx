@@ -1,30 +1,62 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { getAiringWeek } from '../api/client.ts'
 import type { AiringWeekDto } from '../api/types.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
 import './AiringPage.css'
 
-function isoDateWeeksFromToday(offsetWeeks: number): string {
-  const date = new Date()
-  date.setDate(date.getDate() + offsetWeeks * 7)
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function isIsoDate(value: string | null): value is string {
+  return value !== null && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value))
+}
+
+function addDaysIso(iso: string, days: number): string {
+  const date = new Date(`${iso}T00:00:00`)
+  date.setDate(date.getDate() + days)
   return date.toISOString().slice(0, 10)
 }
 
+// Monday of the local week containing the given date — used to tell whether the
+// displayed week is the current one (so "current" can be disabled).
+function weekStartIso(iso: string): string {
+  const date = new Date(`${iso}T00:00:00`)
+  const daysSinceMonday = (date.getDay() + 6) % 7
+  return addDaysIso(iso, -daysSinceMonday)
+}
+
+// "Jul 6 – Jul 12, 2026": the year is shown once, at the end of the range.
 function formatWeekRange(weekStart: string, weekEnd: string): string {
-  const fmt = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-  return `${fmt(weekStart)} – ${fmt(weekEnd)}`
+  const start = new Date(weekStart).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  const end = new Date(weekEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  return `${start} – ${end}`
 }
 
 // Weekly schedule of my-list anime, laid out as seven local day-columns.
-// Navigation moves whole weeks at a time; "current" jumps back to today's week.
+// Navigation moves whole weeks at a time; the date picker jumps straight to the
+// week containing any chosen date; "current" jumps back to today's week. The
+// selected week lives in the URL (not component state) so it survives
+// back-navigation from an anime detail page, and defaults to today when absent.
 export function AiringPage() {
-  const [offsetWeeks, setOffsetWeeks] = useState(0)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const weekParam = searchParams.get('week')
+  const referenceDate = isIsoDate(weekParam) ? weekParam : todayIso()
+
   const [week, setWeek] = useState<AiringWeekDto | null>(null)
+
+  function goToWeek(date: string) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      params.set('week', date)
+      return params
+    })
+  }
 
   useEffect(() => {
     let cancelled = false
-    getAiringWeek(isoDateWeeksFromToday(offsetWeeks))
+    getAiringWeek(referenceDate)
       .then((data) => {
         if (!cancelled) setWeek(data)
       })
@@ -34,8 +66,9 @@ export function AiringPage() {
     return () => {
       cancelled = true
     }
-  }, [offsetWeeks])
+  }, [referenceDate])
 
+  const isCurrentWeek = weekStartIso(referenceDate) === weekStartIso(todayIso())
   const isEmptyWeek = week !== null && week.days.every((day) => day.slots.length === 0)
 
   return (
@@ -43,16 +76,26 @@ export function AiringPage() {
       <div className="airing-page__header">
         <h1>Schedule</h1>
         <div className="airing-page__nav">
-          <button type="button" onClick={() => setOffsetWeeks((value) => value - 1)} aria-label="Previous week">
+          <button type="button" onClick={() => goToWeek(addDaysIso(referenceDate, -7))} aria-label="Previous week">
             &lsaquo;
           </button>
-          <button type="button" onClick={() => setOffsetWeeks(0)} disabled={offsetWeeks === 0}>
+          <button type="button" onClick={() => goToWeek(todayIso())} disabled={isCurrentWeek}>
             current
           </button>
-          <button type="button" onClick={() => setOffsetWeeks((value) => value + 1)} aria-label="Next week">
+          <button type="button" onClick={() => goToWeek(addDaysIso(referenceDate, 7))} aria-label="Next week">
             &rsaquo;
           </button>
         </div>
+        <label className="airing-page__jump">
+          Jump to week
+          <input
+            type="date"
+            value={referenceDate}
+            onChange={(event) => {
+              if (event.target.value) goToWeek(event.target.value)
+            }}
+          />
+        </label>
         {week && <span className="airing-page__range">{formatWeekRange(week.weekStart, week.weekEnd)}</span>}
       </div>
 

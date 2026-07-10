@@ -19,15 +19,6 @@ public interface IBroadcastLocalTimeConverter
     /// unrecognized/missing.</summary>
     LocalBroadcastSlot? ResolveForDate(string? jstDayOfWeek, TimeOnly? jstTime, DateOnly referenceLocalDate);
 
-    /// <summary>True if this anime's broadcast, converted to local time, airs
-    /// on referenceLocalDate. Backs "Airing today" filtering.</summary>
-    bool AirsOnLocalDate(AnimeMetadata anime, DateOnly referenceLocalDate);
-
-    /// <summary>The local day-of-week/time this anime's broadcast falls on
-    /// within the week containing weekReferenceDate, or null if it has no
-    /// known broadcast slot. Backs weekly-schedule grouping.</summary>
-    LocalBroadcastSlot? ResolveForWeek(AnimeMetadata anime, DateOnly weekReferenceDate);
-
     /// <summary>The next UTC instant at or after afterUtc that this anime's
     /// broadcast slot airs, or null when there is no known upcoming broadcast
     /// (not currently airing, or no broadcast day/time cached). Backs the
@@ -45,4 +36,14 @@ public interface IBroadcastLocalTimeConverter
     /// schedule's default week and the season page's once-per-local-day
     /// re-fetch both need this rather than the UTC calendar date.</summary>
     DateOnly GetLocalDate(DateTimeOffset instantUtc);
+
+    /// <summary>The local (Europe/Helsinki) time-of-day for instantUtc. Used to
+    /// render an exact per-episode air time from AniList's UTC timestamps.</summary>
+    TimeOnly GetLocalTime(DateTimeOffset instantUtc);
+
+    /// <summary>The local (Europe/Helsinki) calendar date a broadcast at the
+    /// given JST date + time lands on — e.g. a Monday 00:30 JST slot resolves to
+    /// the preceding Sunday locally. Backs the weekly-cadence episode estimate,
+    /// which anchors episode 1 to the show's local first-air date.</summary>
+    DateOnly LocalDateOfJstBroadcast(DateOnly jstDate, TimeOnly jstTime);
 }

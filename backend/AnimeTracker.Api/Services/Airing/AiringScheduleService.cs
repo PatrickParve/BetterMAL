@@ -1,11 +1,11 @@
 using AnimeTracker.Api.Data.Repositories;
-using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Scheduling;
 
 namespace AnimeTracker.Api.Services.Airing;
 
 public class AiringScheduleService(
     IUserAnimeEntryRepository entryRepository,
+    IEpisodeScheduleService scheduleService,
     IBroadcastLocalTimeConverter broadcastConverter) : IAiringScheduleService
 {
     public async Task<AiringWeekDto> GetWeekAsync(DateOnly? weekReferenceDate, CancellationToken ct = default)
@@ -17,22 +17,26 @@ public class AiringScheduleService(
         var entries = await entryRepository.GetAllAsync(ct);
         var slotsByDate = weekDates.ToDictionary(date => date, _ => new List<AiringSlotDto>());
 
+        // Resolve every my-list show against each of the week's seven local
+        // dates. The schedule service bounds each show to the weeks it actually
+        // airs (and skips break weeks), so navigating to a past/future week
+        // shows exactly what aired then — not the same shows every week.
         foreach (var entry in entries)
         {
-            var slot = broadcastConverter.ResolveForWeek(entry.Anime, weekStart);
-            if (slot is null)
-                continue;
+            foreach (var date in weekDates)
+            {
+                var episode = scheduleService.ResolveOnLocalDate(entry.Anime, date);
+                if (episode is null)
+                    continue;
 
-            var offset = ((int)slot.DayOfWeek - (int)weekStart.DayOfWeek + 7) % 7;
-            var localDate = weekStart.AddDays(offset);
-
-            slotsByDate[localDate].Add(new AiringSlotDto(
-                entry.AnimeId,
-                entry.Anime.Title,
-                entry.Anime.EnglishTitle,
-                entry.Anime.PictureUrl,
-                slot.Time.ToString("HH:mm"),
-                ComputeEpisodeNumber(entry.Anime, localDate)));
+                slotsByDate[date].Add(new AiringSlotDto(
+                    entry.AnimeId,
+                    entry.Anime.Title,
+                    entry.Anime.EnglishTitle,
+                    entry.Anime.PictureUrl,
+                    episode.LocalTime.ToString("HH:mm"),
+                    episode.EpisodeNumber));
+            }
         }
 
         var days = weekDates
@@ -43,22 +47,5 @@ public class AiringScheduleService(
             .ToList();
 
         return new AiringWeekDto(weekStart, weekStart.AddDays(6), days);
-    }
-
-    // Episode airing on localAirDate, assuming the show's weekly cadence
-    // holds since it started — MAL doesn't provide a per-episode air date, so
-    // this is the standard estimate: weeks elapsed since AiredFrom, +1,
-    // capped at the known episode count.
-    private static int? ComputeEpisodeNumber(AnimeMetadata anime, DateOnly localAirDate)
-    {
-        if (anime.AiredFrom is not { } airedFrom)
-            return null;
-
-        var daysSince = localAirDate.DayNumber - airedFrom.DayNumber;
-        if (daysSince < 0)
-            return null;
-
-        var episode = daysSince / 7 + 1;
-        return anime.TotalEpisodes is { } total ? Math.Min(episode, total) : episode;
     }
 }

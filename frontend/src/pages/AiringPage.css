@@ -42,6 +42,30 @@
   cursor: default;
 }
 
+.airing-page__jump {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.airing-page__jump input {
+  font: inherit;
+  font-size: 14px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.airing-page__jump input:hover {
+  border-color: var(--accent-border);
+}
+
 .airing-page__range {
   font-size: 14px;
   color: var(--text);

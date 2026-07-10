@@ -31,25 +31,6 @@ public class BroadcastLocalTimeConverter : IBroadcastLocalTimeConverter
         return null;
     }
 
-    public bool AirsOnLocalDate(AnimeMetadata anime, DateOnly referenceLocalDate) =>
-        ResolveForDate(anime.BroadcastDayOfWeek, anime.BroadcastTime, referenceLocalDate) is not null;
-
-    public LocalBroadcastSlot? ResolveForWeek(AnimeMetadata anime, DateOnly weekReferenceDate)
-    {
-        if (anime.AiringStatus != "currently_airing")
-            return null;
-
-        var weekStart = StartOfWeek(weekReferenceDate);
-        for (var i = 0; i < 7; i++)
-        {
-            var slot = ResolveForDate(anime.BroadcastDayOfWeek, anime.BroadcastTime, weekStart.AddDays(i));
-            if (slot is not null)
-                return slot;
-        }
-
-        return null;
-    }
-
     public DateTimeOffset? NextBroadcastInstant(AnimeMetadata anime, DateTimeOffset afterUtc)
     {
         if (anime.AiringStatus != "currently_airing")
@@ -80,6 +61,15 @@ public class BroadcastLocalTimeConverter : IBroadcastLocalTimeConverter
 
     public DateOnly GetLocalDate(DateTimeOffset instantUtc) =>
         DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instantUtc, LocalZone).DateTime);
+
+    public TimeOnly GetLocalTime(DateTimeOffset instantUtc) =>
+        TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(instantUtc, LocalZone).DateTime);
+
+    public DateOnly LocalDateOfJstBroadcast(DateOnly jstDate, TimeOnly jstTime)
+    {
+        var localInstant = TimeZoneInfo.ConvertTimeFromUtc(jstDate.ToDateTime(jstTime) - JstOffset, LocalZone);
+        return DateOnly.FromDateTime(localInstant);
+    }
 
     private static DateOnly StartOfWeek(DateOnly date)
     {

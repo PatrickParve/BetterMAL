@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.Airing.AniList;
 using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Detail;
 using AnimeTracker.Api.Services.Entries;
@@ -95,6 +96,18 @@ builder.Services.AddScoped<IMainDashboardService, MainDashboardService>();
 
 // --- Airing schedule ---
 builder.Services.AddScoped<IAiringScheduleService, AiringScheduleService>();
+
+// Per-episode air dates from AniList (break-aware), cached in memory and
+// refreshed in the background; the schedule service falls back to a
+// weekly-cadence estimate for shows AniList doesn't cover.
+builder.Services.AddSingleton<IEpisodeScheduleCache, EpisodeScheduleCache>();
+builder.Services.AddHttpClient<IAniListClient, AniListClient>(client =>
+{
+    client.BaseAddress = new Uri("https://graphql.anilist.co/");
+});
+builder.Services.AddScoped<IEpisodeScheduleService, EpisodeScheduleService>();
+builder.Services.AddScoped<IEpisodeScheduleRefreshService, EpisodeScheduleRefreshService>();
+builder.Services.AddHostedService<EpisodeScheduleRefreshBackgroundService>();
 
 // --- Season browsing ---
 builder.Services.AddScoped<ISeasonBrowseService, SeasonBrowseService>();
