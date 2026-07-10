@@ -55,17 +55,19 @@ public static class MalMappingExtensions
             : null;
     }
 
-    /// <summary>MAL broadcast day-of-week, e.g. "mondays". Unrecognized or
-    /// empty input maps to null rather than throwing.</summary>
-    public static DayOfWeek? ParseMalDayOfWeek(string? raw) => raw?.Trim().ToLowerInvariant() switch
+    /// <summary>MAL broadcast day-of-week. The official MAL v2 API returns the
+    /// singular lowercase form ("monday"); the unofficial Jikan API returns the
+    /// plural ("Mondays"). TrimEnd('s') normalizes both so either source works.
+    /// Unrecognized or empty input maps to null rather than throwing.</summary>
+    public static DayOfWeek? ParseMalDayOfWeek(string? raw) => raw?.Trim().ToLowerInvariant().TrimEnd('s') switch
     {
-        "sundays" => DayOfWeek.Sunday,
-        "mondays" => DayOfWeek.Monday,
-        "tuesdays" => DayOfWeek.Tuesday,
-        "wednesdays" => DayOfWeek.Wednesday,
-        "thursdays" => DayOfWeek.Thursday,
-        "fridays" => DayOfWeek.Friday,
-        "saturdays" => DayOfWeek.Saturday,
+        "sunday" => DayOfWeek.Sunday,
+        "monday" => DayOfWeek.Monday,
+        "tuesday" => DayOfWeek.Tuesday,
+        "wednesday" => DayOfWeek.Wednesday,
+        "thursday" => DayOfWeek.Thursday,
+        "friday" => DayOfWeek.Friday,
+        "saturday" => DayOfWeek.Saturday,
         _ => null,
     };
 
