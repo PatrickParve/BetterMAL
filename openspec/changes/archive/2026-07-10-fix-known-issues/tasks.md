@@ -57,6 +57,15 @@
 
 ## 10. Verification
 
-- [ ] 10.1 `cd backend && dotnet build` (and `dotnet test` if present) pass; migration applies on startup
-- [ ] 10.2 `cd frontend && npm run build` passes
-- [ ] 10.3 Run the app and walk the checklist in the design's Migration Plan (Home populated + arrows conditional, navbar, season persistence + one-season, top pagination to 500, airing populated, detail Info + no AniList, profile feed, English titles)
+- [x] 10.1 `cd backend && dotnet build` (and `dotnet test` if present) pass; migration applies on startup — local SDK is 9.0 and the project targets net10.0, so built via `docker compose build backend` instead (uses `mcr.microsoft.com/dotnet/sdk:10.0`); build succeeded; the running `bettermal-backend-1` container (current code, clean git tree) is live proof migrations applied on startup
+- [x] 10.2 `cd frontend && npm run build` passes — local Node is 16.20.2 (Vite needs 20.19+/22.12+), so built via `docker compose build frontend` instead (uses `node:22-alpine`); build succeeded
+- [x] 10.3 Run the app and walk the checklist in the design's Migration Plan (Home populated + arrows conditional, navbar, season persistence + one-season, top pagination to 500, airing populated, detail Info + no AniList, profile feed, English titles) — verified against the live running instance and current source (no browser tool available in this session, so verified via API responses + code, not a manual click-through):
+  - Home populated: `GET /api/dashboard` returns real currentlyWatching/airingToday/currentSeason data with `englishTitle`
+  - Carousel arrows conditional: `CurrentlyWatchingCarousel.tsx` gates on `scrollWidth > clientWidth` via `ResizeObserver`
+  - Navbar: `Navbar.tsx` is Home · My List · Top · Season · Airing, as specified
+  - Season persistence + one-season: `SeasonPage.tsx` uses `useSearchParams`/`currentSeasonTarget`; `SeasonRepository.GetPageAsync` filters listings to the requested (year, season)
+  - Top pagination to 500: `GET /api/top-anime` returns 500 items; `TopAnimePage.tsx` paginates client-side at `PAGE_SIZE = 50`
+  - Airing populated: `GET /api/airing` returns real weekly slots with converted local times
+  - Detail Info + no AniList: `GET /api/anime/38101` (a fully-synced anime) returns `source: "manga"`, `averageEpisodeDurationSeconds: 1445`, `airingStatus`, genres, sequel link; `AnimeDetailPage.tsx` has no AniList reference
+  - Profile feed: `GET /api/profile.recentActivity` shows only `EpisodeIncremented`/`Added` entries, never decreases/status changes
+  - English titles: present throughout (`englishTitle` on dashboard/detail/season/top/airing responses)
