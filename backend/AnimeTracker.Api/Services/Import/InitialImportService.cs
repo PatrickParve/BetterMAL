@@ -7,8 +7,11 @@ namespace AnimeTracker.Api.Services.Import;
 
 /// <summary>Pages the full MAL list, then fetches full metadata per-anime at
 /// the shared pacer's rate (~1 req/s), inserting each anime into Postgres as
-/// its fetch completes. Resumable: anime already present in AnimeMetadata are
-/// skipped, so a restart mid-import continues rather than starting over.</summary>
+/// its fetch completes. Resumable: anime already present in AnimeMetadata skip
+/// the re-fetch, so a restart mid-import continues rather than starting over.
+/// Separately, an anime whose metadata was already cached (e.g. from browsing
+/// a season before ever connecting MAL) but has no list entry yet gets just
+/// the missing entry backfilled, without a redundant details fetch.</summary>
 public class InitialImportService(
     IMalClient malClient,
     AnimeTrackerDbContext db,
@@ -22,7 +25,8 @@ public class InitialImportService(
         var edges = await malClient.GetFullUserAnimeListAsync(ct);
         progress.Start(edges.Count);
 
-        var existingIds = (await db.AnimeMetadata.Select(a => a.Id).ToListAsync(ct)).ToHashSet();
+        var existingAnimeIds = (await db.AnimeMetadata.Select(a => a.Id).ToListAsync(ct)).ToHashSet();
+        var existingEntryIds = (await db.UserAnimeEntries.Select(e => e.AnimeId).ToListAsync(ct)).ToHashSet();
         var synced = 0;
 
         foreach (var edge in edges)
@@ -30,7 +34,7 @@ public class InitialImportService(
             ct.ThrowIfCancellationRequested();
             var animeId = edge.Node.Id;
 
-            if (!existingIds.Contains(animeId))
+            if (!existingAnimeIds.Contains(animeId))
             {
                 try
                 {
@@ -42,6 +46,14 @@ public class InitialImportService(
                         animeId, edge.Node.Title);
                     continue; // leave it missing from AnimeMetadata so the next run retries it
                 }
+            }
+            else if (!existingEntryIds.Contains(animeId))
+            {
+                // Metadata was already cached (e.g. from browsing a season before ever
+                // connecting MAL) but the list entry itself was never created for it —
+                // add just that, without re-fetching anime details.
+                db.UserAnimeEntries.Add(MalMappingExtensions.ToUserAnimeEntry(animeId, edge.ListStatus, DateTimeOffset.UtcNow));
+                await db.SaveChangesAsync(ct);
             }
 
             synced++;

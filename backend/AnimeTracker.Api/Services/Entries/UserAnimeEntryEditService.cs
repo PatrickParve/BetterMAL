@@ -31,8 +31,14 @@ public class UserAnimeEntryEditService(
         var now = DateTimeOffset.UtcNow;
         var changes = new List<(ActivityChangeType Type, string Detail, int? PreviousEpisodesWatched)>();
 
-        ApplyEpisodesWatched(request, entry, today, changes);
-        ApplyStatus(request, entry, anime, animeId, today, changes);
+        // Captured before either Apply* runs: the editor always resends the
+        // status it loaded with (never omits it), so this is the only reliable
+        // way to tell "no explicit status change requested" from a real one once
+        // ApplyEpisodesWatched may have already flipped entry.Status itself.
+        var originalStatus = entry.Status;
+
+        ApplyEpisodesWatched(request, entry, anime, originalStatus, today, changes);
+        ApplyStatus(request, entry, anime, animeId, originalStatus, today, changes);
         ApplyScore(request, entry, changes);
         ApplyRewatchCount(request, entry, changes);
 
@@ -72,7 +78,7 @@ public class UserAnimeEntryEditService(
     }
 
     private static void ApplyEpisodesWatched(
-        UserAnimeEntryEditRequest request, UserAnimeEntry entry, DateOnly today,
+        UserAnimeEntryEditRequest request, UserAnimeEntry entry, AnimeMetadata anime, WatchStatus originalStatus, DateOnly today,
         List<(ActivityChangeType Type, string Detail, int? PreviousEpisodesWatched)> changes)
     {
         if (request.EpisodesWatched is not { } newEpisodes || newEpisodes == entry.EpisodesWatched)
@@ -80,6 +86,9 @@ public class UserAnimeEntryEditService(
 
         if (newEpisodes < 0)
             throw new ArgumentOutOfRangeException(nameof(request), "Episodes watched cannot be negative.");
+
+        if (anime.TotalEpisodes is { } totalEpisodes && newEpisodes > totalEpisodes)
+            throw new ArgumentOutOfRangeException(nameof(request), $"Episodes watched cannot exceed the anime's total episode count ({totalEpisodes}).");
 
         var previousEpisodesWatched = entry.EpisodesWatched;
 
@@ -89,13 +98,23 @@ public class UserAnimeEntryEditService(
 
         entry.EpisodesWatched = newEpisodes;
         changes.Add((ActivityChangeType.EpisodeIncremented, $"Episode {newEpisodes}", previousEpisodesWatched));
+
+        // Watching all episodes marks the show completed, mirroring MAL's own UI —
+        // unless this same request is already setting a different status explicitly.
+        if ((request.Status is null || request.Status == originalStatus) && originalStatus != WatchStatus.Completed &&
+            anime.TotalEpisodes is { } total && newEpisodes == total)
+        {
+            entry.Status = WatchStatus.Completed;
+            entry.CompletedAt ??= today; // never overwrites an existing finish date — see ApplyStatus
+            changes.Add((ActivityChangeType.Completed, "Completed", null));
+        }
     }
 
     private static void ApplyStatus(
-        UserAnimeEntryEditRequest request, UserAnimeEntry entry, AnimeMetadata anime, int animeId, DateOnly today,
+        UserAnimeEntryEditRequest request, UserAnimeEntry entry, AnimeMetadata anime, int animeId, WatchStatus originalStatus, DateOnly today,
         List<(ActivityChangeType Type, string Detail, int? PreviousEpisodesWatched)> changes)
     {
-        if (request.Status is not { } newStatus || newStatus == entry.Status)
+        if (request.Status is not { } newStatus || newStatus == originalStatus)
             return;
 
         if (newStatus == WatchStatus.Completed)
@@ -103,13 +122,12 @@ public class UserAnimeEntryEditService(
             if (anime.TotalEpisodes is null)
                 throw new CannotCompleteUnknownEpisodeCountException(animeId);
 
-            entry.CompletedAt = today;
+            entry.CompletedAt ??= today; // never overwrites an existing finish date — mirrors the StartedAt rule, and MAL itself keeps the original finish_date across rewatches
+            entry.EpisodesWatched = anime.TotalEpisodes.Value; // mirror MAL's own UI, which auto-fills episodes on completion
             changes.Add((ActivityChangeType.Completed, "Completed", null));
         }
         else
         {
-            if (entry.Status == WatchStatus.Completed)
-                entry.CompletedAt = null;
             changes.Add((ActivityChangeType.StatusChanged, $"{entry.Status} -> {newStatus}", null));
         }
 

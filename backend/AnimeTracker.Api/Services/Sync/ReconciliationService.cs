@@ -109,7 +109,14 @@ public class ReconciliationService(
         var now = DateTimeOffset.UtcNow;
         foreach (var entry in diff.Entries)
         {
-            if (!localEntries.TryGetValue(entry.AnimeId, out var local))
+            if (localEntries.TryGetValue(entry.AnimeId, out var local))
+            {
+                // Mirror the compute-time guard: don't let a stale diff overwrite a
+                // local edit made (and not yet pushed) after this diff was computed.
+                if (local.PendingSync)
+                    continue;
+            }
+            else
             {
                 local = new UserAnimeEntry { AnimeId = entry.AnimeId };
                 db.UserAnimeEntries.Add(local);

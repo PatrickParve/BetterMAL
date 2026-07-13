@@ -111,16 +111,18 @@ export function AiringPage() {
                   {day.slots.map((slot) => (
                     <li key={slot.animeId}>
                       <Link to={`/anime/${slot.animeId}`} className="airing-slot">
-                        {slot.pictureUrl ? (
-                          <img src={slot.pictureUrl} alt="" className="airing-slot__thumb" />
-                        ) : (
-                          <div className="airing-slot__thumb airing-slot__thumb--placeholder" aria-hidden="true" />
-                        )}
-                        <span className="airing-slot__info">
-                          <span className="airing-slot__time">{slot.localTime}</span>
-                          <span className="airing-slot__title">
-                            {pickDisplayTitle(slot.title, slot.englishTitle)}
-                            {slot.episodeNumber !== null && ` #${slot.episodeNumber}`}
+                        <span className="airing-slot__time">{slot.localTime}</span>
+                        <span className="airing-slot__body">
+                          {slot.pictureUrl ? (
+                            <img src={slot.pictureUrl} alt="" className="airing-slot__thumb" />
+                          ) : (
+                            <div className="airing-slot__thumb airing-slot__thumb--placeholder" aria-hidden="true" />
+                          )}
+                          <span className="airing-slot__info">
+                            <span className="airing-slot__title">{pickDisplayTitle(slot.title, slot.englishTitle)}</span>
+                            {slot.episodeNumber !== null && (
+                              <span className="airing-slot__episode">Ep {slot.episodeNumber}</span>
+                            )}
                           </span>
                         </span>
                       </Link>

@@ -17,7 +17,7 @@ export function EntryEditorProvider({ children }: { children: ReactNode }) {
   return (
     <EntryEditorContext.Provider value={{ openEditor: setTarget }}>
       {children}
-      {target && <EntryEditorOverlay target={target} onClose={() => setTarget(null)} />}
+      {target && <EntryEditorOverlay key={target.animeId} target={target} onClose={() => setTarget(null)} />}
     </EntryEditorContext.Provider>
   )
 }

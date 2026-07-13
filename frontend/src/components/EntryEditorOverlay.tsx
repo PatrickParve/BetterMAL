@@ -23,10 +23,19 @@ type EntryEditorOverlayProps = {
 // date fields, since those are set automatically by the backend's date logic.
 export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps) {
   const { animeId, animeTitle, totalEpisodes, entry, onSaved } = target
-  const [status, setStatus] = useState<WatchStatus>(entry?.status ?? 'PlanToWatch')
-  const [episodesWatched, setEpisodesWatched] = useState(entry?.episodesWatched ?? 0)
-  const [myScore, setMyScore] = useState(entry?.myScore ?? 0)
-  const [rewatchCount, setRewatchCount] = useState(entry?.rewatchCount ?? 0)
+  // Captured once (the parent remounts this component per target via `key`,
+  // see EntryEditorContext) so the save handler can tell which fields the
+  // user actually touched and send only those — a stale page open in another
+  // tab, or a diff accepted mid-session, won't silently revert other fields.
+  const initialStatus = entry?.status ?? 'PlanToWatch'
+  const initialEpisodesWatched = entry?.episodesWatched ?? 0
+  const initialMyScore = entry?.myScore ?? 0
+  const initialRewatchCount = entry?.rewatchCount ?? 0
+
+  const [status, setStatus] = useState<WatchStatus>(initialStatus)
+  const [episodesWatched, setEpisodesWatched] = useState(initialEpisodesWatched)
+  const [myScore, setMyScore] = useState(initialMyScore)
+  const [rewatchCount, setRewatchCount] = useState(initialRewatchCount)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -37,7 +46,12 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
     setSaving(true)
     setError(null)
 
-    const request: UserAnimeEntryEditRequest = { status, episodesWatched, myScore, rewatchCount }
+    const request: UserAnimeEntryEditRequest = {
+      status: status !== initialStatus ? status : undefined,
+      episodesWatched: episodesWatched !== initialEpisodesWatched ? episodesWatched : undefined,
+      myScore: myScore !== initialMyScore ? myScore : undefined,
+      rewatchCount: rewatchCount !== initialRewatchCount ? rewatchCount : undefined,
+    }
     try {
       const saved = await updateEntry(animeId, request)
       onSaved?.(saved)
