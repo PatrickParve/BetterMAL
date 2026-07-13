@@ -250,7 +250,8 @@
 
 .top-anime-strip__item {
   position: relative;
-  flex: 0 0 calc((100% - 9 * 10px) / 10);
+  flex: 1 1 0;
+  min-width: 0;
   aspect-ratio: 2 / 3;
   border-radius: 8px;
   overflow: hidden;
