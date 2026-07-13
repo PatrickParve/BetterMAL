@@ -1,11 +1,13 @@
 .carousel {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
 }
 
 .carousel__track {
   display: flex;
+  justify-content: safe center;
   gap: 16px;
   overflow-x: auto;
   scroll-snap-type: x proximity;
@@ -35,21 +37,10 @@
   border-color: var(--accent-border);
 }
 
-.carousel__increment {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: none;
-  background: var(--accent);
-  color: #fff;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.carousel__increment:disabled {
-  opacity: 0.5;
-  cursor: default;
+.carousel__progress-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .carousel__progress {

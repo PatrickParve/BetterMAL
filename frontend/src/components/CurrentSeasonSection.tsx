@@ -48,12 +48,12 @@ export function CurrentSeasonSection({ items }: CurrentSeasonSectionProps) {
   return (
     <section className="dashboard-section">
       <div className="current-season__header">
-        <h2>Current season</h2>
+        <h2>Followed shows airing</h2>
         <select
           className="current-season__sort"
           value={sort}
           onChange={(event) => setSort(event.target.value as SortKey)}
-          aria-label="Sort current season"
+          aria-label="Sort followed shows airing"
         >
           {SORT_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>

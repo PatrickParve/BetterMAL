@@ -31,6 +31,8 @@
 .anime-card__title {
   font-size: 14px;
   font-weight: 500;
+  line-height: 1.3;
+  min-height: 2.6em;
   color: var(--text-h);
   display: -webkit-box;
   -webkit-line-clamp: 2;

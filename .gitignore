@@ -28,3 +28,7 @@ Thumbs.db
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 .mcp.json
+
+# Local notes, not shared
+CODE_GUIDE.md
+REVIEW-NOTES.md

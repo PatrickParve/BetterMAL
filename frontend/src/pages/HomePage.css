@@ -4,6 +4,49 @@
   gap: 32px;
 }
 
+.dashboard-section {
+  border: 2px solid var(--border);
+  border-radius: 20px;
+  padding: 20px 24px;
+}
+
 .dashboard-section h2 {
   margin-bottom: 12px;
+}
+
+.dashboard-section--carousel {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.dashboard-section--carousel h2 {
+  text-align: center;
+}
+
+.home-page__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+}
+
+.home-page__aside {
+  flex: 0 0 320px;
+  min-width: 0;
+}
+
+.home-page__main {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .home-page__row {
+    flex-direction: column;
+  }
+
+  .home-page__aside {
+    flex-basis: auto;
+    width: 100%;
+  }
 }

@@ -44,8 +44,14 @@ export function HomePage() {
         items={dashboard.currentlyWatching}
         onEpisodesWatchedChange={handleEpisodesWatchedChange}
       />
-      <AiringTodayList items={dashboard.airingToday} />
-      <CurrentSeasonSection items={dashboard.currentSeason} />
+      <div className="home-page__row">
+        <div className="home-page__aside">
+          <AiringTodayList items={dashboard.airingToday} />
+        </div>
+        <div className="home-page__main">
+          <CurrentSeasonSection items={dashboard.currentSeason} />
+        </div>
+      </div>
     </div>
   )
 }

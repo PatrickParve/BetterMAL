@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimeCard } from './AnimeCard.tsx'
+import { IncrementButton } from './IncrementButton.tsx'
 import { updateEntry } from '../api/client.ts'
 import type { CurrentlyWatchingItemDto } from '../api/types.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
@@ -13,9 +14,9 @@ type CurrentlyWatchingCarouselProps = {
 const SCROLL_AMOUNT = 340
 
 // "Currently watching" row on the main page: a horizontal carousel scrolled
-// via the left/right arrows. The plus control lives outside AnimeCard's link
-// so it increments episodes without navigating; clicking the card body
-// navigates without incrementing.
+// via the left/right arrows. The plus button sits inline after the episode
+// count and stops propagation so it increments without navigating; clicking
+// the rest of the card body navigates without incrementing.
 export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange }: CurrentlyWatchingCarouselProps) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [pendingId, setPendingId] = useState<number | null>(null)
@@ -57,7 +58,7 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange }: Cu
   }
 
   return (
-    <section className="dashboard-section">
+    <section className="dashboard-section dashboard-section--carousel">
       <h2>Currently watching</h2>
       <div className="carousel">
         {overflowing && (
@@ -76,20 +77,16 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange }: Cu
                 englishTitle={item.englishTitle}
                 pictureUrl={item.pictureUrl}
                 className="carousel__card"
-                actions={
-                  <button
-                    type="button"
-                    className="carousel__increment"
-                    disabled={pendingId === item.animeId || atMax}
-                    onClick={() => increment(item)}
-                    aria-label={`Increment episodes watched for ${pickDisplayTitle(item.title, item.englishTitle)}`}
-                  >
-                    +
-                  </button>
-                }
               >
-                <span className="carousel__progress">
-                  {item.episodesWatched}/{item.totalEpisodes ?? '?'}
+                <span className="carousel__progress-row">
+                  <span className="carousel__progress">
+                    {item.episodesWatched}/{item.totalEpisodes ?? '?'}
+                  </span>
+                  <IncrementButton
+                    onIncrement={() => increment(item)}
+                    disabled={pendingId === item.animeId || atMax}
+                    label={`Increment episodes watched for ${pickDisplayTitle(item.title, item.englishTitle)}`}
+                  />
                 </span>
                 {item.nextEpisode && (
                   <span className="carousel__countdown">

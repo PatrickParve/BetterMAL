@@ -14,6 +14,17 @@ export const STATUS_LABELS: Record<WatchStatus, string> = {
   Dropped: 'Dropped',
 }
 
+// Modifier-class suffix per status, used to color-code list rows and filter
+// tabs (watching = green, completed = blue, plan to watch = purple, on hold
+// = yellow, dropped = red) via the --status-* variables in index.css.
+export const STATUS_CLASS: Record<WatchStatus, string> = {
+  Watching: 'watching',
+  OnHold: 'onhold',
+  PlanToWatch: 'plantowatch',
+  Completed: 'completed',
+  Dropped: 'dropped',
+}
+
 export const CHANGE_TYPE_LABELS: Record<string, string> = {
   Added: 'Added',
   StatusChanged: 'Status changed',

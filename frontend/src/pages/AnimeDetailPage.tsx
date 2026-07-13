@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getAnimeDetail, refreshAnime } from "../api/client.ts";
+import { getAnimeDetail, refreshAnime, updateEntry } from "../api/client.ts";
 import type { AnimeDetailDto } from "../api/types.ts";
 import { ProgressBar } from "../components/ProgressBar.tsx";
 import { ScoreValue } from "../components/ScoreValue.tsx";
@@ -54,6 +54,7 @@ export function AnimeDetailPage() {
   const [detail, setDetail] = useState<AnimeDetailDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [incrementPending, setIncrementPending] = useState(false);
   const { openEditor } = useEntryEditor();
 
   const load = useCallback(() => {
@@ -77,6 +78,21 @@ export function AnimeDetailPage() {
       // Leave the page showing whatever was already cached.
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function handleIncrement() {
+    if (!detail || incrementPending) return;
+    setIncrementPending(true);
+    try {
+      const saved = await updateEntry(detail.animeId, {
+        episodesWatched: (detail.entry?.episodesWatched ?? 0) + 1,
+      });
+      setDetail((prev) => (prev ? { ...prev, entry: saved } : prev));
+    } catch {
+      // Leave the count as-is; the user can retry.
+    } finally {
+      setIncrementPending(false);
     }
   }
 
@@ -156,6 +172,9 @@ export function AnimeDetailPage() {
             <ProgressBar
               watched={detail.entry?.episodesWatched ?? 0}
               total={detail.totalEpisodes}
+              onIncrement={detail.entry ? handleIncrement : undefined}
+              incrementPending={incrementPending}
+              incrementLabel={`Increment episodes watched for ${pickDisplayTitle(detail.title, detail.englishTitle)}`}
             />
             <span className="anime-detail-page__status">
               {detail.entry

@@ -1,0 +1,47 @@
+.increment-button {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.increment-button::before,
+.increment-button::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  background: currentColor;
+  border-radius: 1px;
+  transform: translate(-50%, -50%);
+}
+
+.increment-button::before {
+  width: 8px;
+  height: 2px;
+}
+
+.increment-button::after {
+  width: 2px;
+  height: 8px;
+}
+
+.increment-button:hover:not(:disabled) {
+  transform: scale(1.2);
+}
+
+.increment-button:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+.increment-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

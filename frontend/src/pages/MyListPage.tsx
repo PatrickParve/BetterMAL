@@ -1,17 +1,24 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getMyList } from '../api/client.ts'
+import { getMyList, updateEntry } from '../api/client.ts'
 import type { MyListItemDto, WatchStatus } from '../api/types.ts'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
-import { compareByMalScoreDesc, compareByTitleAlphabetical, pickDisplayTitle, STATUS_LABELS } from '../utils/anime.ts'
+import {
+  compareByMalScoreDesc,
+  compareByTitleAlphabetical,
+  pickDisplayTitle,
+  STATUS_CLASS,
+  STATUS_LABELS,
+} from '../utils/anime.ts'
 import './MyListPage.css'
 
 type SortKey = 'alphabetical' | 'malScore' | 'myScore'
 type StatusFilter = 'All' | WatchStatus
 
 const GROUP_ORDER: WatchStatus[] = ['Watching', 'OnHold', 'PlanToWatch', 'Completed', 'Dropped']
+const SCORE_OPTIONS = Array.from({ length: 10 }, (_, i) => i + 1)
 
 const FILTER_TABS: { value: StatusFilter; label: string }[] = [
   { value: 'All', label: 'All' },
@@ -53,6 +60,8 @@ export function MyListPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All')
   const [sort, setSort] = useState<SortKey>('alphabetical')
+  const [pendingIncrementId, setPendingIncrementId] = useState<number | null>(null)
+  const [pendingScoreId, setPendingScoreId] = useState<number | null>(null)
   const { openEditor } = useEntryEditor()
 
   useEffect(() => {
@@ -80,9 +89,35 @@ export function MyListPage() {
     })
   }
 
+  async function incrementEpisodes(item: MyListItemDto) {
+    if (pendingIncrementId !== null) return
+    setPendingIncrementId(item.animeId)
+    try {
+      const saved = await updateEntry(item.animeId, { episodesWatched: item.entry.episodesWatched + 1 })
+      handleSaved(item.animeId)(saved)
+    } catch {
+      // Leave the count as-is; the user can retry.
+    } finally {
+      setPendingIncrementId(null)
+    }
+  }
+
+  async function changeScore(item: MyListItemDto, score: number) {
+    if (pendingScoreId !== null) return
+    setPendingScoreId(item.animeId)
+    try {
+      const saved = await updateEntry(item.animeId, { myScore: score === 0 ? null : score })
+      handleSaved(item.animeId)(saved)
+    } catch {
+      // Leave the score as-is; the user can retry.
+    } finally {
+      setPendingScoreId(null)
+    }
+  }
+
   function renderRow(item: MyListItemDto, rank?: number) {
     return (
-      <li key={item.animeId} className="my-list-row">
+      <li key={item.animeId} className={`my-list-row my-list-row--${STATUS_CLASS[item.entry.status]}`}>
         {rank !== undefined && <span className="my-list-row__rank">#{rank}</span>}
         <Link to={`/anime/${item.animeId}`} className="my-list-row__link">
           {item.pictureUrl ? (
@@ -96,9 +131,30 @@ export function MyListPage() {
           </span>
         </Link>
         <span className="my-list-row__progress">
-          <ProgressBar watched={item.entry.episodesWatched} total={item.totalEpisodes} />
+          <ProgressBar
+            watched={item.entry.episodesWatched}
+            total={item.totalEpisodes}
+            onIncrement={() => incrementEpisodes(item)}
+            incrementPending={pendingIncrementId === item.animeId}
+            incrementLabel={`Increment episodes watched for ${pickDisplayTitle(item.title, item.englishTitle)}`}
+          />
         </span>
-        <span className="my-list-row__my-score">{item.entry.myScore ?? '—'}</span>
+        <span className="my-list-row__my-score">
+          <select
+            className="my-list-row__score-select"
+            value={item.entry.myScore ?? 0}
+            disabled={pendingScoreId === item.animeId}
+            onChange={(event) => changeScore(item, Number(event.target.value))}
+            aria-label={`Set your score for ${pickDisplayTitle(item.title, item.englishTitle)}`}
+          >
+            <option value={0}>—</option>
+            {SCORE_OPTIONS.map((score) => (
+              <option key={score} value={score}>
+                {score}
+              </option>
+            ))}
+          </select>
+        </span>
         <span className="my-list-row__mal-score">
           <ScoreValue value={item.malScore} />
         </span>
@@ -131,20 +187,23 @@ export function MyListPage() {
       </div>
 
       <div className="my-list-page__tabs" role="tablist" aria-label="Filter by status">
-        {FILTER_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            role="tab"
-            aria-selected={statusFilter === tab.value}
-            className={
-              statusFilter === tab.value ? 'my-list-page__tab my-list-page__tab--active' : 'my-list-page__tab'
-            }
-            onClick={() => setStatusFilter(tab.value)}
-          >
-            {tab.label}
-          </button>
-        ))}
+        {FILTER_TABS.map((tab) => {
+          const classes = ['my-list-page__tab']
+          if (tab.value !== 'All') classes.push(`my-list-page__tab--${STATUS_CLASS[tab.value]}`)
+          if (statusFilter === tab.value) classes.push('my-list-page__tab--active')
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              aria-selected={statusFilter === tab.value}
+              className={classes.join(' ')}
+              onClick={() => setStatusFilter(tab.value)}
+            >
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
 
       {loading ? (

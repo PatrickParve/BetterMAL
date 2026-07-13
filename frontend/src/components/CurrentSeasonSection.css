@@ -21,9 +21,13 @@
 }
 
 .current-season__grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 16px;
+}
+
+.current-season__grid .anime-card {
+  width: auto;
 }
 
 .current-season__empty {
