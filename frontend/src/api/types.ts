@@ -279,6 +279,7 @@ export type AnimeDetailDto = {
   englishTitle: string | null
   pictureUrl: string | null
   malScore: number | null
+  rank: number | null
   popularityRank: number | null
   mediaType: string | null
   airingStatus: string | null

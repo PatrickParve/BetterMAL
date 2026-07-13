@@ -17,7 +17,7 @@ public class MalClient(HttpClient http) : IMalClient
     // most returned anime aren't in my list and rarely change once finished
     // airing. Deliberately excludes genres/synopsis/background/related_anime.
     private const string DefaultAnimeFields =
-        "id,title,alternative_titles{en},main_picture,mean,media_type,status,num_episodes,start_date,end_date,studios,broadcast,popularity,start_season";
+        "id,title,alternative_titles{en},main_picture,mean,media_type,status,num_episodes,start_date,end_date,studios,broadcast,popularity,rank,start_season";
 
     // Full/rich detail fields — used only for a specific anime's own detail
     // fetch (initial import, nightly tiered my-list refresh, on-demand

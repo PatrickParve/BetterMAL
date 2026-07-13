@@ -18,6 +18,7 @@ public class MalAnimeNode
     public List<MalStudio>? Studios { get; set; }
     public MalBroadcast? Broadcast { get; set; }
     public int? Popularity { get; set; }
+    public int? Rank { get; set; }
     public MalStartSeason? StartSeason { get; set; }
     public MalListStatus? MyListStatus { get; set; }
     public List<MalGenre>? Genres { get; set; }

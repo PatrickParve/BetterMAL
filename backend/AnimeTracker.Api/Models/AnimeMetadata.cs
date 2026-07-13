@@ -20,6 +20,7 @@ public class AnimeMetadata
     public string? BroadcastDayOfWeek { get; set; } // JST, e.g. "mondays"
     public TimeOnly? BroadcastTime { get; set; } // JST
     public int? PopularityRank { get; set; }
+    public int? Rank { get; set; }
     public DateTimeOffset LastSyncedAt { get; set; }
     public DateTimeOffset? LastScoreSyncedAt { get; set; }
 

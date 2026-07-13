@@ -12,7 +12,9 @@
 }
 
 .anime-detail-page__top h1 {
-  margin: 0 0 8px;
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: normal;
 }
 
 .anime-detail-page__external-links {
@@ -32,8 +34,7 @@
 
 .anime-detail-page__related {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   gap: 6px;
   flex: 0 0 auto;
   padding-top: 8px;
@@ -123,9 +124,12 @@
 }
 
 .anime-detail-page__score-boxes {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
   gap: 16px;
+}
+
+.anime-detail-page__score-boxes .detail-box {
+  flex: 1 1 0;
 }
 
 .detail-box {
@@ -186,6 +190,6 @@
   }
 
   .anime-detail-page__score-boxes {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 }

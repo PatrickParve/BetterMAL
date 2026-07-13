@@ -100,6 +100,7 @@ public static class MalMappingExtensions
         target.BroadcastDayOfWeek = node.Broadcast?.DayOfTheWeek;
         target.BroadcastTime = ParseMalTime(node.Broadcast?.StartTime);
         target.PopularityRank = node.Popularity;
+        target.Rank = node.Rank;
         target.Genres = node.Genres?.Select(g => g.Name).ToList();
         target.Synopsis = node.Synopsis;
         target.Background = node.Background;
@@ -142,6 +143,7 @@ public static class MalMappingExtensions
         target.MediaType = node.MediaType;
         target.TotalEpisodes = node.NumEpisodes is null or 0 ? null : node.NumEpisodes;
         target.PopularityRank = node.Popularity;
+        target.Rank = node.Rank;
         target.LastScoreSyncedAt = now;
     }
 

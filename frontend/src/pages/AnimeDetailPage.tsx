@@ -43,11 +43,11 @@ function formatDuration(seconds: number | null): string {
 }
 
 // Single anime detail page: large picture + progress/edit on the left, a
-// "rank & MAL score" box and a "my score & rewatches" box side by side, an
-// info box, and a synopsis/background box on the right. The external
-// MyAnimeList link is a plain URL template from the id (no API call);
-// prequel/sequel buttons only render when those relations exist on the
-// cached record.
+// rank/score box (plus a my-score/rewatches box only once a score's been
+// given), an info box, and a synopsis/background box on the right. The
+// external MyAnimeList link is a plain URL template from the id (no API
+// call); prequel/sequel buttons only render when those relations exist on
+// the cached record.
 export function AnimeDetailPage() {
   const { id } = useParams();
   const animeId = Number(id);
@@ -119,16 +119,18 @@ export function AnimeDetailPage() {
               <Link
                 to={`/anime/${detail.prequelMalId}`}
                 className="anime-detail-page__related-link"
+                title={detail.prequelTitle ?? undefined}
               >
-                ← Prequel: {detail.prequelTitle}
+                ← Prequel
               </Link>
             )}
             {detail.sequelMalId && (
               <Link
                 to={`/anime/${detail.sequelMalId}`}
                 className="anime-detail-page__related-link"
+                title={detail.sequelTitle ?? undefined}
               >
-                Sequel: {detail.sequelTitle} →
+                Sequel →
               </Link>
             )}
           </div>
@@ -182,26 +184,29 @@ export function AnimeDetailPage() {
         <div className="anime-detail-page__main">
           <div className="anime-detail-page__score-boxes">
             <section className="detail-box">
-              <h2>Rank &amp; MAL score</h2>
+              <p>Rank: {detail.rank ? `#${detail.rank}` : "—"}</p>
               <p>
-                Rank:{" "}
+                Popularity:{" "}
                 {detail.popularityRank ? `#${detail.popularityRank}` : "—"}
               </p>
               <p>
                 MAL score: <ScoreValue value={detail.malScore} />
               </p>
             </section>
-            <section className="detail-box">
-              <h2>My score &amp; rewatches</h2>
-              <p>My score: {detail.entry?.myScore ?? "—"}</p>
-              {detail.entry?.rewatchCount !== 0 && (
-                <p>Rewatch count: {detail.entry?.rewatchCount ?? 0}</p>
-              )}
-            </section>
+            {detail.entry && detail.entry.myScore != null && (
+              <section className="detail-box">
+                <p>My score: {detail.entry.myScore}</p>
+                {detail.entry.rewatchCount !== 0 && (
+                  <p>Rewatch count: {detail.entry.rewatchCount}</p>
+                )}
+                {detail.entry.status === "Completed" && (
+                  <p>Completed: {formatDate(detail.entry.completedAt)}</p>
+                )}
+              </section>
+            )}
           </div>
 
           <section className="detail-box">
-            <h2>Info</h2>
             <dl className="anime-detail-page__info-grid">
               <div>
                 <dt>Type</dt>
