@@ -128,7 +128,7 @@ public class ProfileService(
 
         var items = perfectScores.Select(ToTopAnimeEntry).ToList();
         var slotsRemaining = Math.Max(0, TopAnimeMinimumSize - perfectScores.Count);
-        var candidates = new List<TopAnimeCandidateDto>();
+        var candidates = new List<TopAnimeEntryDto>();
         var tieBreakSlots = 0;
 
         var lowerTiers = scored
@@ -151,7 +151,7 @@ public class ProfileService(
 
             tieBreakSlots = slotsRemaining;
             candidates = tier
-                .Select(e => new TopAnimeCandidateDto(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.MyScore!.Value))
+                .Select(e => new TopAnimeEntryDto(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.MyScore!.Value))
                 .ToList();
 
             var candidateIds = candidates.Select(c => c.AnimeId).ToHashSet();
@@ -163,9 +163,7 @@ public class ProfileService(
             }
 
             var fillSet = fillIds.ToHashSet();
-            items.AddRange(candidates
-                .Where(c => fillSet.Contains(c.AnimeId))
-                .Select(c => new TopAnimeEntryDto(c.AnimeId, c.Title, c.EnglishTitle, c.PictureUrl, c.MyScore)));
+            items.AddRange(candidates.Where(c => fillSet.Contains(c.AnimeId)));
             slotsRemaining = 0;
             break;
         }

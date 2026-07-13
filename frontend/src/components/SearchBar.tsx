@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { searchAnime } from '../api/client.ts'
-import type { AnimeSearchResult } from '../api/types.ts'
-import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
+import { useAnimeSearch } from '../hooks/useAnimeSearch.ts'
 import { useClickOutside } from '../hooks/useClickOutside.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
 import './SearchBar.css'
@@ -14,36 +12,13 @@ import './SearchBar.css'
 // full /search results page.
 export function SearchBar() {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<AnimeSearchResult[]>([])
-  const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const debouncedQuery = useDebouncedValue(query.trim(), 250)
+  const { results, open, setOpen } = useAnimeSearch(query)
 
   useClickOutside(containerRef, () => setOpen(false))
-
-  useEffect(() => {
-    if (debouncedQuery.length === 0) {
-      setResults([])
-      setOpen(false)
-      return
-    }
-
-    const controller = new AbortController()
-    searchAnime(debouncedQuery, controller.signal)
-      .then((matches) => {
-        setResults(matches)
-        setOpen(true)
-      })
-      .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return
-        setResults([])
-      })
-
-    return () => controller.abort()
-  }, [debouncedQuery])
 
   // Keep the input in sync with the URL while on the search page itself, so a
   // reload or a direct link (e.g. /search?q=foo) shows the term that's live.

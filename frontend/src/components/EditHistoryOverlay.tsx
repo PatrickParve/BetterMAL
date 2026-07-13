@@ -3,20 +3,8 @@ import { Link } from 'react-router-dom'
 import { Modal } from './Modal.tsx'
 import { getActivityHistory } from '../api/client.ts'
 import type { ActivityFeedItemDto } from '../api/types.ts'
+import { CHANGE_TYPE_LABELS, formatTimestamp } from '../utils/anime.ts'
 import './EditHistoryOverlay.css'
-
-const CHANGE_TYPE_LABELS: Record<string, string> = {
-  Added: 'Added',
-  StatusChanged: 'Status changed',
-  EpisodeIncremented: 'Episode watched',
-  ScoreChanged: 'Score changed',
-  Completed: 'Completed',
-  RewatchCountChanged: 'Rewatch count changed',
-}
-
-function formatTimestamp(timestamp: string): string {
-  return new Date(timestamp).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-}
 
 type EditHistoryOverlayProps = {
   onClose: () => void

@@ -34,3 +34,13 @@ export function AnimeCard({ animeId, title, englishTitle, pictureUrl, children, 
     </div>
   )
 }
+
+// The `{TYPE} · {N} ep` meta line shown on browse cards (season, search) below
+// the title.
+export function AnimeCardMeta({ mediaType, totalEpisodes }: { mediaType: string | null; totalEpisodes: number | null }) {
+  return (
+    <span className="anime-card__meta">
+      {mediaType ? mediaType.toUpperCase() : 'Unknown'} · {totalEpisodes ?? '?'} ep
+    </span>
+  )
+}

@@ -44,25 +44,8 @@ public class MalClient(HttpClient http) : IMalClient
 
     /// <summary>Pages through the full season listing (the season browser
     /// caches an entire season at once, not one page at a time).</summary>
-    public async Task<List<MalAnimeListEdge>> GetFullSeasonAsync(int year, string season, string? sort = null, CancellationToken ct = default)
-    {
-        const int pageSize = 100;
-        var all = new List<MalAnimeListEdge>();
-        var offset = 0;
-
-        while (true)
-        {
-            var page = await GetSeasonAsync(year, season, pageSize, offset, sort, ct);
-            all.AddRange(page.Data);
-
-            if (page.Paging?.Next is null || page.Data.Count == 0)
-                break;
-
-            offset += pageSize;
-        }
-
-        return all;
-    }
+    public Task<List<MalAnimeListEdge>> GetFullSeasonAsync(int year, string season, string? sort = null, CancellationToken ct = default) =>
+        GetAllPagesAsync(offset => GetSeasonAsync(year, season, FullListPageSize, offset, sort, ct));
 
     public Task<MalPagedResponse<MalAnimeListEdge>> GetRankingAsync(string rankingType = "all", int limit = 100, CancellationToken ct = default) =>
         GetAsync<MalPagedResponse<MalAnimeListEdge>>(
@@ -85,25 +68,8 @@ public class MalClient(HttpClient http) : IMalClient
 
     /// <summary>Pages through the full my-list (import and reconciliation both
     /// need the entire list, not one page).</summary>
-    public async Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(CancellationToken ct = default)
-    {
-        const int pageSize = 100;
-        var all = new List<MalUserAnimeListEdge>();
-        var offset = 0;
-
-        while (true)
-        {
-            var page = await GetUserAnimeListAsync(limit: pageSize, offset: offset, ct: ct);
-            all.AddRange(page.Data);
-
-            if (page.Paging?.Next is null || page.Data.Count == 0)
-                break;
-
-            offset += pageSize;
-        }
-
-        return all;
-    }
+    public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(CancellationToken ct = default) =>
+        GetAllPagesAsync(offset => GetUserAnimeListAsync(limit: FullListPageSize, offset: offset, ct: ct));
 
     public async Task<MalListStatus> UpdateMyListStatusAsync(int animeId, MalListStatusUpdate update, CancellationToken ct = default)
     {
@@ -119,15 +85,6 @@ public class MalClient(HttpClient http) : IMalClient
             ?? throw new InvalidOperationException("MAL returned an empty my_list_status response.");
     }
 
-    public async Task DeleteMyListStatusAsync(int animeId, CancellationToken ct = default)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Delete, $"anime/{animeId}/my_list_status");
-        request.Options.Set(MalRequestOptions.AuthModeKey, MalAuthMode.Bearer);
-
-        using var response = await http.SendAsync(request, ct);
-        response.EnsureSuccessStatusCode();
-    }
-
     private async Task<T> GetAsync<T>(string url, MalAuthMode authMode, CancellationToken ct)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -137,5 +94,29 @@ public class MalClient(HttpClient http) : IMalClient
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct)
             ?? throw new InvalidOperationException($"MAL returned an empty response for {url}.");
+    }
+
+    private const int FullListPageSize = 100;
+
+    /// <summary>Pages through a MAL cursor-paginated endpoint (season listing,
+    /// full my-list) until a page comes back empty or without a next link,
+    /// concatenating every page's data.</summary>
+    private static async Task<List<T>> GetAllPagesAsync<T>(Func<int, Task<MalPagedResponse<T>>> fetchPage)
+    {
+        var all = new List<T>();
+        var offset = 0;
+
+        while (true)
+        {
+            var page = await fetchPage(offset);
+            all.AddRange(page.Data);
+
+            if (page.Paging?.Next is null || page.Data.Count == 0)
+                break;
+
+            offset += FullListPageSize;
+        }
+
+        return all;
     }
 }

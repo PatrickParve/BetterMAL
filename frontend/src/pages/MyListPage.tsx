@@ -5,21 +5,13 @@ import type { MyListItemDto, WatchStatus } from '../api/types.ts'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
-import { pickDisplayTitle } from '../utils/anime.ts'
+import { compareByMalScoreDesc, compareByTitleAlphabetical, pickDisplayTitle, STATUS_LABELS } from '../utils/anime.ts'
 import './MyListPage.css'
 
 type SortKey = 'alphabetical' | 'malScore' | 'myScore'
 type StatusFilter = 'All' | WatchStatus
 
 const GROUP_ORDER: WatchStatus[] = ['Watching', 'OnHold', 'PlanToWatch', 'Completed', 'Dropped']
-
-const STATUS_LABELS: Record<WatchStatus, string> = {
-  Watching: 'Watching',
-  OnHold: 'On hold',
-  PlanToWatch: 'Plan to watch',
-  Completed: 'Completed',
-  Dropped: 'Dropped',
-}
 
 const FILTER_TABS: { value: StatusFilter; label: string }[] = [
   { value: 'All', label: 'All' },
@@ -40,13 +32,13 @@ function sortByKey(items: MyListItemDto[], sort: SortKey): MyListItemDto[] {
   const sorted = [...items]
   switch (sort) {
     case 'malScore':
-      sorted.sort((a, b) => (b.malScore ?? -1) - (a.malScore ?? -1))
+      sorted.sort(compareByMalScoreDesc)
       break
     case 'myScore':
       sorted.sort((a, b) => (b.entry.myScore ?? -1) - (a.entry.myScore ?? -1))
       break
     case 'alphabetical':
-      sorted.sort((a, b) => a.title.localeCompare(b.title))
+      sorted.sort(compareByTitleAlphabetical)
       break
   }
   return sorted

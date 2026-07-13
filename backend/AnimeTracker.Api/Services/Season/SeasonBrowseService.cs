@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Library;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Scheduling;
 using Microsoft.EntityFrameworkCore;
@@ -20,7 +21,7 @@ public class SeasonBrowseService(
 
         var (items, totalCount) = await seasonRepository.GetPageAsync(year, season, ParseSort(sortKey), offset, limit, ct);
         var dtoItems = items
-            .Select(i => new SeasonAnimeItemDto(i.AnimeId, i.Title, i.EnglishTitle, i.PictureUrl, i.TotalEpisodes, i.MediaType, i.MalScore, i.PopularityRank, i.MyScore))
+            .Select(i => new AnimeBrowseItemDto(i.AnimeId, i.Title, i.EnglishTitle, i.PictureUrl, i.TotalEpisodes, i.MediaType, i.MalScore, i.PopularityRank, i.MyScore))
             .ToList();
 
         return new SeasonPageDto(year, season, dtoItems, offset, limit, totalCount);

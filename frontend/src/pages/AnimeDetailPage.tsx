@@ -1,20 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getAnimeDetail, refreshAnime } from "../api/client.ts";
-import type { AnimeDetailDto, WatchStatus } from "../api/types.ts";
+import type { AnimeDetailDto } from "../api/types.ts";
 import { ProgressBar } from "../components/ProgressBar.tsx";
 import { ScoreValue } from "../components/ScoreValue.tsx";
 import { useEntryEditor } from "../context/EntryEditorContext.tsx";
-import { pickDisplayTitle } from "../utils/anime.ts";
+import { pickDisplayTitle, STATUS_LABELS } from "../utils/anime.ts";
 import "./AnimeDetailPage.css";
-
-const STATUS_LABELS: Record<WatchStatus, string> = {
-  Watching: "Watching",
-  OnHold: "On hold",
-  PlanToWatch: "Plan to watch",
-  Completed: "Completed",
-  Dropped: "Dropped",
-};
 
 const AIRING_STATUS_LABELS: Record<string, string> = {
   currently_airing: "Currently airing",

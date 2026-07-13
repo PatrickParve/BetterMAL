@@ -1,14 +1,5 @@
+using AnimeTracker.Api.Services.Library;
+
 namespace AnimeTracker.Api.Services.Season;
 
-public record SeasonAnimeItemDto(
-    int AnimeId,
-    string Title,
-    string? EnglishTitle,
-    string? PictureUrl,
-    int? TotalEpisodes,
-    string? MediaType,
-    double? MalScore,
-    int? PopularityRank,
-    int? MyScore);
-
-public record SeasonPageDto(int Year, string Season, List<SeasonAnimeItemDto> Items, int Offset, int Limit, int TotalCount);
+public record SeasonPageDto(int Year, string Season, List<AnimeBrowseItemDto> Items, int Offset, int Limit, int TotalCount);

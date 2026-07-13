@@ -22,5 +22,4 @@ public interface IMalClient
     Task<MalPagedResponse<MalUserAnimeListEdge>> GetUserAnimeListAsync(string? status = null, int limit = 100, int offset = 0, CancellationToken ct = default);
     Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(CancellationToken ct = default);
     Task<MalListStatus> UpdateMyListStatusAsync(int animeId, MalListStatusUpdate update, CancellationToken ct = default);
-    Task DeleteMyListStatusAsync(int animeId, CancellationToken ct = default);
 }

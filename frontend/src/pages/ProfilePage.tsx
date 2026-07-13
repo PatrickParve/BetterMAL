@@ -5,7 +5,7 @@ import type { OpinionDivergenceItemDto, ProfileDto } from '../api/types.ts'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { EditHistoryOverlay } from '../components/EditHistoryOverlay.tsx'
 import { TopAnimeSelectionOverlay } from '../components/TopAnimeSelectionOverlay.tsx'
-import { pickDisplayTitle } from '../utils/anime.ts'
+import { CHANGE_TYPE_LABELS, formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
 import './ProfilePage.css'
 
 const STAT_LABELS: { key: keyof ProfileDto['stats']; label: string }[] = [
@@ -21,24 +21,11 @@ const STAT_LABELS: { key: keyof ProfileDto['stats']; label: string }[] = [
   { key: 'episodes', label: 'Episodes' },
 ]
 
-const CHANGE_TYPE_LABELS: Record<string, string> = {
-  Added: 'Added',
-  StatusChanged: 'Status changed',
-  EpisodeIncremented: 'Episode watched',
-  ScoreChanged: 'Score changed',
-  Completed: 'Completed',
-  RewatchCountChanged: 'Rewatch count changed',
-}
-
 function formatStatValue(key: keyof ProfileDto['stats'], value: number | null): string {
   if (value === null) return '—'
   if (key === 'days') return value.toFixed(1)
   if (key === 'meanScore') return value.toFixed(2)
   return String(value)
-}
-
-function formatTimestamp(timestamp: string): string {
-  return new Date(timestamp).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {

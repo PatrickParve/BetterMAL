@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { AnimeCard } from './AnimeCard.tsx'
 import { ProgressBar } from './ProgressBar.tsx'
 import type { CurrentSeasonItemDto } from '../api/types.ts'
+import { compareByMalScoreDesc, compareByTitleAlphabetical } from '../utils/anime.ts'
 import './CurrentSeasonSection.css'
 
 type SortKey = 'popularity' | 'malScore' | 'alphabetical'
@@ -25,10 +26,10 @@ function sortItems(items: CurrentSeasonItemDto[], sort: SortKey): CurrentSeasonI
       sorted.sort((a, b) => popularityKey(a.popularityRank) - popularityKey(b.popularityRank))
       break
     case 'malScore':
-      sorted.sort((a, b) => (b.malScore ?? -1) - (a.malScore ?? -1))
+      sorted.sort(compareByMalScoreDesc)
       break
     case 'alphabetical':
-      sorted.sort((a, b) => a.title.localeCompare(b.title))
+      sorted.sort(compareByTitleAlphabetical)
       break
   }
   return sorted

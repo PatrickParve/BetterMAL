@@ -101,7 +101,9 @@ export type AiringWeekDto = {
   days: AiringDayDto[]
 }
 
-export type SeasonAnimeItemDto = {
+// Shared shape for a browsable (not-yet-in-my-list-scoped) anime card, used by
+// both the season page and the search page.
+export type AnimeBrowseItemDto = {
   animeId: number
   title: string
   englishTitle: string | null
@@ -116,27 +118,15 @@ export type SeasonAnimeItemDto = {
 export type SeasonPageDto = {
   year: number
   season: string
-  items: SeasonAnimeItemDto[]
+  items: AnimeBrowseItemDto[]
   offset: number
   limit: number
   totalCount: number
 }
 
-export type SearchAnimeItemDto = {
-  animeId: number
-  title: string
-  englishTitle: string | null
-  pictureUrl: string | null
-  totalEpisodes: number | null
-  mediaType: string | null
-  malScore: number | null
-  popularityRank: number | null
-  myScore: number | null
-}
-
 export type SearchPageDto = {
   query: string
-  items: SearchAnimeItemDto[]
+  items: AnimeBrowseItemDto[]
   offset: number
   limit: number
   totalCount: number
@@ -204,21 +194,13 @@ export type TopAnimeEntryDto = {
   myScore: number
 }
 
-export type TopAnimeCandidateDto = {
-  animeId: number
-  title: string
-  englishTitle: string | null
-  pictureUrl: string | null
-  myScore: number
-}
-
 // Items is the resolved "My top anime" list. Candidates/tieBreakSlots are
 // only populated when the fill boundary lands mid-tier (an actual tie to
 // break) — that's what the selection overlay (15.6) is built from.
 export type TopAnimeSectionDto = {
   items: TopAnimeEntryDto[]
   tieBreakSlots: number
-  candidates: TopAnimeCandidateDto[]
+  candidates: TopAnimeEntryDto[]
   selectedAnimeIds: number[]
 }
 

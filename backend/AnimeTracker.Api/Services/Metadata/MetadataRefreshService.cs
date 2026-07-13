@@ -27,16 +27,34 @@ public class MetadataRefreshService(
     {
         var now = DateTimeOffset.UtcNow;
         var today = DateOnly.FromDateTime(now.UtcDateTime);
+        var recentlyFinishedWindowStart = today.AddDays(-RecentlyFinishedWindowDays);
+        var oneYearWindowStart = today.AddDays(-OneYearWindowDays);
+        var airingCutoff = now - AiringThreshold;
+        var recentlyFinishedCutoff = now - RecentlyFinishedThreshold;
+        var weeklyCutoff = now - WeeklyThreshold;
+        var monthlyCutoff = now - MonthlyThreshold;
 
         // My-list only: Season/Top-Anime browsing populates AnimeMetadata too,
         // but those rows are refreshed solely via the lean, visit-triggered
-        // path (never this nightly job).
-        var all = await db.AnimeMetadata.Where(a => a.UserEntry != null).ToListAsync(ct);
-        var due = all
-            .Where(a => IsStale(a, now, today))
+        // path (never this nightly job). The staleness check (mirrors
+        // IsStale's four tiers) is pushed into the query itself rather than
+        // loading every my-list row into memory to filter client-side.
+        var due = await db.AnimeMetadata
+            .Where(a => a.UserEntry != null)
+            .Where(a =>
+                a.LastScoreSyncedAt == null ||
+                (a.AiringStatus == "currently_airing" && a.LastScoreSyncedAt <= airingCutoff) ||
+                (a.AiringStatus == "not_yet_aired" && a.LastScoreSyncedAt <= weeklyCutoff) ||
+                (a.AiringStatus == "finished_airing" && a.AiredTo != null && a.AiredTo >= recentlyFinishedWindowStart &&
+                    a.LastScoreSyncedAt <= recentlyFinishedCutoff) ||
+                (a.AiringStatus == "finished_airing" && a.AiredTo != null && a.AiredTo < recentlyFinishedWindowStart &&
+                    a.AiredTo >= oneYearWindowStart && a.LastScoreSyncedAt <= weeklyCutoff) ||
+                (a.AiringStatus != "currently_airing" && a.AiringStatus != "not_yet_aired" &&
+                    !(a.AiringStatus == "finished_airing" && a.AiredTo != null && a.AiredTo >= oneYearWindowStart) &&
+                    a.LastScoreSyncedAt <= monthlyCutoff))
             .OrderBy(a => a.LastScoreSyncedAt ?? DateTimeOffset.MinValue)
             .Take(batchSize)
-            .ToList();
+            .ToListAsync(ct);
 
         var refreshed = 0;
         foreach (var anime in due)
@@ -69,19 +87,5 @@ public class MetadataRefreshService(
         var details = await malClient.GetAnimeDetailsAsync(animeId, ct: ct);
         details.ApplyTo(anime, DateTimeOffset.UtcNow);
         await db.SaveChangesAsync(ct);
-    }
-
-    private static bool IsStale(AnimeMetadata anime, DateTimeOffset now, DateOnly today)
-    {
-        var threshold = anime.AiringStatus switch
-        {
-            "currently_airing" => AiringThreshold,
-            "not_yet_aired" => WeeklyThreshold,
-            "finished_airing" when anime.AiredTo is { } airedTo && airedTo >= today.AddDays(-RecentlyFinishedWindowDays) => RecentlyFinishedThreshold,
-            "finished_airing" when anime.AiredTo is { } airedTo && airedTo >= today.AddDays(-OneYearWindowDays) => WeeklyThreshold,
-            _ => MonthlyThreshold,
-        };
-
-        return anime.LastScoreSyncedAt is not { } last || now - last >= threshold;
     }
 }

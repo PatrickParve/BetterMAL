@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using AnimeTracker.Api.Services.Import;
 using AnimeTracker.Api.Services.Mal.Auth;
 using Microsoft.AspNetCore.Mvc;
@@ -34,7 +35,8 @@ public class MalAuthController(
         if (!string.IsNullOrEmpty(error))
         {
             logger.LogWarning("MAL authorization was denied or failed: {Error}", error);
-            return HtmlResult("Authorization failed", $"MAL returned an error: {error}. You can close this tab and try again.");
+            var safeError = HtmlEncoder.Default.Encode(error);
+            return HtmlResult("Authorization failed", $"MAL returned an error: {safeError}. You can close this tab and try again.");
         }
 
         if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(state))

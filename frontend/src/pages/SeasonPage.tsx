@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getSeasonPage } from '../api/client.ts'
-import type { SeasonAnimeItemDto } from '../api/types.ts'
-import { AnimeCard } from '../components/AnimeCard.tsx'
+import type { AnimeBrowseItemDto } from '../api/types.ts'
+import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
+import { useLatestRequest } from '../hooks/useLatestRequest.ts'
 import './SeasonPage.css'
 
 const SEASON_ORDER = ['winter', 'spring', 'summer', 'fall'] as const
@@ -64,11 +65,11 @@ export function SeasonPage() {
   const season = isSeasonName(seasonParam) ? seasonParam : fallback.season
   const sort = isSortKey(sortParam) ? sortParam : 'popularity'
 
-  const [items, setItems] = useState<SeasonAnimeItemDto[]>([])
+  const [items, setItems] = useState<AnimeBrowseItemDto[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const requestIdRef = useRef(0)
+  const { start, current, isLatest } = useLatestRequest()
 
   const hasMore = items.length < totalCount
   const yearOptions = useMemo(() => {
@@ -95,13 +96,13 @@ export function SeasonPage() {
 
   // Season or sort changed: start over from page one.
   useEffect(() => {
-    const requestId = ++requestIdRef.current
+    const requestId = start()
     setItems([])
     setTotalCount(0)
     setLoading(true)
     getSeasonPage(year, season, { sort, offset: 0, limit: PAGE_SIZE })
       .then((page) => {
-        if (requestIdRef.current !== requestId) return
+        if (!isLatest(requestId)) return
         setItems(page.items)
         setTotalCount(page.totalCount)
       })
@@ -109,7 +110,7 @@ export function SeasonPage() {
         // Season page just stays empty; the user can retry via season nav.
       })
       .finally(() => {
-        if (requestIdRef.current === requestId) setLoading(false)
+        if (isLatest(requestId)) setLoading(false)
       })
   }, [year, season, sort])
 
@@ -126,17 +127,17 @@ export function SeasonPage() {
 
     function loadMore() {
       if (loading || !hasMore) return
-      const requestId = requestIdRef.current
+      const requestId = current()
       setLoading(true)
       getSeasonPage(year, season, { sort, offset: items.length, limit: PAGE_SIZE })
         .then((page) => {
-          if (requestIdRef.current !== requestId) return
+          if (!isLatest(requestId)) return
           setItems((prev) => [...prev, ...page.items])
           setTotalCount(page.totalCount)
         })
         .catch(() => {})
         .finally(() => {
-          if (requestIdRef.current === requestId) setLoading(false)
+          if (isLatest(requestId)) setLoading(false)
         })
     }
   }, [items, loading, hasMore, year, season, sort])
@@ -208,9 +209,7 @@ export function SeasonPage() {
               englishTitle={item.englishTitle}
               pictureUrl={item.pictureUrl}
             >
-              <span className="season-card__meta">
-                {item.mediaType ? item.mediaType.toUpperCase() : 'Unknown'} · {item.totalEpisodes ?? '?'} ep
-              </span>
+              <AnimeCardMeta mediaType={item.mediaType} totalEpisodes={item.totalEpisodes} />
             </AnimeCard>
           ))}
         </div>

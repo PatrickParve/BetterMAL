@@ -31,13 +31,6 @@ public record TopAnimeEntryDto(
     string? PictureUrl,
     int MyScore);
 
-public record TopAnimeCandidateDto(
-    int AnimeId,
-    string Title,
-    string? EnglishTitle,
-    string? PictureUrl,
-    int MyScore);
-
 /// <summary>Items is the resolved "My top anime" list (score-10s plus the
 /// filled remainder). Candidates/TieBreakSlots are only non-empty/non-zero
 /// when the fill boundary lands mid-tier — i.e. there's an actual tie to
@@ -45,7 +38,7 @@ public record TopAnimeCandidateDto(
 public record TopAnimeSectionDto(
     List<TopAnimeEntryDto> Items,
     int TieBreakSlots,
-    List<TopAnimeCandidateDto> Candidates,
+    List<TopAnimeEntryDto> Candidates,
     List<int> SelectedAnimeIds);
 
 public record ScoreDistributionBucketDto(int Score, int Count);

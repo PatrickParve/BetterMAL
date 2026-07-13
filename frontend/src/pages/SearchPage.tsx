@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getSearchPage } from '../api/client.ts'
-import type { SearchAnimeItemDto } from '../api/types.ts'
-import { AnimeCard } from '../components/AnimeCard.tsx'
+import type { AnimeBrowseItemDto } from '../api/types.ts'
+import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
 import { Pagination } from '../components/Pagination.tsx'
+import { useLatestRequest } from '../hooks/useLatestRequest.ts'
 import './SearchPage.css'
 
 type SortKey = 'relevance' | 'popularity' | 'malScore' | 'alphabetical' | 'myScore'
@@ -35,10 +36,10 @@ export function SearchPage() {
   const pageParam = Number(searchParams.get('page'))
   const page = Number.isInteger(pageParam) && pageParam > 0 ? pageParam : 1
 
-  const [items, setItems] = useState<SearchAnimeItemDto[]>([])
+  const [items, setItems] = useState<AnimeBrowseItemDto[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
-  const requestIdRef = useRef(0)
+  const { start, isLatest } = useLatestRequest()
 
   function setSort(next: SortKey) {
     setSearchParams((prev) => {
@@ -67,21 +68,21 @@ export function SearchPage() {
       return
     }
 
-    const requestId = ++requestIdRef.current
+    const requestId = start()
     setLoading(true)
     getSearchPage(q, { sort, offset: (page - 1) * PAGE_SIZE, limit: PAGE_SIZE })
       .then((result) => {
-        if (requestIdRef.current !== requestId) return
+        if (!isLatest(requestId)) return
         setItems(result.items)
         setTotalCount(result.totalCount)
       })
       .catch(() => {
-        if (requestIdRef.current !== requestId) return
+        if (!isLatest(requestId)) return
         setItems([])
         setTotalCount(0)
       })
       .finally(() => {
-        if (requestIdRef.current === requestId) setLoading(false)
+        if (isLatest(requestId)) setLoading(false)
       })
   }, [q, sort, page])
 
@@ -122,9 +123,7 @@ export function SearchPage() {
               englishTitle={item.englishTitle}
               pictureUrl={item.pictureUrl}
             >
-              <span className="search-card__meta">
-                {item.mediaType ? item.mediaType.toUpperCase() : 'Unknown'} · {item.totalEpisodes ?? '?'} ep
-              </span>
+              <AnimeCardMeta mediaType={item.mediaType} totalEpisodes={item.totalEpisodes} />
             </AnimeCard>
           ))}
         </div>

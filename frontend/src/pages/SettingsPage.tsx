@@ -8,7 +8,6 @@ import {
   getSyncStatus,
   refreshAnime,
   runReconciliation,
-  searchAnime,
   syncNow,
   triggerResyncFromMal,
 } from '../api/client.ts'
@@ -18,24 +17,11 @@ import type {
   PendingReconciliationDiffDto,
   ResyncStatusDto,
   SyncStatusDto,
-  WatchStatus,
 } from '../api/types.ts'
-import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
+import { useAnimeSearch } from '../hooks/useAnimeSearch.ts'
 import { useClickOutside } from '../hooks/useClickOutside.ts'
+import { STATUS_LABELS, formatTimestamp } from '../utils/anime.ts'
 import './SettingsPage.css'
-
-const STATUS_LABELS: Record<WatchStatus, string> = {
-  Watching: 'Watching',
-  OnHold: 'On hold',
-  PlanToWatch: 'Plan to watch',
-  Completed: 'Completed',
-  Dropped: 'Dropped',
-}
-
-function formatTimestamp(value: string | null): string {
-  if (!value) return 'Never'
-  return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-}
 
 // Operational/settings page: sync status + manual triggers, pending
 // reconciliation-diff review, MAL re-authorization, and on-demand
@@ -269,36 +255,13 @@ export function SettingsPage() {
 // navigation on selection.
 function AnimeRefreshPicker() {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<AnimeSearchResult[]>([])
-  const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<AnimeSearchResult | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const debouncedQuery = useDebouncedValue(query.trim(), 250)
+  const { results, open, setOpen } = useAnimeSearch(query)
 
   useClickOutside(containerRef, () => setOpen(false))
-
-  useEffect(() => {
-    if (debouncedQuery.length === 0) {
-      setResults([])
-      setOpen(false)
-      return
-    }
-
-    const controller = new AbortController()
-    searchAnime(debouncedQuery, controller.signal)
-      .then((matches) => {
-        setResults(matches)
-        setOpen(true)
-      })
-      .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return
-        setResults([])
-      })
-
-    return () => controller.abort()
-  }, [debouncedQuery])
 
   function pick(result: AnimeSearchResult) {
     setSelected(result)

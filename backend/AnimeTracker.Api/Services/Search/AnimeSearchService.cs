@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
+using AnimeTracker.Api.Services.Library;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using Microsoft.EntityFrameworkCore;
@@ -135,7 +136,7 @@ public class AnimeSearchService(
         var items = sorted
             .Skip(offset)
             .Take(limit)
-            .Select(c => new SearchAnimeItemDto(
+            .Select(c => new AnimeBrowseItemDto(
                 c.AnimeId, c.Title, c.EnglishTitle, c.PictureUrl, c.TotalEpisodes, c.MediaType, c.MalScore, c.PopularityRank,
                 myScores.GetValueOrDefault(c.AnimeId)))
             .ToList();
