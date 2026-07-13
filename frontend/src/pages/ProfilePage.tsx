@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getProfile } from '../api/client.ts'
 import type { OpinionDivergenceItemDto, ProfileDto } from '../api/types.ts'
@@ -62,6 +62,34 @@ export function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [showHistory, setShowHistory] = useState(false)
   const [showTopAnimeSelect, setShowTopAnimeSelect] = useState(false)
+  const topAnimeScrollRef = useRef<HTMLDivElement>(null)
+  const topAnimeDrag = useRef({ isDown: false, startX: 0, scrollLeft: 0, dragged: false })
+
+  function handleTopAnimeMouseDown(event: React.MouseEvent<HTMLDivElement>) {
+    const el = topAnimeScrollRef.current
+    if (!el) return
+    topAnimeDrag.current = { isDown: true, startX: event.pageX, scrollLeft: el.scrollLeft, dragged: false }
+  }
+
+  function handleTopAnimeMouseMove(event: React.MouseEvent<HTMLDivElement>) {
+    const state = topAnimeDrag.current
+    const el = topAnimeScrollRef.current
+    if (!state.isDown || !el) return
+    event.preventDefault()
+    const delta = event.pageX - state.startX
+    if (Math.abs(delta) > 3) state.dragged = true
+    el.scrollLeft = state.scrollLeft - delta
+  }
+
+  function handleTopAnimeMouseUp() {
+    topAnimeDrag.current.isDown = false
+  }
+
+  function handleTopAnimeItemClick(event: React.MouseEvent) {
+    if (topAnimeDrag.current.dragged) {
+      event.preventDefault()
+    }
+  }
 
   function loadProfile() {
     return getProfile()
@@ -173,25 +201,39 @@ export function ProfilePage() {
         {profile.topAnime.items.length === 0 ? (
           <p className="profile-page__section-empty">Score some anime to build your top list.</p>
         ) : (
-          <ol className="top-anime-mini-list">
-            {profile.topAnime.items.map((item, index) => (
-              <li key={item.animeId} className="profile-list-row">
-                <span className="profile-list-row__rank">#{index + 1}</span>
-                <Link to={`/anime/${item.animeId}`} className="profile-list-row__link">
-                  {item.pictureUrl ? (
-                    <img src={item.pictureUrl} alt="" className="profile-list-row__picture" />
-                  ) : (
-                    <div
-                      className="profile-list-row__picture profile-list-row__picture--placeholder"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="profile-list-row__title">{pickDisplayTitle(item.title, item.englishTitle)}</span>
-                </Link>
-                <span className="profile-list-row__trailing">{item.myScore}</span>
-              </li>
+          <div
+            className="top-anime-strip"
+            ref={topAnimeScrollRef}
+            onMouseDown={handleTopAnimeMouseDown}
+            onMouseMove={handleTopAnimeMouseMove}
+            onMouseUp={handleTopAnimeMouseUp}
+            onMouseLeave={handleTopAnimeMouseUp}
+          >
+            {profile.topAnime.items.map((item) => (
+              <Link
+                key={item.animeId}
+                to={`/anime/${item.animeId}`}
+                className="top-anime-strip__item"
+                draggable={false}
+                onClick={handleTopAnimeItemClick}
+              >
+                {item.pictureUrl ? (
+                  <img
+                    src={item.pictureUrl}
+                    alt={pickDisplayTitle(item.title, item.englishTitle)}
+                    className="top-anime-strip__picture"
+                    draggable={false}
+                  />
+                ) : (
+                  <div
+                    className="top-anime-strip__picture top-anime-strip__picture--placeholder"
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="top-anime-strip__score">{item.myScore}</span>
+              </Link>
             ))}
-          </ol>
+          </div>
         )}
       </section>
 

@@ -17,7 +17,7 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'myScore', label: 'My score' },
 ]
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 48
 
 function isSortKey(value: string | null): value is SortKey {
   return value !== null && SORT_OPTIONS.some((option) => option.value === value)
