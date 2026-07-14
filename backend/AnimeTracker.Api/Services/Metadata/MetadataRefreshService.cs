@@ -81,11 +81,19 @@ public class MetadataRefreshService(
 
     public async Task RefreshOneAsync(int animeId, CancellationToken ct = default)
     {
-        var anime = await db.AnimeMetadata.FirstOrDefaultAsync(a => a.Id == animeId, ct)
-            ?? throw new AnimeMetadataNotFoundException(animeId);
-
+        // Fetch from MAL first: a genuinely invalid id throws here, before we
+        // touch the DB, so we never insert a garbage row. Upsert so this also
+        // caches an anime that has no row yet (a sequel link or an un-interacted
+        // search result the detail page is opening for the first time).
         var details = await malClient.GetAnimeDetailsAsync(animeId, ct: ct);
-        details.ApplyTo(anime, DateTimeOffset.UtcNow);
+        var now = DateTimeOffset.UtcNow;
+
+        var anime = await db.AnimeMetadata.FirstOrDefaultAsync(a => a.Id == animeId, ct);
+        if (anime is null)
+            db.AnimeMetadata.Add(details.ToAnimeMetadata(now));
+        else
+            details.ApplyTo(anime, now);
+
         await db.SaveChangesAsync(ct);
     }
 }

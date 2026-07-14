@@ -28,9 +28,15 @@ public class ReconciliationService(
 
             // Anime missing locally (e.g. added directly on MAL's site) needs a
             // metadata row cached — this is just cache data, not user data, so
-            // it's kept up to date immediately rather than held for review.
+            // it's added immediately rather than held for review. The my-list
+            // payload only carries listing fields (no synopsis/genres/related),
+            // so cache it lean: LastSyncedAt stays default and the detail page
+            // fills in the rich fields via a full fetch on first visit — same as
+            // a Season/Top-Anime browse row. Stamping the full ToAnimeMetadata
+            // here would set LastSyncedAt on a rich-field-empty row and suppress
+            // that upgrade.
             if (existingAnimeIds.Add(animeId))
-                db.AnimeMetadata.Add(edge.Node.ToAnimeMetadata(now));
+                db.AnimeMetadata.Add(edge.Node.ToLeanAnimeMetadata(now));
 
             var remote = MalMappingExtensions.ToUserAnimeEntry(animeId, edge.ListStatus, now);
 

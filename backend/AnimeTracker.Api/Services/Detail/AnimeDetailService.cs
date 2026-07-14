@@ -10,15 +10,20 @@ public class AnimeDetailService(
 {
     public async Task<AnimeDetailDto> GetDetailAsync(int animeId, CancellationToken ct = default)
     {
-        var anime = await metadataRepository.GetByIdAsync(animeId, ct)
-            ?? throw new AnimeMetadataNotFoundException(animeId);
+        var anime = await metadataRepository.GetByIdAsync(animeId, ct);
 
-        // LastSyncedAt is only ever set by a rich/full-detail upsert (see
-        // MalMappingExtensions.ApplyTo vs ApplyLeanTo) — default means this row
-        // has only ever been lean-fetched via Season/Top-Anime browsing, so the
-        // detail-only fields (genres, synopsis, studio, aired dates, ...) are
-        // still empty. Mirrors SeasonBrowseService's visit-triggered live fetch.
-        if (anime.LastSyncedAt == default)
+        // Live-fetch full detail from MAL (RefreshOneAsync upserts) whenever the
+        // row isn't detail-complete. Genres is the marker: a full-detail fetch
+        // always populates it, and every row that lacks it never had one —
+        //  - missing row: a sequel/prequel link or an un-interacted search
+        //    result opened for the first time (a 404 before this fix);
+        //  - lean row: only ever browsed via Season/Top-Anime;
+        //  - reconciliation-added row: built from the fields-limited my-list
+        //    payload, which omits genres/synopsis/background/related — so it can
+        //    carry a LastSyncedAt yet still be missing every detail-only field.
+        // After the fetch Genres is set, so later visits are plain cache hits.
+        // Mirrors SeasonBrowseService's visit-triggered live fetch.
+        if (anime is null || anime.Genres is not { Count: > 0 })
         {
             try
             {
@@ -27,10 +32,12 @@ public class AnimeDetailService(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to live-fetch full detail for anime {AnimeId} on first visit; serving lean data.", animeId);
+                logger.LogWarning(ex, "Failed to live-fetch full detail for anime {AnimeId}; serving cached data if any.", animeId);
             }
         }
 
-        return AnimeDetailDto.FromEntity(anime);
+        return anime is null
+            ? throw new AnimeMetadataNotFoundException(animeId)
+            : AnimeDetailDto.FromEntity(anime);
     }
 }
