@@ -9,14 +9,18 @@
   display: flex;
   justify-content: safe center;
   gap: 16px;
+  max-width: calc(5 * 160px + 4 * 16px);
   overflow-x: auto;
-  scroll-snap-type: x proximity;
-  padding: 2px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.carousel__track::-webkit-scrollbar {
+  display: none;
 }
 
 .carousel__card {
   flex: 0 0 auto;
-  scroll-snap-align: start;
 }
 
 .carousel__arrow {
