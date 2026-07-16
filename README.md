@@ -104,17 +104,50 @@ To stop everything:
 docker compose down
 ```
 
-To rebuild after pulling new changes:
-
-```bash
-docker compose up -d --build
-```
-
 To view logs:
 
 ```bash
 docker compose logs -f backend   # or frontend / postgres
 ```
+
+#### Rebuilding the Docker images
+
+Whenever you change backend or frontend code, the running containers are
+still using the old image until you rebuild. From the repo root:
+
+```bash
+docker compose up -d --build
+```
+
+This rebuilds any service whose source changed and recreates its container,
+leaving `postgres` (and its data volume) untouched. It's safe to run any
+time, including with no changes — Docker just reuses cached layers.
+
+To target a single service instead of rebuilding everything:
+
+```bash
+docker compose build backend    # or frontend
+docker compose up -d backend    # recreate just that container with the new image
+```
+
+To force a full rebuild with no cached layers (useful if you suspect a stale
+layer, e.g. after a base-image update):
+
+```bash
+docker compose build --no-cache backend frontend
+docker compose up -d
+```
+
+Notes:
+- These commands build the image using each service's `Dockerfile`
+  (`backend/AnimeTracker.Api/Dockerfile`, `frontend/Dockerfile`) — you never
+  need to run `docker build` by hand.
+- `docker compose build` sends your source as a build context (no bind
+  mount), so it works the same everywhere `docker compose` runs, regardless
+  of where the repo lives on disk.
+- The backend image targets .NET 10 and is compiled *inside* the build
+  stage, so you don't need the .NET 10 SDK installed locally to build it —
+  only Docker.
 
 ### Option B: Run natively (faster iteration during development)
 
