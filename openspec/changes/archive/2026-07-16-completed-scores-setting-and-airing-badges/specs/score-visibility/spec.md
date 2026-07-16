@@ -1,32 +1,4 @@
-# score-visibility Specification
-
-## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
-## Requirements
-### Requirement: Global MAL-score hide toggle
-The system SHALL provide a global toggle that, when hidden, replaces every MAL score everywhere with a blur that does not leak the underlying value. The toggle's on/off state SHALL persist across page reloads and new tabs (client-side, e.g. `localStorage`), so a user who hides scores does not see them reappear on refresh.
-
-#### Scenario: Hiding all scores
-- **WHEN** I turn the hide toggle on
-- **THEN** every MAL score across the app is blurred and the actual value is not exposed in the rendered output
-
-#### Scenario: Hidden state survives a reload
-- **WHEN** I turn the hide toggle on and then reload the page or open the app in a new tab
-- **THEN** scores are still hidden without my having to toggle again
-
-### Requirement: Per-score in-place reveal
-The system SHALL give each blurred score its own small unhide control that reveals just that one score in place.
-
-#### Scenario: Revealing a single score
-- **WHEN** I use a blurred score's unhide control
-- **THEN** only that one score is revealed in place while the others remain blurred
-
-### Requirement: Reveal is not persisted
-The system SHALL re-hide any individually revealed score when navigating away, keeping the unhidden state non-persistent.
-
-#### Scenario: Navigating away re-hides
-- **WHEN** I reveal a score and then navigate away and back
-- **THEN** that score is blurred again
+## ADDED Requirements
 
 ### Requirement: Always-show-completed-scores setting
 The system SHALL provide a setting on the Settings page, "Always show MAL scores for completed shows", that when enabled reveals the MAL score of any anime the user has marked **Completed** in full — no blur and no per-score reveal control — even while the global hide-scores toggle is on. The setting SHALL default to off, SHALL be independent of the global hide toggle (it never changes the global toggle's state), and SHALL apply only to scores belonging to completed entries; every other MAL score continues to follow the global hide/unhide behavior. The setting's on/off state SHALL persist across page reloads and new tabs (client-side, e.g. `localStorage`).
@@ -46,4 +18,3 @@ The system SHALL provide a setting on the Settings page, "Always show MAL scores
 #### Scenario: Setting survives a reload
 - **WHEN** I enable "Always show MAL scores for completed shows" and then reload the page or open the app in a new tab
 - **THEN** the setting is still enabled without my having to toggle it again
-
