@@ -262,7 +262,7 @@ export function MyListPage() {
       ) : filteredItems.length === 0 ? (
         <p className="my-list-page__empty">Nothing here yet.</p>
       ) : showRanked ? (
-        <>
+        <section className="my-list-page__group">
           <div className="my-list-page__group-header">
             <h2>{statusFilter === 'All' ? 'All' : STATUS_LABELS[statusFilter]}</h2>
             {renderSortControls()}
@@ -272,7 +272,7 @@ export function MyListPage() {
               renderRow(item, sort === 'airingStatus' ? undefined : index + 1),
             )}
           </ul>
-        </>
+        </section>
       ) : (
         GROUP_ORDER.filter((status) => statusFilter === 'All' || statusFilter === status).map((status) => {
           const groupItems = sortByKey(
