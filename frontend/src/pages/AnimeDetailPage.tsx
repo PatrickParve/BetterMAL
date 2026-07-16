@@ -209,7 +209,7 @@ export function AnimeDetailPage() {
                 {detail.popularityRank ? `#${detail.popularityRank}` : "—"}
               </p>
               <p>
-                MAL score: <ScoreValue value={detail.malScore} />
+                MAL score: <ScoreValue value={detail.malScore} completed={detail.entry?.status === 'Completed'} />
               </p>
             </section>
             {detail.entry && detail.entry.myScore != null && (

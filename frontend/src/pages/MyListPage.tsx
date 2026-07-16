@@ -6,6 +6,7 @@ import { ProgressBar } from '../components/ProgressBar.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import {
+  airingStatusShortLabel,
   compareByMalScoreDesc,
   compareByTitleAlphabetical,
   pickDisplayTitle,
@@ -116,6 +117,8 @@ export function MyListPage() {
   }
 
   function renderRow(item: MyListItemDto, rank?: number) {
+    const airingLabel =
+      item.entry.status === 'PlanToWatch' ? airingStatusShortLabel(item.airingStatus) : null
     return (
       <li key={item.animeId} className={`my-list-row my-list-row--${STATUS_CLASS[item.entry.status]}`}>
         {rank !== undefined && <span className="my-list-row__rank">#{rank}</span>}
@@ -127,7 +130,10 @@ export function MyListPage() {
           )}
           <span className="my-list-row__info">
             <span className="my-list-row__title">{pickDisplayTitle(item.title, item.englishTitle)}</span>
-            <span className="my-list-row__type">{item.mediaType ? item.mediaType.toUpperCase() : 'Unknown'}</span>
+            <span className="my-list-row__type">
+              {item.mediaType ? item.mediaType.toUpperCase() : 'Unknown'}
+              {airingLabel && <span className="my-list-row__airing-badge"> · {airingLabel}</span>}
+            </span>
           </span>
         </Link>
         <span className="my-list-row__progress">
@@ -156,7 +162,7 @@ export function MyListPage() {
           </select>
         </span>
         <span className="my-list-row__mal-score">
-          <ScoreValue value={item.malScore} />
+          <ScoreValue value={item.malScore} completed={item.entry.status === 'Completed'} />
         </span>
         <button type="button" className="my-list-row__edit" onClick={() => openEdit(item)}>
           Edit

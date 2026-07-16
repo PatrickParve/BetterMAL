@@ -94,7 +94,7 @@ export function TopAnimePage() {
               </Link>
               <span className="top-anime-row__my-score">{item.entry?.myScore ?? '—'}</span>
               <span className="top-anime-row__mal-score">
-                <ScoreValue value={item.malScore} />
+                <ScoreValue value={item.malScore} completed={item.entry?.status === 'Completed'} />
               </span>
               {item.entry ? (
                 <button type="button" className="top-anime-row__action" onClick={() => handleEdit(item)}>

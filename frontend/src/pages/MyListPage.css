@@ -178,6 +178,11 @@
   opacity: 0.75;
 }
 
+.my-list-row__airing-badge {
+  color: var(--status-plantowatch, var(--text));
+  font-weight: 500;
+}
+
 .my-list-row__progress {
   width: 140px;
   flex: 0 0 auto;

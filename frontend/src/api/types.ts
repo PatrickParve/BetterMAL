@@ -140,6 +140,7 @@ export type MyListItemDto = {
   mediaType: string | null
   totalEpisodes: number | null
   malScore: number | null
+  airingStatus: string | null
   entry: UserAnimeEntryDto
 }
 

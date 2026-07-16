@@ -54,6 +54,19 @@
   border-color: var(--accent-border);
 }
 
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.settings-toggle input {
+  cursor: pointer;
+}
+
 .settings-box__buttons {
   display: flex;
   gap: 8px;

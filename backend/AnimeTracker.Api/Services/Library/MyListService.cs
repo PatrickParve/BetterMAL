@@ -17,6 +17,7 @@ public class MyListService(IUserAnimeEntryRepository entryRepository) : IMyListS
                 e.Anime.MediaType,
                 e.Anime.TotalEpisodes,
                 e.Anime.MalScore,
+                e.Anime.AiringStatus,
                 UserAnimeEntryDto.FromEntity(e)))
             .ToList();
     }

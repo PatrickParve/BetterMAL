@@ -25,6 +25,21 @@ export const STATUS_CLASS: Record<WatchStatus, string> = {
   Dropped: 'dropped',
 }
 
+// Compact airing-status labels for the My list Plan-to-watch badge. The
+// detail page uses its own longer phrasing (AIRING_STATUS_LABELS in
+// AnimeDetailPage.tsx) — the list wants something terse enough to sit next
+// to the media type.
+const AIRING_STATUS_SHORT_LABELS: Record<string, string> = {
+  not_yet_aired: 'Not aired',
+  currently_airing: 'Airing',
+  finished_airing: 'Aired',
+}
+
+export function airingStatusShortLabel(status: string | null | undefined): string | null {
+  if (!status) return null
+  return AIRING_STATUS_SHORT_LABELS[status] ?? null
+}
+
 export const CHANGE_TYPE_LABELS: Record<string, string> = {
   Added: 'Added',
   StatusChanged: 'Status changed',

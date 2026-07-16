@@ -5,6 +5,7 @@ import './ScoreValue.css'
 type ScoreValueProps = {
   value: number | null | undefined
   placeholder?: string
+  completed?: boolean
 }
 
 // Renders a MAL score respecting the global hide toggle. While hidden and not
@@ -12,13 +13,16 @@ type ScoreValueProps = {
 // only the blur placeholder and reveal control are rendered — so it can't leak
 // via devtools/text-selection. `revealed` is local state, so it naturally
 // resets (re-hides) whenever the surrounding page unmounts on navigation.
-export function ScoreValue({ value, placeholder = '—' }: ScoreValueProps) {
-  const { hidden } = useScoreVisibility()
+// `completed` opts a score into the "always show for completed shows"
+// setting: when that setting is on, a completed entry's score is shown in
+// full with no reveal control, regardless of the global hide state.
+export function ScoreValue({ value, placeholder = '—', completed = false }: ScoreValueProps) {
+  const { hidden, alwaysShowCompletedScores } = useScoreVisibility()
   const [revealed, setRevealed] = useState(false)
 
   if (value == null) return <span className="score-value">{placeholder}</span>
 
-  if (!hidden || revealed) {
+  if (!hidden || revealed || (completed && alwaysShowCompletedScores)) {
     return <span className="score-value">{value.toFixed(2)}</span>
   }
 

@@ -18,6 +18,7 @@ import type {
   ResyncStatusDto,
   SyncStatusDto,
 } from '../api/types.ts'
+import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { useAnimeSearch } from '../hooks/useAnimeSearch.ts'
 import { useClickOutside } from '../hooks/useClickOutside.ts'
 import { STATUS_LABELS, formatTimestamp } from '../utils/anime.ts'
@@ -40,6 +41,8 @@ export function SettingsPage() {
   const [reviewing, setReviewing] = useState(false)
   const [diffError, setDiffError] = useState<string | null>(null)
   const [startingFullResync, setStartingFullResync] = useState(false)
+
+  const { alwaysShowCompletedScores, toggleAlwaysShowCompletedScores } = useScoreVisibility()
 
   const load = useCallback(() => {
     return Promise.all([
@@ -147,6 +150,21 @@ export function SettingsPage() {
   return (
     <div className="settings-page">
       <h1>Settings</h1>
+
+      <section className="settings-box">
+        <h2>Score display</h2>
+        <p className="settings-box__hint">
+          Reveal MAL scores for shows you've completed even while the global "hide scores" toggle is on.
+        </p>
+        <label className="settings-toggle">
+          <input
+            type="checkbox"
+            checked={alwaysShowCompletedScores}
+            onChange={toggleAlwaysShowCompletedScores}
+          />
+          Always show MAL scores for completed shows
+        </label>
+      </section>
 
       <section className="settings-box">
         <h2>Sync status</h2>

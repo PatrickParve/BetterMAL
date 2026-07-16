@@ -13,4 +13,5 @@ public record MyListItemDto(
     string? MediaType,
     int? TotalEpisodes,
     double? MalScore,
+    string? AiringStatus,
     UserAnimeEntryDto Entry);
