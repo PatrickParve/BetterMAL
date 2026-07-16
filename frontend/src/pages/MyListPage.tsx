@@ -6,16 +6,19 @@ import { ProgressBar } from '../components/ProgressBar.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import {
+  AIRING_STATUS_LABELS,
   airingStatusShortLabel,
+  compareByAiringStatus,
   compareByMalScoreDesc,
   compareByTitleAlphabetical,
   pickDisplayTitle,
   STATUS_CLASS,
   STATUS_LABELS,
 } from '../utils/anime.ts'
+import type { AiringStatus } from '../utils/anime.ts'
 import './MyListPage.css'
 
-type SortKey = 'alphabetical' | 'malScore' | 'myScore'
+type SortKey = 'alphabetical' | 'malScore' | 'myScore' | 'airingStatus'
 type StatusFilter = 'All' | WatchStatus
 
 const GROUP_ORDER: WatchStatus[] = ['Watching', 'OnHold', 'PlanToWatch', 'Completed', 'Dropped']
@@ -36,7 +39,18 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'myScore', label: 'My score' },
 ]
 
-function sortByKey(items: MyListItemDto[], sort: SortKey): MyListItemDto[] {
+const AIRING_STATUS_SORT_OPTION: { value: SortKey; label: string } = {
+  value: 'airingStatus',
+  label: 'Airing status',
+}
+
+const AIRING_STATUS_FIRST_OPTIONS: { value: AiringStatus; label: string }[] = [
+  { value: 'currently_airing', label: AIRING_STATUS_LABELS.currently_airing },
+  { value: 'finished_airing', label: AIRING_STATUS_LABELS.finished_airing },
+  { value: 'not_yet_aired', label: AIRING_STATUS_LABELS.not_yet_aired },
+]
+
+function sortByKey(items: MyListItemDto[], sort: SortKey, airingStatusFirst: AiringStatus): MyListItemDto[] {
   const sorted = [...items]
   switch (sort) {
     case 'malScore':
@@ -47,6 +61,9 @@ function sortByKey(items: MyListItemDto[], sort: SortKey): MyListItemDto[] {
       break
     case 'alphabetical':
       sorted.sort(compareByTitleAlphabetical)
+      break
+    case 'airingStatus':
+      sorted.sort(compareByAiringStatus(airingStatusFirst))
       break
   }
   return sorted
@@ -61,6 +78,7 @@ export function MyListPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All')
   const [sort, setSort] = useState<SortKey>('alphabetical')
+  const [airingStatusFirst, setAiringStatusFirst] = useState<AiringStatus>('finished_airing')
   const [pendingIncrementId, setPendingIncrementId] = useState<number | null>(null)
   const [pendingScoreId, setPendingScoreId] = useState<number | null>(null)
   const { openEditor } = useEntryEditor()
@@ -174,22 +192,49 @@ export function MyListPage() {
   const filteredItems = statusFilter === 'All' ? items : items.filter((item) => item.entry.status === statusFilter)
   const showRanked = sort !== 'alphabetical'
 
-  return (
-    <div className="my-list-page">
-      <div className="my-list-page__header">
-        <h1>My list</h1>
+  function selectStatusFilter(next: StatusFilter) {
+    if (sort === 'airingStatus' && next !== 'PlanToWatch') setSort('alphabetical')
+    setStatusFilter(next)
+  }
+
+  function renderSortControls() {
+    const options = statusFilter === 'PlanToWatch' ? [...SORT_OPTIONS, AIRING_STATUS_SORT_OPTION] : SORT_OPTIONS
+    return (
+      <div className="my-list-page__sort-controls">
         <select
           className="my-list-page__sort"
           value={sort}
           onChange={(event) => setSort(event.target.value as SortKey)}
           aria-label="Sort my list"
         >
-          {SORT_OPTIONS.map((option) => (
+          {options.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
         </select>
+        {sort === 'airingStatus' && (
+          <select
+            className="my-list-page__sort"
+            value={airingStatusFirst}
+            onChange={(event) => setAiringStatusFirst(event.target.value as AiringStatus)}
+            aria-label="Show which airing status first"
+          >
+            {AIRING_STATUS_FIRST_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label} first
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="my-list-page">
+      <div className="my-list-page__header">
+        <h1>My list</h1>
       </div>
 
       <div className="my-list-page__tabs" role="tablist" aria-label="Filter by status">
@@ -204,7 +249,7 @@ export function MyListPage() {
               role="tab"
               aria-selected={statusFilter === tab.value}
               className={classes.join(' ')}
-              onClick={() => setStatusFilter(tab.value)}
+              onClick={() => selectStatusFilter(tab.value)}
             >
               {tab.label}
             </button>
@@ -217,17 +262,31 @@ export function MyListPage() {
       ) : filteredItems.length === 0 ? (
         <p className="my-list-page__empty">Nothing here yet.</p>
       ) : showRanked ? (
-        <ul className="my-list-page__list">{sortByKey(filteredItems, sort).map((item, index) => renderRow(item, index + 1))}</ul>
+        <>
+          <div className="my-list-page__group-header">
+            <h2>{statusFilter === 'All' ? 'All' : STATUS_LABELS[statusFilter]}</h2>
+            {renderSortControls()}
+          </div>
+          <ul className="my-list-page__list">
+            {sortByKey(filteredItems, sort, airingStatusFirst).map((item, index) =>
+              renderRow(item, sort === 'airingStatus' ? undefined : index + 1),
+            )}
+          </ul>
+        </>
       ) : (
         GROUP_ORDER.filter((status) => statusFilter === 'All' || statusFilter === status).map((status) => {
           const groupItems = sortByKey(
             filteredItems.filter((item) => item.entry.status === status),
             sort,
+            airingStatusFirst,
           )
           if (groupItems.length === 0) return null
           return (
             <section key={status} className="my-list-page__group">
-              <h2>{STATUS_LABELS[status]}</h2>
+              <div className="my-list-page__group-header">
+                <h2>{STATUS_LABELS[status]}</h2>
+                {renderSortControls()}
+              </div>
               <ul className="my-list-page__list">{groupItems.map((item) => renderRow(item))}</ul>
             </section>
           )

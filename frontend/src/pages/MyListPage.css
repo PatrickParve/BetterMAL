@@ -16,6 +16,13 @@
   margin: 0;
 }
 
+.my-list-page__sort-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .my-list-page__sort {
   font: inherit;
   font-size: 14px;
@@ -81,8 +88,17 @@
   border-color: var(--tab-color, var(--accent-border));
 }
 
-.my-list-page__group h2 {
+.my-list-page__group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
   margin: 0 0 8px;
+}
+
+.my-list-page__group-header h2 {
+  margin: 0;
 }
 
 .my-list-page__list {

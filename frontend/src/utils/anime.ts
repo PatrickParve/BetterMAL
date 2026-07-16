@@ -65,3 +65,28 @@ export function compareByMalScoreDesc<T extends { malScore: number | null }>(a: 
 export function compareByTitleAlphabetical<T extends { title: string }>(a: T, b: T): number {
   return a.title.localeCompare(b.title)
 }
+
+export type AiringStatus = 'finished_airing' | 'currently_airing' | 'not_yet_aired'
+
+export const AIRING_STATUS_LABELS: Record<AiringStatus, string> = {
+  finished_airing: 'Finished airing',
+  currently_airing: 'Currently airing',
+  not_yet_aired: 'Not yet aired',
+}
+
+// Base cycle the "show first" picker rotates through, e.g. choosing
+// "currently_airing" first yields Currently airing -> Not yet aired ->
+// Finished airing, keeping the other two statuses' relative order.
+const AIRING_STATUS_CYCLE: AiringStatus[] = ['finished_airing', 'currently_airing', 'not_yet_aired']
+
+export function compareByAiringStatus<T extends { airingStatus: string | null }>(
+  first: AiringStatus,
+): (a: T, b: T) => number {
+  const startIndex = AIRING_STATUS_CYCLE.indexOf(first)
+  const order = [...AIRING_STATUS_CYCLE.slice(startIndex), ...AIRING_STATUS_CYCLE.slice(0, startIndex)]
+  return (a, b) => {
+    const rankA = a.airingStatus ? order.indexOf(a.airingStatus as AiringStatus) : -1
+    const rankB = b.airingStatus ? order.indexOf(b.airingStatus as AiringStatus) : -1
+    return (rankA === -1 ? order.length : rankA) - (rankB === -1 ? order.length : rankB)
+  }
+}
