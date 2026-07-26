@@ -7,6 +7,13 @@ public class MalTokenProvider(IServiceScopeFactory scopeFactory) : IMalTokenProv
 {
     private static readonly TimeSpan RefreshBuffer = TimeSpan.FromMinutes(10);
 
+    // MAL rotates refresh tokens on use, so two concurrent refreshes would have
+    // the second exchange consume an already-spent refresh token and fail. This
+    // serializes the refresh path; the re-check after acquiring the lock lets
+    // every caller that queued behind an in-flight refresh reuse its result
+    // instead of refreshing again themselves.
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+
     public async Task<string?> GetValidAccessTokenAsync(CancellationToken ct = default)
     {
         using var scope = scopeFactory.CreateScope();
@@ -20,7 +27,23 @@ public class MalTokenProvider(IServiceScopeFactory scopeFactory) : IMalTokenProv
         if (token.ExpiresAt - RefreshBuffer > DateTimeOffset.UtcNow)
             return token.AccessToken;
 
-        var refreshed = await oauth.RefreshAsync(token.RefreshToken, ct);
-        return refreshed?.AccessToken;
+        await _refreshLock.WaitAsync(ct);
+        try
+        {
+            // Re-read: another caller may have already refreshed while we waited.
+            token = await tokenStore.GetAsync(ct);
+            if (token is null)
+                return null;
+
+            if (token.ExpiresAt - RefreshBuffer > DateTimeOffset.UtcNow)
+                return token.AccessToken;
+
+            var refreshed = await oauth.RefreshAsync(token.RefreshToken, ct);
+            return refreshed?.AccessToken;
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
     }
 }

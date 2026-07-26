@@ -35,6 +35,19 @@ public class EntryPushService(
             await db.SaveChangesAsync(ct);
             return true;
         }
+        catch (DbUpdateConcurrencyException)
+        {
+            // The row changed after we read it (a newer edit landed while this
+            // push's MAL call was in flight) — the values we just sent are
+            // already stale. Leave PendingSync set (reload so this DbContext's
+            // tracked state matches the DB) rather than clearing it: the newer
+            // edit's own debounce timer, or the retry sweep, will push the
+            // current values.
+            await db.Entry(entry).ReloadAsync(ct);
+            logger.LogInformation(
+                "Anime {AnimeId} changed while its push was in flight; leaving it pending for the next attempt.", animeId);
+            return false;
+        }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to push pending sync for anime {AnimeId}; it remains pending.", animeId);

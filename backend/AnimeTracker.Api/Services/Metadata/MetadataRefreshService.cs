@@ -1,6 +1,8 @@
+using System.Net;
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Mal;
+using AnimeTracker.Api.Services.Mal.Dto;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Metadata;
@@ -85,7 +87,15 @@ public class MetadataRefreshService(
         // touch the DB, so we never insert a garbage row. Upsert so this also
         // caches an anime that has no row yet (a sequel link or an un-interacted
         // search result the detail page is opening for the first time).
-        var details = await malClient.GetAnimeDetailsAsync(animeId, ct: ct);
+        MalAnimeNode details;
+        try
+        {
+            details = await malClient.GetAnimeDetailsAsync(animeId, ct: ct);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            throw new AnimeMetadataNotFoundException(animeId);
+        }
         var now = DateTimeOffset.UtcNow;
 
         var anime = await db.AnimeMetadata.FirstOrDefaultAsync(a => a.Id == animeId, ct);

@@ -125,7 +125,7 @@ export function MyListPage() {
     if (pendingScoreId !== null) return
     setPendingScoreId(item.animeId)
     try {
-      const saved = await updateEntry(item.animeId, { myScore: score === 0 ? null : score })
+      const saved = await updateEntry(item.animeId, { myScore: score })
       handleSaved(item.animeId)(saved)
     } catch {
       // Leave the score as-is; the user can retry.

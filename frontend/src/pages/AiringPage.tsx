@@ -5,8 +5,17 @@ import type { AiringWeekDto } from '../api/types.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
 import './AiringPage.css'
 
+// Local calendar date, formatted without ever going through toISOString
+// (which converts to UTC and can land on the wrong day for any non-UTC zone).
+function toLocalIso(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
+  return toLocalIso(new Date())
 }
 
 function isIsoDate(value: string | null): value is string {
@@ -16,7 +25,7 @@ function isIsoDate(value: string | null): value is string {
 function addDaysIso(iso: string, days: number): string {
   const date = new Date(`${iso}T00:00:00`)
   date.setDate(date.getDate() + days)
-  return date.toISOString().slice(0, 10)
+  return toLocalIso(date)
 }
 
 // Monday of the local week containing the given date — used to tell whether the

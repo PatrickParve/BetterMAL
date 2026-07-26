@@ -16,6 +16,7 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<TopAnimeRankingEntry> TopAnimeRankingEntries => Set<TopAnimeRankingEntry>();
     public DbSet<TopAnimeFetchLog> TopAnimeFetchLogs => Set<TopAnimeFetchLog>();
     public DbSet<SeasonAnimeListing> SeasonAnimeListings => Set<SeasonAnimeListing>();
+    public DbSet<ReconciliationRunLog> ReconciliationRunLogs => Set<ReconciliationRunLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,6 +33,17 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
                 .WithOne(a => a.UserEntry)
                 .HasForeignKey<UserAnimeEntry>(e => e.AnimeId);
             entity.Property(e => e.Status).HasConversion<string>();
+            // Maps Postgres's built-in xmin system column as a concurrency token
+            // (no migration needed for the column itself — every row already has
+            // one). Lets the debounced push detect, via
+            // DbUpdateConcurrencyException, that an edit landed between its read
+            // and its save, so it can leave PendingSync set instead of silently
+            // clearing it for values it never actually pushed to MAL.
+            entity.Property<uint>("RowVersion")
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
         });
 
         modelBuilder.Entity<ActivityLog>(entity =>
