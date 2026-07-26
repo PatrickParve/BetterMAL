@@ -54,6 +54,63 @@ public class EpisodeScheduleService(
         return converter.NextBroadcastInstant(anime, afterUtc);
     }
 
+    public int? EpisodesAiredAsOf(AnimeMetadata anime, DateTimeOffset nowUtc)
+    {
+        // A finished run is over by definition — trust the total rather than
+        // the estimate, which can drift for a long-finished show.
+        if (anime.AiringStatus == "finished_airing" && anime.TotalEpisodes is { } finishedTotal)
+            return finishedTotal;
+
+        var aired = cache.TryGet(anime.Id, out var schedule) && schedule.Count > 0
+            ? AiredFromCachedSchedule(schedule, nowUtc)
+            : EstimateAiredFromCadence(anime, nowUtc);
+
+        if (aired is not { } count)
+            return null;
+
+        return anime.TotalEpisodes is { } total ? Math.Clamp(count, 0, total) : count;
+    }
+
+    private static int AiredFromCachedSchedule(IReadOnlyList<EpisodeAiring> schedule, DateTimeOffset nowUtc)
+    {
+        var maxAired = 0;
+        foreach (var episode in schedule)
+        {
+            if (episode.AirsAtUtc <= nowUtc && episode.Episode > maxAired)
+                maxAired = episode.Episode;
+        }
+        return maxAired;
+    }
+
+    // Weekly-cadence estimate: episode 1 anchors to the premiere's local date,
+    // then one episode every 7 days. Simpler than re-deriving each week's exact
+    // local slot (which EstimateOnLocalDate does), and good enough for a count
+    // — the only place day-of-week/DST wobble matters is today's own slot.
+    private int? EstimateAiredFromCadence(AnimeMetadata anime, DateTimeOffset nowUtc)
+    {
+        if (anime.AiredFrom is not { } airedFrom || anime.BroadcastTime is not { } broadcastTime)
+            return null;
+
+        var firstLocalDate = converter.LocalDateOfJstBroadcast(airedFrom, broadcastTime);
+        var nowLocalDate = converter.GetLocalDate(nowUtc);
+        var daysSincePremiere = nowLocalDate.DayNumber - firstLocalDate.DayNumber;
+        if (daysSincePremiere < 0)
+            return 0; // before the premiere
+
+        var count = daysSincePremiere / 7 + 1;
+
+        // If today is this week's broadcast day, the tentatively-counted
+        // episode has only aired once its local broadcast time has passed.
+        if (daysSincePremiere % 7 == 0)
+        {
+            var todaySlot = converter.ResolveForDate(anime.BroadcastDayOfWeek, broadcastTime, nowLocalDate);
+            if (todaySlot is not null && converter.GetLocalTime(nowUtc) < todaySlot.Time)
+                count -= 1;
+        }
+
+        return count;
+    }
+
     // Weekly-cadence fallback: place episodes one broadcast slot apart starting
     // from the show's local first-air date, bounded to its real air window.
     private ResolvedEpisode? EstimateOnLocalDate(AnimeMetadata anime, DateOnly localDate)

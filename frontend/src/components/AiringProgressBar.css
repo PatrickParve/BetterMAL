@@ -1,0 +1,36 @@
+.airing-progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.airing-progress-bar__track {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--code-bg);
+  position: relative;
+  overflow: hidden;
+}
+
+.airing-progress-bar__aired-fill {
+  height: 100%;
+  background: var(--status-completed);
+  border-radius: inherit;
+}
+
+.airing-progress-bar__watched-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+}
+
+.airing-progress-bar__label {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}

@@ -1,60 +1,4 @@
-# main-dashboard Specification
-
-## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
-## Requirements
-### Requirement: Currently watching horizontal carousel
-The system SHALL show a "Currently watching" section on the main page as a horizontal row of cards navigable with left/right arrows. At most 5 cards SHALL be visible at once; the visible row SHALL be bounded to the width of 5 cards rather than growing with the number of entries. When there are more than 5 entries, the carousel SHALL scroll as an infinite loop in both directions: scrolling past the last card continues to the first card, and scrolling before the first card continues to the last card, with no dead-end and no visible seam. The left/right arrows SHALL be shown only when the row has more entries than fit on screen (i.e. scrolling is actually possible); when all cards already fit, no arrows are shown and no looping occurs. Clicking a card SHALL open that anime's detail page. Each card SHALL have a plus control next to its episode count that increments episodes-watched, applying the started-date and debounced-sync logic; clicking the card itself navigates and does not increment.
-
-#### Scenario: At most five cards visible
-- **WHEN** the Currently watching section renders with more than 5 entries
-- **THEN** at most 5 cards are visible at once and the remaining entries are reached by scrolling
-
-#### Scenario: Looping forward past the end
-- **WHEN** the row has more than 5 entries and I scroll right past the last card
-- **THEN** the row continues to the first card rather than stopping, so I can keep scrolling around the list
-
-#### Scenario: Looping backward past the start
-- **WHEN** the row has more than 5 entries and I scroll left before the first card
-- **THEN** the row continues to the last card rather than stopping, so I can keep scrolling around the list
-
-#### Scenario: Navigating the carousel
-- **WHEN** the row has more entries than fit and I click the left or right arrow on the Currently watching row
-- **THEN** the row scrolls to reveal more currently-watching cards
-
-#### Scenario: Arrows hidden when everything fits
-- **WHEN** there are 5 or fewer currently-watching cards and they all fit within the visible width
-- **THEN** no left/right arrows are shown and the row does not loop
-
-#### Scenario: Opening a card
-- **WHEN** I click a currently-watching card
-- **THEN** I am taken to that anime's detail page without changing its episode count
-
-#### Scenario: Incrementing from the plus control
-- **WHEN** I click the plus control next to a card's episode count
-- **THEN** its episodes-watched increases by one and the started-date and debounced-sync rules are applied
-
-### Requirement: Next-episode countdown on currently-watching cards
-The system SHALL show, on each currently-watching card, a countdown to the next episode in the form "Next ep: in X days, Y h", computed from the anime's cached broadcast schedule converted to local time.
-
-#### Scenario: Showing the countdown
-- **WHEN** a currently-watching card is rendered for an airing anime with a known broadcast schedule
-- **THEN** it shows the time remaining until the next episode as "Next ep: in X days, Y h"
-
-#### Scenario: No known next episode
-- **WHEN** a currently-watching anime has no known upcoming broadcast (e.g. it has finished airing)
-- **THEN** the card omits the next-episode countdown rather than showing a stale value
-
-### Requirement: Airing today filtered to my list in local time
-The system SHALL show an "Airing today" section as a list column (not a grid) containing only anime in my list, filtered by broadcast day converted from JST to local (Finland) time, where each row shows a small image and "time: Title" and links to the anime's detail page.
-
-#### Scenario: Local-day airing filter
-- **WHEN** the main page loads
-- **THEN** "Airing today" lists only my-list anime whose broadcast day, converted to local time, is today, each as a row with a small image and "time: Title"
-
-#### Scenario: Nothing airing today
-- **WHEN** no my-list anime air today in local time
-- **THEN** the section shows a small message indicating nothing is airing today
+## MODIFIED Requirements
 
 ### Requirement: Current season section with filters and progress
 The system SHALL show a "Current season" section on the home page containing only anime in my list that are airing this season, filterable by popularity, MAL score, alphabetical, and my score. When sorting by popularity, anime that are unranked — MAL popularity rank absent or zero — SHALL be ordered after all ranked anime rather than treated as most popular.
@@ -101,6 +45,8 @@ This bar SHALL apply only to the home page's followed-shows-airing section. The 
 - **WHEN** I view My List, an anime detail page, or the currently-watching carousel
 - **THEN** the episode bar there still shows watched/total with no aired fill and no purple overlay
 
+## ADDED Requirements
+
 ### Requirement: Aired-episode count for followed airing shows
 The dashboard data for the followed-shows-airing section SHALL include, per anime, the number of episodes that have aired as of the current instant. The count SHALL be derived from the same episode-schedule source of truth that backs "Airing today" and the next-episode countdown: exact per-episode air dates when they are cached, and the bounded weekly-cadence estimate otherwise. An episode SHALL be counted as aired only once its broadcast instant has passed. The count SHALL never exceed the anime's total episode count when that count is known, and SHALL be reported as unknown rather than guessed when the anime has neither cached per-episode dates nor enough schedule data (start date and broadcast time) to place episodes on a timeline.
 
@@ -123,15 +69,3 @@ The dashboard data for the followed-shows-airing section SHALL include, per anim
 #### Scenario: Aired count is unknown
 - **WHEN** the aired count is computed for an anime with no cached per-episode dates and no start date or no broadcast time
 - **THEN** the aired count is reported as unknown rather than as zero or an estimate
-
-### Requirement: Dashboard section title dividers
-The system SHALL render a thin horizontal divider rule directly beneath the title of each dashboard section on the main page — "Currently watching", "Airing today", and "Followed shows airing" — visually separating the section heading from its content. The divider SHALL span the width of the section's content area.
-
-#### Scenario: Divider under each section title
-- **WHEN** the main page renders the "Currently watching", "Airing today", and "Followed shows airing" sections
-- **THEN** each section's title is underlined by a thin horizontal divider rule separating the heading from the section content
-
-#### Scenario: Divider spans the section width
-- **WHEN** a dashboard section title divider is rendered
-- **THEN** the divider spans the width of that section's content area
-

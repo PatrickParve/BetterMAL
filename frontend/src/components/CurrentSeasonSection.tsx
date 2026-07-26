@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AnimeCard } from './AnimeCard.tsx'
-import { ProgressBar } from './ProgressBar.tsx'
+import { AiringProgressBar } from './AiringProgressBar.tsx'
 import type { CurrentSeasonItemDto } from '../api/types.ts'
 import { compareByMalScoreDesc, compareByTitleAlphabetical } from '../utils/anime.ts'
 import './CurrentSeasonSection.css'
@@ -40,7 +40,7 @@ type CurrentSeasonSectionProps = {
 }
 
 // "Current season" section: my-list anime airing this season, sortable by
-// popularity, MAL score, or alphabetically, each with an episode progress bar.
+// popularity, MAL score, or alphabetically, each with an airing progress bar.
 export function CurrentSeasonSection({ items }: CurrentSeasonSectionProps) {
   const [sort, setSort] = useState<SortKey>('popularity')
   const sortedItems = useMemo(() => sortItems(items, sort), [items, sort])
@@ -74,7 +74,11 @@ export function CurrentSeasonSection({ items }: CurrentSeasonSectionProps) {
               englishTitle={item.englishTitle}
               pictureUrl={item.pictureUrl}
             >
-              <ProgressBar watched={item.episodesWatched} total={item.totalEpisodes} />
+              <AiringProgressBar
+                aired={item.episodesAired}
+                watched={item.episodesWatched}
+                total={item.totalEpisodes}
+              />
             </AnimeCard>
           ))}
         </div>

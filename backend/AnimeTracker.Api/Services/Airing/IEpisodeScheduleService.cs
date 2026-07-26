@@ -20,4 +20,11 @@ public interface IEpisodeScheduleService
     /// AniList when cached (so a mid-run break is skipped), else the plain
     /// weekly broadcast estimate. Backs the currently-watching countdown.</summary>
     DateTimeOffset? NextAiringInstant(AnimeMetadata anime, DateTimeOffset afterUtc);
+
+    /// <summary>How many episodes have aired as of nowUtc — from the cached
+    /// AniList schedule when present, else the weekly-cadence estimate. Never
+    /// exceeds a known TotalEpisodes. Null means "not determinable": no cached
+    /// schedule and no start date/broadcast time to estimate from. Backs the
+    /// home page's airing-progress bar.</summary>
+    int? EpisodesAiredAsOf(AnimeMetadata anime, DateTimeOffset nowUtc);
 }

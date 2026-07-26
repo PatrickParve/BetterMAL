@@ -85,6 +85,7 @@ export type CurrentSeasonItemDto = {
   totalEpisodes: number | null
   malScore: number | null
   popularityRank: number | null
+  episodesAired: number | null
 }
 
 export type MainDashboardDto = {

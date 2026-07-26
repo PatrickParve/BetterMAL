@@ -54,7 +54,8 @@ public class MainDashboardService(
                 e.EpisodesWatched,
                 e.Anime.TotalEpisodes,
                 e.Anime.MalScore,
-                e.Anime.PopularityRank))
+                e.Anime.PopularityRank,
+                scheduleService.EpisodesAiredAsOf(e.Anime, now)))
             .ToList();
 
         return new MainDashboardDto(currentlyWatching, airingToday, currentSeason);

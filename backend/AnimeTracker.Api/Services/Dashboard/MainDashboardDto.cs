@@ -26,7 +26,8 @@ public record CurrentSeasonItemDto(
     int EpisodesWatched,
     int? TotalEpisodes,
     double? MalScore,
-    int? PopularityRank);
+    int? PopularityRank,
+    int? EpisodesAired);
 
 public record MainDashboardDto(
     List<CurrentlyWatchingItemDto> CurrentlyWatching,
