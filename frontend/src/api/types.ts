@@ -40,6 +40,19 @@ export type EntryEditorTarget = {
   onSaved?: (entry: UserAnimeEntryDto) => void
 }
 
+// Everything the shared episode-increment hook needs to perform the edit and,
+// on a completion transition, open the completion score prompt.
+export type IncrementTarget = {
+  animeId: number
+  animeTitle: string
+  pictureUrl: string | null
+  episodesWatched: number
+  previousStatus: WatchStatus
+  currentScore: number | null
+  onSaved: (entry: UserAnimeEntryDto) => void
+  onCompleted?: () => void
+}
+
 export type NextEpisodeEtaDto = {
   days: number
   hours: number

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getAnimeDetail, refreshAnime, updateEntry } from "../api/client.ts";
+import { getAnimeDetail, refreshAnime } from "../api/client.ts";
 import type { AnimeDetailDto } from "../api/types.ts";
 import { ProgressBar } from "../components/ProgressBar.tsx";
 import { ScoreValue } from "../components/ScoreValue.tsx";
 import { useEntryEditor } from "../context/EntryEditorContext.tsx";
+import { useEpisodeIncrement } from "../context/CompletionPromptContext.tsx";
 import { pickDisplayTitle, STATUS_LABELS } from "../utils/anime.ts";
 import "./AnimeDetailPage.css";
 
@@ -56,6 +57,7 @@ export function AnimeDetailPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [incrementPending, setIncrementPending] = useState(false);
   const { openEditor } = useEntryEditor();
+  const increment = useEpisodeIncrement();
 
   const load = useCallback(() => {
     return getAnimeDetail(animeId)
@@ -82,15 +84,20 @@ export function AnimeDetailPage() {
   }
 
   async function handleIncrement() {
-    if (!detail || incrementPending) return;
+    if (!detail || !detail.entry || incrementPending) return;
     setIncrementPending(true);
     try {
-      const saved = await updateEntry(detail.animeId, {
-        episodesWatched: (detail.entry?.episodesWatched ?? 0) + 1,
+      await increment({
+        animeId: detail.animeId,
+        animeTitle: pickDisplayTitle(detail.title, detail.englishTitle),
+        pictureUrl: detail.pictureUrl,
+        episodesWatched: detail.entry.episodesWatched,
+        previousStatus: detail.entry.status,
+        currentScore: detail.entry.myScore,
+        onSaved: (saved) =>
+          setDetail((prev) => (prev ? { ...prev, entry: saved } : prev)),
+        onCompleted: load,
       });
-      setDetail((prev) => (prev ? { ...prev, entry: saved } : prev));
-    } catch {
-      // Leave the count as-is; the user can retry.
     } finally {
       setIncrementPending(false);
     }

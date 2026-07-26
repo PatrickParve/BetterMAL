@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getMyList, updateEntry } from '../api/client.ts'
 import type { MyListItemDto, WatchStatus } from '../api/types.ts'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
+import { useEpisodeIncrement } from '../context/CompletionPromptContext.tsx'
 import {
   AIRING_STATUS_LABELS,
   airingStatusShortLabel,
@@ -82,15 +83,19 @@ export function MyListPage() {
   const [pendingIncrementId, setPendingIncrementId] = useState<number | null>(null)
   const [pendingScoreId, setPendingScoreId] = useState<number | null>(null)
   const { openEditor } = useEntryEditor()
+  const increment = useEpisodeIncrement()
 
-  useEffect(() => {
-    getMyList()
+  const loadList = useCallback(() => {
+    return getMyList()
       .then(setItems)
       .catch(() => {
         // Page just stays empty; nothing else to react to here.
       })
-      .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    loadList().finally(() => setLoading(false))
+  }, [loadList])
 
   function handleSaved(animeId: number) {
     return (saved: MyListItemDto['entry']) => {
@@ -112,10 +117,16 @@ export function MyListPage() {
     if (pendingIncrementId !== null) return
     setPendingIncrementId(item.animeId)
     try {
-      const saved = await updateEntry(item.animeId, { episodesWatched: item.entry.episodesWatched + 1 })
-      handleSaved(item.animeId)(saved)
-    } catch {
-      // Leave the count as-is; the user can retry.
+      await increment({
+        animeId: item.animeId,
+        animeTitle: pickDisplayTitle(item.title, item.englishTitle),
+        pictureUrl: item.pictureUrl,
+        episodesWatched: item.entry.episodesWatched,
+        previousStatus: item.entry.status,
+        currentScore: item.entry.myScore,
+        onSaved: handleSaved(item.animeId),
+        onCompleted: loadList,
+      })
     } finally {
       setPendingIncrementId(null)
     }

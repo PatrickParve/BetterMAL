@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimeCard } from './AnimeCard.tsx'
 import { IncrementButton } from './IncrementButton.tsx'
-import { updateEntry } from '../api/client.ts'
 import type { CurrentlyWatchingItemDto } from '../api/types.ts'
+import { useEpisodeIncrement } from '../context/CompletionPromptContext.tsx'
 import { pickDisplayTitle } from '../utils/anime.ts'
 import './CurrentlyWatchingCarousel.css'
 
 type CurrentlyWatchingCarouselProps = {
   items: CurrentlyWatchingItemDto[]
   onEpisodesWatchedChange: (animeId: number, episodesWatched: number) => void
+  onCompleted: () => void
 }
 
 const LOOP_COPIES = 3
@@ -21,11 +22,12 @@ const LOOP_COPIES = 3
 // The plus button sits inline after the episode count and stops propagation
 // so it increments without navigating; clicking the rest of the card body
 // navigates without incrementing.
-export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange }: CurrentlyWatchingCarouselProps) {
+export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCompleted }: CurrentlyWatchingCarouselProps) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [pendingId, setPendingId] = useState<number | null>(null)
   const [overflowing, setOverflowing] = useState(false)
   const looping = overflowing
+  const incrementEpisode = useEpisodeIncrement()
 
   // Arrows (and looping) only make sense when the row actually overflows —
   // recompute on resize (font/zoom/window changes) and whenever the item
@@ -134,10 +136,21 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange }: Cu
     if (pendingId !== null) return
     setPendingId(item.animeId)
     try {
-      const saved = await updateEntry(item.animeId, { episodesWatched: item.episodesWatched + 1 })
-      onEpisodesWatchedChange(item.animeId, saved.episodesWatched)
-    } catch {
-      // Leave the count as-is; the debounced sync/retry path handles durability once a save does go through.
+      await incrementEpisode({
+        animeId: item.animeId,
+        animeTitle: pickDisplayTitle(item.title, item.englishTitle),
+        pictureUrl: item.pictureUrl,
+        episodesWatched: item.episodesWatched,
+        // The dashboard's currently-watching items are all Status == Watching
+        // by construction (MainDashboardService filters on it), and the DTO
+        // carries no status field, so the pre-increment status is known here.
+        previousStatus: 'Watching',
+        // CurrentlyWatchingItemDto carries no score field; the carousel has
+        // nothing to pre-fill the completion prompt with.
+        currentScore: null,
+        onSaved: (saved) => onEpisodesWatchedChange(item.animeId, saved.episodesWatched),
+        onCompleted,
+      })
     } finally {
       setPendingId(null)
     }
