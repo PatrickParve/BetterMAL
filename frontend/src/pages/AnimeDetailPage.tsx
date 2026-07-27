@@ -26,9 +26,16 @@ function formatDate(value: string | null): string {
   });
 }
 
-function formatAiringStatus(status: string | null): string {
+function formatAiringStatus(
+  status: string | null,
+  episodesAired: number | null,
+  totalEpisodes: number | null,
+): string {
   if (!status) return NO_INFO;
-  return AIRING_STATUS_LABELS[status] ?? status;
+  const label = AIRING_STATUS_LABELS[status] ?? status;
+  if (status !== "currently_airing" || episodesAired === null) return label;
+  const total = totalEpisodes ? totalEpisodes : "?";
+  return `${label}: ${episodesAired}/${total} ep aired`;
 }
 
 // MAL sends raw source values like "light_novel" — prettify to "Light novel".
@@ -242,7 +249,7 @@ export function AnimeDetailPage() {
               </div>
               <div>
                 <dt>Status</dt>
-                <dd>{formatAiringStatus(detail.airingStatus)}</dd>
+                <dd>{formatAiringStatus(detail.airingStatus, detail.episodesAired, detail.totalEpisodes)}</dd>
               </div>
               <div>
                 <dt>Source</dt>

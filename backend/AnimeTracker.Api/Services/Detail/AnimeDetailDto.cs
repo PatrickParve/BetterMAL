@@ -18,6 +18,7 @@ public record AnimeDetailDto(
     string? MediaType,
     string? AiringStatus,
     int? TotalEpisodes,
+    int? EpisodesAired,
     DateOnly? AiredFrom,
     DateOnly? AiredTo,
     string? Studio,
@@ -32,7 +33,7 @@ public record AnimeDetailDto(
     string? SequelTitle,
     UserAnimeEntryDto? Entry)
 {
-    public static AnimeDetailDto FromEntity(AnimeMetadata anime) => new(
+    public static AnimeDetailDto FromEntity(AnimeMetadata anime, int? episodesAired) => new(
         anime.Id,
         anime.Title,
         anime.EnglishTitle,
@@ -43,6 +44,7 @@ public record AnimeDetailDto(
         anime.MediaType,
         anime.AiringStatus,
         anime.TotalEpisodes,
+        episodesAired,
         anime.AiredFrom,
         anime.AiredTo,
         anime.Studio,

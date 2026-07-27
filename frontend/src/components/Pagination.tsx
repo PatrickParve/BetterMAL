@@ -9,7 +9,7 @@ type PaginationProps = {
   className?: string
 }
 
-const WINDOW_SIZE = 2
+const WINDOW_SIZE = 1
 
 // Page-number buttons around the current page, with an ellipsis-truncated
 // window plus the first/last page always shown.

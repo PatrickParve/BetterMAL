@@ -115,7 +115,12 @@ export function AiringPage() {
           <div className="airing-page__grid">
             {week.days.map((day) => (
               <div key={day.localDate} className="airing-day">
-                <div className="airing-day__header">{day.dayOfWeek}</div>
+                {/* Sliced, not `new Date(day.localDate)` — parsing a bare ISO date
+                    with the Date constructor reads it as UTC and can land on the
+                    wrong local day (see toLocalIso above). */}
+                <div className="airing-day__header">
+                  {day.dayOfWeek} {Number(day.localDate.slice(8, 10))}
+                </div>
                 <ul className="airing-day__slots">
                   {day.slots.map((slot) => (
                     <li key={slot.animeId}>
@@ -129,9 +134,7 @@ export function AiringPage() {
                           )}
                           <span className="airing-slot__info">
                             <span className="airing-slot__title">{pickDisplayTitle(slot.title, slot.englishTitle)}</span>
-                            {slot.episodeNumber !== null && (
-                              <span className="airing-slot__episode">Ep {slot.episodeNumber}</span>
-                            )}
+                            <span className="airing-slot__episode">Ep {slot.episodeNumber ?? '—'}</span>
                           </span>
                         </span>
                       </Link>

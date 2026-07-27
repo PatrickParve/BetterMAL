@@ -301,6 +301,7 @@ export type AnimeDetailDto = {
   mediaType: string | null
   airingStatus: string | null
   totalEpisodes: number | null
+  episodesAired: number | null
   airedFrom: string | null
   airedTo: string | null
   studio: string | null

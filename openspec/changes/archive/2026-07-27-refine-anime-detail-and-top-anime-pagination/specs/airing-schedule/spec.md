@@ -1,32 +1,4 @@
-# airing-schedule Specification
-
-## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
-## Requirements
-### Requirement: Weekly airing view of my list in local time
-The system SHALL show a week view of time slots for anime in my list that are currently airing and have a known broadcast schedule, labeled by title and episode number, with times converted from JST broadcast data to local time. Anime that have finished airing SHALL NOT appear in the weekly view even if stale broadcast data exists.
-
-#### Scenario: Displaying the weekly schedule
-- **WHEN** the airing page loads
-- **THEN** it shows my-list anime that are currently airing in weekly time slots, each labeled with title and episode number in local time
-
-#### Scenario: Finished anime excluded
-- **WHEN** a my-list anime has finished airing
-- **THEN** it does not appear in the weekly airing view
-
-### Requirement: Grouping by converted local day
-The system SHALL group shows by their broadcast day converted to local time, not the raw JST day.
-
-#### Scenario: Show crosses the day boundary on conversion
-- **WHEN** an anime's JST broadcast day converts to a different local day
-- **THEN** it appears under the converted local day in the weekly view
-
-### Requirement: Week navigation
-The system SHALL allow navigating to other weeks via a `< current >` control near the "Schedule" title bar.
-
-#### Scenario: Navigating weeks
-- **WHEN** I navigate to a different week
-- **THEN** the view updates to show that week's airing slots
+## MODIFIED Requirements
 
 ### Requirement: Seven day-column layout
 The system SHALL lay the week out as seven day-columns left to right, each with a day-label header, stacking each day's time slots (time + small image + title + episode number) beneath its header. The number of slots per day SHALL follow how many of my-list anime air that local day, with no fixed cap.
@@ -54,11 +26,3 @@ Every slot box SHALL render at the same height regardless of its content. The ti
 #### Scenario: Slot with an unknown episode number
 - **WHEN** a slot has no known episode number
 - **THEN** its box still reserves the episode row with a placeholder and matches the height of slots that do show an episode number
-
-### Requirement: Empty-week message
-The system SHALL show a message in the middle of the view when nothing in my list airs during the displayed week.
-
-#### Scenario: Nothing airing this week
-- **WHEN** no my-list anime air during the displayed week
-- **THEN** the view shows a centered message stating nothing is airing that week
-

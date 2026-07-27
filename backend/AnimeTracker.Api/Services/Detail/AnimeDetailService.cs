@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Data.Repositories;
+using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Metadata;
 
 namespace AnimeTracker.Api.Services.Detail;
@@ -6,6 +7,7 @@ namespace AnimeTracker.Api.Services.Detail;
 public class AnimeDetailService(
     IAnimeMetadataRepository metadataRepository,
     IMetadataRefreshService refreshService,
+    IEpisodeScheduleService scheduleService,
     ILogger<AnimeDetailService> logger) : IAnimeDetailService
 {
     public async Task<AnimeDetailDto> GetDetailAsync(int animeId, CancellationToken ct = default)
@@ -38,6 +40,6 @@ public class AnimeDetailService(
 
         return anime is null
             ? throw new AnimeMetadataNotFoundException(animeId)
-            : AnimeDetailDto.FromEntity(anime);
+            : AnimeDetailDto.FromEntity(anime, scheduleService.EpisodesAiredAsOf(anime, DateTimeOffset.UtcNow));
     }
 }

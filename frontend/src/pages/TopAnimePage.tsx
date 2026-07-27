@@ -71,7 +71,7 @@ export function TopAnimePage() {
       <div className="top-anime-page__header">
         <h1>Top anime</h1>
         {items.length > 0 && (
-          <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} variant="arrows" />
+          <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
         )}
       </div>
 
