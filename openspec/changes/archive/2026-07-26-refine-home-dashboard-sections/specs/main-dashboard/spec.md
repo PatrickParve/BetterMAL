@@ -1,8 +1,5 @@
-# main-dashboard Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
-## Requirements
 ### Requirement: Currently watching horizontal carousel
 The system SHALL show a "Currently watching" section on the main page as a horizontal row of cards navigable with left/right arrows. At most 5 cards SHALL be visible at once; the visible row SHALL be bounded to the width of 5 cards rather than growing with the number of entries. When there are more than 5 entries, the carousel SHALL scroll as an infinite loop in both directions: scrolling past the last card continues to the first card, and scrolling before the first card continues to the last card, with no dead-end and no visible seam. The left/right arrows SHALL be shown only when the row has more entries than fit on screen (i.e. scrolling is actually possible); when all cards already fit, no arrows are shown and no looping occurs. Clicking a card SHALL open that anime's detail page. Each card SHALL have a plus control next to its episode count that increments episodes-watched, applying the started-date and debounced-sync logic; clicking the card itself navigates and does not increment.
 
@@ -47,17 +44,6 @@ Each card SHALL show the standard watched/total progress bar directly in front o
 #### Scenario: Bar follows an increment
 - **WHEN** I click the plus control on a currently-watching card
 - **THEN** the bar's fill grows along with the incremented count without a page reload
-
-### Requirement: Next-episode countdown on currently-watching cards
-The system SHALL show, on each currently-watching card, a countdown to the next episode in the form "Next ep: in X days, Y h", computed from the anime's cached broadcast schedule converted to local time.
-
-#### Scenario: Showing the countdown
-- **WHEN** a currently-watching card is rendered for an airing anime with a known broadcast schedule
-- **THEN** it shows the time remaining until the next episode as "Next ep: in X days, Y h"
-
-#### Scenario: No known next episode
-- **WHEN** a currently-watching anime has no known upcoming broadcast (e.g. it has finished airing)
-- **THEN** the card omits the next-episode countdown rather than showing a stale value
 
 ### Requirement: Airing today filtered to my list in local time
 The system SHALL show an "Airing today" section as a list column (not a grid) containing only anime in my list, filtered by broadcast day converted from JST to local (Finland) time, where each row links to the anime's detail page.
@@ -229,15 +215,3 @@ The weekly-cadence estimate SHALL stop accruing episodes at the anime's last air
 #### Scenario: Aired count is unknown
 - **WHEN** the aired count is computed for an anime with no cached per-episode dates and no start date or no broadcast time
 - **THEN** the aired count is reported as unknown rather than as zero or an estimate
-
-### Requirement: Dashboard section title dividers
-The system SHALL render a thin horizontal divider rule directly beneath the title of each dashboard section on the main page — "Currently watching", "Airing today", and "Followed shows airing" — visually separating the section heading from its content. The divider SHALL span the width of the section's content area.
-
-#### Scenario: Divider under each section title
-- **WHEN** the main page renders the "Currently watching", "Airing today", and "Followed shows airing" sections
-- **THEN** each section's title is underlined by a thin horizontal divider rule separating the heading from the section content
-
-#### Scenario: Divider spans the section width
-- **WHEN** a dashboard section title divider is rendered
-- **THEN** the divider spans the width of that section's content area
-

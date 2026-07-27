@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Season;
 
 namespace AnimeTracker.Api.Services.Dashboard;
 
@@ -18,6 +19,7 @@ public class MainDashboardService(
         // local reference date, so derive today in the broadcast-local zone
         // rather than from UTC (which is off by a day near local midnight).
         var today = broadcastConverter.GetLocalDate(now);
+        var currentSeasonQuarter = SeasonCalendar.GetSeasonFor(today);
 
         var currentlyWatching = entries
             .Where(e => e.Status == WatchStatus.Watching)
@@ -40,11 +42,18 @@ public class MainDashboardService(
             .Select(e => (Entry: e, Episode: scheduleService.ResolveOnLocalDate(e.Anime, today)))
             .Where(x => x.Episode is not null)
             .OrderBy(x => x.Episode!.LocalTime)
-            .Select(x => new AiringTodayItemDto(x.Entry.AnimeId, x.Entry.Anime.Title, x.Entry.Anime.EnglishTitle, x.Entry.Anime.PictureUrl, x.Episode!.LocalTime.ToString("HH:mm")))
+            .Select(x => new AiringTodayItemDto(x.Entry.AnimeId, x.Entry.Anime.Title, x.Entry.Anime.EnglishTitle, x.Entry.Anime.PictureUrl, x.Episode!.LocalTime.ToString("HH:mm"), x.Episode!.EpisodeNumber))
             .ToList();
 
+        // Season membership is derived from AiredFrom rather than the cached
+        // SeasonAnimeListing rows: those only exist for seasons the user has
+        // browsed, which would make this section's contents depend on
+        // unrelated navigation history instead of each anime's own data.
         var currentSeason = entries
-            .Where(e => e.Anime.AiringStatus == "currently_airing")
+            .Where(e => e.Anime.AiringStatus == "currently_airing"
+                || (e.Anime.AiredFrom is { } from
+                    && from <= today
+                    && SeasonCalendar.GetSeasonFor(from) == currentSeasonQuarter))
             .OrderBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase)
             .Select(e => new CurrentSeasonItemDto(
                 e.AnimeId,
@@ -55,7 +64,8 @@ public class MainDashboardService(
                 e.Anime.TotalEpisodes,
                 e.Anime.MalScore,
                 e.Anime.PopularityRank,
-                scheduleService.EpisodesAiredAsOf(e.Anime, now)))
+                scheduleService.EpisodesAiredAsOf(e.Anime, now),
+                e.Anime.AiringStatus == "finished_airing"))
             .ToList();
 
         return new MainDashboardDto(currentlyWatching, airingToday, currentSeason);

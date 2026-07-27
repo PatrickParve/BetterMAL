@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimeCard } from './AnimeCard.tsx'
-import { IncrementButton } from './IncrementButton.tsx'
+import { ProgressBar } from './ProgressBar.tsx'
 import type { CurrentlyWatchingItemDto } from '../api/types.ts'
 import { useEpisodeIncrement } from '../context/CompletionPromptContext.tsx'
 import { pickDisplayTitle } from '../utils/anime.ts'
@@ -19,9 +19,10 @@ const LOOP_COPIES = 3
 // rendered back-to-back and the scroll position is silently re-centered
 // whenever it drifts out of the middle copy, so native trackpad/touch
 // scrolling (and the arrows) appear to loop endlessly in both directions.
-// The plus button sits inline after the episode count and stops propagation
-// so it increments without navigating; clicking the rest of the card body
-// navigates without incrementing.
+// Each card shows the shared watched/total progress bar with its inline plus
+// button after the count; the plus stops propagation so it increments
+// without navigating, while clicking the rest of the card body navigates
+// without incrementing.
 export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCompleted }: CurrentlyWatchingCarouselProps) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [pendingId, setPendingId] = useState<number | null>(null)
@@ -169,35 +170,29 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
         )}
         <div className="carousel__track" ref={trackRef}>
           {copies.flatMap((copy) =>
-            items.map((item) => {
-              const atMax = item.totalEpisodes !== null && item.episodesWatched >= item.totalEpisodes
-              return (
-                <AnimeCard
-                  key={`${copy}:${item.animeId}`}
-                  animeId={item.animeId}
-                  title={item.title}
-                  englishTitle={item.englishTitle}
-                  pictureUrl={item.pictureUrl}
-                  className="carousel__card"
-                >
-                  <span className="carousel__progress-row">
-                    <span className="carousel__progress">
-                      {item.episodesWatched}/{item.totalEpisodes ?? '?'}
-                    </span>
-                    <IncrementButton
-                      onIncrement={() => increment(item)}
-                      disabled={pendingId === item.animeId || atMax}
-                      label={`Increment episodes watched for ${pickDisplayTitle(item.title, item.englishTitle)}`}
-                    />
+            items.map((item) => (
+              <AnimeCard
+                key={`${copy}:${item.animeId}`}
+                animeId={item.animeId}
+                title={item.title}
+                englishTitle={item.englishTitle}
+                pictureUrl={item.pictureUrl}
+                className="carousel__card"
+              >
+                <ProgressBar
+                  watched={item.episodesWatched}
+                  total={item.totalEpisodes}
+                  onIncrement={() => increment(item)}
+                  incrementPending={pendingId === item.animeId}
+                  incrementLabel={`Increment episodes watched for ${pickDisplayTitle(item.title, item.englishTitle)}`}
+                />
+                {item.nextEpisode && (
+                  <span className="carousel__countdown">
+                    Next ep: in {item.nextEpisode.days} days, {item.nextEpisode.hours} h
                   </span>
-                  {item.nextEpisode && (
-                    <span className="carousel__countdown">
-                      Next ep: in {item.nextEpisode.days} days, {item.nextEpisode.hours} h
-                    </span>
-                  )}
-                </AnimeCard>
-              )
-            }),
+                )}
+              </AnimeCard>
+            )),
           )}
         </div>
         {overflowing && (

@@ -8,7 +8,10 @@ type AiringTodayListProps = {
 }
 
 // "Airing today" column: my-list anime whose broadcast day, converted to
-// local time, is today. Rendered as a single-column list, not a grid.
+// local time, is today. Rendered as a single-column list, not a grid. Each
+// row is a larger thumbnail beside two stacked lines: `time : Ep N` (time
+// alone when the episode number can't be resolved) over the title, clamped
+// to two lines.
 export function AiringTodayList({ items }: AiringTodayListProps) {
   return (
     <section className="dashboard-section">
@@ -25,8 +28,12 @@ export function AiringTodayList({ items }: AiringTodayListProps) {
                 ) : (
                   <div className="airing-today__thumb airing-today__thumb--placeholder" aria-hidden="true" />
                 )}
-                <span>
-                  {item.localTime}: {pickDisplayTitle(item.title, item.englishTitle)}
+                <span className="airing-today__text">
+                  <span className="airing-today__meta">
+                    {item.localTime}
+                    {item.episodeNumber !== null && ` : Ep ${item.episodeNumber}`}
+                  </span>
+                  <span className="airing-today__title">{pickDisplayTitle(item.title, item.englishTitle)}</span>
                 </span>
               </Link>
             </li>

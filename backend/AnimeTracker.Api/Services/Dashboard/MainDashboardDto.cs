@@ -16,7 +16,8 @@ public record AiringTodayItemDto(
     string Title,
     string? EnglishTitle,
     string? PictureUrl,
-    string LocalTime);
+    string LocalTime,
+    int? EpisodeNumber);
 
 public record CurrentSeasonItemDto(
     int AnimeId,
@@ -27,7 +28,8 @@ public record CurrentSeasonItemDto(
     int? TotalEpisodes,
     double? MalScore,
     int? PopularityRank,
-    int? EpisodesAired);
+    int? EpisodesAired,
+    bool FinishedAiring);
 
 public record MainDashboardDto(
     List<CurrentlyWatchingItemDto> CurrentlyWatching,

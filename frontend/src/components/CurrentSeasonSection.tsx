@@ -39,8 +39,10 @@ type CurrentSeasonSectionProps = {
   items: CurrentSeasonItemDto[]
 }
 
-// "Current season" section: my-list anime airing this season, sortable by
-// popularity, MAL score, or alphabetically, each with an airing progress bar.
+// "Current season" section: my-list anime that premiered this season —
+// currently airing, or already finished (a movie, short, or completed TV
+// run) but still within the season it premiered in — sortable by popularity,
+// MAL score, or alphabetically, each with an airing progress bar.
 export function CurrentSeasonSection({ items }: CurrentSeasonSectionProps) {
   const [sort, setSort] = useState<SortKey>('popularity')
   const sortedItems = useMemo(() => sortItems(items, sort), [items, sort])
@@ -63,7 +65,7 @@ export function CurrentSeasonSection({ items }: CurrentSeasonSectionProps) {
         </select>
       </div>
       {sortedItems.length === 0 ? (
-        <p className="current-season__empty">Nothing from my list is airing this season.</p>
+        <p className="current-season__empty">Nothing from my list this season.</p>
       ) : (
         <div className="current-season__grid">
           {sortedItems.map((item) => (
@@ -78,6 +80,7 @@ export function CurrentSeasonSection({ items }: CurrentSeasonSectionProps) {
                 aired={item.episodesAired}
                 watched={item.episodesWatched}
                 total={item.totalEpisodes}
+                finished={item.finishedAiring}
               />
             </AnimeCard>
           ))}

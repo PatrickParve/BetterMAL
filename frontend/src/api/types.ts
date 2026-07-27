@@ -74,6 +74,7 @@ export type AiringTodayItemDto = {
   englishTitle: string | null
   pictureUrl: string | null
   localTime: string
+  episodeNumber: number | null
 }
 
 export type CurrentSeasonItemDto = {
@@ -86,6 +87,7 @@ export type CurrentSeasonItemDto = {
   malScore: number | null
   popularityRank: number | null
   episodesAired: number | null
+  finishedAiring: boolean
 }
 
 export type MainDashboardDto = {

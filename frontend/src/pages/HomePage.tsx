@@ -21,12 +21,19 @@ export function HomePage() {
     loadDashboard()
   }, [loadDashboard])
 
+  // The same anime can appear in both "Currently watching" and "Followed
+  // shows airing" (a current-season title I'm also watching), so an
+  // increment in one must patch the other's watched count too, or the two
+  // bars would show different fills until the next reload.
   const handleEpisodesWatchedChange = useCallback((animeId: number, episodesWatched: number) => {
     setDashboard((prev) =>
       prev
         ? {
             ...prev,
             currentlyWatching: prev.currentlyWatching.map((item) =>
+              item.animeId === animeId ? { ...item, episodesWatched } : item,
+            ),
+            currentSeason: prev.currentSeason.map((item) =>
               item.animeId === animeId ? { ...item, episodesWatched } : item,
             ),
           }

@@ -92,7 +92,28 @@ public class EpisodeScheduleService(
             return null;
 
         var firstLocalDate = converter.LocalDateOfJstBroadcast(airedFrom, broadcastTime);
-        var nowLocalDate = converter.GetLocalDate(nowUtc);
+        var todayLocalDate = converter.GetLocalDate(nowUtc);
+
+        // Bound the reference date at the show's last air date so a finished
+        // show with no published total stops accruing a phantom episode every
+        // week forever. EstimateLastLocalDate (EstimateOnLocalDate's sibling)
+        // is deliberately not reused here — its MinimumEpisodeEstimate
+        // fallback would fabricate a 12-episode ceiling when AiredTo and the
+        // total are both missing. Bound by AiredTo only; when AiredTo is
+        // absent but MAL says the run is over, FinishedAiring (decision 3)
+        // carries that meaning instead.
+        var nowLocalDate = todayLocalDate;
+        var wasClampedToPast = false;
+        if (anime.AiredTo is { } airedTo)
+        {
+            var lastAirLocalDate = converter.LocalDateOfJstBroadcast(airedTo, broadcastTime);
+            if (lastAirLocalDate < todayLocalDate)
+            {
+                nowLocalDate = lastAirLocalDate;
+                wasClampedToPast = true;
+            }
+        }
+
         var daysSincePremiere = nowLocalDate.DayNumber - firstLocalDate.DayNumber;
         if (daysSincePremiere < 0)
             return 0; // before the premiere
@@ -101,7 +122,11 @@ public class EpisodeScheduleService(
 
         // If today is this week's broadcast day, the tentatively-counted
         // episode has only aired once its local broadcast time has passed.
-        if (daysSincePremiere % 7 == 0)
+        // Only applies when the reference date is genuinely today — once
+        // clamped to a past AiredTo date, comparing against the current
+        // wall-clock time would incorrectly deduct an episode that aired
+        // long ago.
+        if (!wasClampedToPast && daysSincePremiere % 7 == 0)
         {
             var todaySlot = converter.ResolveForDate(anime.BroadcastDayOfWeek, broadcastTime, nowLocalDate);
             if (todaySlot is not null && converter.GetLocalTime(nowUtc) < todaySlot.Time)
