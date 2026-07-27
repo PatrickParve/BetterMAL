@@ -8,12 +8,16 @@ public class UnknownAnimeIdsException(IReadOnlyCollection<int> animeIds)
 
 public class TopAnimeSelectionRepository(AnimeTrackerDbContext db) : ITopAnimeSelectionRepository
 {
-    public Task<List<int>> GetSelectedAnimeIdsAsync(CancellationToken ct = default) =>
-        db.TopAnimeSelections.AsNoTracking().Select(s => s.AnimeId).ToListAsync(ct);
+    public Task<List<int>> GetOrderedAnimeIdsAsync(CancellationToken ct = default) =>
+        db.TopAnimeSelections.AsNoTracking()
+            .OrderBy(s => s.Position)
+            .ThenBy(s => s.AnimeId)
+            .Select(s => s.AnimeId)
+            .ToListAsync(ct);
 
-    public async Task ReplaceSelectionAsync(IReadOnlyCollection<int> animeIds, CancellationToken ct = default)
+    public async Task ReplaceOrderAsync(IReadOnlyList<int> orderedAnimeIds, CancellationToken ct = default)
     {
-        var distinctIds = animeIds.Distinct().ToList();
+        var distinctIds = orderedAnimeIds.Distinct().ToList();
 
         var knownIds = await db.AnimeMetadata
             .Where(a => distinctIds.Contains(a.Id))
@@ -27,8 +31,8 @@ public class TopAnimeSelectionRepository(AnimeTrackerDbContext db) : ITopAnimeSe
         db.TopAnimeSelections.RemoveRange(existing);
 
         var now = DateTimeOffset.UtcNow;
-        foreach (var animeId in distinctIds)
-            db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = animeId, SelectedAt = now });
+        for (var i = 0; i < distinctIds.Count; i++)
+            db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = distinctIds[i], SelectedAt = now, Position = i });
 
         await db.SaveChangesAsync(ct);
     }

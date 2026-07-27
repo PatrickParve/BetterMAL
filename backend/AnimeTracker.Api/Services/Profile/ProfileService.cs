@@ -26,14 +26,14 @@ public class ProfileService(
     {
         var entries = await entryRepository.GetAllAsync(ct);
         var recentActivityWindow = await activityLogRepository.GetRecentAsync(RecentActivityFetchWindow, ct);
-        var selectedAnimeIds = await topAnimeSelectionRepository.GetSelectedAnimeIdsAsync(ct);
+        var orderedAnimeIds = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
 
         var (theyLikedItIDidnt, iLikedItTheyDidnt) = BuildOpinionDivergence(entries);
 
         return new ProfileDto(
             BuildStats(entries),
             BuildActivityFeed(recentActivityWindow),
-            BuildTopAnimeSection(entries, selectedAnimeIds),
+            BuildTopAnimeSection(entries, orderedAnimeIds, TopAnimeMediaTypeScope.All),
             BuildScoreDistribution(entries),
             theyLikedItIDidnt,
             iLikedItTheyDidnt);
@@ -43,6 +43,68 @@ public class ProfileService(
     {
         var history = await activityLogRepository.GetAllAsync(ct);
         return history.Select(ToActivityFeedItem).ToList();
+    }
+
+    public async Task<TopAnimeSectionDto> GetTopAnimeSectionAsync(string mediaType, CancellationToken ct = default)
+    {
+        var entries = await entryRepository.GetAllAsync(ct);
+        var orderedAnimeIds = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
+        return BuildTopAnimeSection(entries, orderedAnimeIds, mediaType);
+    }
+
+    public async Task ApplyTopAnimeOrderAsync(List<TopAnimeTierOrderRequest> tiers, CancellationToken ct = default)
+    {
+        var entries = await entryRepository.GetAllAsync(ct);
+        var existingOrder = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
+        var positionByAnimeId = TopAnimeOrdering.ToPositionMap(existingOrder);
+
+        var membersByScore = entries
+            .Where(e => e.MyScore is not null)
+            .GroupBy(e => e.MyScore!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var mismatchedIds = tiers
+            .SelectMany(tier =>
+            {
+                var tierMemberIds = (membersByScore.GetValueOrDefault(tier.Score) ?? [])
+                    .Select(e => e.AnimeId)
+                    .ToHashSet();
+                return tier.AnimeIds.Where(id => !tierMemberIds.Contains(id));
+            })
+            .ToList();
+        if (mismatchedIds.Count > 0)
+            throw new TopAnimeTierScoreMismatchException(mismatchedIds);
+
+        var editedIds = new HashSet<int>();
+        var editedSegments = new List<int>();
+
+        foreach (var tier in tiers.OrderByDescending(t => t.Score))
+        {
+            var tierMembers = membersByScore.GetValueOrDefault(tier.Score) ?? [];
+            var effectiveOrder = TopAnimeOrdering.OrderTierMembers(tierMembers, positionByAnimeId)
+                .Select(e => e.AnimeId)
+                .ToList();
+
+            var visibleIds = tier.AnimeIds;
+            var visibleIndexes = effectiveOrder
+                .Select((animeId, index) => (animeId, index))
+                .Where(x => visibleIds.Contains(x.animeId))
+                .Select(x => x.index)
+                .OrderBy(index => index)
+                .ToList();
+
+            var merged = effectiveOrder.ToList();
+            for (var i = 0; i < visibleIndexes.Count; i++)
+                merged[visibleIndexes[i]] = visibleIds[i];
+
+            editedSegments.AddRange(merged);
+            foreach (var animeId in merged) editedIds.Add(animeId);
+        }
+
+        var remaining = existingOrder.Where(id => !editedIds.Contains(id));
+        var finalOrder = editedSegments.Concat(remaining).ToList();
+
+        await topAnimeSelectionRepository.ReplaceOrderAsync(finalOrder, ct);
     }
 
     private static ActivityFeedItemDto ToActivityFeedItem(ActivityLog log) =>
@@ -112,67 +174,48 @@ public class ProfileService(
     }
 
     // All score-10 anime are shown uncapped; if that's fewer than 10, fill the
-    // remainder with the next-highest score tiers. When a tier has more
-    // members than remaining slots, that tier is the tie-break boundary: a
-    // persisted manual selection takes precedence for those slots, falling
-    // back to a deterministic (alphabetical) pick for anything it doesn't
-    // cover, so the list always still reaches the minimum of 10 when possible.
-    private static TopAnimeSectionDto BuildTopAnimeSection(List<UserAnimeEntry> entries, List<int> selectedAnimeIds)
+    // remainder with the next-highest score tiers, in descending order, each
+    // ordered by the user's persisted preference (falling back to
+    // alphabetical). The tier that doesn't fully fit is truncated — its full
+    // membership is still returned (via Tiers) so the overlay can render a
+    // cut line and let the user move members across it. Tiers that can never
+    // reach the list (score dominance) are omitted entirely.
+    private static TopAnimeSectionDto BuildTopAnimeSection(List<UserAnimeEntry> entries, List<int> orderedAnimeIds, string mediaType)
     {
-        var scored = entries.Where(e => e.MyScore is not null).ToList();
+        var positionByAnimeId = TopAnimeOrdering.ToPositionMap(orderedAnimeIds);
 
-        var perfectScores = scored
-            .Where(e => e.MyScore == 10)
-            .OrderBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var items = perfectScores.Select(ToTopAnimeEntry).ToList();
-        var slotsRemaining = Math.Max(0, TopAnimeMinimumSize - perfectScores.Count);
-        var candidates = new List<TopAnimeEntryDto>();
-        var tieBreakSlots = 0;
-
-        var lowerTiers = scored
-            .Where(e => e.MyScore < 10)
+        var tierGroups = entries
+            .Where(e => e.MyScore is not null && TopAnimeMediaTypeScope.Matches(mediaType, e.Anime.MediaType))
             .GroupBy(e => e.MyScore!.Value)
-            .OrderByDescending(g => g.Key);
+            .OrderByDescending(g => g.Key)
+            .Select(g => (
+                Score: g.Key,
+                Members: TopAnimeOrdering.OrderTierMembers(g, positionByAnimeId).Select(ToTopAnimeEntry).ToList()));
 
-        foreach (var tierGroup in lowerTiers)
+        var items = new List<TopAnimeEntryDto>();
+        var tiers = new List<TopAnimeTierDto>();
+        var slotsRemaining = TopAnimeMinimumSize;
+
+        foreach (var (score, members) in tierGroups)
         {
-            if (slotsRemaining == 0) break;
-
-            var tier = tierGroup.OrderBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase).ToList();
-
-            if (tier.Count <= slotsRemaining)
+            int includedCount;
+            if (score == 10)
             {
-                items.AddRange(tier.Select(ToTopAnimeEntry));
-                slotsRemaining -= tier.Count;
-                continue;
+                includedCount = members.Count;
+                slotsRemaining = Math.Max(0, slotsRemaining - includedCount);
+            }
+            else
+            {
+                if (slotsRemaining == 0) break;
+                includedCount = Math.Min(members.Count, slotsRemaining);
+                slotsRemaining -= includedCount;
             }
 
-            tieBreakSlots = slotsRemaining;
-            candidates = tier
-                .Select(e => new TopAnimeEntryDto(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.MyScore!.Value))
-                .ToList();
-
-            var candidateIds = candidates.Select(c => c.AnimeId).ToHashSet();
-            var fillIds = selectedAnimeIds.Where(candidateIds.Contains).Take(tieBreakSlots).ToList();
-            if (fillIds.Count < tieBreakSlots)
-            {
-                var fillIdSet = fillIds.ToHashSet();
-                fillIds.AddRange(tier.Select(e => e.AnimeId).Where(id => !fillIdSet.Contains(id)).Take(tieBreakSlots - fillIds.Count));
-            }
-
-            var fillSet = fillIds.ToHashSet();
-            items.AddRange(candidates.Where(c => fillSet.Contains(c.AnimeId)));
-            slotsRemaining = 0;
-            break;
+            items.AddRange(members.Take(includedCount));
+            tiers.Add(new TopAnimeTierDto(score, members, includedCount));
         }
 
-        var relevantSelection = candidates.Count == 0
-            ? []
-            : selectedAnimeIds.Where(id => candidates.Any(c => c.AnimeId == id)).ToList();
-
-        return new TopAnimeSectionDto(items, tieBreakSlots, candidates, relevantSelection);
+        return new TopAnimeSectionDto(items, tiers, mediaType);
     }
 
     private static TopAnimeEntryDto ToTopAnimeEntry(UserAnimeEntry e) =>
@@ -213,5 +256,5 @@ public class ProfileService(
     }
 
     private static OpinionDivergenceItemDto ToDivergenceItem(UserAnimeEntry e) =>
-        new(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.MyScore!.Value, e.Anime.MalScore!.Value);
+        new(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.MyScore!.Value, e.Anime.MalScore!.Value, e.Status == WatchStatus.Completed);
 }

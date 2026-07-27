@@ -15,6 +15,26 @@
   opacity: 0.85;
 }
 
+.top-anime-selection__tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.top-anime-selection__tier {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.top-anime-selection__tier-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
 .top-anime-selection__list {
   list-style: none;
   margin: 0;
@@ -22,21 +42,54 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 320px;
-  overflow-y: auto;
 }
 
-.top-anime-selection__row label {
+.top-anime-selection__row {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 6px;
   border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: grab;
+}
+
+.top-anime-selection__row:hover {
+  background: var(--code-bg);
+  border-color: var(--border);
+}
+
+.top-anime-selection__row-buttons {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.top-anime-selection__row-buttons button {
+  font: inherit;
+  width: 24px;
+  height: 24px;
+  line-height: 1;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
   cursor: pointer;
 }
 
-.top-anime-selection__row label:hover {
-  background: var(--code-bg);
+.top-anime-selection__row-buttons button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.top-anime-selection__row-buttons button:not(:disabled):hover {
+  border-color: var(--accent-border);
+}
+
+.top-anime-selection__cut-line {
+  margin: 4px 6px;
+  border-top: 2px dashed var(--accent-border);
 }
 
 .top-anime-selection__picture {
@@ -53,6 +106,8 @@
 }
 
 .top-anime-selection__row-title {
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--text-h);
   overflow: hidden;
   text-overflow: ellipsis;

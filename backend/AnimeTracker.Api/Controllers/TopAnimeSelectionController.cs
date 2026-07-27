@@ -1,39 +1,40 @@
 using AnimeTracker.Api.Data.Repositories;
+using AnimeTracker.Api.Services.Profile;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AnimeTracker.Api.Controllers;
 
 [ApiController]
-public class TopAnimeSelectionController(ITopAnimeSelectionRepository repository) : ControllerBase
+public class TopAnimeSelectionController(IProfileService profileService) : ControllerBase
 {
-    /// <summary>The current manual "My top anime" selection, if any. An empty
-    /// list means no manual selection is stored and the profile page falls
-    /// back to the default next-highest auto-fill.</summary>
-    [HttpGet("api/top-anime/selection")]
-    public async Task<IActionResult> Get(CancellationToken ct)
+    /// <summary>Replaces the tier order for the given tiers wholesale, using
+    /// the slot-preserving merge: every member of an edited tier becomes
+    /// explicitly ordered, and members a filtered view hid keep their
+    /// relative positions.</summary>
+    [HttpPut("api/top-anime/order")]
+    public async Task<IActionResult> ReplaceOrder([FromBody] TopAnimeOrderRequest request, CancellationToken ct)
     {
-        var animeIds = await repository.GetSelectedAnimeIdsAsync(ct);
-        return Ok(new { animeIds });
-    }
+        if (!TopAnimeMediaTypeScope.IsValid(request.MediaType))
+            return BadRequest(new { error = $"Unknown mediaType: {request.MediaType}" });
 
-    /// <summary>Replaces the manual selection wholesale. Pass an empty list to
-    /// clear it and revert to the default auto-fill.</summary>
-    [HttpPut("api/top-anime/selection")]
-    public async Task<IActionResult> Replace([FromBody] TopAnimeSelectionRequest request, CancellationToken ct)
-    {
         try
         {
-            await repository.ReplaceSelectionAsync(request.AnimeIds, ct);
+            await profileService.ApplyTopAnimeOrderAsync(request.Tiers, ct);
             return NoContent();
         }
         catch (UnknownAnimeIdsException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
+        catch (TopAnimeTierScoreMismatchException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 }
 
-public class TopAnimeSelectionRequest
+public class TopAnimeOrderRequest
 {
-    public List<int> AnimeIds { get; set; } = [];
+    public string MediaType { get; set; } = "";
+    public List<TopAnimeTierOrderRequest> Tiers { get; set; } = [];
 }

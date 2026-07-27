@@ -31,15 +31,21 @@ public record TopAnimeEntryDto(
     string? PictureUrl,
     int MyScore);
 
+/// <summary>One score tier of the ordered preference list. Members is every
+/// scored anime in this tier for the current scope, in tier order (explicitly
+/// ordered members first, then alphabetical); IncludedCount is how many of
+/// them made it into the resolved top list — the rest sit below the overlay's
+/// cut line.</summary>
+public record TopAnimeTierDto(int Score, List<TopAnimeEntryDto> Members, int IncludedCount);
+
 /// <summary>Items is the resolved "My top anime" list (score-10s plus the
-/// filled remainder). Candidates/TieBreakSlots are only non-empty/non-zero
-/// when the fill boundary lands mid-tier — i.e. there's an actual tie to
-/// break — and back the selection overlay (15.6).</summary>
+/// filled remainder) for MediaType's scope. Tiers carries only the tiers that
+/// contribute to Items, each in full (including members below the cut line),
+/// and backs the tier order editor overlay.</summary>
 public record TopAnimeSectionDto(
     List<TopAnimeEntryDto> Items,
-    int TieBreakSlots,
-    List<TopAnimeEntryDto> Candidates,
-    List<int> SelectedAnimeIds);
+    List<TopAnimeTierDto> Tiers,
+    string MediaType);
 
 public record ScoreDistributionBucketDto(int Score, int Count);
 
@@ -51,7 +57,8 @@ public record OpinionDivergenceItemDto(
     string? EnglishTitle,
     string? PictureUrl,
     int MyScore,
-    double MalScore);
+    double MalScore,
+    bool IsCompleted);
 
 public record ProfileDto(
     AnimeStatsDto Stats,

@@ -14,6 +14,8 @@ import type {
   SeasonPageDto,
   SyncStatusDto,
   TopAnimeItemDto,
+  TopAnimeMediaType,
+  TopAnimeSectionDto,
   UserAnimeEntryDto,
   UserAnimeEntryEditRequest,
 } from './types.ts'
@@ -98,11 +100,18 @@ export function getActivityHistory(): Promise<ActivityFeedItemDto[]> {
   return fetchJson<ActivityFeedItemDto[]>('/api/profile/activity')
 }
 
-export function putTopAnimeSelection(animeIds: number[]): Promise<void> {
-  return fetchVoid('/api/top-anime/selection', {
+export function getTopAnimeSection(mediaType: TopAnimeMediaType): Promise<TopAnimeSectionDto> {
+  return fetchJson<TopAnimeSectionDto>(`/api/profile/top-anime?mediaType=${encodeURIComponent(mediaType)}`)
+}
+
+export function putTopAnimeOrder(
+  mediaType: TopAnimeMediaType,
+  tiers: { score: number; animeIds: number[] }[],
+): Promise<void> {
+  return fetchVoid('/api/top-anime/order', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ animeIds }),
+    body: JSON.stringify({ mediaType, tiers }),
   })
 }
 

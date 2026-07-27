@@ -1,35 +1,40 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Modal } from './Modal.tsx'
-import { putTopAnimeSelection } from '../api/client.ts'
-import type { TopAnimeSectionDto } from '../api/types.ts'
+import { putTopAnimeOrder } from '../api/client.ts'
+import type { TopAnimeMediaType, TopAnimeSectionDto, TopAnimeTierDto } from '../api/types.ts'
 import './TopAnimeSelectionOverlay.css'
 
 type TopAnimeSelectionOverlayProps = {
   section: TopAnimeSectionDto
+  mediaType: TopAnimeMediaType
+  mediaTypeLabel: string
   onClose: () => void
   onSaved: () => void
 }
 
-// Lets the user pick which tied next-highest-scored anime fill the remaining
-// "My top anime" slots, overriding the deterministic (alphabetical) default.
-// Selecting fewer than the available slots is fine — the backend fills any
-// unselected slots from the same default, so the list still always reaches
-// the minimum of 10 when possible.
-export function TopAnimeSelectionOverlay({ section, onClose, onSaved }: TopAnimeSelectionOverlayProps) {
-  const defaultChecked = section.candidates.slice(0, section.tieBreakSlots).map((c) => c.animeId)
-  const [selected, setSelected] = useState<number[]>(
-    section.selectedAnimeIds.length > 0 ? section.selectedAnimeIds : defaultChecked,
+type EditableTier = { score: number; members: TopAnimeTierDto['members']; includedCount: number }
+
+// Lets the user reorder every tier of the current "My top anime" list.
+// Score still dominates (each tier is edited independently), but within a
+// tier the order is fully up to the user, and a tier that doesn't fully fit
+// shows a cut line after includedCount: moving a member above it adds that
+// anime to the top list, displacing whichever member drops below.
+export function TopAnimeSelectionOverlay({ section, mediaType, mediaTypeLabel, onClose, onSaved }: TopAnimeSelectionOverlayProps) {
+  const [tiers, setTiers] = useState<EditableTier[]>(
+    section.tiers.map((tier) => ({ score: tier.score, members: [...tier.members], includedCount: tier.includedCount })),
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const dragRef = useRef<{ tierIndex: number; index: number } | null>(null)
 
-  const atLimit = selected.length >= section.tieBreakSlots
-
-  function toggle(animeId: number) {
-    setSelected((prev) => {
-      if (prev.includes(animeId)) return prev.filter((id) => id !== animeId)
-      if (prev.length >= section.tieBreakSlots) return prev
-      return [...prev, animeId]
+  function moveMember(tierIndex: number, fromIndex: number, toIndex: number) {
+    setTiers((prev) => {
+      const tier = prev[tierIndex]
+      if (toIndex < 0 || toIndex >= tier.members.length || fromIndex === toIndex) return prev
+      const next = prev.map((t, i) => (i === tierIndex ? { ...t, members: [...t.members] } : t))
+      const [moved] = next[tierIndex].members.splice(fromIndex, 1)
+      next[tierIndex].members.splice(toIndex, 0, moved)
+      return next
     })
   }
 
@@ -37,10 +42,13 @@ export function TopAnimeSelectionOverlay({ section, onClose, onSaved }: TopAnime
     setSaving(true)
     setError(null)
     try {
-      await putTopAnimeSelection(selected)
+      await putTopAnimeOrder(
+        mediaType,
+        tiers.map((tier) => ({ score: tier.score, animeIds: tier.members.map((m) => m.animeId) })),
+      )
       onSaved()
     } catch {
-      setError('Could not save the selection. Please try again.')
+      setError('Could not save the order. Please try again.')
       setSaving(false)
     }
   }
@@ -49,39 +57,72 @@ export function TopAnimeSelectionOverlay({ section, onClose, onSaved }: TopAnime
     <Modal onClose={onClose} labelledBy="top-anime-selection-title">
       <div className="top-anime-selection">
         <h2 id="top-anime-selection-title" className="top-anime-selection__title">
-          Choose your top anime
+          Edit top anime order
         </h2>
         <p className="top-anime-selection__hint">
-          Pick up to {section.tieBreakSlots} of these tied anime to fill the remaining slots ({selected.length}/
-          {section.tieBreakSlots} selected).
+          Editing order for: {mediaTypeLabel}. Drag a row or use the arrows to reorder within its score tier
+          {tiers.some((t) => t.includedCount < t.members.length) ? '; the line marks the cutoff for the top list.' : '.'}
         </p>
 
-        <ul className="top-anime-selection__list">
-          {section.candidates.map((candidate) => {
-            const checked = selected.includes(candidate.animeId)
-            return (
-              <li key={candidate.animeId} className="top-anime-selection__row">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={!checked && atLimit}
-                    onChange={() => toggle(candidate.animeId)}
-                  />
-                  {candidate.pictureUrl ? (
-                    <img src={candidate.pictureUrl} alt="" className="top-anime-selection__picture" />
-                  ) : (
+        <div className="top-anime-selection__tiers">
+          {tiers.map((tier, tierIndex) => (
+            <div key={tier.score} className="top-anime-selection__tier">
+              <h3 className="top-anime-selection__tier-title">Score {tier.score}</h3>
+              <ul className="top-anime-selection__list">
+                {tier.members.map((member, index) => (
+                  <li key={member.animeId}>
                     <div
-                      className="top-anime-selection__picture top-anime-selection__picture--placeholder"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <span className="top-anime-selection__row-title">{candidate.title}</span>
-                </label>
-              </li>
-            )
-          })}
-        </ul>
+                      className="top-anime-selection__row"
+                      draggable
+                      onDragStart={() => {
+                        dragRef.current = { tierIndex, index }
+                      }}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        event.preventDefault()
+                        const drag = dragRef.current
+                        dragRef.current = null
+                        if (!drag || drag.tierIndex !== tierIndex) return
+                        moveMember(tierIndex, drag.index, index)
+                      }}
+                    >
+                      {member.pictureUrl ? (
+                        <img src={member.pictureUrl} alt="" className="top-anime-selection__picture" />
+                      ) : (
+                        <div
+                          className="top-anime-selection__picture top-anime-selection__picture--placeholder"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span className="top-anime-selection__row-title">{member.title}</span>
+                      <span className="top-anime-selection__row-buttons">
+                        <button
+                          type="button"
+                          aria-label="Move up"
+                          disabled={index === 0}
+                          onClick={() => moveMember(tierIndex, index, index - 1)}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Move down"
+                          disabled={index === tier.members.length - 1}
+                          onClick={() => moveMember(tierIndex, index, index + 1)}
+                        >
+                          ↓
+                        </button>
+                      </span>
+                    </div>
+                    {index === tier.includedCount - 1 && tier.includedCount < tier.members.length && (
+                      <div className="top-anime-selection__cut-line" role="separator" aria-label="Top list cutoff" />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
 
         {error && <p className="top-anime-selection__error">{error}</p>}
 

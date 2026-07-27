@@ -211,14 +211,24 @@ export type TopAnimeEntryDto = {
   myScore: number
 }
 
-// Items is the resolved "My top anime" list. Candidates/tieBreakSlots are
-// only populated when the fill boundary lands mid-tier (an actual tie to
-// break) — that's what the selection overlay (15.6) is built from.
+export type TopAnimeMediaType = 'all' | 'tv' | 'movie' | 'ova' | 'ona' | 'special'
+
+// One score tier: every scored member for the current scope, in tier order,
+// with includedCount of them making the resolved top list. A cut line
+// belongs after includedCount whenever it's less than members.length.
+export type TopAnimeTierDto = {
+  score: number
+  members: TopAnimeEntryDto[]
+  includedCount: number
+}
+
+// items is the resolved "My top anime" list for mediaType's scope; tiers
+// carries only the tiers that contribute to it, each in full — that's what
+// the tier order overlay is built from.
 export type TopAnimeSectionDto = {
   items: TopAnimeEntryDto[]
-  tieBreakSlots: number
-  candidates: TopAnimeEntryDto[]
-  selectedAnimeIds: number[]
+  tiers: TopAnimeTierDto[]
+  mediaType: string
 }
 
 export type ScoreDistributionBucketDto = {
@@ -238,6 +248,7 @@ export type OpinionDivergenceItemDto = {
   pictureUrl: string | null
   myScore: number
   malScore: number
+  isCompleted: boolean
 }
 
 export type ProfileDto = {

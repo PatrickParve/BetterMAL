@@ -235,6 +235,35 @@
   opacity: 0.75;
 }
 
+.profile-media-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-media-tabs__tab {
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.profile-media-tabs__tab:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.profile-media-tabs__tab--active {
+  color: var(--text-h);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
 .top-anime-strip {
   display: flex;
   gap: 10px;

@@ -1,14 +1,16 @@
 namespace AnimeTracker.Api.Data.Repositories;
 
-/// <summary>Persistence for which anime the user has manually chosen to fill
-/// the remaining "My top anime" slots, overriding the default next-highest
-/// auto-fill.</summary>
+/// <summary>Persistence for the user's ordered "My top anime" preference
+/// list — an anime id's position in the list, not membership in a set.</summary>
 public interface ITopAnimeSelectionRepository
 {
-    Task<List<int>> GetSelectedAnimeIdsAsync(CancellationToken ct = default);
+    /// <summary>All ordered anime ids, sorted by <c>(Position, AnimeId)</c> so a
+    /// duplicate or backfilled tie is still deterministic.</summary>
+    Task<List<int>> GetOrderedAnimeIdsAsync(CancellationToken ct = default);
 
-    /// <summary>Replaces the entire manual selection with the given anime ids.
-    /// An empty collection clears the manual selection, reverting the profile
-    /// page to the default auto-fill.</summary>
-    Task ReplaceSelectionAsync(IReadOnlyCollection<int> animeIds, CancellationToken ct = default);
+    /// <summary>Replaces the entire ordering with the given anime ids, assigning
+    /// <c>Position</c> sequentially from their order in the list. An empty
+    /// collection clears the ordering, reverting every tier to the alphabetical
+    /// default.</summary>
+    Task ReplaceOrderAsync(IReadOnlyList<int> orderedAnimeIds, CancellationToken ct = default);
 }

@@ -1,12 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getProfile } from '../api/client.ts'
-import type { OpinionDivergenceItemDto, ProfileDto } from '../api/types.ts'
+import { getProfile, getTopAnimeSection } from '../api/client.ts'
+import type { OpinionDivergenceItemDto, ProfileDto, TopAnimeMediaType, TopAnimeSectionDto } from '../api/types.ts'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { EditHistoryOverlay } from '../components/EditHistoryOverlay.tsx'
 import { TopAnimeSelectionOverlay } from '../components/TopAnimeSelectionOverlay.tsx'
 import { CHANGE_TYPE_LABELS, formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
 import './ProfilePage.css'
+
+const MEDIA_TYPE_TABS: { value: TopAnimeMediaType; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'tv', label: 'TV' },
+  { value: 'movie', label: 'Movie' },
+  { value: 'ova', label: 'OVA' },
+  { value: 'ona', label: 'ONA' },
+  { value: 'special', label: 'Specials' },
+]
 
 const STAT_LABELS: { key: keyof ProfileDto['stats']; label: string }[] = [
   { key: 'days', label: 'Days' },
@@ -45,7 +54,7 @@ function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
             <span className="profile-list-row__title">{pickDisplayTitle(item.title, item.englishTitle)}</span>
           </Link>
           <span className="profile-list-row__trailing">
-            Me {item.myScore} · MAL <ScoreValue value={item.malScore} />
+            Me {item.myScore} · MAL <ScoreValue value={item.malScore} completed={item.isCompleted} />
           </span>
         </li>
       ))}
@@ -59,6 +68,8 @@ function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
 // from cached Postgres data.
 export function ProfilePage() {
   const [profile, setProfile] = useState<ProfileDto | null>(null)
+  const [topAnime, setTopAnime] = useState<TopAnimeSectionDto | null>(null)
+  const [mediaType, setMediaType] = useState<TopAnimeMediaType>('all')
   const [loading, setLoading] = useState(true)
   const [showHistory, setShowHistory] = useState(false)
   const [showTopAnimeSelect, setShowTopAnimeSelect] = useState(false)
@@ -93,10 +104,26 @@ export function ProfilePage() {
 
   function loadProfile() {
     return getProfile()
-      .then(setProfile)
+      .then((data) => {
+        setProfile(data)
+        setTopAnime(data.topAnime)
+      })
       .catch(() => {
         // Page just stays empty; nothing else to react to here.
       })
+  }
+
+  function loadTopAnimeSection(type: TopAnimeMediaType) {
+    return getTopAnimeSection(type)
+      .then(setTopAnime)
+      .catch(() => {
+        // Section just stays as-is; nothing else to react to here.
+      })
+  }
+
+  function selectMediaType(type: TopAnimeMediaType) {
+    setMediaType(type)
+    loadTopAnimeSection(type)
   }
 
   useEffect(() => {
@@ -192,14 +219,36 @@ export function ProfilePage() {
       <section className="profile-box">
         <div className="profile-box__header-row">
           <h2>My top anime</h2>
-          {profile.topAnime.candidates.length > 0 && (
+          {topAnime && topAnime.tiers.some((tier) => tier.members.length > 1) && (
             <button type="button" className="profile-box__control" onClick={() => setShowTopAnimeSelect(true)}>
-              Edit selection
+              Edit order
             </button>
           )}
         </div>
-        {profile.topAnime.items.length === 0 ? (
-          <p className="profile-page__section-empty">Score some anime to build your top list.</p>
+
+        <div className="profile-media-tabs" role="tablist" aria-label="Filter by media type">
+          {MEDIA_TYPE_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              aria-selected={mediaType === tab.value}
+              className={
+                mediaType === tab.value ? 'profile-media-tabs__tab profile-media-tabs__tab--active' : 'profile-media-tabs__tab'
+              }
+              onClick={() => selectMediaType(tab.value)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {!topAnime || topAnime.items.length === 0 ? (
+          <p className="profile-page__section-empty">
+            {mediaType === 'all'
+              ? 'Score some anime to build your top list.'
+              : `No scored ${MEDIA_TYPE_TABS.find((tab) => tab.value === mediaType)?.label} yet.`}
+          </p>
         ) : (
           <div
             className="top-anime-strip"
@@ -209,7 +258,7 @@ export function ProfilePage() {
             onMouseUp={handleTopAnimeMouseUp}
             onMouseLeave={handleTopAnimeMouseUp}
           >
-            {profile.topAnime.items.map((item) => (
+            {topAnime.items.map((item) => (
               <Link
                 key={item.animeId}
                 to={`/anime/${item.animeId}`}
@@ -249,13 +298,15 @@ export function ProfilePage() {
       </div>
 
       {showHistory && <EditHistoryOverlay onClose={() => setShowHistory(false)} />}
-      {showTopAnimeSelect && (
+      {showTopAnimeSelect && topAnime && (
         <TopAnimeSelectionOverlay
-          section={profile.topAnime}
+          section={topAnime}
+          mediaType={mediaType}
+          mediaTypeLabel={MEDIA_TYPE_TABS.find((tab) => tab.value === mediaType)?.label ?? 'All'}
           onClose={() => setShowTopAnimeSelect(false)}
           onSaved={() => {
             setShowTopAnimeSelect(false)
-            loadProfile()
+            loadTopAnimeSection(mediaType)
           }}
         />
       )}

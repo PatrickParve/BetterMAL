@@ -24,4 +24,16 @@ public class ProfileController(IProfileService profileService) : ControllerBase
         var history = await profileService.GetActivityHistoryAsync(ct);
         return Ok(history);
     }
+
+    /// <summary>"My top anime" recomputed over one media-type scope (or "all")
+    /// for the profile page's filter tabs.</summary>
+    [HttpGet("api/profile/top-anime")]
+    public async Task<IActionResult> GetTopAnime([FromQuery] string? mediaType, CancellationToken ct)
+    {
+        if (!TopAnimeMediaTypeScope.IsValid(mediaType))
+            return BadRequest(new { error = $"Unknown mediaType: {mediaType}" });
+
+        var section = await profileService.GetTopAnimeSectionAsync(mediaType, ct);
+        return Ok(section);
+    }
 }
