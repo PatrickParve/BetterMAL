@@ -122,6 +122,7 @@ export function SearchPage() {
               title={item.title}
               englishTitle={item.englishTitle}
               pictureUrl={item.pictureUrl}
+              className="anime-card--fluid"
             >
               <AnimeCardMeta mediaType={item.mediaType} totalEpisodes={item.totalEpisodes} />
             </AnimeCard>

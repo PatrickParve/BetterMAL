@@ -22,10 +22,20 @@
   color: var(--text);
 }
 
+/* Fixed column count rather than auto-fill/minmax — see .season-page__grid
+   in SeasonPage.css for why a min-width-based track count is fragile to
+   small container-width changes. */
 .current-season__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(6, 1fr);
   gap: 16px;
+}
+
+@media (max-width: 1024px) {
+  .current-season__grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+  }
 }
 
 .current-season__grid .anime-card {

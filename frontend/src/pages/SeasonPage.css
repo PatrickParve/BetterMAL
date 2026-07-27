@@ -133,10 +133,22 @@
   opacity: 0.75;
 }
 
+/* Fixed 6-up grid rather than auto-fill/minmax: a min-width-based track count
+   flips between 5 and 6 columns from sub-pixel container-width differences
+   (e.g. scrollbar presence, external-display scaling), which made cards
+   balloon in size depending on monitor setup. A fixed column count keeps
+   card size deterministic at normal desktop widths. */
 .season-page__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(6, 1fr);
   gap: 20px;
+}
+
+@media (max-width: 1024px) {
+  .season-page__grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 16px;
+  }
 }
 
 .season-page__divider {

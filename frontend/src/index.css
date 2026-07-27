@@ -31,7 +31,13 @@
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
-  font: 18px/145% var(--sans);
+  /* Fluid instead of a hard breakpoint switch: a binary 18px/16px flip at
+     exactly 1024px means any viewport-width fluctuation around that
+     threshold (e.g. a window landing at a slightly different logical width
+     after a display is connected/disconnected) reads as text visibly
+     resizing. clamp() scales continuously between 640px and 1280px instead,
+     so the same width change only ever nudges size a little. */
+  font: clamp(16px, 14px + 0.3125vw, 18px)/145% var(--sans);
   letter-spacing: 0.18px;
   color-scheme: light dark;
   color: var(--text);
@@ -40,10 +46,6 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -82,9 +84,17 @@
   }
 }
 
+/* Fluid up to a generous cap instead of a fixed 1440px canvas: the old
+   `width: 1440px` was the *preferred* size, so anything wider than that
+   (an external monitor, or a laptop's own display running unscaled) left a
+   centered 1440px column with dead space and the border-inline lines
+   visibly flanking it — an obvious "boxed" look that changed every time the
+   display changed. Filling the viewport by default and only capping at an
+   uncommonly-wide 2400px means virtually every real laptop/monitor
+   combination renders edge-to-edge, identically, whichever is connected. */
 #root {
-  width: 1440px;
-  max-width: 100%;
+  width: 100%;
+  max-width: 2400px;
   margin: 0 auto;
   text-align: center;
   border-inline: 1px solid var(--border);
@@ -114,22 +124,19 @@ h2 {
 }
 
 h1 {
-  font-size: 56px;
+  /* See :root's font-size comment: fluid instead of a hard cliff. */
+  font-size: clamp(36px, 16px + 3.125vw, 56px);
   letter-spacing: -1.68px;
   margin: 32px 0;
   @media (max-width: 1024px) {
-    font-size: 36px;
     margin: 20px 0;
   }
 }
 h2 {
-  font-size: 24px;
+  font-size: clamp(20px, 16px + 0.625vw, 24px);
   line-height: 118%;
   letter-spacing: -0.24px;
   margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
 }
 p {
   margin: 0;

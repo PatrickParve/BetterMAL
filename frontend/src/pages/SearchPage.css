@@ -45,10 +45,18 @@
   opacity: 0.75;
 }
 
+/* Matches .season-page__grid so search and season browsing look identical. */
 .search-page__grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 1024px) {
+  .search-page__grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 16px;
+  }
 }
 
 .search-page__loading {

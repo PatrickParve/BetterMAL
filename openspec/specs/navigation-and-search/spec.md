@@ -60,11 +60,15 @@ The system SHALL provide a centered, debounced type-ahead search that, on every 
 - **THEN** the dropdown still shows any local-cache matches instead of erroring
 
 ### Requirement: Full search results page
-The system SHALL provide a dedicated search results page that lists every anime matching a submitted query, presented the same way as the seasonal page (picture, title, media type, and episode count per card). Results SHALL default to the order returned by the search API (closest match first) and SHALL additionally be sortable by Popularity, MAL score, Alphabetical, and My score; the Popularity sort SHALL place unranked anime (MAL popularity rank absent or zero) last. The page SHALL show at most 50 results per page with pagination controls. A double-quoted query SHALL constrain results to exact title matches. The query, sort, and page SHALL be held in the URL so back-navigation restores the same view.
+The system SHALL provide a dedicated search results page that lists every anime matching a submitted query, presented the same way as the seasonal page (picture, title, media type, and episode count per card, using the same content-width-filling grid layout and the same fixed per-row card count at ordinary desktop widths). Results SHALL default to the order returned by the search API (closest match first) and SHALL additionally be sortable by Popularity, MAL score, Alphabetical, and My score; the Popularity sort SHALL place unranked anime (MAL popularity rank absent or zero) last. The page SHALL show at most 50 results per page with pagination controls. A double-quoted query SHALL constrain results to exact title matches. The query, sort, and page SHALL be held in the URL so back-navigation restores the same view.
 
 #### Scenario: Viewing full results for a query
 - **WHEN** I submit a search
 - **THEN** the search page shows all matching anime as cards with picture, title, type, and episode count, in the API's relevance order by default
+
+#### Scenario: Search grid matches the season grid's layout
+- **WHEN** search results are displayed at any window width
+- **THEN** the cards in each full row together span the content width the same way the season page's grid does, with no large empty space to the right of the grid
 
 #### Scenario: Sorting results
 - **WHEN** I choose a sort option on the search page
