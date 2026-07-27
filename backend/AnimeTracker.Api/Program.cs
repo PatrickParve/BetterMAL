@@ -110,6 +110,7 @@ builder.Services.AddScoped<IEpisodeScheduleRefreshService, EpisodeScheduleRefres
 builder.Services.AddHostedService<EpisodeScheduleRefreshBackgroundService>();
 
 // --- Season browsing ---
+builder.Services.AddSingleton<SeasonRefreshGate>();
 builder.Services.AddScoped<ISeasonBrowseService, SeasonBrowseService>();
 
 // --- Library views (my list / top anime) ---

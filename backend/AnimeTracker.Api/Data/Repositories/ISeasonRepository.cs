@@ -11,7 +11,8 @@ public record SeasonAnimeItem(
     string? MediaType,
     double? MalScore,
     int? PopularityRank,
-    int? MyScore);
+    int? MyScore,
+    bool InMyList);
 
 /// <summary>Read-only access to cached season listings. Backs the season
 /// page's render path — never call the MAL client from here.</summary>
@@ -22,5 +23,5 @@ public interface ISeasonRepository
     Task<DateTimeOffset?> GetLastFetchedAsync(int year, string season, CancellationToken ct = default);
 
     Task<(List<SeasonAnimeItem> Items, int TotalCount)> GetPageAsync(
-        int year, string season, SeasonSortKey sort, int offset, int limit, CancellationToken ct = default);
+        int year, string season, SeasonSortKey sort, bool includeMyList, int offset, int limit, CancellationToken ct = default);
 }

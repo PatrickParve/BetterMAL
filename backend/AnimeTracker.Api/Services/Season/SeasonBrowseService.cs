@@ -13,46 +13,46 @@ public class SeasonBrowseService(
     IMalClient malClient,
     ISeasonRepository seasonRepository,
     IBroadcastLocalTimeConverter broadcastConverter,
+    SeasonRefreshGate refreshGate,
     ILogger<SeasonBrowseService> logger) : ISeasonBrowseService
 {
-    public async Task<SeasonPageDto> GetPageAsync(int year, string season, string sortKey, int offset, int limit, CancellationToken ct = default)
+    public async Task<SeasonPageDto> GetPageAsync(int year, string season, string sortKey, bool includeMyList, int offset, int limit, CancellationToken ct = default)
     {
-        await EnsureFreshAsync(year, season, ct);
-
-        var (items, totalCount) = await seasonRepository.GetPageAsync(year, season, ParseSort(sortKey), offset, limit, ct);
+        var (items, totalCount) = await seasonRepository.GetPageAsync(year, season, ParseSort(sortKey), includeMyList, offset, limit, ct);
         var dtoItems = items
-            .Select(i => new AnimeBrowseItemDto(i.AnimeId, i.Title, i.EnglishTitle, i.PictureUrl, i.TotalEpisodes, i.MediaType, i.MalScore, i.PopularityRank, i.MyScore))
+            .Select(i => new AnimeBrowseItemDto(i.AnimeId, i.Title, i.EnglishTitle, i.PictureUrl, i.TotalEpisodes, i.MediaType, i.MalScore, i.PopularityRank, i.MyScore, i.InMyList))
             .ToList();
 
-        return new SeasonPageDto(year, season, dtoItems, offset, limit, totalCount);
+        var lastFetchedAt = await seasonRepository.GetLastFetchedAsync(year, season, ct);
+
+        return new SeasonPageDto(year, season, dtoItems, offset, limit, totalCount, lastFetchedAt);
     }
 
-    // First visit of any season triggers a live fetch. After that, only the
-    // current and immediately-upcoming season ever refresh again, and only
-    // once per local calendar day — every other season (past or further out)
-    // is served from cache indefinitely once cached.
-    private async Task EnsureFreshAsync(int year, string season, CancellationToken ct)
+    // Fetches at most once per local calendar day, for any season — past,
+    // current, or upcoming alike. Single-flight via SeasonRefreshGate: a
+    // waiter re-checks LastFetchedAt inside the lock, so it sees the first
+    // refresh's stamp and skips a second MAL fetch instead of racing it.
+    public async Task<SeasonRefreshResultDto> RefreshAsync(int year, string season, CancellationToken ct = default)
     {
-        var now = DateTimeOffset.UtcNow;
-        var todayLocalDate = broadcastConverter.GetLocalDate(now);
-        var lastFetched = await seasonRepository.GetLastFetchedAsync(year, season, ct);
-
-        if (lastFetched is { } fetchedAt)
+        using (await refreshGate.LockAsync(year, season, ct))
         {
-            if (!IsCurrentOrUpcoming(year, season, todayLocalDate))
-                return;
+            var now = DateTimeOffset.UtcNow;
+            var todayLocalDate = broadcastConverter.GetLocalDate(now);
+            var lastFetched = await seasonRepository.GetLastFetchedAsync(year, season, ct);
 
-            if (broadcastConverter.GetLocalDate(fetchedAt) == todayLocalDate)
-                return;
-        }
+            if (lastFetched is { } fetchedAt && broadcastConverter.GetLocalDate(fetchedAt) == todayLocalDate)
+                return new SeasonRefreshResultDto(false);
 
-        try
-        {
-            await FetchAndCacheAsync(year, season, now, ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to live-fetch season {Year}/{Season}; serving whatever is already cached.", year, season);
+            try
+            {
+                await FetchAndCacheAsync(year, season, now, ct);
+                return new SeasonRefreshResultDto(true);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to refresh season {Year}/{Season}; serving whatever is already cached.", year, season);
+                return new SeasonRefreshResultDto(false);
+            }
         }
     }
 
@@ -120,16 +120,6 @@ public class SeasonBrowseService(
             fetchLog.LastFetchedAt = now;
 
         await db.SaveChangesAsync(ct);
-    }
-
-    private static bool IsCurrentOrUpcoming(int year, string season, DateOnly todayLocalDate)
-    {
-        var (currentYear, currentSeason) = SeasonCalendar.GetSeasonFor(todayLocalDate);
-        if (year == currentYear && season == currentSeason)
-            return true;
-
-        var (upcomingYear, upcomingSeason) = SeasonCalendar.GetNextSeason(currentYear, currentSeason);
-        return year == upcomingYear && season == upcomingSeason;
     }
 
     private static SeasonSortKey ParseSort(string sortKey) => sortKey switch

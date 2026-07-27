@@ -3,6 +3,12 @@
   width: 160px;
 }
 
+/* Fills its grid track instead of the fixed browse-card width — used by the
+   season page's fluid grid; every other consumer keeps the 160px default. */
+.anime-card--fluid {
+  width: 100%;
+}
+
 .anime-card__link {
   display: flex;
   flex-direction: column;

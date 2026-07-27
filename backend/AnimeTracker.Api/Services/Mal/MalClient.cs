@@ -36,7 +36,9 @@ public class MalClient(HttpClient http) : IMalClient
 
     public Task<MalPagedResponse<MalAnimeListEdge>> GetSeasonAsync(int year, string season, int limit = 100, int offset = 0, string? sort = null, CancellationToken ct = default)
     {
-        var url = $"anime/season/{year}/{Uri.EscapeDataString(season)}?limit={limit}&offset={offset}&fields={DefaultAnimeFields}";
+        // nsfw=true — without it MAL silently omits R+/Rx-rated entries from the
+        // season listing, same as the user animelist fetch below.
+        var url = $"anime/season/{year}/{Uri.EscapeDataString(season)}?limit={limit}&offset={offset}&fields={DefaultAnimeFields}&nsfw=true";
         if (!string.IsNullOrEmpty(sort))
             url += $"&sort={Uri.EscapeDataString(sort)}";
         return GetAsync<MalPagedResponse<MalAnimeListEdge>>(url, MalAuthMode.ClientId, ct);

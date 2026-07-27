@@ -12,4 +12,5 @@ public record AnimeBrowseItemDto(
     string? MediaType,
     double? MalScore,
     int? PopularityRank,
-    int? MyScore);
+    int? MyScore,
+    bool InMyList);

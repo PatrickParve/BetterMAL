@@ -129,6 +129,7 @@ export type AnimeBrowseItemDto = {
   malScore: number | null
   popularityRank: number | null
   myScore: number | null
+  inMyList: boolean
 }
 
 export type SeasonPageDto = {
@@ -138,6 +139,11 @@ export type SeasonPageDto = {
   offset: number
   limit: number
   totalCount: number
+  lastFetchedAt: string | null
+}
+
+export type SeasonRefreshResultDto = {
+  refreshed: boolean
 }
 
 export type SearchPageDto = {

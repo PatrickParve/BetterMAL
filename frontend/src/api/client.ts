@@ -12,6 +12,7 @@ import type {
   ResyncStatusDto,
   SearchPageDto,
   SeasonPageDto,
+  SeasonRefreshResultDto,
   SyncStatusDto,
   TopAnimeItemDto,
   TopAnimeMediaType,
@@ -74,14 +75,19 @@ export function getAiringWeek(week?: string): Promise<AiringWeekDto> {
 export function getSeasonPage(
   year: number,
   season: string,
-  params: { sort: string; offset: number; limit: number },
+  params: { sort: string; includeMyList: boolean; offset: number; limit: number },
 ): Promise<SeasonPageDto> {
   const query = new URLSearchParams({
     sort: params.sort,
+    includeMyList: String(params.includeMyList),
     offset: String(params.offset),
     limit: String(params.limit),
   })
   return fetchJson<SeasonPageDto>(`/api/season/${year}/${season}?${query.toString()}`)
+}
+
+export function refreshSeason(year: number, season: string): Promise<SeasonRefreshResultDto> {
+  return fetchJson<SeasonRefreshResultDto>(`/api/season/${year}/${season}/refresh`, { method: 'POST' })
 }
 
 export function getMyList(): Promise<MyListItemDto[]> {

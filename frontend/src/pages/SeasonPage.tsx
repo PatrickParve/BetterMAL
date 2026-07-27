@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { getSeasonPage } from '../api/client.ts'
+import { getSeasonPage, refreshSeason } from '../api/client.ts'
 import type { AnimeBrowseItemDto } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
+import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
 import { useLatestRequest } from '../hooks/useLatestRequest.ts'
 import './SeasonPage.css'
 
@@ -18,6 +19,11 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 ]
 
 const PAGE_SIZE = 24
+
+// How long the season selection must sit still before a background refresh
+// fires — so stepping quickly through seasons with the arrows only fetches
+// the season actually landed on.
+const REFRESH_DEBOUNCE_MS = 400
 
 // Earliest year selectable in the quick-jump dropdown — anime predate this,
 // but a bounded range keeps the <select> from growing unbounded.
@@ -50,9 +56,15 @@ function isSortKey(value: string | null): value is SortKey {
 
 // Season page: all anime airing in the selected season (not just my list),
 // with a sort/filter control and hand-rolled infinite scroll via an
-// IntersectionObserver sentinel below the grid. Year/season/sort live in the
-// URL (not component state) so the selection survives back-navigation from
-// an anime detail page, and default to the current season when absent.
+// IntersectionObserver sentinel below the grid. Year/season/sort/inMyList
+// live in the URL (not component state) so the selection survives
+// back-navigation from an anime detail page, and default to the current
+// season when absent.
+//
+// Reads and refreshes are two separate effects (design §4): reading from
+// cache is instant and re-runs on any sort/filter/season change, while the
+// MAL refresh is debounced and keyed on season alone, so changing sort or
+// the "in my list" filter never triggers a MAL fetch.
 export function SeasonPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const fallback = useMemo(currentSeasonTarget, [])
@@ -60,18 +72,34 @@ export function SeasonPage() {
   const yearParam = Number(searchParams.get('year'))
   const seasonParam = searchParams.get('season')
   const sortParam = searchParams.get('sort')
+  const inMyListParam = searchParams.get('inMyList')
 
   const year = Number.isInteger(yearParam) && yearParam > 0 ? yearParam : fallback.year
   const season = isSeasonName(seasonParam) ? seasonParam : fallback.season
   const sort = isSortKey(sortParam) ? sortParam : 'popularity'
+  const inMyList = inMyListParam !== '0'
 
   const [items, setItems] = useState<AnimeBrowseItemDto[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const { start, current, isLatest } = useLatestRequest()
 
+  // Read by the debounced refresh effect so it re-reads with whatever sort,
+  // filter, and loaded-page-count are current when the refresh completes,
+  // not whatever was current when the season settled.
+  const sortRef = useRef(sort)
+  sortRef.current = sort
+  const inMyListRef = useRef(inMyList)
+  inMyListRef.current = inMyList
+  const itemsLengthRef = useRef(items.length)
+  itemsLengthRef.current = items.length
+
   const hasMore = items.length < totalCount
+  const neverCached = lastFetchedAt === null && items.length === 0
+  const firstUnwatchedIndex = sort === 'myScore' ? items.findIndex((item) => item.myScore === null) : -1
   const yearOptions = useMemo(() => {
     const latest = Math.max(year, fallback.year) + 1
     return Array.from({ length: latest - EARLIEST_YEAR + 1 }, (_, i) => latest - i)
@@ -94,17 +122,29 @@ export function SeasonPage() {
     })
   }
 
-  // Season or sort changed: start over from page one.
+  function setInMyList(next: boolean) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      if (next) params.delete('inMyList')
+      else params.set('inMyList', '0')
+      return params
+    })
+  }
+
+  // Cache-first read: fires on every season/sort/filter change and never
+  // touches MAL. Resets to page one so a sort or filter change behaves like a
+  // fresh navigation.
   useEffect(() => {
     const requestId = start()
     setItems([])
     setTotalCount(0)
     setLoading(true)
-    getSeasonPage(year, season, { sort, offset: 0, limit: PAGE_SIZE })
+    getSeasonPage(year, season, { sort, includeMyList: inMyList, offset: 0, limit: PAGE_SIZE })
       .then((page) => {
         if (!isLatest(requestId)) return
         setItems(page.items)
         setTotalCount(page.totalCount)
+        setLastFetchedAt(page.lastFetchedAt)
       })
       .catch(() => {
         // Season page just stays empty; the user can retry via season nav.
@@ -112,7 +152,55 @@ export function SeasonPage() {
       .finally(() => {
         if (isLatest(requestId)) setLoading(false)
       })
-  }, [year, season, sort])
+  }, [year, season, sort, inMyList])
+
+  // Visit-triggered background refresh: keyed on season alone (via the
+  // debounced key below) so sort/filter changes never cause a MAL fetch.
+  // Debounced so arrow-stepping through seasons only refreshes the one
+  // settled on; the very first render's value is applied immediately since
+  // useDebouncedValue seeds its state with the initial value.
+  const debouncedSeasonKey = useDebouncedValue(`${year}/${season}`, REFRESH_DEBOUNCE_MS)
+
+  useEffect(() => {
+    const [yearPart, seasonPart] = debouncedSeasonKey.split('/')
+    const targetYear = Number(yearPart)
+    const targetSeason = seasonPart as SeasonName
+    // Captured now, at the moment this season's refresh starts (the read
+    // effect above already bumped it for this same season) — not after
+    // refreshSeason resolves, so a slow refresh whose season has since been
+    // navigated away from is still correctly recognized as stale.
+    const requestId = current()
+
+    let cancelled = false
+    setRefreshing(true)
+
+    refreshSeason(targetYear, targetSeason)
+      .then((result) => {
+        if (cancelled || !result.refreshed) return undefined
+        return getSeasonPage(targetYear, targetSeason, {
+          sort: sortRef.current,
+          includeMyList: inMyListRef.current,
+          offset: 0,
+          limit: Math.max(itemsLengthRef.current, PAGE_SIZE),
+        }).then((page) => {
+          if (cancelled || !isLatest(requestId)) return
+          setItems(page.items)
+          setTotalCount(page.totalCount)
+          setLastFetchedAt(page.lastFetchedAt)
+        })
+      })
+      .catch(() => {
+        // A failed refresh leaves the cached page exactly as it is — no
+        // error is surfaced, the indicator just clears below.
+      })
+      .finally(() => {
+        if (!cancelled) setRefreshing(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [debouncedSeasonKey])
 
   // Infinite scroll: load the next page once the sentinel enters view.
   useEffect(() => {
@@ -129,7 +217,7 @@ export function SeasonPage() {
       if (loading || !hasMore) return
       const requestId = current()
       setLoading(true)
-      getSeasonPage(year, season, { sort, offset: items.length, limit: PAGE_SIZE })
+      getSeasonPage(year, season, { sort, includeMyList: inMyList, offset: items.length, limit: PAGE_SIZE })
         .then((page) => {
           if (!isLatest(requestId)) return
           setItems((prev) => [...prev, ...page.items])
@@ -140,83 +228,99 @@ export function SeasonPage() {
           if (isLatest(requestId)) setLoading(false)
         })
     }
-  }, [items, loading, hasMore, year, season, sort])
+  }, [items, loading, hasMore, year, season, sort, inMyList])
 
   return (
     <div className="season-page">
       <div className="season-page__header">
-        <h1>Seasonal anime</h1>
-        <div className="season-page__nav">
-          <button type="button" onClick={() => setTarget(shiftSeason(year, season, -1))} aria-label="Previous season">
-            &lsaquo;
-          </button>
-          <span className="season-page__label">
-            {seasonLabel(season)} {year}
-          </span>
-          <button type="button" onClick={() => setTarget(shiftSeason(year, season, 1))} aria-label="Next season">
-            &rsaquo;
-          </button>
+        <h1 className="season-page__title">Seasonal anime</h1>
+
+        <div className="season-page__center">
+          <div className="season-page__nav">
+            <button type="button" onClick={() => setTarget(shiftSeason(year, season, -1))} aria-label="Previous season">
+              &lsaquo;
+            </button>
+            <span className="season-page__label-wrap">
+              <span className="season-page__label">
+                {seasonLabel(season)} {year}
+              </span>
+              {refreshing && <span className="season-page__updating">Updating…</span>}
+            </span>
+            <button type="button" onClick={() => setTarget(shiftSeason(year, season, 1))} aria-label="Next season">
+              &rsaquo;
+            </button>
+          </div>
+          <div className="season-page__jump">
+            <select
+              className="season-page__sort"
+              value={season}
+              onChange={(event) => setTarget({ year, season: event.target.value as SeasonName })}
+              aria-label="Jump to season"
+            >
+              {SEASON_ORDER.map((option) => (
+                <option key={option} value={option}>
+                  {seasonLabel(option)}
+                </option>
+              ))}
+            </select>
+            <select
+              className="season-page__sort"
+              value={year}
+              onChange={(event) => setTarget({ year: Number(event.target.value), season })}
+              aria-label="Jump to year"
+            >
+              {yearOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div className="season-page__jump">
+
+        <div className="season-page__controls">
           <select
             className="season-page__sort"
-            value={season}
-            onChange={(event) => setTarget({ year, season: event.target.value as SeasonName })}
-            aria-label="Jump to season"
+            value={sort}
+            onChange={(event) => setSort(event.target.value as SortKey)}
+            aria-label="Sort season anime"
           >
-            {SEASON_ORDER.map((option) => (
-              <option key={option} value={option}>
-                {seasonLabel(option)}
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
-          <select
-            className="season-page__sort"
-            value={year}
-            onChange={(event) => setTarget({ year: Number(event.target.value), season })}
-            aria-label="Jump to year"
-          >
-            {yearOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+          <label className="season-page__checkbox">
+            <input type="checkbox" checked={inMyList} onChange={(event) => setInMyList(event.target.checked)} />
+            In my list
+          </label>
         </div>
-        <select
-          className="season-page__sort"
-          value={sort}
-          onChange={(event) => setSort(event.target.value as SortKey)}
-          aria-label="Sort season anime"
-        >
-          {SORT_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
       </div>
 
-      {items.length === 0 && !loading ? (
+      {items.length === 0 && !loading && !neverCached ? (
         <p className="season-page__empty">No anime found for this season.</p>
-      ) : (
+      ) : items.length > 0 ? (
         <div className="season-page__grid">
-          {items.map((item) => (
-            <AnimeCard
-              key={item.animeId}
-              animeId={item.animeId}
-              title={item.title}
-              englishTitle={item.englishTitle}
-              pictureUrl={item.pictureUrl}
-            >
-              <AnimeCardMeta mediaType={item.mediaType} totalEpisodes={item.totalEpisodes} />
-            </AnimeCard>
+          {items.map((item, index) => (
+            <Fragment key={item.animeId}>
+              {index === firstUnwatchedIndex && index > 0 && <div className="season-page__divider">Unwatched</div>}
+              <AnimeCard
+                animeId={item.animeId}
+                title={item.title}
+                englishTitle={item.englishTitle}
+                pictureUrl={item.pictureUrl}
+                className="anime-card--fluid"
+              >
+                <AnimeCardMeta mediaType={item.mediaType} totalEpisodes={item.totalEpisodes} />
+              </AnimeCard>
+            </Fragment>
           ))}
         </div>
-      )}
+      ) : null}
 
       <div ref={sentinelRef} className="season-page__sentinel" />
-      {loading && <p className="season-page__loading">Loading…</p>}
+      {(loading || neverCached) && <p className="season-page__loading">Loading…</p>}
     </div>
   )
 }

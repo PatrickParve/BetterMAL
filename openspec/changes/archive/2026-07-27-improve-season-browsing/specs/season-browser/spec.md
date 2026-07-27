@@ -1,8 +1,5 @@
-# season-browser Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
-## Requirements
 ### Requirement: Full season listing with live-then-cached fetch
 The system SHALL show all anime whose MAL season classification (`start_season`) is the selected season (not just my list), fetching the season live from the API when it has never been fetched before and caching the results for subsequent visits. Season membership SHALL follow MAL's own `start_season` — the field MAL uses to build its per-season listings — which can differ from the calendar quarter the anime's start date falls in; the system SHALL NOT re-derive an anime's season from its start date. Each anime SHALL appear in exactly one season (the season MAL files it under); a long-running anime SHALL NOT appear in seasons after its premiere. The cached listing SHALL be the single source of truth read back to the page (no start-date re-filtering at read time).
 
@@ -31,6 +28,54 @@ Reading a season's page SHALL NOT block on a live fetch: the cached listing is s
 #### Scenario: Refresh updates stale scores and ranks
 - **WHEN** a season is refreshed and MAL now reports a different score or popularity rank for an anime already in the cached listing
 - **THEN** the cached anime's score and rank are updated, so score and popularity sorts reflect current MAL values even for anime that are not in my list
+
+### Requirement: Season selection
+The system SHALL allow changing the selected season, and SHALL keep the selected season, sort, and filter state in the page's URL so it persists through back-navigation from an anime detail page. Opening the Season page from the navbar with no season specified SHALL default to the current season. The system SHALL provide a quick-jump control to select a specific year and season directly, in addition to stepping one season at a time.
+
+The season header SHALL place the step navigation (previous/next arrows with the season label) in the horizontal center of the header, the year and season quick-jump dropdowns immediately to the right of that navigation, and the sort and filter controls after them — so no control group is pushed to the far edge of the header.
+
+#### Scenario: Changing season
+- **WHEN** I select a different season
+- **THEN** the page shows that season's anime and the selection is reflected in the URL
+
+#### Scenario: Selection persists through back-navigation
+- **WHEN** I pick a season, open an anime, then press the browser Back button
+- **THEN** I return to the season I had selected, not the current season
+
+#### Scenario: Navbar defaults to current season
+- **WHEN** I open the Season page from the navbar with no season in the URL
+- **THEN** it defaults to the current season
+
+#### Scenario: Quick-jump to a specific season
+- **WHEN** I use the quick-jump control to choose a year and season
+- **THEN** the page jumps directly to that season without stepping through intermediate seasons
+
+#### Scenario: Header control placement
+- **WHEN** I view the season header
+- **THEN** the arrows and season label sit centered in the header with the year/season quick-jump dropdowns directly to their right, rather than the quick-jump sitting alone at the far right edge
+
+### Requirement: Season filtering
+The system SHALL allow filtering/sorting season anime by popularity, score, alphabetical, and my score, where my score is meaningful only for anime also in my list. When sorting by popularity, anime that are unranked — MAL popularity rank absent or zero — SHALL be ordered after all ranked anime (a rank of `0` is not treated as "most popular"), then ranked anime by ascending rank (1 = most popular), then by title.
+
+When sorting by my score, the results SHALL be split into two ordered groups: first every anime I have scored, ordered by my score descending (equal scores broken by popularity, then title); then every remaining anime, ordered by popularity using the same unranked-last rule as the popularity sort. The grouping SHALL be produced server-side so it holds across paginated loads, and the page SHALL render a visual break with the label `Unwatched` between the two groups, shown only when both groups have at least one anime.
+
+#### Scenario: Sorting by my score
+- **WHEN** I sort by my score
+- **THEN** the anime I have scored appear first in descending score order, followed by an `Unwatched` divider, followed by the remaining anime in popularity order
+
+#### Scenario: My-score grouping holds across pages
+- **WHEN** I sort by my score and scroll far enough to load additional pages
+- **THEN** no scored anime appears after the `Unwatched` divider — the grouping is consistent across every loaded page
+
+#### Scenario: No scored anime in the season
+- **WHEN** I sort by my score in a season where I have scored nothing
+- **THEN** all anime are shown in popularity order with no `Unwatched` divider
+
+#### Scenario: Unranked anime sort last by popularity
+- **WHEN** I sort by popularity and some anime have no popularity rank (rank absent or zero)
+- **THEN** the ranked anime appear first in ascending rank order and the unranked anime appear last, rather than an unranked anime sorting to the top
+
+## ADDED Requirements
 
 ### Requirement: Cache-first read with visit-triggered background refresh
 The system SHALL render the season page from the cached listing first and refresh that season from MAL in the background, updating the page in place once the refresh completes. Opening a season SHALL trigger a background refresh regardless of whether that season is past, current, or upcoming — refresh is driven by the user visiting a season, never by a timer or schedule, so that a deployment which is not running continuously never misses a refresh window.
@@ -85,74 +130,6 @@ A season SHALL be fetched at most once per local calendar day: if its last succe
 - **WHEN** a background refresh fails (MAL is unreachable or returns an error)
 - **THEN** the page keeps showing the cached listing and the failure is not surfaced as a page error
 
-### Requirement: Season selection
-The system SHALL allow changing the selected season, and SHALL keep the selected season, sort, and filter state in the page's URL so it persists through back-navigation from an anime detail page. Opening the Season page from the navbar with no season specified SHALL default to the current season. The system SHALL provide a quick-jump control to select a specific year and season directly, in addition to stepping one season at a time.
-
-The season header SHALL place the step navigation (previous/next arrows with the season label) in the horizontal center of the header, the year and season quick-jump dropdowns immediately to the right of that navigation, and the sort and filter controls after them — so no control group is pushed to the far edge of the header.
-
-#### Scenario: Changing season
-- **WHEN** I select a different season
-- **THEN** the page shows that season's anime and the selection is reflected in the URL
-
-#### Scenario: Selection persists through back-navigation
-- **WHEN** I pick a season, open an anime, then press the browser Back button
-- **THEN** I return to the season I had selected, not the current season
-
-#### Scenario: Navbar defaults to current season
-- **WHEN** I open the Season page from the navbar with no season in the URL
-- **THEN** it defaults to the current season
-
-#### Scenario: Quick-jump to a specific season
-- **WHEN** I use the quick-jump control to choose a year and season
-- **THEN** the page jumps directly to that season without stepping through intermediate seasons
-
-#### Scenario: Header control placement
-- **WHEN** I view the season header
-- **THEN** the arrows and season label sit centered in the header with the year/season quick-jump dropdowns directly to their right, rather than the quick-jump sitting alone at the far right edge
-
-### Requirement: Season card content
-The system SHALL show, on each season card, the anime's title, picture, episode count, and type (TV/movie/etc).
-
-#### Scenario: Rendering a season card
-- **WHEN** season anime are displayed
-- **THEN** each card shows the anime's title, picture, episode count, and type
-
-#### Scenario: Unknown episode count on a season card
-- **WHEN** a season anime's total episode count is unknown
-- **THEN** the card shows the episode count as `?`
-
-### Requirement: Season grid fills the content width
-The season results grid SHALL size its cards so that each row spans the full width of the page content, leaving no unused gutter to the right of the last card in a row, and SHALL show cover images larger than the fixed-width browse card. The number of cards per row SHALL adapt to the available width.
-
-#### Scenario: Grid leaves no right-hand gutter
-- **WHEN** season results are displayed at any window width
-- **THEN** the cards in each full row together span the content width, with no large empty space to the right of the grid
-
-#### Scenario: Adapting to a narrower window
-- **WHEN** I narrow the window
-- **THEN** fewer cards are placed per row and the cards continue to fill the row width
-
-### Requirement: Season filtering
-The system SHALL allow filtering/sorting season anime by popularity, score, alphabetical, and my score, where my score is meaningful only for anime also in my list. When sorting by popularity, anime that are unranked — MAL popularity rank absent or zero — SHALL be ordered after all ranked anime (a rank of `0` is not treated as "most popular"), then ranked anime by ascending rank (1 = most popular), then by title.
-
-When sorting by my score, the results SHALL be split into two ordered groups: first every anime I have scored, ordered by my score descending (equal scores broken by popularity, then title); then every remaining anime, ordered by popularity using the same unranked-last rule as the popularity sort. The grouping SHALL be produced server-side so it holds across paginated loads, and the page SHALL render a visual break with the label `Unwatched` between the two groups, shown only when both groups have at least one anime.
-
-#### Scenario: Sorting by my score
-- **WHEN** I sort by my score
-- **THEN** the anime I have scored appear first in descending score order, followed by an `Unwatched` divider, followed by the remaining anime in popularity order
-
-#### Scenario: My-score grouping holds across pages
-- **WHEN** I sort by my score and scroll far enough to load additional pages
-- **THEN** no scored anime appears after the `Unwatched` divider — the grouping is consistent across every loaded page
-
-#### Scenario: No scored anime in the season
-- **WHEN** I sort by my score in a season where I have scored nothing
-- **THEN** all anime are shown in popularity order with no `Unwatched` divider
-
-#### Scenario: Unranked anime sort last by popularity
-- **WHEN** I sort by popularity and some anime have no popularity rank (rank absent or zero)
-- **THEN** the ranked anime appear first in ascending rank order and the unranked anime appear last, rather than an unranked anime sorting to the top
-
 ### Requirement: In-my-list inclusion filter
 The system SHALL provide an "In my list" checkbox beside the season sort control, checked by default. When it is unchecked, anime that have an entry in my list SHALL be excluded from the season results and from the result count used for paging, so only anime not yet in my list are shown. The checkbox state SHALL be part of the page's URL state and SHALL apply server-side so that paging and infinite scroll stay correct.
 
@@ -168,9 +145,20 @@ The system SHALL provide an "In my list" checkbox beside the season sort control
 - **WHEN** I uncheck "In my list", open an anime, then press the browser Back button
 - **THEN** the checkbox is still unchecked and the filtered results are shown
 
-### Requirement: Infinite scroll
-The system SHALL load season results with infinite scroll.
+### Requirement: Season grid fills the content width
+The season results grid SHALL size its cards so that each row spans the full width of the page content, leaving no unused gutter to the right of the last card in a row, and SHALL show cover images larger than the fixed-width browse card. The number of cards per row SHALL adapt to the available width.
 
-#### Scenario: Scrolling loads more
-- **WHEN** I scroll to the end of the loaded season results
-- **THEN** more results load automatically
+#### Scenario: Grid leaves no right-hand gutter
+- **WHEN** season results are displayed at any window width
+- **THEN** the cards in each full row together span the content width, with no large empty space to the right of the grid
+
+#### Scenario: Adapting to a narrower window
+- **WHEN** I narrow the window
+- **THEN** fewer cards are placed per row and the cards continue to fill the row width
+
+## REMOVED Requirements
+
+### Requirement: Daily refresh limited to current and upcoming seasons
+**Reason**: Two separate defects. The once-per-local-day refresh ran inside the page read, so the page blocked on MAL to render. And restricting refresh to the current/upcoming season froze every past season permanently — not only its membership but its cached MAL scores and popularity ranks, which no other job updates for anime outside my list (`MetadataRefreshService` is my-list-only and score-only), so score and popularity sorts on a past season ranked by values captured the day it was first cached. It is replaced by "Cache-first read with visit-triggered background refresh", which refreshes any season on visit, off the read path.
+
+**Migration**: No data migration and no change to `SeasonFetchLog`. The once-per-local-day comparison is retained verbatim; what is removed is the season-class gate that sat in front of it, so the daily rule now applies to every season instead of only the current and upcoming ones. A season last fetched on an earlier date refreshes on its next visit; one already fetched on the current local date refreshes the following day.

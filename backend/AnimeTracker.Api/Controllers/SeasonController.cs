@@ -9,12 +9,14 @@ public class SeasonController(ISeasonBrowseService seasonBrowseService) : Contro
     private static readonly HashSet<string> ValidSeasons = ["winter", "spring", "summer", "fall"];
 
     /// <summary>One page of a season's full anime listing (not just my list),
-    /// live-fetched and cached as needed before reading from Postgres.</summary>
+    /// read from the cache only — never calls MAL. Pair with the refresh
+    /// endpoint below to bring the cache up to date.</summary>
     [HttpGet("api/season/{year:int}/{season}")]
     public async Task<IActionResult> GetPage(
         int year,
         string season,
         [FromQuery] string sort = "popularity",
+        [FromQuery] bool includeMyList = true,
         [FromQuery] int offset = 0,
         [FromQuery] int limit = 24,
         CancellationToken ct = default)
@@ -22,7 +24,21 @@ public class SeasonController(ISeasonBrowseService seasonBrowseService) : Contro
         if (!ValidSeasons.Contains(season))
             return BadRequest(new { error = $"Unknown season '{season}'." });
 
-        var page = await seasonBrowseService.GetPageAsync(year, season, sort, offset, Math.Clamp(limit, 1, 100), ct);
+        var page = await seasonBrowseService.GetPageAsync(year, season, sort, includeMyList, offset, Math.Clamp(limit, 1, 100), ct);
         return Ok(page);
+    }
+
+    /// <summary>Triggers a background refresh of this season from MAL,
+    /// subject to the once-per-local-day rule and per-season single-flight.
+    /// Called whenever the client visits a season — never by a schedule or a
+    /// user-facing refresh control.</summary>
+    [HttpPost("api/season/{year:int}/{season}/refresh")]
+    public async Task<IActionResult> Refresh(int year, string season, CancellationToken ct = default)
+    {
+        if (!ValidSeasons.Contains(season))
+            return BadRequest(new { error = $"Unknown season '{season}'." });
+
+        var result = await seasonBrowseService.RefreshAsync(year, season, ct);
+        return Ok(result);
     }
 }

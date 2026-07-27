@@ -138,7 +138,7 @@ public class AnimeSearchService(
             .Take(limit)
             .Select(c => new AnimeBrowseItemDto(
                 c.AnimeId, c.Title, c.EnglishTitle, c.PictureUrl, c.TotalEpisodes, c.MediaType, c.MalScore, c.PopularityRank,
-                myScores.GetValueOrDefault(c.AnimeId)))
+                myScores.GetValueOrDefault(c.AnimeId), myScores.ContainsKey(c.AnimeId)))
             .ToList();
 
         return new SearchPageDto(query, items, offset, limit, totalCount);
