@@ -116,7 +116,12 @@ public class AnimeSearchService(
         }
 
         var filtered = candidates.ToList();
-        var totalCount = filtered.Count;
+        // The frontend fetches this page once (offset 0) and reveals it client-side
+        // in chunks, never re-fetching for more — so totalCount must reflect what
+        // this single response can actually deliver, not MAL's full (up to
+        // MaxResults) candidate count, or the displayed total would exceed what
+        // scrolling could ever reveal.
+        var totalCount = Math.Min(filtered.Count, limit);
 
         var ids = filtered.Select(c => c.AnimeId).ToList();
         var myScores = await db.UserAnimeEntries.AsNoTracking()

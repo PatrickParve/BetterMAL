@@ -16,9 +16,9 @@ public class SeasonBrowseService(
     SeasonRefreshGate refreshGate,
     ILogger<SeasonBrowseService> logger) : ISeasonBrowseService
 {
-    public async Task<SeasonPageDto> GetPageAsync(int year, string season, string sortKey, bool includeMyList, int offset, int limit, CancellationToken ct = default)
+    public async Task<SeasonPageDto> GetPageAsync(int year, string season, string sortKey, bool includeMyList, bool hideHentai, int offset, int limit, CancellationToken ct = default)
     {
-        var (items, totalCount) = await seasonRepository.GetPageAsync(year, season, ParseSort(sortKey), includeMyList, offset, limit, ct);
+        var (items, totalCount) = await seasonRepository.GetPageAsync(year, season, ParseSort(sortKey), includeMyList, hideHentai, offset, limit, ct);
         var dtoItems = items
             .Select(i => new AnimeBrowseItemDto(i.AnimeId, i.Title, i.EnglishTitle, i.PictureUrl, i.TotalEpisodes, i.MediaType, i.MalScore, i.PopularityRank, i.MyScore, i.InMyList))
             .ToList();

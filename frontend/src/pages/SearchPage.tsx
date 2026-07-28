@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getSearchPage } from '../api/client.ts'
 import type { AnimeBrowseItemDto } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
-import { Pagination } from '../components/Pagination.tsx'
 import { useLatestRequest } from '../hooks/useLatestRequest.ts'
 import './SearchPage.css'
 
@@ -17,50 +16,55 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'myScore', label: 'My score' },
 ]
 
-const PAGE_SIZE = 48
+// How many revealed cards grow by per scroll-triggered reveal. Distinct from
+// CANDIDATE_LIMIT below — this only controls how much of the already-loaded
+// array is rendered at once.
+const CHUNK_SIZE = 48
+
+// The whole candidate set for a query is fetched once (MAL's own cap), so
+// scrolling further just reveals more of what's already in memory instead of
+// re-running the live MAL search per chunk.
+const CANDIDATE_LIMIT = 90
 
 function isSortKey(value: string | null): value is SortKey {
   return value !== null && SORT_OPTIONS.some((option) => option.value === value)
 }
 
-// Full search results page: paginated (not infinite scroll, unlike Season),
-// sourced from MAL's own search relevance by default. Query/sort/page all
-// live in the URL so back-navigation from an anime detail page restores
-// exactly where the user left off.
+// Full search results page: fetches the whole (≤90) candidate set once per
+// (query, sort) — the search endpoint has no cache behind it, so paging would
+// re-run the live MAL search per chunk — and reveals it in chunks of
+// CHUNK_SIZE via an IntersectionObserver sentinel, the same continuous-scroll
+// pattern as the season page. Query/sort live in the URL so back-navigation
+// from an anime detail page restores exactly where the user left off; the
+// revealed-chunk count is not restored, matching Season's infinite scroll.
+// A legacy `?page=N` link is simply ignored — the query itself still resolves.
 export function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const q = searchParams.get('q') ?? ''
   const sortParam = searchParams.get('sort')
   const sort = isSortKey(sortParam) ? sortParam : 'relevance'
-  const pageParam = Number(searchParams.get('page'))
-  const page = Number.isInteger(pageParam) && pageParam > 0 ? pageParam : 1
 
   const [items, setItems] = useState<AnimeBrowseItemDto[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(CHUNK_SIZE)
+  const sentinelRef = useRef<HTMLDivElement>(null)
   const { start, isLatest } = useLatestRequest()
 
   function setSort(next: SortKey) {
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev)
       params.set('sort', next)
-      params.set('page', '1')
       return params
     })
   }
 
-  function setPage(next: number) {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev)
-      params.set('page', String(next))
-      return params
-    })
-  }
-
-  // Query, sort, or page changed: (re)fetch this page. An empty query skips
-  // the request entirely — there's nothing to search for.
+  // Query or sort changed: fetch the whole candidate set once and reset the
+  // reveal to the first chunk. An empty query skips the request entirely.
   useEffect(() => {
+    setVisibleCount(CHUNK_SIZE)
+
     if (q.length === 0) {
       setItems([])
       setTotalCount(0)
@@ -70,7 +74,7 @@ export function SearchPage() {
 
     const requestId = start()
     setLoading(true)
-    getSearchPage(q, { sort, offset: (page - 1) * PAGE_SIZE, limit: PAGE_SIZE })
+    getSearchPage(q, { sort, offset: 0, limit: CANDIDATE_LIMIT })
       .then((result) => {
         if (!isLatest(requestId)) return
         setItems(result.items)
@@ -84,9 +88,24 @@ export function SearchPage() {
       .finally(() => {
         if (isLatest(requestId)) setLoading(false)
       })
-  }, [q, sort, page])
+  }, [q, sort])
 
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
+  // Reveal more of the already-loaded array once the sentinel enters view —
+  // no network call, everything for this (query, sort) is already in memory.
+  useEffect(() => {
+    const node = sentinelRef.current
+    if (!node) return
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) {
+        setVisibleCount((prev) => Math.min(prev + CHUNK_SIZE, items.length))
+      }
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [items])
+
+  const visibleItems = items.slice(0, visibleCount)
 
   return (
     <div className="search-page">
@@ -115,7 +134,7 @@ export function SearchPage() {
         <p className="search-page__empty">No anime found.</p>
       ) : (
         <div className="search-page__grid">
-          {items.map((item) => (
+          {visibleItems.map((item) => (
             <AnimeCard
               key={item.animeId}
               animeId={item.animeId}
@@ -130,9 +149,8 @@ export function SearchPage() {
         </div>
       )}
 
+      <div ref={sentinelRef} className="search-page__sentinel" />
       {loading && <p className="search-page__loading">Loading…</p>}
-
-      <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} variant="full" />
     </div>
   )
 }

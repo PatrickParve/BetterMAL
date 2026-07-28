@@ -27,6 +27,7 @@ public class MalAnimeNode
     public int? AverageEpisodeDuration { get; set; } // seconds
     public string? Source { get; set; } // e.g. manga, original, light_novel
     public List<MalRelatedAnimeEdge>? RelatedAnime { get; set; }
+    public string? Rating { get; set; } // g, pg, pg_13, r, r+, rx — rx means Hentai
 }
 
 public class MalAlternativeTitles

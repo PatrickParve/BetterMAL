@@ -13,6 +13,7 @@ public class AnimeMetadata
     public double? MalScore { get; set; }
     public string? MediaType { get; set; } // tv, movie, ova, ona, special, music, unknown
     public string? AiringStatus { get; set; } // currently_airing, finished_airing, not_yet_aired
+    public string? Rating { get; set; } // g, pg, pg_13, r, r+, rx — rx means Hentai
     public int? TotalEpisodes { get; set; } // null = unknown/still airing
     public DateOnly? AiredFrom { get; set; }
     public DateOnly? AiredTo { get; set; }

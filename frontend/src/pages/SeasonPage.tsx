@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { getSeasonPage, refreshSeason } from '../api/client.ts'
 import type { AnimeBrowseItemDto } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
+import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
 import { useLatestRequest } from '../hooks/useLatestRequest.ts'
 import './SeasonPage.css'
@@ -78,6 +79,7 @@ export function SeasonPage() {
   const season = isSeasonName(seasonParam) ? seasonParam : fallback.season
   const sort = isSortKey(sortParam) ? sortParam : 'popularity'
   const inMyList = inMyListParam !== '0'
+  const { hideHentai } = useContentFilter()
 
   const [items, setItems] = useState<AnimeBrowseItemDto[]>([])
   const [totalCount, setTotalCount] = useState(0)
@@ -94,6 +96,8 @@ export function SeasonPage() {
   sortRef.current = sort
   const inMyListRef = useRef(inMyList)
   inMyListRef.current = inMyList
+  const hideHentaiRef = useRef(hideHentai)
+  hideHentaiRef.current = hideHentai
   const itemsLengthRef = useRef(items.length)
   itemsLengthRef.current = items.length
 
@@ -139,7 +143,7 @@ export function SeasonPage() {
     setItems([])
     setTotalCount(0)
     setLoading(true)
-    getSeasonPage(year, season, { sort, includeMyList: inMyList, offset: 0, limit: PAGE_SIZE })
+    getSeasonPage(year, season, { sort, includeMyList: inMyList, hideHentai, offset: 0, limit: PAGE_SIZE })
       .then((page) => {
         if (!isLatest(requestId)) return
         setItems(page.items)
@@ -152,7 +156,7 @@ export function SeasonPage() {
       .finally(() => {
         if (isLatest(requestId)) setLoading(false)
       })
-  }, [year, season, sort, inMyList])
+  }, [year, season, sort, inMyList, hideHentai])
 
   // Visit-triggered background refresh: keyed on season alone (via the
   // debounced key below) so sort/filter changes never cause a MAL fetch.
@@ -180,6 +184,7 @@ export function SeasonPage() {
         return getSeasonPage(targetYear, targetSeason, {
           sort: sortRef.current,
           includeMyList: inMyListRef.current,
+          hideHentai: hideHentaiRef.current,
           offset: 0,
           limit: Math.max(itemsLengthRef.current, PAGE_SIZE),
         }).then((page) => {
@@ -217,7 +222,7 @@ export function SeasonPage() {
       if (loading || !hasMore) return
       const requestId = current()
       setLoading(true)
-      getSeasonPage(year, season, { sort, includeMyList: inMyList, offset: items.length, limit: PAGE_SIZE })
+      getSeasonPage(year, season, { sort, includeMyList: inMyList, hideHentai, offset: items.length, limit: PAGE_SIZE })
         .then((page) => {
           if (!isLatest(requestId)) return
           setItems((prev) => [...prev, ...page.items])
@@ -228,7 +233,7 @@ export function SeasonPage() {
           if (isLatest(requestId)) setLoading(false)
         })
     }
-  }, [items, loading, hasMore, year, season, sort, inMyList])
+  }, [items, loading, hasMore, year, season, sort, inMyList, hideHentai])
 
   return (
     <div className="season-page">

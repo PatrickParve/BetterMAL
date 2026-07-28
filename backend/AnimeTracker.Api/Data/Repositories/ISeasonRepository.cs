@@ -23,5 +23,5 @@ public interface ISeasonRepository
     Task<DateTimeOffset?> GetLastFetchedAsync(int year, string season, CancellationToken ct = default);
 
     Task<(List<SeasonAnimeItem> Items, int TotalCount)> GetPageAsync(
-        int year, string season, SeasonSortKey sort, bool includeMyList, int offset, int limit, CancellationToken ct = default);
+        int year, string season, SeasonSortKey sort, bool includeMyList, bool hideHentai, int offset, int limit, CancellationToken ct = default);
 }

@@ -59,6 +59,10 @@
   }
 }
 
+.search-page__sentinel {
+  height: 1px;
+}
+
 .search-page__loading {
   text-align: center;
   color: var(--text);

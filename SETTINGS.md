@@ -22,7 +22,12 @@ without you:
   shows refresh daily, recently-finished every few days, older shows weekly to
   monthly), capped so it never hammers the MAL API.
 
-The five actions below are the manual overrides for those automatic flows.
+The five actions below are the manual overrides for those automatic flows. The
+Settings page also has a **Content** section with a **Hide NSFW** checkbox —
+unrelated to sync, it's a display preference: enabling it excludes hentai
+(anime MAL rates `rx`) from the season browser only. `r`/`r+` titles, search
+results, my list, and everything else are unaffected. It's unchecked (off) by
+default and takes effect immediately without refetching from MAL.
 
 ---
 

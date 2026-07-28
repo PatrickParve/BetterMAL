@@ -16,8 +16,11 @@ public class MalClient(HttpClient http) : IMalClient
     // Lean listing fields — used for search/season/ranking/user-list, where
     // most returned anime aren't in my list and rarely change once finished
     // airing. Deliberately excludes genres/synopsis/background/related_anime.
+    // `rating` is included here (not just in the full detail set) so every
+    // listing path records MAL's content rating with no extra request — it
+    // backs the season browser's hentai filter.
     private const string DefaultAnimeFields =
-        "id,title,alternative_titles{en},main_picture,mean,media_type,status,num_episodes,start_date,end_date,studios,broadcast,popularity,rank,start_season";
+        "id,title,alternative_titles{en},main_picture,mean,media_type,status,num_episodes,start_date,end_date,studios,broadcast,popularity,rank,start_season,rating";
 
     // Full/rich detail fields — used only for a specific anime's own detail
     // fetch (initial import, nightly tiered my-list refresh, on-demand
@@ -30,8 +33,10 @@ public class MalClient(HttpClient http) : IMalClient
         ",list_status{status,score,num_episodes_watched,start_date,finish_date,num_times_rewatched,is_rewatching}";
 
     public Task<MalPagedResponse<MalAnimeListEdge>> SearchAnimeAsync(string query, int limit = 5, CancellationToken ct = default) =>
+        // nsfw=true — without it MAL silently omits R+/Rx-rated entries from
+        // search results, same as the season listing and user animelist fetches.
         GetAsync<MalPagedResponse<MalAnimeListEdge>>(
-            $"anime?q={Uri.EscapeDataString(query)}&limit={limit}&fields={DefaultAnimeFields}",
+            $"anime?q={Uri.EscapeDataString(query)}&limit={limit}&fields={DefaultAnimeFields}&nsfw=true",
             MalAuthMode.ClientId, ct);
 
     public Task<MalPagedResponse<MalAnimeListEdge>> GetSeasonAsync(int year, string season, int limit = 100, int offset = 0, string? sort = null, CancellationToken ct = default)

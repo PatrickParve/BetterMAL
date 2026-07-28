@@ -93,6 +93,7 @@ public static class MalMappingExtensions
         target.MalScore = node.Mean;
         target.MediaType = node.MediaType;
         target.AiringStatus = node.Status;
+        target.Rating = node.Rating;
         target.TotalEpisodes = node.NumEpisodes is null or 0 ? null : node.NumEpisodes;
         target.AiredFrom = ParseMalDate(node.StartDate);
         target.AiredTo = ParseMalDate(node.EndDate);
@@ -133,7 +134,9 @@ public static class MalMappingExtensions
     /// detail-page fields (airing status/dates, studio, broadcast, genres,
     /// synopsis, background, prequel/sequel) or <see cref="AnimeMetadata.LastSyncedAt"/> —
     /// so a Season/Top-Anime browse can never clobber richer data a full
-    /// detail fetch already populated on the same row.</summary>
+    /// detail fetch already populated on the same row. `Rating` is written here
+    /// too — it's in both the lean and full field sets, so this always has a
+    /// real value rather than clobbering one with null.</summary>
     public static void ApplyLeanTo(this MalAnimeNode node, AnimeMetadata target, DateTimeOffset now)
     {
         target.Title = node.Title;
@@ -141,6 +144,7 @@ public static class MalMappingExtensions
         target.PictureUrl = node.MainPicture?.Large ?? node.MainPicture?.Medium;
         target.MalScore = node.Mean;
         target.MediaType = node.MediaType;
+        target.Rating = node.Rating;
         target.TotalEpisodes = node.NumEpisodes is null or 0 ? null : node.NumEpisodes;
         target.PopularityRank = node.Popularity;
         target.Rank = node.Rank;

@@ -75,11 +75,12 @@ export function getAiringWeek(week?: string): Promise<AiringWeekDto> {
 export function getSeasonPage(
   year: number,
   season: string,
-  params: { sort: string; includeMyList: boolean; offset: number; limit: number },
+  params: { sort: string; includeMyList: boolean; hideHentai: boolean; offset: number; limit: number },
 ): Promise<SeasonPageDto> {
   const query = new URLSearchParams({
     sort: params.sort,
     includeMyList: String(params.includeMyList),
+    hideHentai: String(params.hideHentai),
     offset: String(params.offset),
     limit: String(params.limit),
   })

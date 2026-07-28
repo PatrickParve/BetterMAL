@@ -22,7 +22,7 @@ public class AnimeSearchController(IAnimeSearchService searchService) : Controll
     public async Task<IActionResult> SearchPage([FromQuery] string? q, [FromQuery] string sort = "relevance",
         [FromQuery] int offset = 0, [FromQuery] int limit = 50, CancellationToken ct = default)
     {
-        var page = await searchService.SearchPageAsync(q ?? "", sort, Math.Max(offset, 0), Math.Clamp(limit, 1, 50), ct);
+        var page = await searchService.SearchPageAsync(q ?? "", sort, Math.Max(offset, 0), Math.Clamp(limit, 1, 90), ct);
         return Ok(page);
     }
 }

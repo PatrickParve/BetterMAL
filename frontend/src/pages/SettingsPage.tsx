@@ -18,6 +18,7 @@ import type {
   ResyncStatusDto,
   SyncStatusDto,
 } from '../api/types.ts'
+import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { useAnimeSearch } from '../hooks/useAnimeSearch.ts'
 import { useClickOutside } from '../hooks/useClickOutside.ts'
@@ -43,6 +44,7 @@ export function SettingsPage() {
   const [startingFullResync, setStartingFullResync] = useState(false)
 
   const { alwaysShowCompletedScores, toggleAlwaysShowCompletedScores } = useScoreVisibility()
+  const { hideHentai, toggleHideHentai } = useContentFilter()
 
   const load = useCallback(() => {
     return Promise.all([
@@ -163,6 +165,18 @@ export function SettingsPage() {
             onChange={toggleAlwaysShowCompletedScores}
           />
           Always show MAL scores for completed shows
+        </label>
+      </section>
+
+      <section className="settings-box">
+        <h2>Content</h2>
+        <p className="settings-box__hint">
+          Hides NSFW (MAL Rx) from the seasonal page. R and R+ titles, search results, and anything already in
+          your list are unaffected.
+        </p>
+        <label className="settings-toggle">
+          <input type="checkbox" checked={hideHentai} onChange={toggleHideHentai} />
+          Hide NSFW
         </label>
       </section>
 
