@@ -237,6 +237,22 @@ export type TopAnimeSectionDto = {
   mediaType: string
 }
 
+export type RewatchedEntryDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  rewatchCount: number
+  myScore: number | null
+}
+
+// items is every rewatched entry (rewatchCount > 0) for mediaType's scope,
+// ordered by rewatch count descending, with no tiers and no cap.
+export type RewatchedSectionDto = {
+  items: RewatchedEntryDto[]
+  mediaType: string
+}
+
 export type ScoreDistributionBucketDto = {
   score: number
   count: number
@@ -261,6 +277,7 @@ export type ProfileDto = {
   stats: AnimeStatsDto
   recentActivity: ActivityFeedItemDto[]
   topAnime: TopAnimeSectionDto
+  rewatched: RewatchedSectionDto
   scoreDistribution: ScoreDistributionDto
   theyLikedItIDidnt: OpinionDivergenceItemDto[]
   iLikedItTheyDidnt: OpinionDivergenceItemDto[]

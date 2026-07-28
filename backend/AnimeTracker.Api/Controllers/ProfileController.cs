@@ -36,4 +36,16 @@ public class ProfileController(IProfileService profileService) : ControllerBase
         var section = await profileService.GetTopAnimeSectionAsync(mediaType, ct);
         return Ok(section);
     }
+
+    /// <summary>"Most rewatched" recomputed over one media-type scope (or
+    /// "all") for the profile page's filter tabs.</summary>
+    [HttpGet("api/profile/rewatched")]
+    public async Task<IActionResult> GetRewatched([FromQuery] string? mediaType, CancellationToken ct)
+    {
+        if (!TopAnimeMediaTypeScope.IsValid(mediaType))
+            return BadRequest(new { error = $"Unknown mediaType: {mediaType}" });
+
+        var section = await profileService.GetRewatchedSectionAsync(mediaType, ct);
+        return Ok(section);
+    }
 }

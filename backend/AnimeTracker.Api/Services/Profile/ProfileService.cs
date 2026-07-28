@@ -34,6 +34,7 @@ public class ProfileService(
             BuildStats(entries),
             BuildActivityFeed(recentActivityWindow),
             BuildTopAnimeSection(entries, orderedAnimeIds, TopAnimeMediaTypeScope.All),
+            BuildRewatchedSection(entries, TopAnimeMediaTypeScope.All),
             BuildScoreDistribution(entries),
             theyLikedItIDidnt,
             iLikedItTheyDidnt);
@@ -50,6 +51,12 @@ public class ProfileService(
         var entries = await entryRepository.GetAllAsync(ct);
         var orderedAnimeIds = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
         return BuildTopAnimeSection(entries, orderedAnimeIds, mediaType);
+    }
+
+    public async Task<RewatchedSectionDto> GetRewatchedSectionAsync(string mediaType, CancellationToken ct = default)
+    {
+        var entries = await entryRepository.GetAllAsync(ct);
+        return BuildRewatchedSection(entries, mediaType);
     }
 
     public async Task ApplyTopAnimeOrderAsync(List<TopAnimeTierOrderRequest> tiers, CancellationToken ct = default)
@@ -220,6 +227,27 @@ public class ProfileService(
 
     private static TopAnimeEntryDto ToTopAnimeEntry(UserAnimeEntry e) =>
         new(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.MyScore!.Value);
+
+    // No tiers, no cut line, no cap: every entry with a rewatch count above
+    // zero, most-rewatched first. Ties break by score (unscored last), then
+    // title — the same tie-break vocabulary as TopAnimeOrdering, but over the
+    // raw Title rather than display title so the order doesn't shift with
+    // title-preference display logic.
+    private static RewatchedSectionDto BuildRewatchedSection(List<UserAnimeEntry> entries, string mediaType)
+    {
+        var items = entries
+            .Where(e => e.RewatchCount > 0 && TopAnimeMediaTypeScope.Matches(mediaType, e.Anime.MediaType))
+            .OrderByDescending(e => e.RewatchCount)
+            .ThenByDescending(e => e.MyScore ?? -1)
+            .ThenBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase)
+            .Select(ToRewatchedEntry)
+            .ToList();
+
+        return new RewatchedSectionDto(items, mediaType);
+    }
+
+    private static RewatchedEntryDto ToRewatchedEntry(UserAnimeEntry e) =>
+        new(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.RewatchCount, e.MyScore);
 
     private static ScoreDistributionDto BuildScoreDistribution(List<UserAnimeEntry> entries)
     {

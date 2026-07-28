@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getProfile, getTopAnimeSection } from '../api/client.ts'
-import type { OpinionDivergenceItemDto, ProfileDto, TopAnimeMediaType, TopAnimeSectionDto } from '../api/types.ts'
+import { getProfile, getRewatchedSection, getTopAnimeSection } from '../api/client.ts'
+import type {
+  OpinionDivergenceItemDto,
+  ProfileDto,
+  RewatchedSectionDto,
+  TopAnimeMediaType,
+  TopAnimeSectionDto,
+} from '../api/types.ts'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { EditHistoryOverlay } from '../components/EditHistoryOverlay.tsx'
 import { TopAnimeSelectionOverlay } from '../components/TopAnimeSelectionOverlay.tsx'
@@ -16,6 +22,15 @@ const MEDIA_TYPE_TABS: { value: TopAnimeMediaType; label: string }[] = [
   { value: 'ona', label: 'ONA' },
   { value: 'special', label: 'Specials' },
 ]
+
+const REWATCHED_EMPTY_MESSAGES: Record<TopAnimeMediaType, string> = {
+  all: 'No shows have been rewatched',
+  tv: 'No TV shows have been rewatched',
+  movie: 'No movies have been rewatched',
+  ova: 'No OVAs have been rewatched',
+  ona: 'No ONAs have been rewatched',
+  special: 'No specials have been rewatched',
+}
 
 const STAT_LABELS: { key: keyof ProfileDto['stats']; label: string }[] = [
   { key: 'days', label: 'Days' },
@@ -35,6 +50,47 @@ function formatStatValue(key: keyof ProfileDto['stats'], value: number | null): 
   if (key === 'days') return value.toFixed(1)
   if (key === 'meanScore') return value.toFixed(2)
   return String(value)
+}
+
+// Shared drag-to-scroll behavior for a horizontal poster strip: a mouse-down
+// on the strip starts tracking, mouse-move scrolls it and flags a drag once
+// the pointer has moved past a small threshold, and onItemClick suppresses
+// the resulting navigation click so a drag doesn't also open the tile.
+function useDragScroll() {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const drag = useRef({ isDown: false, startX: 0, scrollLeft: 0, dragged: false })
+
+  function onMouseDown(event: React.MouseEvent<HTMLDivElement>) {
+    const el = scrollRef.current
+    if (!el) return
+    drag.current = { isDown: true, startX: event.pageX, scrollLeft: el.scrollLeft, dragged: false }
+  }
+
+  function onMouseMove(event: React.MouseEvent<HTMLDivElement>) {
+    const state = drag.current
+    const el = scrollRef.current
+    if (!state.isDown || !el) return
+    event.preventDefault()
+    const delta = event.pageX - state.startX
+    if (Math.abs(delta) > 3) state.dragged = true
+    el.scrollLeft = state.scrollLeft - delta
+  }
+
+  function onMouseUp() {
+    drag.current.isDown = false
+  }
+
+  function onItemClick(event: React.MouseEvent) {
+    if (drag.current.dragged) {
+      event.preventDefault()
+    }
+  }
+
+  return {
+    ref: scrollRef,
+    handlers: { onMouseDown, onMouseMove, onMouseUp, onMouseLeave: onMouseUp },
+    onItemClick,
+  }
 }
 
 function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
@@ -72,43 +128,20 @@ export function ProfilePage() {
   const [profile, setProfile] = useState<ProfileDto | null>(null)
   const [topAnime, setTopAnime] = useState<TopAnimeSectionDto | null>(null)
   const [mediaType, setMediaType] = useState<TopAnimeMediaType>('all')
+  const [rewatched, setRewatched] = useState<RewatchedSectionDto | null>(null)
+  const [rewatchedMediaType, setRewatchedMediaType] = useState<TopAnimeMediaType>('all')
   const [loading, setLoading] = useState(true)
   const [showHistory, setShowHistory] = useState(false)
   const [showTopAnimeSelect, setShowTopAnimeSelect] = useState(false)
-  const topAnimeScrollRef = useRef<HTMLDivElement>(null)
-  const topAnimeDrag = useRef({ isDown: false, startX: 0, scrollLeft: 0, dragged: false })
-
-  function handleTopAnimeMouseDown(event: React.MouseEvent<HTMLDivElement>) {
-    const el = topAnimeScrollRef.current
-    if (!el) return
-    topAnimeDrag.current = { isDown: true, startX: event.pageX, scrollLeft: el.scrollLeft, dragged: false }
-  }
-
-  function handleTopAnimeMouseMove(event: React.MouseEvent<HTMLDivElement>) {
-    const state = topAnimeDrag.current
-    const el = topAnimeScrollRef.current
-    if (!state.isDown || !el) return
-    event.preventDefault()
-    const delta = event.pageX - state.startX
-    if (Math.abs(delta) > 3) state.dragged = true
-    el.scrollLeft = state.scrollLeft - delta
-  }
-
-  function handleTopAnimeMouseUp() {
-    topAnimeDrag.current.isDown = false
-  }
-
-  function handleTopAnimeItemClick(event: React.MouseEvent) {
-    if (topAnimeDrag.current.dragged) {
-      event.preventDefault()
-    }
-  }
+  const topAnimeDragScroll = useDragScroll()
+  const rewatchedDragScroll = useDragScroll()
 
   function loadProfile() {
     return getProfile()
       .then((data) => {
         setProfile(data)
         setTopAnime(data.topAnime)
+        setRewatched(data.rewatched)
       })
       .catch(() => {
         // Page just stays empty; nothing else to react to here.
@@ -126,6 +159,19 @@ export function ProfilePage() {
   function selectMediaType(type: TopAnimeMediaType) {
     setMediaType(type)
     loadTopAnimeSection(type)
+  }
+
+  function loadRewatchedSection(type: TopAnimeMediaType) {
+    return getRewatchedSection(type)
+      .then(setRewatched)
+      .catch(() => {
+        // Section just stays as-is; nothing else to react to here.
+      })
+  }
+
+  function selectRewatchedMediaType(type: TopAnimeMediaType) {
+    setRewatchedMediaType(type)
+    loadRewatchedSection(type)
   }
 
   useEffect(() => {
@@ -257,21 +303,14 @@ export function ProfilePage() {
               : `No scored ${MEDIA_TYPE_TABS.find((tab) => tab.value === mediaType)?.label} yet.`}
           </p>
         ) : (
-          <div
-            className="top-anime-strip"
-            ref={topAnimeScrollRef}
-            onMouseDown={handleTopAnimeMouseDown}
-            onMouseMove={handleTopAnimeMouseMove}
-            onMouseUp={handleTopAnimeMouseUp}
-            onMouseLeave={handleTopAnimeMouseUp}
-          >
+          <div className="top-anime-strip" ref={topAnimeDragScroll.ref} {...topAnimeDragScroll.handlers}>
             {topAnime.items.map((item) => (
               <Link
                 key={item.animeId}
                 to={`/anime/${item.animeId}`}
                 className="top-anime-strip__item"
                 draggable={false}
-                onClick={handleTopAnimeItemClick}
+                onClick={topAnimeDragScroll.onItemClick}
               >
                 {item.pictureUrl ? (
                   <img
@@ -287,6 +326,60 @@ export function ProfilePage() {
                   />
                 )}
                 <span className="top-anime-strip__score">{item.myScore}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="profile-box">
+        <h2>Most rewatched</h2>
+
+        <div className="profile-media-tabs" role="tablist" aria-label="Filter by media type">
+          {MEDIA_TYPE_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              aria-selected={rewatchedMediaType === tab.value}
+              className={
+                rewatchedMediaType === tab.value
+                  ? 'profile-media-tabs__tab profile-media-tabs__tab--active'
+                  : 'profile-media-tabs__tab'
+              }
+              onClick={() => selectRewatchedMediaType(tab.value)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {!rewatched || rewatched.items.length === 0 ? (
+          <p className="profile-page__section-empty">{REWATCHED_EMPTY_MESSAGES[rewatchedMediaType]}</p>
+        ) : (
+          <div className="rewatched-strip" ref={rewatchedDragScroll.ref} {...rewatchedDragScroll.handlers}>
+            {rewatched.items.map((item) => (
+              <Link
+                key={item.animeId}
+                to={`/anime/${item.animeId}`}
+                className="rewatched-strip__item"
+                draggable={false}
+                onClick={rewatchedDragScroll.onItemClick}
+              >
+                {item.pictureUrl ? (
+                  <img
+                    src={item.pictureUrl}
+                    alt={pickDisplayTitle(item.title, item.englishTitle)}
+                    className="rewatched-strip__picture"
+                    draggable={false}
+                  />
+                ) : (
+                  <div
+                    className="rewatched-strip__picture rewatched-strip__picture--placeholder"
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="rewatched-strip__count">{item.rewatchCount}</span>
               </Link>
             ))}
           </div>

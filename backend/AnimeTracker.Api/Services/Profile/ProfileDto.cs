@@ -47,6 +47,18 @@ public record TopAnimeSectionDto(
     List<TopAnimeTierDto> Tiers,
     string MediaType);
 
+public record RewatchedEntryDto(
+    int AnimeId,
+    string Title,
+    string? EnglishTitle,
+    string? PictureUrl,
+    int RewatchCount,
+    int? MyScore);
+
+/// <summary>Every rewatched entry (RewatchCount > 0) for MediaType's scope,
+/// ordered by rewatch count descending with no tiers and no cap.</summary>
+public record RewatchedSectionDto(List<RewatchedEntryDto> Items, string MediaType);
+
 public record ScoreDistributionBucketDto(int Score, int Count);
 
 public record ScoreDistributionDto(List<ScoreDistributionBucketDto> Buckets, double? MeanScore);
@@ -60,10 +72,13 @@ public record OpinionDivergenceItemDto(
     double MalScore,
     bool IsCompleted);
 
+/// <summary>Rewatched is the "Most rewatched" section for the "all" scope —
+/// ordered by rewatch count, with no tiers — for the page's initial render.</summary>
 public record ProfileDto(
     AnimeStatsDto Stats,
     List<ActivityFeedItemDto> RecentActivity,
     TopAnimeSectionDto TopAnime,
+    RewatchedSectionDto Rewatched,
     ScoreDistributionDto ScoreDistribution,
     List<OpinionDivergenceItemDto> TheyLikedItIDidnt,
     List<OpinionDivergenceItemDto> ILikedItTheyDidnt);

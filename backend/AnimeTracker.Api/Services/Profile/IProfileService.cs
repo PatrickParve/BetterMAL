@@ -11,6 +11,11 @@ public interface IProfileService
     /// <see cref="GetProfileAsync"/>.</summary>
     Task<TopAnimeSectionDto> GetTopAnimeSectionAsync(string mediaType, CancellationToken ct = default);
 
+    /// <summary>The "Most rewatched" section for one scope (all or one media
+    /// type), computed from the same ranking rules as the section embedded in
+    /// <see cref="GetProfileAsync"/>.</summary>
+    Task<RewatchedSectionDto> GetRewatchedSectionAsync(string mediaType, CancellationToken ct = default);
+
     /// <summary>Applies an edited tier order — as displayed under some scope,
     /// which may omit tier members that scope's filter hides — via the
     /// slot-preserving merge: every edited tier's full membership becomes

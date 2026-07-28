@@ -10,6 +10,7 @@ import type {
   ProfileDto,
   ReconciliationResultDto,
   ResyncStatusDto,
+  RewatchedSectionDto,
   SearchPageDto,
   SeasonPageDto,
   SeasonRefreshResultDto,
@@ -109,6 +110,10 @@ export function getActivityHistory(): Promise<ActivityFeedItemDto[]> {
 
 export function getTopAnimeSection(mediaType: TopAnimeMediaType): Promise<TopAnimeSectionDto> {
   return fetchJson<TopAnimeSectionDto>(`/api/profile/top-anime?mediaType=${encodeURIComponent(mediaType)}`)
+}
+
+export function getRewatchedSection(mediaType: TopAnimeMediaType): Promise<RewatchedSectionDto> {
+  return fetchJson<RewatchedSectionDto>(`/api/profile/rewatched?mediaType=${encodeURIComponent(mediaType)}`)
 }
 
 export function putTopAnimeOrder(
