@@ -27,7 +27,9 @@ export function AnimeCard({ animeId, title, englishTitle, pictureUrl, children, 
         ) : (
           <div className="anime-card__picture anime-card__picture--placeholder" aria-hidden="true" />
         )}
-        <span className="anime-card__title">{pickDisplayTitle(title, englishTitle)}</span>
+        <span className="anime-card__title" title={pickDisplayTitle(title, englishTitle)}>
+          {pickDisplayTitle(title, englishTitle)}
+        </span>
         {children}
       </Link>
       {actions && <div className="anime-card__actions">{actions}</div>}

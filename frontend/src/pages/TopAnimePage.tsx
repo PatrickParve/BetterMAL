@@ -90,7 +90,9 @@ export function TopAnimePage() {
                 ) : (
                   <div className="top-anime-row__picture top-anime-row__picture--placeholder" aria-hidden="true" />
                 )}
-                <span className="top-anime-row__title">{pickDisplayTitle(item.title, item.englishTitle)}</span>
+                <span className="top-anime-row__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
+                  {pickDisplayTitle(item.title, item.englishTitle)}
+                </span>
               </Link>
               <span className="top-anime-row__my-score">{item.entry?.myScore ?? '—'}</span>
               <span className="top-anime-row__mal-score">

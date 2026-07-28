@@ -51,7 +51,9 @@ function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
             ) : (
               <div className="profile-list-row__picture profile-list-row__picture--placeholder" aria-hidden="true" />
             )}
-            <span className="profile-list-row__title">{pickDisplayTitle(item.title, item.englishTitle)}</span>
+            <span className="profile-list-row__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
+              {pickDisplayTitle(item.title, item.englishTitle)}
+            </span>
           </Link>
           <span className="profile-list-row__trailing">
             Me {item.myScore} · MAL <ScoreValue value={item.malScore} completed={item.isCompleted} />
@@ -201,7 +203,12 @@ export function ProfilePage() {
                       />
                     )}
                     <span className="profile-list-row__info">
-                      <span className="profile-list-row__title">{pickDisplayTitle(item.animeTitle, item.animeEnglishTitle)}</span>
+                      <span
+                        className="profile-list-row__title"
+                        title={pickDisplayTitle(item.animeTitle, item.animeEnglishTitle)}
+                      >
+                        {pickDisplayTitle(item.animeTitle, item.animeEnglishTitle)}
+                      </span>
                       <span className="profile-list-row__meta">
                         {CHANGE_TYPE_LABELS[item.changeType] ?? item.changeType}
                         {item.changeDetail ? ` — ${item.changeDetail}` : ''}

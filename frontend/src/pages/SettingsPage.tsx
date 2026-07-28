@@ -232,7 +232,9 @@ export function SettingsPage() {
                     aria-hidden="true"
                   />
                 )}
-                <span className="settings-diff-row__title">{entry.title}</span>
+                <span className="settings-diff-row__title" title={entry.title}>
+                  {entry.title}
+                </span>
                 <span className="settings-diff-row__detail">
                   {entry.changeType === 'Added' ? 'New entry' : 'Updated'} — {STATUS_LABELS[entry.status]},{' '}
                   {entry.episodesWatched} ep{entry.myScore !== null ? `, score ${entry.myScore}` : ''}

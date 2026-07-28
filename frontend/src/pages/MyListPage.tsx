@@ -158,7 +158,9 @@ export function MyListPage() {
             <div className="my-list-row__picture my-list-row__picture--placeholder" aria-hidden="true" />
           )}
           <span className="my-list-row__info">
-            <span className="my-list-row__title">{pickDisplayTitle(item.title, item.englishTitle)}</span>
+            <span className="my-list-row__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
+              {pickDisplayTitle(item.title, item.englishTitle)}
+            </span>
             <span className="my-list-row__type">
               {item.mediaType ? item.mediaType.toUpperCase() : 'Unknown'}
               {airingLabel && <span className="my-list-row__airing-badge"> · {airingLabel}</span>}
