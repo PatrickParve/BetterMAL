@@ -9,9 +9,10 @@ type AiringTodayListProps = {
 
 // "Airing today" column: my-list anime whose broadcast day, converted to
 // local time, is today. Rendered as a single-column list, not a grid. Each
-// row is a larger thumbnail beside two stacked lines: `time : Ep N` (time
-// alone when the episode number can't be resolved) over the title, clamped
-// to two lines.
+// row is a poster-sized 2:3 thumbnail beside top-aligned text: the
+// `time : Ep N` meta line (time alone when the episode number can't be
+// resolved) starts level with the top of the poster, with the title
+// directly beneath it, clamped to two lines.
 export function AiringTodayList({ items }: AiringTodayListProps) {
   return (
     <section className="dashboard-section">

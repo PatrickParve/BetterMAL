@@ -10,7 +10,7 @@
 
 .airing-today__row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   padding: 6px 8px;
   border-radius: 6px;
@@ -29,8 +29,8 @@
 }
 
 .airing-today__thumb {
-  width: 48px;
-  height: 66px;
+  width: 72px;
+  aspect-ratio: 2 / 3;
   object-fit: cover;
   border-radius: 4px;
   background: var(--code-bg);

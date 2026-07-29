@@ -12,9 +12,11 @@ type CurrentlyWatchingCarouselProps = {
   onCompleted: () => void
 }
 
-// "Currently watching" row on the main page: a horizontal carousel capped to
-// 5 visible cards. When more entries exist, the row scrolls as a plain
-// bounded list — it stops at the first card and at the last card, in both
+// "Currently watching" row on the main page: a horizontal carousel bounded
+// to exactly 5 visible cards — no part of a 6th card is visible at any
+// resting scroll position, at either end. When more entries exist, the row
+// scrolls as a plain bounded list — it stops at the first card and at the
+// last card, in both
 // arrow-click and native trackpad/touch scrolling. Each card shows the
 // shared watched/total progress bar and count in the card's `footer` slot,
 // outside the card's link, so the whole progress row navigates nowhere while

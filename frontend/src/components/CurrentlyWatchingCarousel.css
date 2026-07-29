@@ -9,6 +9,11 @@
   display: flex;
   justify-content: safe center;
   gap: 16px;
+  /* border-box makes this the scrollport width, not the content width: five
+     160px cards + four 16px gaps + two 6px hover reserves (one per edge).
+     Content-box here would let the scrollport run 12px past the 5th card's
+     poster, showing a sliver of the 6th. */
+  box-sizing: border-box;
   max-width: calc(5 * 160px + 4 * 16px + 2 * 6px);
   padding: 6px;
   overflow-x: auto;
