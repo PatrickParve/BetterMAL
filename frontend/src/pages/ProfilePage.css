@@ -159,6 +159,12 @@
   border-radius: 8px;
 }
 
+.profile-list-row:hover,
+.profile-list-row:focus-within {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
 .profile-list-row__link {
   display: flex;
   align-items: center;
@@ -267,6 +273,7 @@
 .top-anime-strip {
   display: flex;
   gap: 10px;
+  padding: 8px;
   overflow-x: auto;
   cursor: grab;
   user-select: none;
@@ -285,6 +292,18 @@
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--border);
+  transition: transform 0.15s ease;
+}
+
+/* Scale up in place, no border/ring/scrim change — the strip's own padding
+   above reserves room so a scaled-up edge tile doesn't clip against the
+   scroll boundary, and z-index lifts it above its neighbours so it isn't
+   overlapped as it grows into the gap either side. */
+.top-anime-strip__item:hover,
+.top-anime-strip__item:focus-visible {
+  transform: scale(1.08);
+  z-index: 1;
+  outline: none;
 }
 
 .top-anime-strip__picture {
@@ -319,6 +338,7 @@
 .rewatched-strip {
   display: flex;
   gap: 10px;
+  padding: 8px;
   overflow-x: auto;
   cursor: grab;
   user-select: none;
@@ -337,6 +357,18 @@
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--border);
+  transition: transform 0.15s ease;
+}
+
+.rewatched-strip__item:hover,
+.rewatched-strip__item:focus-visible {
+  transform: scale(1.08);
+  z-index: 1;
+  outline: none;
+}
+
+.rewatched-strip__item:focus-visible {
+  outline: none;
 }
 
 .rewatched-strip__picture {

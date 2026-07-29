@@ -9,6 +9,7 @@ public record CurrentlyWatchingItemDto(
     string? PictureUrl,
     int EpisodesWatched,
     int? TotalEpisodes,
+    int? EpisodesAired,
     NextEpisodeEtaDto? NextEpisode);
 
 public record AiringTodayItemDto(

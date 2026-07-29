@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getAnimeDetail, refreshAnime } from "../api/client.ts";
-import type { AnimeDetailDto } from "../api/types.ts";
+import type { AnimeDetailDto, IncrementTarget } from "../api/types.ts";
 import { ProgressBar } from "../components/ProgressBar.tsx";
 import { ScoreValue } from "../components/ScoreValue.tsx";
 import { useEntryEditor } from "../context/EntryEditorContext.tsx";
-import { useEpisodeIncrement } from "../context/CompletionPromptContext.tsx";
+import {
+  useEpisodeIncrement,
+  useSetEpisodesWatched,
+} from "../context/CompletionPromptContext.tsx";
 import { pickDisplayTitle, STATUS_LABELS } from "../utils/anime.ts";
 import "./AnimeDetailPage.css";
 
@@ -65,6 +68,7 @@ export function AnimeDetailPage() {
   const [incrementPending, setIncrementPending] = useState(false);
   const { openEditor } = useEntryEditor();
   const increment = useEpisodeIncrement();
+  const setEpisodesWatched = useSetEpisodesWatched();
 
   const load = useCallback(() => {
     return getAnimeDetail(animeId)
@@ -90,21 +94,37 @@ export function AnimeDetailPage() {
     }
   }
 
+  function buildIncrementTarget(): IncrementTarget {
+    // Only called when detail.entry exists (guarded by the callers below).
+    const entry = detail!.entry!;
+    return {
+      animeId: detail!.animeId,
+      animeTitle: pickDisplayTitle(detail!.title, detail!.englishTitle),
+      pictureUrl: detail!.pictureUrl,
+      episodesWatched: entry.episodesWatched,
+      previousStatus: entry.status,
+      currentScore: entry.myScore,
+      onSaved: (saved) =>
+        setDetail((prev) => (prev ? { ...prev, entry: saved } : prev)),
+      onCompleted: load,
+    };
+  }
+
   async function handleIncrement() {
     if (!detail || !detail.entry || incrementPending) return;
     setIncrementPending(true);
     try {
-      await increment({
-        animeId: detail.animeId,
-        animeTitle: pickDisplayTitle(detail.title, detail.englishTitle),
-        pictureUrl: detail.pictureUrl,
-        episodesWatched: detail.entry.episodesWatched,
-        previousStatus: detail.entry.status,
-        currentScore: detail.entry.myScore,
-        onSaved: (saved) =>
-          setDetail((prev) => (prev ? { ...prev, entry: saved } : prev)),
-        onCompleted: load,
-      });
+      await increment(buildIncrementTarget());
+    } finally {
+      setIncrementPending(false);
+    }
+  }
+
+  async function handleSetWatched(value: number) {
+    if (!detail || !detail.entry || incrementPending) return;
+    setIncrementPending(true);
+    try {
+      await setEpisodesWatched(buildIncrementTarget(), value);
     } finally {
       setIncrementPending(false);
     }
@@ -187,6 +207,8 @@ export function AnimeDetailPage() {
               watched={detail.entry?.episodesWatched ?? 0}
               total={detail.totalEpisodes}
               onIncrement={detail.entry ? handleIncrement : undefined}
+              onSetWatched={detail.entry ? handleSetWatched : undefined}
+              max={detail.episodesAired ?? detail.totalEpisodes}
               incrementPending={incrementPending}
               incrementLabel={`Increment episodes watched for ${pickDisplayTitle(detail.title, detail.englishTitle)}`}
             />

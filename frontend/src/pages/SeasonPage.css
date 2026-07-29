@@ -67,6 +67,7 @@
 
 .season-page__nav button:hover {
   color: var(--text-h);
+  background: var(--accent-bg);
   border-color: var(--accent-border);
 }
 

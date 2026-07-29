@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Sync;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,7 +13,8 @@ namespace AnimeTracker.Api.Services.Entries;
 /// is the write path.</summary>
 public class UserAnimeEntryEditService(
     AnimeTrackerDbContext db,
-    IEntrySyncScheduler syncScheduler) : IUserAnimeEntryEditService
+    IEntrySyncScheduler syncScheduler,
+    IEpisodeScheduleService scheduleService) : IUserAnimeEntryEditService
 {
     public async Task<UserAnimeEntryDto> UpdateEntryAsync(int animeId, UserAnimeEntryEditRequest request, CancellationToken ct = default)
     {
@@ -37,7 +39,7 @@ public class UserAnimeEntryEditService(
         // ApplyEpisodesWatched may have already flipped entry.Status itself.
         var originalStatus = entry.Status;
 
-        ApplyEpisodesWatched(request, entry, anime, originalStatus, today, changes);
+        ApplyEpisodesWatched(request, entry, anime, originalStatus, today, now, changes);
         ApplyStatus(request, entry, anime, animeId, originalStatus, today, changes);
         ApplyScore(request, entry, changes);
         ApplyRewatchCount(request, entry, changes);
@@ -77,8 +79,8 @@ public class UserAnimeEntryEditService(
         return UserAnimeEntryDto.FromEntity(entry);
     }
 
-    private static void ApplyEpisodesWatched(
-        UserAnimeEntryEditRequest request, UserAnimeEntry entry, AnimeMetadata anime, WatchStatus originalStatus, DateOnly today,
+    private void ApplyEpisodesWatched(
+        UserAnimeEntryEditRequest request, UserAnimeEntry entry, AnimeMetadata anime, WatchStatus originalStatus, DateOnly today, DateTimeOffset now,
         List<(ActivityChangeType Type, string Detail, int? PreviousEpisodesWatched)> changes)
     {
         if (request.EpisodesWatched is not { } newEpisodes || newEpisodes == entry.EpisodesWatched)
@@ -87,8 +89,14 @@ public class UserAnimeEntryEditService(
         if (newEpisodes < 0)
             throw new ArgumentOutOfRangeException(nameof(request), "Episodes watched cannot be negative.");
 
-        if (anime.TotalEpisodes is { } totalEpisodes && newEpisodes > totalEpisodes)
-            throw new ArgumentOutOfRangeException(nameof(request), $"Episodes watched cannot exceed the anime's total episode count ({totalEpisodes}).");
+        // Cap against what's actually out, not just the eventual total: a
+        // still-airing show can't be watched past its aired-so-far count even
+        // once its total episode count is known. EpisodesAiredAsOf already
+        // resolves to the total for a finished show, so this single check
+        // covers both cases.
+        var maxEpisodes = scheduleService.EpisodesAiredAsOf(anime, now) ?? anime.TotalEpisodes;
+        if (maxEpisodes is { } cap && newEpisodes > cap)
+            throw new ArgumentOutOfRangeException(nameof(request), $"Episodes watched cannot exceed the number of episodes available ({cap}).");
 
         var previousEpisodesWatched = entry.EpisodesWatched;
 

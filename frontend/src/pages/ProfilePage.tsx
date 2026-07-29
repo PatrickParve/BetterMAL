@@ -186,7 +186,7 @@ export function ProfilePage() {
     return <p className="profile-page__empty">Couldn't load profile data.</p>
   }
 
-  const maxBucketCount = Math.max(1, ...profile.scoreDistribution.buckets.map((b) => b.count))
+  const totalRated = profile.scoreDistribution.buckets.reduce((sum, b) => sum + b.count, 0)
 
   return (
     <div className="profile-page">
@@ -214,7 +214,7 @@ export function ProfilePage() {
                 <div className="score-distribution__bar-track">
                   <div
                     className="score-distribution__bar"
-                    style={{ width: `${(bucket.count / maxBucketCount) * 100}%` }}
+                    style={{ width: `${totalRated > 0 ? (bucket.count / totalRated) * 100 : 0}%` }}
                   />
                 </div>
                 <span className="score-distribution__count">{bucket.count}</span>

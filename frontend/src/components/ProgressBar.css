@@ -24,3 +24,50 @@
   color: var(--text);
   white-space: nowrap;
 }
+
+/* Zero padding/margin at rest so the trigger sits exactly where plain
+   "watched/total" text would (matching AiringProgressBar's static label) —
+   the click/edit affordance is hover/focus-only and adds no box size. */
+.progress-bar__watched {
+  box-sizing: content-box;
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  padding: 0;
+  margin: 0;
+  text-align: center;
+  cursor: pointer;
+}
+
+.progress-bar__watched:hover:not(:disabled),
+.progress-bar__watched:focus-visible {
+  color: var(--text-h);
+  background: var(--code-bg);
+  outline: none;
+}
+
+.progress-bar__watched:disabled {
+  cursor: default;
+}
+
+.progress-bar__watched-input {
+  box-sizing: content-box;
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+  background: var(--code-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 3px;
+  padding: 0;
+  margin: 0;
+  text-align: center;
+}
+
+.progress-bar__watched-input:disabled {
+  opacity: 0.6;
+}

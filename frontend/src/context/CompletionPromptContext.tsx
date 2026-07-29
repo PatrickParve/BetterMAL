@@ -13,21 +13,23 @@ type PromptState = {
 
 type CompletionPromptContextValue = {
   increment: (target: IncrementTarget) => Promise<void>
+  setEpisodesWatched: (target: IncrementTarget, value: number) => Promise<void>
 }
 
 const CompletionPromptContext = createContext<CompletionPromptContextValue | null>(null)
 
 // Mounts a single overlay instance at the app root, mirroring
-// EntryEditorContext. Every "+" call site routes its increment through
-// useEpisodeIncrement() instead of calling updateEntry directly, so the
-// completion prompt can't be forgotten at a new site.
+// EntryEditorContext. Both the "+" button and the inline episode-count edit
+// route through here — via useEpisodeIncrement() or useSetEpisodesWatched()
+// — instead of calling updateEntry directly, so the completion prompt can't
+// be forgotten at a new call site.
 export function CompletionPromptProvider({ children }: { children: ReactNode }) {
   const [prompt, setPrompt] = useState<PromptState | null>(null)
 
-  async function increment(target: IncrementTarget) {
+  async function setEpisodesWatched(target: IncrementTarget, value: number) {
     let saved: UserAnimeEntryDto
     try {
-      saved = await updateEntry(target.animeId, { episodesWatched: target.episodesWatched + 1 })
+      saved = await updateEntry(target.animeId, { episodesWatched: value })
     } catch {
       // Leave the count as-is; the user can retry.
       return
@@ -46,6 +48,10 @@ export function CompletionPromptProvider({ children }: { children: ReactNode }) 
     })
   }
 
+  function increment(target: IncrementTarget) {
+    return setEpisodesWatched(target, target.episodesWatched + 1)
+  }
+
   function handleClose() {
     const onClosed = prompt?.onClosed
     setPrompt(null)
@@ -53,7 +59,7 @@ export function CompletionPromptProvider({ children }: { children: ReactNode }) 
   }
 
   return (
-    <CompletionPromptContext.Provider value={{ increment }}>
+    <CompletionPromptContext.Provider value={{ increment, setEpisodesWatched }}>
       {children}
       {prompt && (
         <CompletionScoreOverlay
@@ -73,4 +79,10 @@ export function useEpisodeIncrement(): (target: IncrementTarget) => Promise<void
   const ctx = useContext(CompletionPromptContext)
   if (!ctx) throw new Error('useEpisodeIncrement must be used within a CompletionPromptProvider')
   return ctx.increment
+}
+
+export function useSetEpisodesWatched(): (target: IncrementTarget, value: number) => Promise<void> {
+  const ctx = useContext(CompletionPromptContext)
+  if (!ctx) throw new Error('useSetEpisodesWatched must be used within a CompletionPromptProvider')
+  return ctx.setEpisodesWatched
 }

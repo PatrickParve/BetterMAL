@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimeCard } from './AnimeCard.tsx'
 import { ProgressBar } from './ProgressBar.tsx'
-import type { CurrentlyWatchingItemDto } from '../api/types.ts'
-import { useEpisodeIncrement } from '../context/CompletionPromptContext.tsx'
+import type { CurrentlyWatchingItemDto, IncrementTarget } from '../api/types.ts'
+import { useEpisodeIncrement, useSetEpisodesWatched } from '../context/CompletionPromptContext.tsx'
 import { pickDisplayTitle } from '../utils/anime.ts'
 import './CurrentlyWatchingCarousel.css'
 
@@ -16,14 +16,15 @@ type CurrentlyWatchingCarouselProps = {
 // 5 visible cards. When more entries exist, the row scrolls as a plain
 // bounded list — it stops at the first card and at the last card, in both
 // arrow-click and native trackpad/touch scrolling. Each card shows the
-// shared watched/total progress bar with its inline plus button after the
-// count; the plus stops propagation so it increments without navigating,
-// while clicking the rest of the card body navigates without incrementing.
+// shared watched/total progress bar and count in the card's `footer` slot,
+// outside the card's link, so the whole progress row navigates nowhere while
+// clicking the picture or title still opens the detail page.
 export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCompleted }: CurrentlyWatchingCarouselProps) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [pendingId, setPendingId] = useState<number | null>(null)
   const [overflowing, setOverflowing] = useState(false)
   const incrementEpisode = useEpisodeIncrement()
+  const setEpisodesWatched = useSetEpisodesWatched()
 
   // Arrows only make sense when the row actually overflows — recompute on
   // resize (font/zoom/window changes) and whenever the item count changes.
@@ -59,25 +60,39 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
     node.scrollTo({ left: target, behavior: 'smooth' })
   }
 
+  function buildTarget(item: CurrentlyWatchingItemDto): IncrementTarget {
+    return {
+      animeId: item.animeId,
+      animeTitle: pickDisplayTitle(item.title, item.englishTitle),
+      pictureUrl: item.pictureUrl,
+      episodesWatched: item.episodesWatched,
+      // The dashboard's currently-watching items are all Status == Watching
+      // by construction (MainDashboardService filters on it), and the DTO
+      // carries no status field, so the pre-increment status is known here.
+      previousStatus: 'Watching',
+      // CurrentlyWatchingItemDto carries no score field; the carousel has
+      // nothing to pre-fill the completion prompt with.
+      currentScore: null,
+      onSaved: (saved) => onEpisodesWatchedChange(item.animeId, saved.episodesWatched),
+      onCompleted,
+    }
+  }
+
   async function increment(item: CurrentlyWatchingItemDto) {
     if (pendingId !== null) return
     setPendingId(item.animeId)
     try {
-      await incrementEpisode({
-        animeId: item.animeId,
-        animeTitle: pickDisplayTitle(item.title, item.englishTitle),
-        pictureUrl: item.pictureUrl,
-        episodesWatched: item.episodesWatched,
-        // The dashboard's currently-watching items are all Status == Watching
-        // by construction (MainDashboardService filters on it), and the DTO
-        // carries no status field, so the pre-increment status is known here.
-        previousStatus: 'Watching',
-        // CurrentlyWatchingItemDto carries no score field; the carousel has
-        // nothing to pre-fill the completion prompt with.
-        currentScore: null,
-        onSaved: (saved) => onEpisodesWatchedChange(item.animeId, saved.episodesWatched),
-        onCompleted,
-      })
+      await incrementEpisode(buildTarget(item))
+    } finally {
+      setPendingId(null)
+    }
+  }
+
+  async function setWatched(item: CurrentlyWatchingItemDto, value: number) {
+    if (pendingId !== null) return
+    setPendingId(item.animeId)
+    try {
+      await setEpisodesWatched(buildTarget(item), value)
     } finally {
       setPendingId(null)
     }
@@ -101,20 +116,25 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
               englishTitle={item.englishTitle}
               pictureUrl={item.pictureUrl}
               className="carousel__card"
-            >
-              <ProgressBar
-                watched={item.episodesWatched}
-                total={item.totalEpisodes}
-                onIncrement={() => increment(item)}
-                incrementPending={pendingId === item.animeId}
-                incrementLabel={`Increment episodes watched for ${pickDisplayTitle(item.title, item.englishTitle)}`}
-              />
-              {item.nextEpisode && (
-                <span className="carousel__countdown">
-                  Next ep: in {item.nextEpisode.days} days, {item.nextEpisode.hours} h
-                </span>
-              )}
-            </AnimeCard>
+              footer={
+                <>
+                  <ProgressBar
+                    watched={item.episodesWatched}
+                    total={item.totalEpisodes}
+                    onIncrement={() => increment(item)}
+                    onSetWatched={(value) => setWatched(item, value)}
+                    max={item.episodesAired ?? item.totalEpisodes}
+                    incrementPending={pendingId === item.animeId}
+                    incrementLabel={`Increment episodes watched for ${pickDisplayTitle(item.title, item.englishTitle)}`}
+                  />
+                  {item.nextEpisode && (
+                    <span className="carousel__countdown">
+                      Next ep: in {item.nextEpisode.days} days, {item.nextEpisode.hours} h
+                    </span>
+                  )}
+                </>
+              }
+            />
           ))}
         </div>
         {overflowing && (

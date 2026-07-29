@@ -21,6 +21,7 @@
 .pagination__arrow:hover,
 .pagination__page:hover {
   color: var(--text-h);
+  background: var(--accent-bg);
   border-color: var(--accent-border);
 }
 

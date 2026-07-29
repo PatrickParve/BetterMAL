@@ -1,79 +1,4 @@
-# list-editing Specification
-
-## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
-## Requirements
-### Requirement: Started-date on first progress
-The system SHALL set `started_at` to today when episodes-watched is set on an anime that was previously at 0 episodes or not yet in my list.
-
-#### Scenario: First episode watched
-- **WHEN** I set episodes-watched above 0 on an anime that had 0 (or was not in my list)
-- **THEN** `started_at` is set to today
-
-#### Scenario: Subsequent increments do not overwrite start date
-- **WHEN** I increment episodes on an anime that already has a `started_at`
-- **THEN** `started_at` is left unchanged
-
-### Requirement: Completed-date lifecycle
-The system SHALL set `completed_at` only when status is explicitly changed to Completed, and SHALL clear `completed_at` when status is changed away from Completed.
-
-#### Scenario: Marking completed
-- **WHEN** I change an entry's status to Completed
-- **THEN** `completed_at` is set
-
-#### Scenario: Un-completing
-- **WHEN** I change a Completed entry to any other status
-- **THEN** `completed_at` is cleared
-
-### Requirement: Unknown total episodes cannot be completed
-The system SHALL display an unknown total as `watched/?` and SHALL NOT allow an anime with an unknown total episode count to be marked Completed.
-
-#### Scenario: Blocking completion when total unknown
-- **WHEN** an anime has an unknown total episode count and I attempt to mark it Completed
-- **THEN** the system prevents the completion
-
-#### Scenario: Displaying unknown total
-- **WHEN** an anime with an unknown total is displayed with progress
-- **THEN** progress is shown as `watched/?`
-
-### Requirement: Rewatch count is independently editable
-The system SHALL expose rewatch count as an editable field in the status editor, independent of watch status.
-
-#### Scenario: Editing rewatch count
-- **WHEN** I change the rewatch count on any entry regardless of its status
-- **THEN** the new rewatch count is saved
-
-### Requirement: Edits log activity and trigger sync
-The system SHALL, for every tracked field change (episode count, status, score, rewatch count), write an ActivityLog entry and trigger the debounced MAL sync.
-
-#### Scenario: Change produces log and sync trigger
-- **WHEN** a tracked field on an entry changes
-- **THEN** an ActivityLog row is written and the entry's debounced sync is triggered
-
-### Requirement: Edit and add-to-list open an overlay
-The system SHALL open the entry editor as an overlay on top of the current page wherever an edit or add-to-list action appears (my list, top anime, season, detail, and dashboard), consistent across the app.
-
-#### Scenario: Editing via overlay
-- **WHEN** I trigger an edit or add-to-list action anywhere in the app
-- **THEN** an editor overlay opens on top of the current page rather than navigating away
-
-### Requirement: Editor excludes start/finish dates
-The system SHALL NOT expose start or finish date fields in the entry editor; those dates are set automatically by the start/complete-date logic.
-
-#### Scenario: No date fields in the editor
-- **WHEN** the entry editor is open
-- **THEN** it shows episode count, status, score, and rewatch count but no start/finish date fields
-
-### Requirement: Adding an anime to my list
-The system SHALL allow adding an anime that is not yet in my list (for example from the Top anime or Season pages), creating a UserAnimeEntry with a default status of Plan to watch and triggering the debounced sync so the new entry is pushed to MAL. Once added, the Add action SHALL become an Edit action that opens the editor overlay in place on the same page, consistent with edit actions everywhere.
-
-#### Scenario: Adding from a page that ranks all anime
-- **WHEN** I use the Add action on an anime not in my list
-- **THEN** a UserAnimeEntry is created for it with status Plan to watch, and the change is logged and synced to MAL
-
-#### Scenario: Add becomes Edit in place
-- **WHEN** I have just added an anime to my list from such a page
-- **THEN** its Add action becomes an Edit action that opens the editor overlay on the same page without navigating away
+## ADDED Requirements
 
 ### Requirement: Inline editable episode count
 The system SHALL make the `watched` half of the `watched/total` count directly editable in place wherever the count appears next to a plus control — the main dashboard's currently-watching carousel, my list rows, and the anime detail page. Clicking (or keyboard-focusing) the count SHALL turn it into a text field pre-filled with the current value and select its contents, so typing replaces the count rather than appending to it. At rest, the count SHALL occupy no more space than the plain `watched/total` text would, so it lines up with the equivalent static count shown elsewhere (e.g. the current-season aired/total bar).
@@ -128,6 +53,8 @@ While a save is in flight, the field and the plus control SHALL be disabled so t
 - **WHEN** I confirm a new count and the save request fails
 - **THEN** the displayed count reverts to the stored value
 
+## MODIFIED Requirements
+
 ### Requirement: Score prompt on completion via the increment button
 The system SHALL open a score prompt overlay whenever an episode-count change made from the progress row takes an entry into Completed status — whether from the "+" button or from editing the count in place — from every place that row appears (the main dashboard's currently-watching carousel, my list rows, the anime detail page, and any later addition). The overlay SHALL show the anime's picture on the left and a score dropdown offering "No score" and the values 1 through 10, pre-selected with the entry's current score.
 
@@ -161,34 +88,3 @@ The system SHALL open the completion score prompt only on the transition into Co
 #### Scenario: Unknown total episode count
 - **WHEN** I press the "+" button on an anime with an unknown total episode count
 - **THEN** no score prompt opens, because the entry does not auto-complete
-
-### Requirement: Saving or dismissing the completion score prompt
-The system SHALL save a chosen score through the same entry-edit path as any other score change, so it is logged as activity and queued for MAL sync. Dismissing the prompt — via a skip action, Esc, or a click outside the overlay — SHALL close it and leave the entry's score unchanged. Neither path SHALL undo the completion itself.
-
-#### Scenario: Score given
-- **WHEN** I pick a score in the completion prompt and confirm
-- **THEN** the score is saved on the entry, logged as activity, queued for MAL sync, and the prompt closes
-
-#### Scenario: Prompt dismissed without a score
-- **WHEN** I dismiss the completion prompt with skip, Esc, or a click outside
-- **THEN** the prompt closes, the entry's score is unchanged, and the entry stays Completed
-
-#### Scenario: Score save fails
-- **WHEN** saving the chosen score fails
-- **THEN** the prompt reports the failure and stays open so I can retry or dismiss it
-
-### Requirement: Triggering view refreshes after the completion prompt closes
-The system SHALL refresh the data of the view that triggered the completion prompt once the prompt closes, by either path, so the newly completed anime is reflected without a manual page reload — it disappears from the main dashboard's currently-watching carousel and reads as Completed in my list and on the anime detail page.
-
-#### Scenario: Completing from the dashboard carousel
-- **WHEN** I complete an anime with the "+" button in the currently-watching carousel and the prompt closes
-- **THEN** the dashboard reloads and that anime is no longer in the currently-watching carousel
-
-#### Scenario: Completing from my list
-- **WHEN** I complete an anime with the "+" button in my list and the prompt closes
-- **THEN** my list reloads and that entry shows as Completed, with any score I gave
-
-#### Scenario: Completing from the anime detail page
-- **WHEN** I complete an anime with the "+" button on its detail page and the prompt closes
-- **THEN** the detail page reloads and shows the entry as Completed, with any score I gave
-

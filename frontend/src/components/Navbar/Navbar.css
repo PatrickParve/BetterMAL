@@ -26,6 +26,7 @@
 .navbar__link {
   padding: 8px 12px;
   border-radius: 6px;
+  border: 1px solid transparent;
   color: var(--text);
   text-decoration: none;
   font-size: 15px;
@@ -34,6 +35,8 @@
 
 .navbar__link:hover {
   color: var(--text-h);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
 }
 
 .navbar__link--active {
@@ -55,6 +58,7 @@
 
 .navbar__toggle:hover {
   color: var(--text-h);
+  background: var(--accent-bg);
   border-color: var(--accent-border);
 }
 
@@ -65,11 +69,14 @@
   width: 32px;
   height: 32px;
   border-radius: 6px;
+  border: 1px solid transparent;
   color: var(--text);
 }
 
 .navbar__settings:hover {
   color: var(--text-h);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
 }
 
 @media (max-width: 900px) {

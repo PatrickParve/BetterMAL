@@ -120,6 +120,16 @@
   border-radius: 8px;
 }
 
+/* Only the top/right/bottom border colours change on hover — border-left-color
+   stays owned by the status modifier below so the status stripe survives. */
+.my-list-row:hover,
+.my-list-row:focus-within {
+  background: var(--accent-bg);
+  border-top-color: var(--accent-border);
+  border-right-color: var(--accent-border);
+  border-bottom-color: var(--accent-border);
+}
+
 .my-list-row--watching {
   border-left-color: var(--status-watching);
 }

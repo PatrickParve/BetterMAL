@@ -31,6 +31,7 @@ public class MainDashboardService(
                 e.Anime.PictureUrl,
                 e.EpisodesWatched,
                 e.Anime.TotalEpisodes,
+                scheduleService.EpisodesAiredAsOf(e.Anime, now),
                 ToEta(scheduleService.NextAiringInstant(e.Anime, now), now)))
             .ToList();
 

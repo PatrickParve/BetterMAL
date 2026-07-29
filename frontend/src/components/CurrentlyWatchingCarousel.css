@@ -9,7 +9,8 @@
   display: flex;
   justify-content: safe center;
   gap: 16px;
-  max-width: calc(5 * 160px + 4 * 16px);
+  max-width: calc(5 * 160px + 4 * 16px + 2 * 6px);
+  padding: 6px;
   overflow-x: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -38,6 +39,7 @@
 
 .carousel__arrow:hover {
   color: var(--text-h);
+  background: var(--accent-bg);
   border-color: var(--accent-border);
 }
 

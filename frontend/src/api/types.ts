@@ -65,6 +65,7 @@ export type CurrentlyWatchingItemDto = {
   pictureUrl: string | null
   episodesWatched: number
   totalEpisodes: number | null
+  episodesAired: number | null
   nextEpisode: NextEpisodeEtaDto | null
 }
 
@@ -163,6 +164,7 @@ export type MyListItemDto = {
   totalEpisodes: number | null
   malScore: number | null
   airingStatus: string | null
+  episodesAired: number | null
   entry: UserAnimeEntryDto
 }
 

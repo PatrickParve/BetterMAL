@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getMyList, updateEntry } from '../api/client.ts'
-import type { MyListItemDto, WatchStatus } from '../api/types.ts'
+import type { IncrementTarget, MyListItemDto, WatchStatus } from '../api/types.ts'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
-import { useEpisodeIncrement } from '../context/CompletionPromptContext.tsx'
+import { useEpisodeIncrement, useSetEpisodesWatched } from '../context/CompletionPromptContext.tsx'
 import {
   AIRING_STATUS_LABELS,
   airingStatusShortLabel,
@@ -84,6 +84,7 @@ export function MyListPage() {
   const [pendingScoreId, setPendingScoreId] = useState<number | null>(null)
   const { openEditor } = useEntryEditor()
   const increment = useEpisodeIncrement()
+  const setEpisodesWatched = useSetEpisodesWatched()
 
   const loadList = useCallback(() => {
     return getMyList()
@@ -113,20 +114,34 @@ export function MyListPage() {
     })
   }
 
+  function buildIncrementTarget(item: MyListItemDto): IncrementTarget {
+    return {
+      animeId: item.animeId,
+      animeTitle: pickDisplayTitle(item.title, item.englishTitle),
+      pictureUrl: item.pictureUrl,
+      episodesWatched: item.entry.episodesWatched,
+      previousStatus: item.entry.status,
+      currentScore: item.entry.myScore,
+      onSaved: handleSaved(item.animeId),
+      onCompleted: loadList,
+    }
+  }
+
   async function incrementEpisodes(item: MyListItemDto) {
     if (pendingIncrementId !== null) return
     setPendingIncrementId(item.animeId)
     try {
-      await increment({
-        animeId: item.animeId,
-        animeTitle: pickDisplayTitle(item.title, item.englishTitle),
-        pictureUrl: item.pictureUrl,
-        episodesWatched: item.entry.episodesWatched,
-        previousStatus: item.entry.status,
-        currentScore: item.entry.myScore,
-        onSaved: handleSaved(item.animeId),
-        onCompleted: loadList,
-      })
+      await increment(buildIncrementTarget(item))
+    } finally {
+      setPendingIncrementId(null)
+    }
+  }
+
+  async function setEpisodesWatchedForItem(item: MyListItemDto, value: number) {
+    if (pendingIncrementId !== null) return
+    setPendingIncrementId(item.animeId)
+    try {
+      await setEpisodesWatched(buildIncrementTarget(item), value)
     } finally {
       setPendingIncrementId(null)
     }
@@ -172,6 +187,8 @@ export function MyListPage() {
             watched={item.entry.episodesWatched}
             total={item.totalEpisodes}
             onIncrement={() => incrementEpisodes(item)}
+            onSetWatched={(value) => setEpisodesWatchedForItem(item, value)}
+            max={item.episodesAired ?? item.totalEpisodes}
             incrementPending={pendingIncrementId === item.animeId}
             incrementLabel={`Increment episodes watched for ${pickDisplayTitle(item.title, item.englishTitle)}`}
           />
