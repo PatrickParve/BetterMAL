@@ -48,11 +48,21 @@ The system SHALL request only the specific fields needed for a refresh (for exam
 - **THEN** the request asks for just the required field(s) rather than the full record
 
 ### Requirement: On-demand single-anime refresh
-The system SHALL offer an on-demand refresh action for a single anime that performs one API call for that one anime at the moment it is requested.
+The system SHALL offer an on-demand refresh action for a single anime that, at the moment it is requested, performs one MyAnimeList API call for that one anime and additionally re-fetches that one anime's airing data from AniList. Neither call SHALL touch any other anime.
+
+When the MyAnimeList call succeeds but the AniList fetch fails, the action SHALL still report success, update the cached record and sync timestamps, and log the AniList failure.
 
 #### Scenario: Refreshing one anime on demand
 - **WHEN** the user triggers refresh on a single anime's detail page
-- **THEN** the system makes one API call for that anime and updates its cached record and sync timestamps
+- **THEN** the system makes one MyAnimeList API call for that anime, re-fetches that anime's airing data from AniList, and updates its cached record and sync timestamps
+
+#### Scenario: Scope stays at one anime
+- **WHEN** the user triggers refresh on a single anime's detail page
+- **THEN** no other anime's cached record or airing data is fetched or modified
+
+#### Scenario: AniList unavailable during an on-demand refresh
+- **WHEN** the user triggers refresh, the MyAnimeList call succeeds, and the AniList fetch fails
+- **THEN** the action reports success with updated metadata, the anime's stored airing rows are left unchanged, and the AniList failure is logged
 
 ### Requirement: Lean, visit-triggered refresh for browsed anime
 The system SHALL refresh Season-page and Top-Anime-page listings by re-fetching only when the user visits the current season, the upcoming season, or the Top Anime ranking on a local calendar day after its last fetch, requesting only lean listing fields (title, picture, episode count, type, MAL score, rank/popularity) rather than full anime details. A season or ranking never visited SHALL never be proactively fetched.

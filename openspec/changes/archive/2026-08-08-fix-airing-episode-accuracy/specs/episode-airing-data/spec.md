@@ -1,0 +1,183 @@
+## ADDED Requirements
+
+### Requirement: AniList is the sole source of episode timing
+The system SHALL derive every per-episode air instant, every aired-so-far episode count, and every next-episode instant exclusively from AniList. No MyAnimeList value SHALL feed an episode-timing field. MyAnimeList SHALL remain the source for the anime's total episode count, its airing status, and all static metadata (title, synopsis, genres, cover art, studio, score, rank).
+
+The system SHALL NOT compute an episode number or an aired-episode count from elapsed time since a start date, from a weekly broadcast cadence, or from any other projection. A value that cannot be read from stored AniList data SHALL be reported as unknown.
+
+#### Scenario: Episode timing comes from AniList
+- **WHEN** an aired-episode count, a per-episode air time, or a next-episode instant is produced for any view
+- **THEN** its value traces to stored AniList airing data and to no MyAnimeList field
+
+#### Scenario: Static metadata still comes from MyAnimeList
+- **WHEN** an anime's title, synopsis, genres, cover art, studio, total episode count, or airing status is displayed
+- **THEN** the value comes from the cached MyAnimeList record, unchanged by this capability
+
+#### Scenario: No projection when data is absent
+- **WHEN** an aired-episode count is requested for an anime that has no stored airing rows
+- **THEN** the count is reported as unknown, and is not estimated from the anime's start date, broadcast day, or broadcast time
+
+### Requirement: Persisted per-episode airing rows
+The system SHALL store one row per episode per anime, holding the anime id, the episode number, and that episode's air instant as reported by AniList. Rows SHALL persist across application restarts.
+
+The stored set SHALL include episodes whose air instant is in the future as well as those already past, so that a single stored record backs the past view, the upcoming view, and the next-episode countdown. An episode SHALL be treated as aired only once its stored air instant has passed.
+
+#### Scenario: Rows survive a restart
+- **WHEN** the application restarts after airing rows have been stored
+- **THEN** aired counts and schedule slots read the same values as before the restart, with no warm-up period during which they differ
+
+#### Scenario: Future episodes are stored
+- **WHEN** AniList reports an episode scheduled to air next week
+- **THEN** a row is stored for it, and it is not counted as aired until its stored air instant has passed
+
+#### Scenario: Aired count is the highest past episode
+- **WHEN** an anime has stored rows for episodes 1 through 8 where episodes 1 through 5 have air instants in the past and 6 through 8 in the future
+- **THEN** the aired-so-far count is 5
+
+#### Scenario: Aired count is not clamped by the MyAnimeList total
+- **WHEN** an anime has a stored row for episode 13 whose air instant has passed, while its cached MyAnimeList total episode count is 12
+- **THEN** the aired-so-far count is 13
+
+### Requirement: A refresh replaces an anime's stored rows wholesale
+When a refresh for one anime returns airing data, the system SHALL replace that anime's entire stored row set with the returned data in a single atomic operation, rather than merging the new data into the existing rows.
+
+A refresh that returns no airing data — because AniList has no entry for that anime, or because the request failed — SHALL leave the existing stored rows untouched.
+
+#### Scenario: Renumbered episodes leave no stale rows
+- **WHEN** a refresh returns an episode numbering that differs from what is stored, such that an episode number present before is absent from the new data
+- **THEN** the previously stored row for that episode number is gone after the refresh, and the aired count reflects only the new numbering
+
+#### Scenario: A failed fetch preserves stored data
+- **WHEN** a refresh for an anime with stored rows returns no airing data
+- **THEN** the anime's stored rows are unchanged and its aired count is unaffected
+
+#### Scenario: Replacement is atomic
+- **WHEN** a read for an anime's airing rows occurs while that anime's rows are being replaced
+- **THEN** the read observes either the complete previous row set or the complete new one, never a partial set
+
+### Requirement: One-time full-history backfill
+The system SHALL perform a one-time backfill, on first start after this capability is deployed, that re-fetches the complete airing history for every anime in my list and overwrites the stored rows for each. The backfill SHALL page through AniList's full schedule for an anime rather than fetching only a recent window, so that a long-running series has rows for its whole run.
+
+The backfill SHALL be recorded as complete only once every targeted anime has been fetched, and SHALL resume rather than restart if the application stops partway. Once recorded complete, it SHALL NOT run again.
+
+The backfill SHALL log each targeted anime for which AniList returned no airing data, identified by title and id, so that coverage gaps are visible.
+
+#### Scenario: Existing bad data is corrected
+- **WHEN** the backfill runs for an anime whose stored airing data was previously wrong
+- **THEN** its stored rows are replaced with AniList's data and its aired count reflects the corrected rows
+
+#### Scenario: Long-running series gets full history
+- **WHEN** the backfill runs for a series with more episodes than fit in a single AniList response page
+- **THEN** it pages until AniList reports no further pages, and rows are stored for every episode returned
+
+#### Scenario: Backfill resumes after an interruption
+- **WHEN** the application restarts while the backfill is partway through
+- **THEN** the backfill continues with the anime it has not yet fetched rather than re-fetching those already done, and is recorded complete only after all of them are fetched
+
+#### Scenario: Backfill runs only once
+- **WHEN** the application starts after the backfill has been recorded complete
+- **THEN** no backfill runs
+
+#### Scenario: Coverage gaps are logged
+- **WHEN** the backfill targets an anime for which AniList returns no airing data
+- **THEN** that anime's title and id are written to the log
+
+### Requirement: Elapsed-time refresh rather than fixed-schedule polling
+The system SHALL trigger a refresh of airing data for my-list anime that are currently airing or not yet aired based on the time elapsed since the last successful refresh, evaluated periodically while the application is running, rather than at a fixed time of day or on a fixed polling interval.
+
+A refresh SHALL be triggered when there has been no successful refresh, when the last successful refresh was more than roughly a day ago, or when the last successful refresh fell on an earlier local calendar day than today. This SHALL cover the case of the application starting after having been stopped, without requiring a separate start-up rule.
+
+The system SHALL NOT refresh airing data on a fixed interval independent of whether the data could have changed.
+
+#### Scenario: Start after being stopped overnight
+- **WHEN** the application starts and the last successful airing refresh was on an earlier local calendar day
+- **THEN** a refresh of all currently-airing and not-yet-aired my-list anime is triggered
+
+#### Scenario: Start after a refresh already ran today
+- **WHEN** the application starts and a successful airing refresh already ran earlier the same local calendar day
+- **THEN** no refresh is triggered by the start alone
+
+#### Scenario: Day rolls over while running
+- **WHEN** the application has been running continuously and roughly a day has passed since the last successful refresh
+- **THEN** a refresh is triggered without requiring a restart
+
+#### Scenario: Missed calendar day self-corrects
+- **WHEN** the application was not running for an entire calendar day and then starts
+- **THEN** a refresh is triggered, rather than the missed day being skipped
+
+### Requirement: Event-driven refresh triggers
+The system SHALL additionally refresh airing data on each of the following events, independent of the elapsed-time schedule:
+
+- An anime whose airing status is currently airing or not yet aired is added to my list — that one anime is refreshed immediately.
+- The on-demand refresh action is triggered on an anime's detail page — that one anime is refreshed immediately.
+- The current viewing season changes at a Winter/Spring/Summer/Fall boundary — all currently-airing and not-yet-aired my-list anime are refreshed.
+
+Refreshing on add SHALL NOT delay the response to the add request.
+
+#### Scenario: Adding an airing anime
+- **WHEN** an anime whose airing status is currently airing is added to my list
+- **THEN** its airing data is fetched immediately, and the add request completes without waiting for that fetch
+
+#### Scenario: Adding an upcoming anime
+- **WHEN** an anime whose airing status is not yet aired is added to my list
+- **THEN** its airing data is fetched immediately
+
+#### Scenario: Adding a finished anime
+- **WHEN** an anime that has finished airing is added to my list
+- **THEN** no immediate airing fetch is triggered by the add
+
+#### Scenario: Season boundary
+- **WHEN** the current viewing season changes to a new Winter, Spring, Summer, or Fall quarter
+- **THEN** all currently-airing and not-yet-aired my-list anime have their airing data refreshed
+
+### Requirement: Recheck cadence for anime with incomplete airing data
+The system SHALL track, per anime, when it is next due for a recheck, derived from AniList's reported next airing episode.
+
+When AniList reports a next airing episode at instant T, the anime SHALL be due for recheck at one month before T, at one week before T, and on the day of T — whichever of those is next in the future.
+
+When the anime is still airing and AniList reports no next airing episode at all, the system SHALL treat its data as incomplete immediately and set it due for recheck every three days, rather than waiting for a month-out checkpoint.
+
+When the anime is still airing past its reported next-episode instant and no newer airing data has arrived, the system SHALL likewise set it due for recheck every three days.
+
+An anime that has finished airing and whose last stored episode is in the past SHALL have no recheck due.
+
+#### Scenario: Checkpoints before a known next episode
+- **WHEN** AniList reports a next airing episode two months from now
+- **THEN** the anime is set due for recheck one month before that instant
+
+#### Scenario: No next airing episode reported
+- **WHEN** AniList reports no next airing episode for an anime that is still airing
+- **THEN** the anime is treated as having incomplete data immediately and is set due for recheck in three days, not in one month
+
+#### Scenario: Past the expected instant with no new data
+- **WHEN** an anime's reported next-episode instant has passed and a recheck returns no newer airing data while the anime is still airing
+- **THEN** it is set due for recheck three days later
+
+#### Scenario: Due anime is rechecked
+- **WHEN** an anime's recheck due time has passed and the elapsed-time refresh has not already covered it
+- **THEN** its airing data is refreshed
+
+#### Scenario: Finished anime is not rechecked
+- **WHEN** an anime has finished airing and its last stored episode aired in the past
+- **THEN** it has no recheck due time and is not refreshed by the recheck queue
+
+### Requirement: AniList request pacing
+The system SHALL pace AniList requests to stay within AniList's published rate limit, and SHALL back off and retry when AniList reports the limit has been exceeded. A failure to fetch one anime SHALL NOT abort the refresh of the remaining anime in the pass.
+
+The system SHALL store the AniList identifier resolved for an anime so that later refreshes for that anime do not repeat the identifier lookup. An anime AniList has no entry for SHALL be recorded as such, so the lookup is not retried on every pass.
+
+#### Scenario: Rate limit reached
+- **WHEN** AniList reports that the request rate limit has been exceeded
+- **THEN** the system waits and retries rather than dropping the anime from the pass
+
+#### Scenario: One anime fails
+- **WHEN** the fetch for one anime in a refresh pass fails
+- **THEN** the failure is logged and the pass continues with the remaining anime
+
+#### Scenario: Identifier lookup is not repeated
+- **WHEN** an anime whose AniList identifier was already resolved is refreshed again
+- **THEN** no identifier lookup request is made and only the schedule request is issued
+
+#### Scenario: Anime unknown to AniList
+- **WHEN** AniList has no entry matching an anime's MyAnimeList id
+- **THEN** that fact is recorded, and later refresh passes do not re-issue the identifier lookup for it

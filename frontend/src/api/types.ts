@@ -298,6 +298,14 @@ export type ResyncStatusDto = {
   total: number
 }
 
+export type AiringFullRefreshPhase = 'NotStarted' | 'Running' | 'Complete'
+
+export type AiringFullRefreshStatusDto = {
+  phase: AiringFullRefreshPhase
+  synced: number
+  total: number
+}
+
 export type ReconciliationResultDto = {
   added: number
   updated: number

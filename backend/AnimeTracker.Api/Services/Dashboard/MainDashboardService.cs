@@ -21,42 +21,49 @@ public class MainDashboardService(
         var today = broadcastConverter.GetLocalDate(now);
         var currentSeasonQuarter = SeasonCalendar.GetSeasonFor(today);
 
-        var currentlyWatching = entries
-            .Where(e => e.Status == WatchStatus.Watching)
-            .OrderBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase)
-            .Select(e => new CurrentlyWatchingItemDto(
+        var currentlyWatching = new List<CurrentlyWatchingItemDto>();
+        foreach (var e in entries.Where(e => e.Status == WatchStatus.Watching)
+                     .OrderBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase))
+        {
+            currentlyWatching.Add(new CurrentlyWatchingItemDto(
                 e.AnimeId,
                 e.Anime.Title,
                 e.Anime.EnglishTitle,
                 e.Anime.PictureUrl,
                 e.EpisodesWatched,
                 e.Anime.TotalEpisodes,
-                scheduleService.EpisodesAiredAsOf(e.Anime, now),
-                ToEta(scheduleService.NextAiringInstant(e.Anime, now), now)))
-            .ToList();
+                await scheduleService.EpisodesAiredAsOfAsync(e.Anime, now, ct),
+                ToEta(await scheduleService.NextAiringInstantAsync(e.Anime, now, ct), now)));
+        }
 
         // Resolve each show against today's local date through the shared
-        // schedule logic: it bounds shows to their real air window and skips
-        // break weeks, so a finished show (past window) or a show on hiatus
-        // today no longer leaks in.
-        var airingToday = entries
-            .Select(e => (Entry: e, Episode: scheduleService.ResolveOnLocalDate(e.Anime, today)))
-            .Where(x => x.Episode is not null)
-            .OrderBy(x => x.Episode!.LocalTime)
-            .Select(x => new AiringTodayItemDto(x.Entry.AnimeId, x.Entry.Anime.Title, x.Entry.Anime.EnglishTitle, x.Entry.Anime.PictureUrl, x.Episode!.LocalTime.ToString("HH:mm"), x.Episode!.EpisodeNumber))
+        // schedule service: it reads only stored AniList rows, so a finished
+        // show or a show on hiatus today no longer leaks in.
+        var airingToday = new List<(UserAnimeEntry Entry, ResolvedEpisode Episode)>();
+        foreach (var e in entries)
+        {
+            if (await scheduleService.ResolveOnLocalDateAsync(e.Anime, today, ct) is { } episode)
+                airingToday.Add((e, episode));
+        }
+
+        var airingTodayDtos = airingToday
+            .OrderBy(x => x.Episode.LocalTime)
+            .Select(x => new AiringTodayItemDto(x.Entry.AnimeId, x.Entry.Anime.Title, x.Entry.Anime.EnglishTitle, x.Entry.Anime.PictureUrl, x.Episode.LocalTime.ToString("HH:mm"), x.Episode.EpisodeNumber))
             .ToList();
 
         // Season membership is derived from AiredFrom rather than the cached
         // SeasonAnimeListing rows: those only exist for seasons the user has
         // browsed, which would make this section's contents depend on
         // unrelated navigation history instead of each anime's own data.
-        var currentSeason = entries
-            .Where(e => e.Anime.AiringStatus == "currently_airing"
-                || (e.Anime.AiredFrom is { } from
-                    && from <= today
-                    && SeasonCalendar.GetSeasonFor(from) == currentSeasonQuarter))
-            .OrderBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase)
-            .Select(e => new CurrentSeasonItemDto(
+        var currentSeason = new List<CurrentSeasonItemDto>();
+        foreach (var e in entries
+                     .Where(e => e.Anime.AiringStatus == "currently_airing"
+                         || (e.Anime.AiredFrom is { } from
+                             && from <= today
+                             && SeasonCalendar.GetSeasonFor(from) == currentSeasonQuarter))
+                     .OrderBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase))
+        {
+            currentSeason.Add(new CurrentSeasonItemDto(
                 e.AnimeId,
                 e.Anime.Title,
                 e.Anime.EnglishTitle,
@@ -65,11 +72,11 @@ public class MainDashboardService(
                 e.Anime.TotalEpisodes,
                 e.Anime.MalScore,
                 e.Anime.PopularityRank,
-                scheduleService.EpisodesAiredAsOf(e.Anime, now),
-                e.Anime.AiringStatus == "finished_airing"))
-            .ToList();
+                await scheduleService.EpisodesAiredAsOfAsync(e.Anime, now, ct),
+                e.Anime.AiringStatus == "finished_airing"));
+        }
 
-        return new MainDashboardDto(currentlyWatching, airingToday, currentSeason);
+        return new MainDashboardDto(currentlyWatching, airingTodayDtos, currentSeason);
     }
 
     private static NextEpisodeEtaDto? ToEta(DateTimeOffset? nextInstant, DateTimeOffset now)

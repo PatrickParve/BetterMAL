@@ -14,7 +14,8 @@ namespace AnimeTracker.Api.Services.Entries;
 public class UserAnimeEntryEditService(
     AnimeTrackerDbContext db,
     IEntrySyncScheduler syncScheduler,
-    IEpisodeScheduleService scheduleService) : IUserAnimeEntryEditService
+    IEpisodeScheduleService scheduleService,
+    IAiringRefreshTrigger airingRefreshTrigger) : IUserAnimeEntryEditService
 {
     public async Task<UserAnimeEntryDto> UpdateEntryAsync(int animeId, UserAnimeEntryEditRequest request, CancellationToken ct = default)
     {
@@ -39,7 +40,7 @@ public class UserAnimeEntryEditService(
         // ApplyEpisodesWatched may have already flipped entry.Status itself.
         var originalStatus = entry.Status;
 
-        ApplyEpisodesWatched(request, entry, anime, originalStatus, today, now, changes);
+        await ApplyEpisodesWatchedAsync(request, entry, anime, originalStatus, today, now, changes, ct);
         ApplyStatus(request, entry, anime, animeId, originalStatus, today, changes);
         ApplyScore(request, entry, changes);
         ApplyRewatchCount(request, entry, changes);
@@ -76,12 +77,18 @@ public class UserAnimeEntryEditService(
         if (triggersSync)
             syncScheduler.ScheduleSync(animeId);
 
+        // Fire-and-forget: an airing/upcoming anime just added to the list gets
+        // its airing data fetched right away rather than waiting for the next
+        // hourly pass, without delaying this response on an AniList round-trip.
+        if (isNew && anime.AiringStatus is "currently_airing" or "not_yet_aired")
+            airingRefreshTrigger.Enqueue(animeId);
+
         return UserAnimeEntryDto.FromEntity(entry);
     }
 
-    private void ApplyEpisodesWatched(
+    private async Task ApplyEpisodesWatchedAsync(
         UserAnimeEntryEditRequest request, UserAnimeEntry entry, AnimeMetadata anime, WatchStatus originalStatus, DateOnly today, DateTimeOffset now,
-        List<(ActivityChangeType Type, string Detail, int? PreviousEpisodesWatched)> changes)
+        List<(ActivityChangeType Type, string Detail, int? PreviousEpisodesWatched)> changes, CancellationToken ct)
     {
         if (request.EpisodesWatched is not { } newEpisodes || newEpisodes == entry.EpisodesWatched)
             return;
@@ -91,10 +98,11 @@ public class UserAnimeEntryEditService(
 
         // Cap against what's actually out, not just the eventual total: a
         // still-airing show can't be watched past its aired-so-far count even
-        // once its total episode count is known. EpisodesAiredAsOf already
-        // resolves to the total for a finished show, so this single check
-        // covers both cases.
-        var maxEpisodes = scheduleService.EpisodesAiredAsOf(anime, now) ?? anime.TotalEpisodes;
+        // once its total episode count is known. A finished show has no
+        // stored rows in the future, so EpisodesAiredAsOfAsync already
+        // resolves to its last stored episode — the `?? anime.TotalEpisodes`
+        // fallback below only matters while no airing data is stored at all.
+        var maxEpisodes = await scheduleService.EpisodesAiredAsOfAsync(anime, now, ct) ?? anime.TotalEpisodes;
         if (maxEpisodes is { } cap && newEpisodes > cap)
             throw new ArgumentOutOfRangeException(nameof(request), $"Episodes watched cannot exceed the number of episodes available ({cap}).");
 

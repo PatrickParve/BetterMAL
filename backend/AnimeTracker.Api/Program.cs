@@ -36,6 +36,7 @@ builder.Services.AddScoped<IActivityLogRepository, ActivityLogRepository>();
 builder.Services.AddScoped<ITopAnimeSelectionRepository, TopAnimeSelectionRepository>();
 builder.Services.AddScoped<ISeasonRepository, SeasonRepository>();
 builder.Services.AddScoped<ITopAnimeRepository, TopAnimeRepository>();
+builder.Services.AddScoped<IEpisodeAiringRepository, EpisodeAiringRepository>();
 
 // --- MAL API integration ---
 builder.Services.Configure<MalOptions>(builder.Configuration.GetSection(MalOptions.SectionName));
@@ -97,10 +98,10 @@ builder.Services.AddScoped<IMainDashboardService, MainDashboardService>();
 // --- Airing schedule ---
 builder.Services.AddScoped<IAiringScheduleService, AiringScheduleService>();
 
-// Per-episode air dates from AniList (break-aware), cached in memory and
-// refreshed in the background; the schedule service falls back to a
-// weekly-cadence estimate for shows AniList doesn't cover.
-builder.Services.AddSingleton<IEpisodeScheduleCache, EpisodeScheduleCache>();
+// Per-episode air dates from AniList (break-aware), persisted in
+// EpisodeAiring rows and refreshed in the background — no in-memory cache and
+// no cadence-estimate fallback; a value not backed by a stored row is unknown.
+builder.Services.AddSingleton<AniListRequestPacer>();
 builder.Services.AddHttpClient<IAniListClient, AniListClient>(client =>
 {
     client.BaseAddress = new Uri("https://graphql.anilist.co/");
@@ -108,6 +109,14 @@ builder.Services.AddHttpClient<IAniListClient, AniListClient>(client =>
 builder.Services.AddScoped<IEpisodeScheduleService, EpisodeScheduleService>();
 builder.Services.AddScoped<IEpisodeScheduleRefreshService, EpisodeScheduleRefreshService>();
 builder.Services.AddHostedService<EpisodeScheduleRefreshBackgroundService>();
+builder.Services.AddSingleton<IAiringRefreshTrigger, AiringRefreshTrigger>();
+builder.Services.AddHostedService<AiringRefreshTriggerBackgroundService>();
+
+// Manual "refresh all airing data" (settings page) — mirrors the corrective
+// MAL re-sync's trigger/progress-tracker/background-service shape.
+builder.Services.AddSingleton<IAiringFullRefreshTrigger, AiringFullRefreshTrigger>();
+builder.Services.AddSingleton<IAiringFullRefreshProgressTracker, AiringFullRefreshProgressTracker>();
+builder.Services.AddHostedService<AiringFullRefreshBackgroundService>();
 
 // --- Season browsing ---
 builder.Services.AddSingleton<SeasonRefreshGate>();

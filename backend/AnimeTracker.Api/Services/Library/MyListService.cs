@@ -12,8 +12,10 @@ public class MyListService(
     {
         var entries = await entryRepository.GetAllAsync(ct);
         var now = DateTimeOffset.UtcNow;
-        return entries
-            .Select(e => new MyListItemDto(
+        var items = new List<MyListItemDto>();
+        foreach (var e in entries)
+        {
+            items.Add(new MyListItemDto(
                 e.AnimeId,
                 e.Anime.Title,
                 e.Anime.EnglishTitle,
@@ -22,8 +24,9 @@ public class MyListService(
                 e.Anime.TotalEpisodes,
                 e.Anime.MalScore,
                 e.Anime.AiringStatus,
-                scheduleService.EpisodesAiredAsOf(e.Anime, now),
-                UserAnimeEntryDto.FromEntity(e)))
-            .ToList();
+                await scheduleService.EpisodesAiredAsOfAsync(e.Anime, now, ct),
+                UserAnimeEntryDto.FromEntity(e)));
+        }
+        return items;
     }
 }

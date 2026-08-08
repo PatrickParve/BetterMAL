@@ -1,5 +1,6 @@
 import type {
   ActivityFeedItemDto,
+  AiringFullRefreshStatusDto,
   AiringWeekDto,
   AnimeDetailDto,
   AnimeSearchResult,
@@ -178,4 +179,16 @@ export function triggerResyncFromMal(): Promise<ResyncStatusDto> {
 
 export function getResyncFromMalStatus(): Promise<ResyncStatusDto> {
   return fetchJson<ResyncStatusDto>('/api/sync/resync-from-mal/status')
+}
+
+// Manual "refresh all airing data" (settings page): kicks off a background
+// run, paced through AniList's rate limit and skipping finished shows already
+// fetched before, rather than waiting on it; poll getAiringFullRefreshStatus
+// for progress.
+export function triggerAiringFullRefresh(): Promise<AiringFullRefreshStatusDto> {
+  return fetchJson<AiringFullRefreshStatusDto>('/api/airing/refresh-all', { method: 'POST' })
+}
+
+export function getAiringFullRefreshStatus(): Promise<AiringFullRefreshStatusDto> {
+  return fetchJson<AiringFullRefreshStatusDto>('/api/airing/refresh-all/status')
 }

@@ -38,8 +38,10 @@ public class AnimeDetailService(
             }
         }
 
-        return anime is null
-            ? throw new AnimeMetadataNotFoundException(animeId)
-            : AnimeDetailDto.FromEntity(anime, scheduleService.EpisodesAiredAsOf(anime, DateTimeOffset.UtcNow));
+        if (anime is null)
+            throw new AnimeMetadataNotFoundException(animeId);
+
+        var episodesAired = await scheduleService.EpisodesAiredAsOfAsync(anime, DateTimeOffset.UtcNow, ct);
+        return AnimeDetailDto.FromEntity(anime, episodesAired);
     }
 }

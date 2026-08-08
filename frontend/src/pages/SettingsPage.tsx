@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   acceptReconciliationDiff,
   cancelReconciliationDiff,
+  getAiringFullRefreshStatus,
   getMalAuthStatus,
   getPendingReconciliationDiff,
   getResyncFromMalStatus,
@@ -9,9 +10,11 @@ import {
   refreshAnime,
   runReconciliation,
   syncNow,
+  triggerAiringFullRefresh,
   triggerResyncFromMal,
 } from '../api/client.ts'
 import type {
+  AiringFullRefreshStatusDto,
   AnimeSearchResult,
   MalAuthStatus,
   PendingReconciliationDiffDto,
@@ -35,6 +38,7 @@ export function SettingsPage() {
   const [diff, setDiff] = useState<PendingReconciliationDiffDto | null>(null)
   const [authStatus, setAuthStatus] = useState<MalAuthStatus | null>(null)
   const [resyncStatus, setResyncStatus] = useState<ResyncStatusDto | null>(null)
+  const [airingRefreshStatus, setAiringRefreshStatus] = useState<AiringFullRefreshStatusDto | null>(null)
   const [loading, setLoading] = useState(true)
 
   const [resyncing, setResyncing] = useState(false)
@@ -42,6 +46,7 @@ export function SettingsPage() {
   const [reviewing, setReviewing] = useState(false)
   const [diffError, setDiffError] = useState<string | null>(null)
   const [startingFullResync, setStartingFullResync] = useState(false)
+  const [startingAiringRefresh, setStartingAiringRefresh] = useState(false)
 
   const { alwaysShowCompletedScores, toggleAlwaysShowCompletedScores } = useScoreVisibility()
   const { hideHentai, toggleHideHentai } = useContentFilter()
@@ -60,6 +65,9 @@ export function SettingsPage() {
       getResyncFromMalStatus()
         .then(setResyncStatus)
         .catch(() => setResyncStatus(null)),
+      getAiringFullRefreshStatus()
+        .then(setAiringRefreshStatus)
+        .catch(() => setAiringRefreshStatus(null)),
     ])
   }, [])
 
@@ -78,6 +86,19 @@ export function SettingsPage() {
     }, 2000)
     return () => clearInterval(id)
   }, [resyncStatus?.phase])
+
+  // Poll while a manual airing-data refresh is in flight (paced through
+  // AniList's rate limit, so a full list can take a while) — stops as soon as
+  // the backend reports it's no longer running.
+  useEffect(() => {
+    if (airingRefreshStatus?.phase !== 'Running') return
+    const id = setInterval(() => {
+      getAiringFullRefreshStatus()
+        .then(setAiringRefreshStatus)
+        .catch(() => {})
+    }, 2000)
+    return () => clearInterval(id)
+  }, [airingRefreshStatus?.phase])
 
   async function handleResyncNow() {
     if (resyncing) return
@@ -101,6 +122,18 @@ export function SettingsPage() {
       // Leave whatever status was already there; the button stays retryable.
     } finally {
       setStartingFullResync(false)
+    }
+  }
+
+  async function handleAiringFullRefresh() {
+    if (startingAiringRefresh || airingRefreshStatus?.phase === 'Running') return
+    setStartingAiringRefresh(true)
+    try {
+      setAiringRefreshStatus(await triggerAiringFullRefresh())
+    } catch {
+      // Leave whatever status was already there; the button stays retryable.
+    } finally {
+      setStartingAiringRefresh(false)
     }
   }
 
@@ -227,6 +260,32 @@ export function SettingsPage() {
             disabled={startingFullResync || resyncStatus?.phase === 'Running'}
           >
             {resyncStatus?.phase === 'Running' ? 'Resyncing…' : 'Run corrective re-sync'}
+          </button>
+        </div>
+      </section>
+
+      <section className="settings-box">
+        <h2>Airing dates</h2>
+        <p className="settings-box__hint">
+          Re-fetches per-episode airing dates from AniList for every anime in my list, in case something looks
+          wrong. Skips shows that have already finished airing and were fetched successfully before — their
+          episode dates can't change further. Paced to stay under AniList's rate limit, so a full list can take a
+          while; runs in the background.
+        </p>
+        {airingRefreshStatus && airingRefreshStatus.phase !== 'NotStarted' && (
+          <p className="settings-box__hint">
+            {airingRefreshStatus.phase === 'Running'
+              ? `Refreshing… ${airingRefreshStatus.synced}/${airingRefreshStatus.total}`
+              : `Last run complete: ${airingRefreshStatus.synced}/${airingRefreshStatus.total} processed.`}
+          </p>
+        )}
+        <div className="settings-box__buttons">
+          <button
+            type="button"
+            onClick={handleAiringFullRefresh}
+            disabled={startingAiringRefresh || airingRefreshStatus?.phase === 'Running'}
+          >
+            {airingRefreshStatus?.phase === 'Running' ? 'Refreshing…' : 'Refresh all airing dates'}
           </button>
         </div>
       </section>

@@ -17,6 +17,9 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<TopAnimeFetchLog> TopAnimeFetchLogs => Set<TopAnimeFetchLog>();
     public DbSet<SeasonAnimeListing> SeasonAnimeListings => Set<SeasonAnimeListing>();
     public DbSet<ReconciliationRunLog> ReconciliationRunLogs => Set<ReconciliationRunLog>();
+    public DbSet<EpisodeAiring> EpisodeAirings => Set<EpisodeAiring>();
+    public DbSet<AnimeAiringSync> AnimeAiringSyncs => Set<AnimeAiringSync>();
+    public DbSet<AiringRefreshState> AiringRefreshStates => Set<AiringRefreshState>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -97,6 +100,25 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
         {
             entity.HasKey(e => e.AnimeId);
             entity.HasOne(e => e.Anime)
+                .WithMany()
+                .HasForeignKey(e => e.AnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EpisodeAiring>(entity =>
+        {
+            entity.HasKey(e => new { e.AnimeId, e.Episode });
+            entity.HasOne<AnimeMetadata>()
+                .WithMany()
+                .HasForeignKey(e => e.AnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.AnimeId, e.AirsAtUtc });
+        });
+
+        modelBuilder.Entity<AnimeAiringSync>(entity =>
+        {
+            entity.HasKey(e => e.AnimeId);
+            entity.HasOne<AnimeMetadata>()
                 .WithMany()
                 .HasForeignKey(e => e.AnimeId)
                 .OnDelete(DeleteBehavior.Cascade);

@@ -1,0 +1,25 @@
+using AnimeTracker.Api.Models;
+
+namespace AnimeTracker.Api.Data.Repositories;
+
+/// <summary>Read/write access to stored per-episode airing rows — the single
+/// source behind every aired-count, schedule-slot, and next-episode read.</summary>
+public interface IEpisodeAiringRepository
+{
+    /// <summary>The highest episode number whose AirsAtUtc is at/before
+    /// asOfUtc, or null when the anime has no aired row.</summary>
+    Task<int?> GetMaxAiredEpisodeAsync(int animeId, DateTimeOffset asOfUtc, CancellationToken ct = default);
+
+    /// <summary>The earliest AirsAtUtc strictly after afterUtc, or null when no
+    /// future row is stored.</summary>
+    Task<DateTimeOffset?> GetNextAiringInstantAsync(int animeId, DateTimeOffset afterUtc, CancellationToken ct = default);
+
+    /// <summary>Every stored row for the given anime whose AirsAtUtc falls in
+    /// [fromUtc, toUtc), across all of them in one query.</summary>
+    Task<List<EpisodeAiring>> GetRowsInRangeAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default);
+
+    /// <summary>Replaces this anime's entire stored row set with rows, in one
+    /// transaction. A no-op when rows is empty, so a failed or empty fetch
+    /// never wipes good data.</summary>
+    Task ReplaceForAnimeAsync(int animeId, IReadOnlyList<EpisodeAiring> rows, CancellationToken ct = default);
+}

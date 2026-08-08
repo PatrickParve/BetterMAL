@@ -43,12 +43,12 @@ export function AiringProgressBar({ aired, watched, total, finished }: AiringPro
         ? pct(watched, total)
         : (watched / Math.max(aired ?? 0, watched)) * airedPct
 
-  const label = `${aired ?? '?'}/${total ?? '?'}`
+  const label = `${aired ?? '—'}/${total ?? '?'}`
   const description =
     total !== null
-      ? `${aired ?? '?'} of ${total} episodes aired, ${watched} watched`
+      ? `${aired ?? 'an unknown number of'} of ${total} episodes aired, ${watched} watched`
       : finished
-        ? `Finished airing, episode count unpublished (${aired ?? '?'} known aired), ${watched} watched`
+        ? `Finished airing, episode count unpublished (${aired ?? 'an unknown number of'} known aired), ${watched} watched`
         : aired !== null
           ? `${aired} episodes aired so far of an unknown total, ${watched} watched`
           : `Aired episode count unknown, ${watched} watched`

@@ -56,6 +56,53 @@ namespace AnimeTracker.Api.Migrations
                     b.ToTable("ActivityLogs");
                 });
 
+            modelBuilder.Entity("AnimeTracker.Api.Models.AiringRefreshState", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset?>("BackfillCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastPassSeason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("LastSuccessfulPassAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AiringRefreshStates");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.AnimeAiringSync", b =>
+                {
+                    b.Property<int>("AnimeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AniListId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("HasCompleteData")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LastFetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("NextAiringEpisodeAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("NextRecheckAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AnimeId");
+
+                    b.ToTable("AnimeAiringSyncs");
+                });
+
             modelBuilder.Entity("AnimeTracker.Api.Models.AnimeMetadata", b =>
                 {
                     b.Property<int>("Id")
@@ -143,6 +190,27 @@ namespace AnimeTracker.Api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("AnimeMetadata");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.EpisodeAiring", b =>
+                {
+                    b.Property<int>("AnimeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Episode")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("AirsAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("FetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AnimeId", "Episode");
+
+                    b.HasIndex("AnimeId", "AirsAtUtc");
+
+                    b.ToTable("EpisodeAirings");
                 });
 
             modelBuilder.Entity("AnimeTracker.Api.Models.OAuthToken", b =>
@@ -377,6 +445,24 @@ namespace AnimeTracker.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Anime");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.AnimeAiringSync", b =>
+                {
+                    b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", null)
+                        .WithMany()
+                        .HasForeignKey("AnimeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.EpisodeAiring", b =>
+                {
+                    b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", null)
+                        .WithMany()
+                        .HasForeignKey("AnimeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AnimeTracker.Api.Models.PendingReconciliationDiffEntry", b =>
