@@ -119,7 +119,7 @@ export function AiringPage() {
                     with the Date constructor reads it as UTC and can land on the
                     wrong local day (see toLocalIso above). */}
                 <div className="airing-day__header">
-                  {day.dayOfWeek} {Number(day.localDate.slice(8, 10))}
+                  {day.dayOfWeek} {Number(day.localDate.slice(8, 10))}.{Number(day.localDate.slice(5, 7))}
                 </div>
                 <ul className="airing-day__slots">
                   {day.slots.map((slot) => (

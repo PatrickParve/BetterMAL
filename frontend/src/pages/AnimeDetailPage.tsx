@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getAnimeDetail, refreshAnime } from "../api/client.ts";
-import type { AnimeDetailDto, IncrementTarget } from "../api/types.ts";
+import {
+  getAnimeDetail,
+  refreshAnime,
+  refreshRelatedAnimeMediaTypes,
+  updateEntry,
+} from "../api/client.ts";
+import type {
+  AnimeDetailDto,
+  IncrementTarget,
+  NextEpisodeEtaDto,
+} from "../api/types.ts";
 import { ProgressBar } from "../components/ProgressBar.tsx";
+import { RelatedAnimeOverlay } from "../components/RelatedAnimeOverlay.tsx";
 import { ScoreValue } from "../components/ScoreValue.tsx";
 import { useEntryEditor } from "../context/EntryEditorContext.tsx";
 import {
@@ -20,6 +30,15 @@ const AIRING_STATUS_LABELS: Record<string, string> = {
 
 const NO_INFO = "No info";
 
+const RATING_LABELS: Record<string, string> = {
+  g: "G",
+  pg: "PG",
+  pg_13: "PG-13",
+  r: "R",
+  "r+": "R+",
+  rx: "Rx",
+};
+
 function formatDate(value: string | null): string {
   if (!value) return NO_INFO;
   return new Date(value).toLocaleDateString(undefined, {
@@ -29,16 +48,38 @@ function formatDate(value: string | null): string {
   });
 }
 
+// A movie or special that aired in a single day reads better as one date
+// than as a same-day-to-same-day range.
+function formatAiredRange(from: string | null, to: string | null): string {
+  if (from && from === to) return formatDate(from);
+  return `${formatDate(from)} – ${formatDate(to)}`;
+}
+
+function formatRating(rating: string | null): string {
+  if (!rating) return NO_INFO;
+  return RATING_LABELS[rating] ?? rating;
+}
+
+function formatSeason(seasonYear: number | null, season: string | null): string | null {
+  if (!season || seasonYear === null) return null;
+  return `${season.charAt(0).toUpperCase()}${season.slice(1)} ${seasonYear}`;
+}
+
 function formatAiringStatus(
   status: string | null,
   episodesAired: number | null,
   totalEpisodes: number | null,
+  nextEpisode: NextEpisodeEtaDto | null,
 ): string {
   if (!status) return NO_INFO;
   const label = AIRING_STATUS_LABELS[status] ?? status;
-  if (status !== "currently_airing" || episodesAired === null) return label;
-  const total = totalEpisodes ? totalEpisodes : "?";
-  return `${label}: ${episodesAired}/${total} ep aired`;
+  const base =
+    status === "currently_airing" && episodesAired !== null
+      ? `${label}: ${episodesAired}/${totalEpisodes ? totalEpisodes : "?"} ep aired`
+      : label;
+  return nextEpisode
+    ? `${base} · next in ${nextEpisode.days}d ${nextEpisode.hours}h`
+    : base;
 }
 
 // MAL sends raw source values like "light_novel" — prettify to "Light novel".
@@ -48,17 +89,21 @@ function formatSource(source: string | null): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-function formatDuration(seconds: number | null): string {
+// AverageEpisodeDurationSeconds is always a per-episode figure; label it as
+// such whenever there's more than one episode (or the count isn't known yet)
+// so it doesn't read as the show's total runtime.
+function formatDuration(seconds: number | null, totalEpisodes: number | null): string {
   if (!seconds) return NO_INFO;
-  return `${Math.round(seconds / 60)} min`;
+  const minutes = Math.round(seconds / 60);
+  return totalEpisodes === 1 ? `${minutes} min` : `${minutes} min/ep`;
 }
 
 // Single anime detail page: large picture + progress/edit on the left, a
 // rank/score box (plus a my-score/rewatches box only once a score's been
 // given), an info box, and a synopsis/background box on the right. The
-// external MyAnimeList link is a plain URL template from the id (no API
-// call); prequel/sequel buttons only render when those relations exist on
-// the cached record.
+// external links are plain URL templates (no API call); prequel/sequel/
+// main-series buttons only render when those relations exist on the cached
+// record, and a More button opens the overlay for everything else.
 export function AnimeDetailPage() {
   const { id } = useParams();
   const animeId = Number(id);
@@ -66,6 +111,9 @@ export function AnimeDetailPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [incrementPending, setIncrementPending] = useState(false);
+  const [actionPending, setActionPending] = useState(false);
+  const [showRelatedOverlay, setShowRelatedOverlay] = useState(false);
+  const [relatedAnimeLoading, setRelatedAnimeLoading] = useState(false);
   const { openEditor } = useEntryEditor();
   const increment = useEpisodeIncrement();
   const setEpisodesWatched = useSetEpisodesWatched();
@@ -91,6 +139,47 @@ export function AnimeDetailPage() {
       // Leave the page showing whatever was already cached.
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function handleAddToWatching() {
+    if (!detail || actionPending) return;
+    setActionPending(true);
+    try {
+      const saved = await updateEntry(detail.animeId, { status: "Watching" });
+      setDetail((prev) => (prev ? { ...prev, entry: saved } : prev));
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  async function handleAddToList() {
+    if (!detail || actionPending) return;
+    setActionPending(true);
+    try {
+      const saved = await updateEntry(detail.animeId, {
+        status: "PlanToWatch",
+      });
+      setDetail((prev) => (prev ? { ...prev, entry: saved } : prev));
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  // Opens the More overlay immediately with whatever media types are already
+  // known, then backfills the rest (uncached related anime, capped and
+  // paced server-side) so "Unknown" resolves without a per-page-view cost.
+  async function handleOpenMoreOverlay() {
+    setShowRelatedOverlay(true);
+    if (relatedAnimeLoading) return;
+    setRelatedAnimeLoading(true);
+    try {
+      const refreshed = await refreshRelatedAnimeMediaTypes(animeId);
+      setDetail((prev) => (prev ? { ...prev, relatedAnime: refreshed } : prev));
+    } catch {
+      // Overlay just keeps showing whatever media types were already known.
+    } finally {
+      setRelatedAnimeLoading(false);
     }
   }
 
@@ -156,6 +245,22 @@ export function AnimeDetailPage() {
     );
   }
 
+  // Only the first prequel/sequel/parent-story MAL reports gets a dedicated
+  // button (by reference, not by relation type — so a second prequel still
+  // ends up in `moreRelations` rather than being excluded outright).
+  const prequel =
+    detail.relatedAnime.find((r) => r.relationType === "prequel") ?? null;
+  const sequel =
+    detail.relatedAnime.find((r) => r.relationType === "sequel") ?? null;
+  const parentStory =
+    detail.relatedAnime.find((r) => r.relationType === "parent_story") ??
+    null;
+  const moreRelations = detail.relatedAnime.filter(
+    (r) => r !== prequel && r !== sequel && r !== parentStory,
+  );
+  const hideAddToWatching =
+    detail.entry?.status === "Completed" || detail.entry?.status === "Dropped";
+
   return (
     <div className="anime-detail-page">
       <div className="anime-detail-page__top">
@@ -163,22 +268,40 @@ export function AnimeDetailPage() {
           <h1>{pickDisplayTitle(detail.title, detail.englishTitle)}</h1>
         </div>
 
-        {(detail.prequelMalId || detail.sequelMalId) && (
+        {(prequel || sequel || parentStory || moreRelations.length > 0) && (
           <div className="anime-detail-page__related">
-            {detail.prequelMalId && (
+            {parentStory && (
               <Link
-                to={`/anime/${detail.prequelMalId}`}
+                to={`/anime/${parentStory.animeId}`}
                 className="anime-detail-page__related-link"
-                title={detail.prequelTitle ?? undefined}
+                title={parentStory.title}
+              >
+                Main series
+              </Link>
+            )}
+            {moreRelations.length > 0 && (
+              <button
+                type="button"
+                className="anime-detail-page__related-link"
+                onClick={handleOpenMoreOverlay}
+              >
+                More
+              </button>
+            )}
+            {prequel && (
+              <Link
+                to={`/anime/${prequel.animeId}`}
+                className="anime-detail-page__related-link"
+                title={prequel.title}
               >
                 ← Prequel
               </Link>
             )}
-            {detail.sequelMalId && (
+            {sequel && (
               <Link
-                to={`/anime/${detail.sequelMalId}`}
+                to={`/anime/${sequel.animeId}`}
                 className="anime-detail-page__related-link"
-                title={detail.sequelTitle ?? undefined}
+                title={sequel.title}
               >
                 Sequel →
               </Link>
@@ -186,6 +309,14 @@ export function AnimeDetailPage() {
           </div>
         )}
       </div>
+
+      {showRelatedOverlay && (
+        <RelatedAnimeOverlay
+          relations={moreRelations}
+          loading={relatedAnimeLoading}
+          onClose={() => setShowRelatedOverlay(false)}
+        />
+      )}
 
       <div className="anime-detail-page__body">
         <div className="anime-detail-page__picture-col">
@@ -217,23 +348,49 @@ export function AnimeDetailPage() {
                 ? STATUS_LABELS[detail.entry.status]
                 : "Not in my list"}
             </span>
-            <button
-              type="button"
-              className="anime-detail-page__edit"
-              onClick={handleEdit}
-            >
-              Edit
-            </button>
           </div>
 
-          <button
-            type="button"
-            className="anime-detail-page__refresh"
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            {refreshing ? "Refreshing…" : "Refresh data"}
-          </button>
+          <div className="anime-detail-page__actions">
+            <div className="anime-detail-page__actions-row">
+              {!hideAddToWatching && (
+                <button
+                  type="button"
+                  className="anime-detail-page__action"
+                  onClick={handleAddToWatching}
+                  disabled={actionPending || refreshing}
+                >
+                  Add to watching
+                </button>
+              )}
+              {detail.entry ? (
+                <button
+                  type="button"
+                  className="anime-detail-page__action"
+                  onClick={handleEdit}
+                  disabled={actionPending || refreshing}
+                >
+                  Edit
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="anime-detail-page__action"
+                  onClick={handleAddToList}
+                  disabled={actionPending || refreshing}
+                >
+                  Add to list
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              className="anime-detail-page__action"
+              onClick={handleRefresh}
+              disabled={refreshing || actionPending}
+            >
+              {refreshing ? "Refreshing…" : "Refresh data"}
+            </button>
+          </div>
         </div>
 
         <div className="anime-detail-page__main">
@@ -271,7 +428,7 @@ export function AnimeDetailPage() {
               </div>
               <div>
                 <dt>Status</dt>
-                <dd>{formatAiringStatus(detail.airingStatus, detail.episodesAired, detail.totalEpisodes)}</dd>
+                <dd>{formatAiringStatus(detail.airingStatus, detail.episodesAired, detail.totalEpisodes, detail.nextEpisode)}</dd>
               </div>
               <div>
                 <dt>Source</dt>
@@ -279,7 +436,12 @@ export function AnimeDetailPage() {
               </div>
               <div>
                 <dt>Duration</dt>
-                <dd>{formatDuration(detail.averageEpisodeDurationSeconds)}</dd>
+                <dd>
+                  {formatDuration(
+                    detail.averageEpisodeDurationSeconds,
+                    detail.totalEpisodes,
+                  )}
+                </dd>
               </div>
               <div>
                 <dt>Studio</dt>
@@ -287,8 +449,25 @@ export function AnimeDetailPage() {
               </div>
               <div>
                 <dt>Aired</dt>
+                <dd>{formatAiredRange(detail.airedFrom, detail.airedTo)}</dd>
+              </div>
+              <div>
+                <dt>Rating</dt>
+                <dd>{formatRating(detail.rating)}</dd>
+              </div>
+              <div>
+                <dt>Season</dt>
                 <dd>
-                  {formatDate(detail.airedFrom)} – {formatDate(detail.airedTo)}
+                  {formatSeason(detail.seasonYear, detail.season) &&
+                  detail.season ? (
+                    <Link
+                      to={`/season?year=${detail.seasonYear}&season=${detail.season}`}
+                    >
+                      {formatSeason(detail.seasonYear, detail.season)}
+                    </Link>
+                  ) : (
+                    NO_INFO
+                  )}
                 </dd>
               </div>
               <div>
@@ -299,13 +478,34 @@ export function AnimeDetailPage() {
                     : NO_INFO}
                 </dd>
               </div>
-              <div className="anime-detail-page__external-links">
+              <div className="anime-detail-page__links">
                 <a
                   href={`https://myanimelist.net/anime/${detail.animeId}`}
                   target="_blank"
                   rel="noreferrer"
+                  className="anime-detail-page__related-link"
                 >
                   MyAnimeList
+                </a>
+                <a
+                  href={
+                    detail.aniListId != null
+                      ? `https://anilist.co/anime/${detail.aniListId}`
+                      : `https://anilist.co/search/anime?search=${encodeURIComponent(pickDisplayTitle(detail.title, detail.englishTitle))}`
+                  }
+                  target="_blank"
+                  rel="noreferrer"
+                  className="anime-detail-page__related-link"
+                >
+                  AniList
+                </a>
+                <a
+                  href={`https://seriesgraph.com/show/search/${encodeURIComponent(pickDisplayTitle(detail.title, detail.englishTitle))}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="anime-detail-page__related-link"
+                >
+                  SeriesGraph
                 </a>
               </div>
             </dl>

@@ -17,19 +17,10 @@
   letter-spacing: normal;
 }
 
-.anime-detail-page__external-links {
+.anime-detail-page__links {
   display: flex;
-  gap: 16px;
-}
-
-.anime-detail-page__external-links a {
-  font-size: 14px;
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.anime-detail-page__external-links a:hover {
-  text-decoration: underline;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .anime-detail-page__related {
@@ -41,6 +32,11 @@
 }
 
 .anime-detail-page__related-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font: inherit;
   font-size: 14px;
   color: var(--text);
   text-decoration: none;
@@ -48,6 +44,8 @@
   border-radius: 6px;
   padding: 6px 12px;
   white-space: nowrap;
+  background: none;
+  cursor: pointer;
 }
 
 .anime-detail-page__related-link:hover {
@@ -92,8 +90,23 @@
   font-weight: 500;
 }
 
-.anime-detail-page__edit,
-.anime-detail-page__refresh {
+.anime-detail-page__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.anime-detail-page__actions-row {
+  display: flex;
+  gap: 8px;
+}
+
+.anime-detail-page__actions-row .anime-detail-page__action {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.anime-detail-page__action {
   font: inherit;
   font-size: 13px;
   padding: 8px 12px;
@@ -102,15 +115,15 @@
   background: var(--bg);
   color: var(--text);
   cursor: pointer;
+  width: 100%;
 }
 
-.anime-detail-page__edit:hover,
-.anime-detail-page__refresh:hover {
+.anime-detail-page__action:hover {
   color: var(--text-h);
   border-color: var(--accent-border);
 }
 
-.anime-detail-page__refresh:disabled {
+.anime-detail-page__action:disabled {
   opacity: 0.6;
   cursor: default;
 }
@@ -165,6 +178,15 @@
 .anime-detail-page__info-grid dd {
   margin: 0;
   color: var(--text-h);
+}
+
+.anime-detail-page__info-grid dd a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.anime-detail-page__info-grid dd a:hover {
+  color: var(--accent);
 }
 
 .anime-detail-page__synopsis {

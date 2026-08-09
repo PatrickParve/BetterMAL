@@ -83,7 +83,7 @@ public static class MalMappingExtensions
     /// the update-in-place counterpart of <see cref="ToAnimeMetadata"/>, so
     /// on-demand refresh, reconciliation, and import all share one mapping.
     /// Full/rich upsert: also overwrites detail-page fields (genres, synopsis,
-    /// background, prequel/sequel), so only call this from a full-detail fetch
+    /// background, related anime), so only call this from a full-detail fetch
     /// — never from a lean listing refresh (see <see cref="ApplyLeanTo"/>).</summary>
     public static void ApplyTo(this MalAnimeNode node, AnimeMetadata target, DateTimeOffset now)
     {
@@ -108,13 +108,18 @@ public static class MalMappingExtensions
         target.AverageEpisodeDurationSeconds = node.AverageEpisodeDuration;
         target.Source = node.Source;
 
-        var prequel = node.RelatedAnime?.FirstOrDefault(r => r.RelationType == "prequel");
-        target.PrequelMalId = prequel?.Node.Id;
-        target.PrequelTitle = prequel?.Node.Title;
-
-        var sequel = node.RelatedAnime?.FirstOrDefault(r => r.RelationType == "sequel");
-        target.SequelMalId = sequel?.Node.Id;
-        target.SequelTitle = sequel?.Node.Title;
+        target.RelatedAnime = node.RelatedAnime?
+            .Where(edge => edge.Node is not null)
+            .Select((edge, index) => new AnimeRelatedAnime
+            {
+                AnimeId = target.Id,
+                RelatedAnimeId = edge.Node.Id,
+                RelationType = edge.RelationType ?? "",
+                Title = edge.Node.Title,
+                PictureUrl = edge.Node.MainPicture?.Large ?? edge.Node.MainPicture?.Medium,
+                SortOrder = index,
+            })
+            .ToList() ?? [];
 
         target.LastSyncedAt = now;
         target.LastScoreSyncedAt = now;
@@ -132,7 +137,7 @@ public static class MalMappingExtensions
     /// <summary>Lean upsert: writes only listing-page fields (title, picture,
     /// episode count, type, score, rank/popularity) and never touches rich
     /// detail-page fields (airing status/dates, studio, broadcast, genres,
-    /// synopsis, background, prequel/sequel) or <see cref="AnimeMetadata.LastSyncedAt"/> —
+    /// synopsis, background, related anime) or <see cref="AnimeMetadata.LastSyncedAt"/> —
     /// so a Season/Top-Anime browse can never clobber richer data a full
     /// detail fetch already populated on the same row. `Rating` is written here
     /// too — it's in both the lean and full field sets, so this always has a

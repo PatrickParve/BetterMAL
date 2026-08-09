@@ -20,6 +20,7 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<EpisodeAiring> EpisodeAirings => Set<EpisodeAiring>();
     public DbSet<AnimeAiringSync> AnimeAiringSyncs => Set<AnimeAiringSync>();
     public DbSet<AiringRefreshState> AiringRefreshStates => Set<AiringRefreshState>();
+    public DbSet<AnimeRelatedAnime> AnimeRelatedAnime => Set<AnimeRelatedAnime>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -122,6 +123,16 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
                 .WithMany()
                 .HasForeignKey(e => e.AnimeId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AnimeRelatedAnime>(entity =>
+        {
+            entity.HasKey(e => new { e.AnimeId, e.RelatedAnimeId, e.RelationType });
+            entity.HasOne(e => e.Anime)
+                .WithMany(a => a.RelatedAnime)
+                .HasForeignKey(e => e.AnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.AnimeId);
         });
     }
 }

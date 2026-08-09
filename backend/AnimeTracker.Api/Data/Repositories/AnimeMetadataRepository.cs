@@ -8,6 +8,7 @@ public class AnimeMetadataRepository(AnimeTrackerDbContext db) : IAnimeMetadataR
     public Task<AnimeMetadata?> GetByIdAsync(int id, CancellationToken ct = default) =>
         db.AnimeMetadata.AsNoTracking()
             .Include(a => a.UserEntry)
+            .Include(a => a.RelatedAnime.OrderBy(r => r.SortOrder))
             .FirstOrDefaultAsync(a => a.Id == id, ct);
 
     public Task<List<AnimeMetadata>> GetAllAsync(CancellationToken ct = default) =>

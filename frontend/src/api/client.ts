@@ -10,6 +10,7 @@ import type {
   PendingReconciliationDiffDto,
   ProfileDto,
   ReconciliationResultDto,
+  RelatedAnimeDto,
   ResyncStatusDto,
   RewatchedSectionDto,
   SearchPageDto,
@@ -134,6 +135,12 @@ export function getAnimeDetail(animeId: number): Promise<AnimeDetailDto> {
 
 export function refreshAnime(animeId: number): Promise<void> {
   return fetchVoid(`/api/anime/${animeId}/refresh`, { method: 'POST' })
+}
+
+// Backfills media types for this anime's not-yet-cached related entries
+// (paced, capped server-side) and returns the refreshed related-anime list.
+export function refreshRelatedAnimeMediaTypes(animeId: number): Promise<RelatedAnimeDto[]> {
+  return fetchJson<RelatedAnimeDto[]>(`/api/anime/${animeId}/related-anime/refresh`, { method: 'POST' })
 }
 
 export function getSyncStatus(): Promise<SyncStatusDto> {

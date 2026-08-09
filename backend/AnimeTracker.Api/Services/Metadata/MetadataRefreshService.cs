@@ -98,7 +98,10 @@ public class MetadataRefreshService(
         }
         var now = DateTimeOffset.UtcNow;
 
-        var anime = await db.AnimeMetadata.FirstOrDefaultAsync(a => a.Id == animeId, ct);
+        // Related-anime must be loaded before ApplyTo replaces the collection —
+        // without a tracked snapshot, EF has nothing to diff against and would
+        // try to re-insert rows that already exist instead of deleting stale ones.
+        var anime = await db.AnimeMetadata.Include(a => a.RelatedAnime).FirstOrDefaultAsync(a => a.Id == animeId, ct);
         if (anime is null)
             db.AnimeMetadata.Add(details.ToAnimeMetadata(now));
         else

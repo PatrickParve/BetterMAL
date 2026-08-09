@@ -334,6 +334,14 @@ export type PendingReconciliationDiffDto = {
   entries: PendingReconciliationDiffEntryDto[]
 }
 
+export type RelatedAnimeDto = {
+  animeId: number
+  title: string
+  pictureUrl: string | null
+  mediaType: string | null
+  relationType: string
+}
+
 export type AnimeDetailDto = {
   animeId: number
   title: string
@@ -354,9 +362,11 @@ export type AnimeDetailDto = {
   genres: string[] | null
   synopsis: string | null
   background: string | null
-  prequelMalId: number | null
-  prequelTitle: string | null
-  sequelMalId: number | null
-  sequelTitle: string | null
+  rating: string | null
+  seasonYear: number | null
+  season: string | null
+  nextEpisode: NextEpisodeEtaDto | null
+  aniListId: number | null
+  relatedAnime: RelatedAnimeDto[]
   entry: UserAnimeEntryDto | null
 }

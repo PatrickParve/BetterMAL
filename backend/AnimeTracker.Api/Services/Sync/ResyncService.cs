@@ -26,7 +26,10 @@ public class ResyncService(
         var edges = await malClient.GetFullUserAnimeListAsync(ct);
         progress.Start(edges.Count);
 
-        var existingAnime = await db.AnimeMetadata.ToDictionaryAsync(a => a.Id, ct);
+        // Related-anime must be loaded before ApplyTo replaces the collection —
+        // without a tracked snapshot, EF has nothing to diff against and would
+        // try to re-insert rows that already exist instead of deleting stale ones.
+        var existingAnime = await db.AnimeMetadata.Include(a => a.RelatedAnime).ToDictionaryAsync(a => a.Id, ct);
         var existingEntries = await db.UserAnimeEntries.ToDictionaryAsync(e => e.AnimeId, ct);
 
         var synced = 0;

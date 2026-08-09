@@ -32,13 +32,8 @@ public class AnimeMetadata
     public int? AverageEpisodeDurationSeconds { get; set; }
     public string? Source { get; set; } // e.g. manga, original, light_novel
 
-    // Related-anime links (rich/full detail only). MAL can report several
-    // related entries per relation type, but the detail page shows at most
-    // one prequel and one sequel button, so only the first of each is kept.
-    public int? PrequelMalId { get; set; }
-    public string? PrequelTitle { get; set; }
-    public int? SequelMalId { get; set; }
-    public string? SequelTitle { get; set; }
+    // Related-anime links (rich/full detail only — never touched by a lean upsert).
+    public List<AnimeRelatedAnime> RelatedAnime { get; set; } = [];
 
     public UserAnimeEntry? UserEntry { get; set; }
 }
