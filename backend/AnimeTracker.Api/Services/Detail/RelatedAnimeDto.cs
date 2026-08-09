@@ -7,15 +7,15 @@ namespace AnimeTracker.Api.Services.Detail;
 /// button vs. land in the More overlay is a UI decision made client-side.</summary>
 public record RelatedAnimeDto(int AnimeId, string Title, string? PictureUrl, string? MediaType, string RelationType)
 {
-    // MAL's related_anime field never returns the related anime's media type
-    // (its node shape is a fixed id/title/picture, with no field-selection
-    // support), so it isn't stored on AnimeRelatedAnime — it's looked up from
-    // our own AnimeMetadata cache instead, and is simply absent for a related
-    // anime we haven't cached yet.
+    // MAL's related_anime{node{media_type}} nested field selection reports
+    // the related anime's media type directly, so a full-detail fetch stores
+    // it on AnimeRelatedAnime.MediaType. The AnimeMetadata cache lookup is a
+    // fallback only, for relation rows written before this column existed —
+    // those stay null until their owner's next full-detail fetch.
     public static RelatedAnimeDto FromEntity(AnimeRelatedAnime relation, IReadOnlyDictionary<int, string?> mediaTypeByAnimeId) => new(
         relation.RelatedAnimeId,
         relation.Title,
         relation.PictureUrl,
-        mediaTypeByAnimeId.GetValueOrDefault(relation.RelatedAnimeId),
+        relation.MediaType ?? mediaTypeByAnimeId.GetValueOrDefault(relation.RelatedAnimeId),
         relation.RelationType);
 }

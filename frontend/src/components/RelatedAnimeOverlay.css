@@ -8,13 +8,6 @@
   margin: 0;
 }
 
-.related-anime-overlay__loading {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text);
-  opacity: 0.75;
-}
-
 .related-anime-overlay__body {
   display: flex;
   flex-direction: column;

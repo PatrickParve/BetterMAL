@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Entries;
+using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Scheduling;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ public class TopAnimeService(
     IMalClient malClient,
     ITopAnimeRepository topAnimeRepository,
     IBroadcastLocalTimeConverter broadcastConverter,
+    RefreshGate refreshGate,
     ILogger<TopAnimeService> logger) : ITopAnimeService
 {
     private const int RankingSize = 500;
@@ -37,24 +39,37 @@ public class TopAnimeService(
 
     // This method IS the visit path (nothing else calls it), so a ranking
     // that's never visited is never fetched. Once visited, it refreshes again
-    // at most once per local calendar day.
+    // at most once per local calendar day. Single-flight via RefreshGate: a
+    // waiter re-checks GetLastFetchedAsync inside the lock, so it sees the
+    // first refresh's stamp and skips a second MAL fetch instead of racing it.
     private async Task EnsureFreshAsync(CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
         var todayLocalDate = broadcastConverter.GetLocalDate(now);
-        var lastFetched = await topAnimeRepository.GetLastFetchedAsync(ct);
 
-        if (lastFetched is { } fetchedAt && broadcastConverter.GetLocalDate(fetchedAt) == todayLocalDate)
+        if (await IsFreshAsync(todayLocalDate, ct))
             return;
 
-        try
+        using (await refreshGate.LockAsync("top-anime", ct))
         {
-            await FetchAndCacheAsync(now, ct);
+            if (await IsFreshAsync(todayLocalDate, ct))
+                return;
+
+            try
+            {
+                await FetchAndCacheAsync(now, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to live-fetch the Top Anime ranking; serving whatever is already cached.");
+            }
         }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to live-fetch the Top Anime ranking; serving whatever is already cached.");
-        }
+    }
+
+    private async Task<bool> IsFreshAsync(DateOnly todayLocalDate, CancellationToken ct)
+    {
+        var lastFetched = await topAnimeRepository.GetLastFetchedAsync(ct);
+        return lastFetched is { } fetchedAt && broadcastConverter.GetLocalDate(fetchedAt) == todayLocalDate;
     }
 
     private async Task FetchAndCacheAsync(DateTimeOffset now, CancellationToken ct)

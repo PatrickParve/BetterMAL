@@ -117,6 +117,7 @@ public static class MalMappingExtensions
                 RelationType = edge.RelationType ?? "",
                 Title = edge.Node.Title,
                 PictureUrl = edge.Node.MainPicture?.Large ?? edge.Node.MainPicture?.Medium,
+                MediaType = edge.Node.MediaType,
                 SortOrder = index,
             })
             .ToList() ?? [];

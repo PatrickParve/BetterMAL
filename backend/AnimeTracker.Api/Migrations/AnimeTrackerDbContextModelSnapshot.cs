@@ -191,6 +191,9 @@ namespace AnimeTracker.Api.Migrations
                     b.Property<string>("RelationType")
                         .HasColumnType("text");
 
+                    b.Property<string>("MediaType")
+                        .HasColumnType("text");
+
                     b.Property<string>("PictureUrl")
                         .HasColumnType("text");
 

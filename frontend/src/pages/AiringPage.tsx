@@ -22,6 +22,22 @@ function isIsoDate(value: string | null): value is string {
   return value !== null && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value))
 }
 
+// Twelve month names in the viewer's locale, built from a fixed reference
+// year so leap-year length never affects the label.
+const MONTH_LABELS = Array.from({ length: 12 }, (_, index) =>
+  new Date(2000, index, 1).toLocaleDateString(undefined, { month: 'long' }),
+)
+
+// The target ISO date for a chosen month/year, keeping the current
+// day-of-month and clamping to the target month's last day (31 Jan -> Feb
+// lands on the 28th/29th rather than overflowing into March).
+function dateForMonthYear(referenceDate: string, year: number, month: number): string {
+  const day = Number(referenceDate.slice(8, 10))
+  const lastDayOfMonth = new Date(year, month, 0).getDate()
+  const clampedDay = Math.min(day, lastDayOfMonth)
+  return `${year}-${String(month).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`
+}
+
 function addDaysIso(iso: string, days: number): string {
   const date = new Date(`${iso}T00:00:00`)
   date.setDate(date.getDate() + days)
@@ -80,6 +96,13 @@ export function AiringPage() {
   const isCurrentWeek = weekStartIso(referenceDate) === weekStartIso(todayIso())
   const isEmptyWeek = week !== null && week.days.every((day) => day.slots.length === 0)
 
+  // Sliced, not `new Date(referenceDate)` — see toLocalIso above.
+  const selectedYear = Number(referenceDate.slice(0, 4))
+  const selectedMonth = Number(referenceDate.slice(5, 7))
+  const currentYear = new Date().getFullYear()
+  const jumpYears: number[] = []
+  for (let year = currentYear + 1; year >= 1960; year--) jumpYears.push(year)
+
   return (
     <div className="airing-page">
       <div className="airing-page__header">
@@ -95,16 +118,31 @@ export function AiringPage() {
             &rsaquo;
           </button>
         </div>
-        <label className="airing-page__jump">
-          Jump to week
-          <input
-            type="date"
-            value={referenceDate}
-            onChange={(event) => {
-              if (event.target.value) goToWeek(event.target.value)
-            }}
-          />
-        </label>
+        <div className="airing-page__jump">
+          <span>Jump to</span>
+          <select
+            aria-label="Month"
+            value={selectedMonth}
+            onChange={(event) => goToWeek(dateForMonthYear(referenceDate, selectedYear, Number(event.target.value)))}
+          >
+            {MONTH_LABELS.map((label, index) => (
+              <option key={label} value={index + 1}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Year"
+            value={selectedYear}
+            onChange={(event) => goToWeek(dateForMonthYear(referenceDate, Number(event.target.value), selectedMonth))}
+          >
+            {jumpYears.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+        </div>
         {week && <span className="airing-page__range">{formatWeekRange(week.weekStart, week.weekEnd)}</span>}
       </div>
 

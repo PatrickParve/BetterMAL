@@ -52,7 +52,7 @@
   opacity: 0.85;
 }
 
-.airing-page__jump input {
+.airing-page__jump select {
   font: inherit;
   font-size: 14px;
   padding: 5px 10px;
@@ -63,7 +63,7 @@
   cursor: pointer;
 }
 
-.airing-page__jump input:hover {
+.airing-page__jump select:hover {
   border-color: var(--accent-border);
 }
 

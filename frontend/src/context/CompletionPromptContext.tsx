@@ -8,7 +8,7 @@ type PromptState = {
   animeTitle: string
   pictureUrl: string | null
   currentScore: number | null
-  onClosed: () => void
+  onClosed: (saved: UserAnimeEntryDto | null) => void
 }
 
 type CompletionPromptContextValue = {
@@ -44,7 +44,7 @@ export function CompletionPromptProvider({ children }: { children: ReactNode }) 
       animeTitle: target.animeTitle,
       pictureUrl: target.pictureUrl,
       currentScore: target.currentScore,
-      onClosed: () => target.onCompleted?.(),
+      onClosed: (saved) => target.onCompleted?.(saved),
     })
   }
 
@@ -52,10 +52,10 @@ export function CompletionPromptProvider({ children }: { children: ReactNode }) 
     return setEpisodesWatched(target, target.episodesWatched + 1)
   }
 
-  function handleClose() {
+  function handleClose(saved: UserAnimeEntryDto | null) {
     const onClosed = prompt?.onClosed
     setPrompt(null)
-    onClosed?.()
+    onClosed?.(saved)
   }
 
   return (

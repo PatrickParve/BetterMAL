@@ -123,6 +123,8 @@ export function MyListPage() {
       previousStatus: item.entry.status,
       currentScore: item.entry.myScore,
       onSaved: handleSaved(item.animeId),
+      // Reloads rather than patching: completing an anime moves it between
+      // status groups, a server-computed regrouping no mutation response describes.
       onCompleted: loadList,
     }
   }

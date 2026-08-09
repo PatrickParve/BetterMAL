@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import {
-  getAnimeDetail,
-  refreshAnime,
-  refreshRelatedAnimeMediaTypes,
-  updateEntry,
-} from "../api/client.ts";
+import { getAnimeDetail, refreshAnime, updateEntry } from "../api/client.ts";
 import type {
   AnimeDetailDto,
   IncrementTarget,
@@ -91,11 +86,18 @@ function formatSource(source: string | null): string {
 
 // AverageEpisodeDurationSeconds is always a per-episode figure; label it as
 // such whenever there's more than one episode (or the count isn't known yet)
-// so it doesn't read as the show's total runtime.
+// so it doesn't read as the show's total runtime. The hour threshold is
+// applied to the rounded duration itself rather than to mediaType so a
+// feature-length OVA or special reads the same as a movie, while a
+// short-episode series that happens to be typed as a movie doesn't.
 function formatDuration(seconds: number | null, totalEpisodes: number | null): string {
   if (!seconds) return NO_INFO;
   const minutes = Math.round(seconds / 60);
-  return totalEpisodes === 1 ? `${minutes} min` : `${minutes} min/ep`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  const value =
+    minutes < 60 ? `${minutes} min` : remainder === 0 ? `${hours}h` : `${hours}h ${remainder}min`;
+  return totalEpisodes === 1 ? value : `${value}/ep`;
 }
 
 // Single anime detail page: large picture + progress/edit on the left, a
@@ -113,7 +115,6 @@ export function AnimeDetailPage() {
   const [incrementPending, setIncrementPending] = useState(false);
   const [actionPending, setActionPending] = useState(false);
   const [showRelatedOverlay, setShowRelatedOverlay] = useState(false);
-  const [relatedAnimeLoading, setRelatedAnimeLoading] = useState(false);
   const { openEditor } = useEntryEditor();
   const increment = useEpisodeIncrement();
   const setEpisodesWatched = useSetEpisodesWatched();
@@ -166,21 +167,8 @@ export function AnimeDetailPage() {
     }
   }
 
-  // Opens the More overlay immediately with whatever media types are already
-  // known, then backfills the rest (uncached related anime, capped and
-  // paced server-side) so "Unknown" resolves without a per-page-view cost.
-  async function handleOpenMoreOverlay() {
+  function handleOpenRelatedOverlay() {
     setShowRelatedOverlay(true);
-    if (relatedAnimeLoading) return;
-    setRelatedAnimeLoading(true);
-    try {
-      const refreshed = await refreshRelatedAnimeMediaTypes(animeId);
-      setDetail((prev) => (prev ? { ...prev, relatedAnime: refreshed } : prev));
-    } catch {
-      // Overlay just keeps showing whatever media types were already known.
-    } finally {
-      setRelatedAnimeLoading(false);
-    }
   }
 
   function buildIncrementTarget(): IncrementTarget {
@@ -195,7 +183,13 @@ export function AnimeDetailPage() {
       currentScore: entry.myScore,
       onSaved: (saved) =>
         setDetail((prev) => (prev ? { ...prev, entry: saved } : prev)),
-      onCompleted: load,
+      // The completion-score prompt's own save (a separate updateEntry call
+      // for myScore) isn't reflected by the increment's onSaved above, so
+      // patch it in here instead of re-reading the anime. null means the
+      // user skipped without scoring — onSaved above already has the latest.
+      onCompleted: (saved) => {
+        if (saved) setDetail((prev) => (prev ? { ...prev, entry: saved } : prev));
+      },
     };
   }
 
@@ -259,7 +253,9 @@ export function AnimeDetailPage() {
     (r) => r !== prequel && r !== sequel && r !== parentStory,
   );
   const hideAddToWatching =
-    detail.entry?.status === "Completed" || detail.entry?.status === "Dropped";
+    detail.entry?.status === "Watching" ||
+    detail.entry?.status === "Completed" ||
+    detail.entry?.status === "Dropped";
 
   return (
     <div className="anime-detail-page">
@@ -283,7 +279,7 @@ export function AnimeDetailPage() {
               <button
                 type="button"
                 className="anime-detail-page__related-link"
-                onClick={handleOpenMoreOverlay}
+                onClick={handleOpenRelatedOverlay}
               >
                 More
               </button>
@@ -313,7 +309,6 @@ export function AnimeDetailPage() {
       {showRelatedOverlay && (
         <RelatedAnimeOverlay
           relations={moreRelations}
-          loading={relatedAnimeLoading}
           onClose={() => setShowRelatedOverlay(false)}
         />
       )}

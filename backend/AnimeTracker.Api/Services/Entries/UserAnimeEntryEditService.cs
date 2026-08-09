@@ -77,10 +77,10 @@ public class UserAnimeEntryEditService(
         if (triggersSync)
             syncScheduler.ScheduleSync(animeId);
 
-        // Fire-and-forget: an airing/upcoming anime just added to the list gets
-        // its airing data fetched right away rather than waiting for the next
-        // hourly pass, without delaying this response on an AniList round-trip.
-        if (isNew && anime.AiringStatus is "currently_airing" or "not_yet_aired")
+        // Fire-and-forget: any anime just added gets its episode history
+        // fetched now rather than waiting for the backfill, without delaying
+        // this response on an AniList round-trip.
+        if (isNew)
             airingRefreshTrigger.Enqueue(animeId);
 
         return UserAnimeEntryDto.FromEntity(entry);

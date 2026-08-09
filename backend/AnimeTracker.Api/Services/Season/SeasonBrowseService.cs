@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Library;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Scheduling;
@@ -13,7 +14,7 @@ public class SeasonBrowseService(
     IMalClient malClient,
     ISeasonRepository seasonRepository,
     IBroadcastLocalTimeConverter broadcastConverter,
-    SeasonRefreshGate refreshGate,
+    RefreshGate refreshGate,
     ILogger<SeasonBrowseService> logger) : ISeasonBrowseService
 {
     public async Task<SeasonPageDto> GetPageAsync(int year, string season, string sortKey, bool includeMyList, bool hideHentai, int offset, int limit, CancellationToken ct = default)
@@ -29,12 +30,12 @@ public class SeasonBrowseService(
     }
 
     // Fetches at most once per local calendar day, for any season — past,
-    // current, or upcoming alike. Single-flight via SeasonRefreshGate: a
-    // waiter re-checks LastFetchedAt inside the lock, so it sees the first
-    // refresh's stamp and skips a second MAL fetch instead of racing it.
+    // current, or upcoming alike. Single-flight via RefreshGate: a waiter
+    // re-checks LastFetchedAt inside the lock, so it sees the first refresh's
+    // stamp and skips a second MAL fetch instead of racing it.
     public async Task<SeasonRefreshResultDto> RefreshAsync(int year, string season, CancellationToken ct = default)
     {
-        using (await refreshGate.LockAsync(year, season, ct))
+        using (await refreshGate.LockAsync($"season:{year}:{season}", ct))
         {
             var now = DateTimeOffset.UtcNow;
             var todayLocalDate = broadcastConverter.GetLocalDate(now);

@@ -5,7 +5,6 @@ import "./RelatedAnimeOverlay.css";
 
 type RelatedAnimeOverlayProps = {
   relations: RelatedAnimeDto[];
-  loading?: boolean;
   onClose: () => void;
 };
 
@@ -32,7 +31,6 @@ function relationLabel(relationType: string): string {
 // every relation that isn't a dedicated prequel/sequel/main-series button.
 export function RelatedAnimeOverlay({
   relations,
-  loading,
   onClose,
 }: RelatedAnimeOverlayProps) {
   const groups = new Map<string, RelatedAnimeDto[]>();
@@ -60,12 +58,6 @@ export function RelatedAnimeOverlay({
         >
           Related anime
         </h2>
-
-        {loading && (
-          <p className="related-anime-overlay__loading">
-            Loading media types…
-          </p>
-        )}
 
         <div className="related-anime-overlay__body">
           {orderedTypes.map((type) => (

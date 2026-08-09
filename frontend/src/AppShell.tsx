@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom'
 import { Navbar } from './components/Navbar/Navbar.tsx'
+import { ConnectionStatusNotice } from './components/ConnectionStatusNotice.tsx'
 import { ScoreVisibilityProvider } from './context/ScoreVisibilityContext.tsx'
 import { EntryEditorProvider } from './context/EntryEditorContext.tsx'
 import { CompletionPromptProvider } from './context/CompletionPromptContext.tsx'
@@ -39,6 +40,7 @@ export function AppShell() {
                 <Route path="*" element={<HomePage />} />
               </Routes>
             </main>
+            <ConnectionStatusNotice />
           </CompletionPromptProvider>
         </EntryEditorProvider>
       </ContentFilterProvider>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal } from './Modal.tsx'
 import { updateEntry } from '../api/client.ts'
+import type { UserAnimeEntryDto } from '../api/types.ts'
 import './CompletionScoreOverlay.css'
 
 type CompletionScoreOverlayProps = {
@@ -8,7 +9,10 @@ type CompletionScoreOverlayProps = {
   animeTitle: string
   pictureUrl: string | null
   currentScore: number | null
-  onClose: () => void
+  // Carries the saved entry when a score was actually saved, null on skip
+  // (button, Escape, or click-outside) so the caller can patch instead of
+  // re-reading.
+  onClose: (saved: UserAnimeEntryDto | null) => void
 }
 
 // Shown right after a "+" increment completes an entry, so the user can rate
@@ -22,14 +26,14 @@ export function CompletionScoreOverlay({ animeId, animeTitle, pictureUrl, curren
 
   async function handleSave() {
     if (score === initialScore) {
-      onClose()
+      onClose(null)
       return
     }
     setSaving(true)
     setError(null)
     try {
-      await updateEntry(animeId, { myScore: score })
-      onClose()
+      const saved = await updateEntry(animeId, { myScore: score })
+      onClose(saved)
     } catch {
       setError('Could not save the score. Please try again.')
       setSaving(false)
@@ -37,7 +41,7 @@ export function CompletionScoreOverlay({ animeId, animeTitle, pictureUrl, curren
   }
 
   return (
-    <Modal onClose={onClose} labelledBy="completion-score-title">
+    <Modal onClose={() => onClose(null)} labelledBy="completion-score-title">
       <div className="completion-score">
         {pictureUrl ? (
           <img src={pictureUrl} alt="" className="completion-score__picture" />
@@ -64,7 +68,7 @@ export function CompletionScoreOverlay({ animeId, animeTitle, pictureUrl, curren
           {error && <p className="completion-score__error">{error}</p>}
 
           <div className="completion-score__buttons">
-            <button type="button" onClick={onClose} disabled={saving}>
+            <button type="button" onClick={() => onClose(null)} disabled={saving}>
               Skip
             </button>
             <button type="button" className="completion-score__save" onClick={handleSave} disabled={saving}>

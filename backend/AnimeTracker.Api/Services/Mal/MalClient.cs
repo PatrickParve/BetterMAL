@@ -25,7 +25,12 @@ public class MalClient(HttpClient http) : IMalClient
     // Full/rich detail fields — used only for a specific anime's own detail
     // fetch (initial import, nightly tiered my-list refresh, on-demand
     // refresh, or first detail-page visit), never for a listing page.
-    private const string FullDetailAnimeFields = DefaultAnimeFields + ",genres,synopsis,background,related_anime,average_episode_duration,source";
+    // `related_anime{node{media_type}}` — MAL does honor nested field
+    // selection here (verified by hand: bare `related_anime` omits
+    // media_type, this form returns it per node alongside the always-present
+    // id/title/main_picture) — so the More overlay's media types come free
+    // with this fetch, with no separate backfill call needed.
+    private const string FullDetailAnimeFields = DefaultAnimeFields + ",genres,synopsis,background,related_anime{node{media_type}},average_episode_duration,source";
 
     // list_status sub-fields for the user animelist — without these, MAL omits
     // list_status entirely and every imported entry looks like "plan to watch".

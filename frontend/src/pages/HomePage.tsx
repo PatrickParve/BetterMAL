@@ -48,6 +48,9 @@ export function HomePage() {
       <CurrentlyWatchingCarousel
         items={dashboard.currentlyWatching}
         onEpisodesWatchedChange={handleEpisodesWatchedChange}
+        // Reloads rather than patching: completing an anime moves it out of
+        // "Currently watching" and possibly into the current-season section's
+        // finished state, a server-computed regrouping no mutation response describes.
         onCompleted={loadDashboard}
       />
       <div className="home-page__row">

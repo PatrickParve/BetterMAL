@@ -6,6 +6,7 @@ using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Detail;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Import;
+using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Library;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Auth;
@@ -86,6 +87,11 @@ builder.Services.AddHostedService<ResyncBackgroundService>();
 builder.Services.AddScoped<IMetadataRefreshService, MetadataRefreshService>();
 builder.Services.AddHostedService<MetadataRefreshBackgroundService>();
 
+// Single-flight lock shared by every visit-triggered live fetch (season,
+// top-anime ranking, anime detail) so concurrent requests for the same
+// subject collapse into one MAL fetch instead of racing.
+builder.Services.AddSingleton<RefreshGate>();
+
 // --- Timezone conversion ---
 builder.Services.AddSingleton<IBroadcastLocalTimeConverter, BroadcastLocalTimeConverter>();
 
@@ -119,7 +125,6 @@ builder.Services.AddSingleton<IAiringFullRefreshProgressTracker, AiringFullRefre
 builder.Services.AddHostedService<AiringFullRefreshBackgroundService>();
 
 // --- Season browsing ---
-builder.Services.AddSingleton<SeasonRefreshGate>();
 builder.Services.AddScoped<ISeasonBrowseService, SeasonBrowseService>();
 
 // --- Library views (my list / top anime) ---

@@ -1,7 +1,9 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
+using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Dashboard;
+using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Metadata;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,6 +14,7 @@ public class AnimeDetailService(
     IMetadataRefreshService refreshService,
     IEpisodeScheduleService scheduleService,
     AnimeTrackerDbContext db,
+    RefreshGate refreshGate,
     ILogger<AnimeDetailService> logger) : IAnimeDetailService
 {
     // Migration cutoff for AddAnimeRelatedAnime: rows last synced before this
@@ -19,10 +22,13 @@ public class AnimeDetailService(
     // treats them as detail-incomplete even when Genres is already populated.
     private static readonly DateTimeOffset RelatedAnimeMigrationCutoff = new(2026, 8, 8, 0, 0, 0, TimeSpan.Zero);
 
-    // Caps how many uncached related anime a single More-overlay open will
-    // fetch from MAL (one paced call each, ~1/sec) — bounds worst-case
-    // request latency for a large franchise instead of fetching all of them.
-    private const int MaxRelatedBackfillCount = 20;
+    // Migration cutoff for AddRelatedAnimeMediaType: relation rows written
+    // before this predate the MediaType column (and the related_anime{node{
+    // media_type}} field selection that populates it), so they're stuck
+    // showing "Unknown" in the More overlay for any related anime we haven't
+    // separately cached — which MAL's own relation data would have resolved
+    // directly, for free, had this anime been fetched after the column existed.
+    private static readonly DateTimeOffset RelatedAnimeMediaTypeMigrationCutoff = new(2026, 8, 9, 0, 0, 0, TimeSpan.Zero);
 
     public async Task<AnimeDetailDto> GetDetailAsync(int animeId, CancellationToken ct = default)
     {
@@ -40,20 +46,31 @@ public class AnimeDetailService(
         // A row with no related-anime entries and a LastSyncedAt predating the
         // related-anime migration also refetches, so relations repopulate on
         // the first visit after deploy even for rows that already had genres.
+        // Same idea for a row whose relations exist but predate the
+        // MediaType column: one more refetch backfills every relation's media
+        // type directly from MAL, rather than leaving it to the (weaker)
+        // per-related-anime cache-lookup fallback.
         // After the fetch Genres and RelatedAnime are set, so later visits are
-        // plain cache hits. Mirrors SeasonBrowseService's visit-triggered live fetch.
-        if (anime is null
-            || anime.Genres is not { Count: > 0 }
-            || (anime.RelatedAnime.Count == 0 && anime.LastSyncedAt < RelatedAnimeMigrationCutoff))
+        // plain cache hits. Single-flight via RefreshGate: a waiter re-checks
+        // this same predicate after acquiring the gate, so it sees the
+        // winner's fetch and skips a second MAL fetch instead of racing it.
+        if (NeedsFullDetailFetch(anime))
         {
-            try
+            using (await refreshGate.LockAsync($"anime:{animeId}", ct))
             {
-                await refreshService.RefreshOneAsync(animeId, ct);
-                anime = await metadataRepository.GetByIdAsync(animeId, ct) ?? anime;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to live-fetch full detail for anime {AnimeId}; serving cached data if any.", animeId);
+                anime = await metadataRepository.GetByIdAsync(animeId, ct);
+                if (NeedsFullDetailFetch(anime))
+                {
+                    try
+                    {
+                        await refreshService.RefreshOneAsync(animeId, ct);
+                        anime = await metadataRepository.GetByIdAsync(animeId, ct) ?? anime;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Failed to live-fetch full detail for anime {AnimeId}; serving cached data if any.", animeId);
+                    }
+                }
             }
         }
 
@@ -68,47 +85,22 @@ public class AnimeDetailService(
             .Select(s => s.AniListId)
             .FirstOrDefaultAsync(ct);
 
-        // MAL's related_anime field never reports the related anime's media
-        // type, so it's opportunistically looked up from our own cache —
-        // present only for related anime we've already fetched ourselves.
+        // Full-detail fetches store each relation's media type directly
+        // (AnimeRelatedAnime.MediaType, from related_anime{node{media_type}});
+        // this cache lookup is only a fallback for relation rows written
+        // before that column existed.
         var relatedMediaTypeByAnimeId = await GetMediaTypesAsync(anime.RelatedAnime.Select(r => r.RelatedAnimeId), ct);
 
         return AnimeDetailDto.FromEntity(anime, episodesAired, nextEpisode, aniListId, relatedMediaTypeByAnimeId);
     }
 
-    /// <summary>Fetches full detail for up to <see cref="MaxRelatedBackfillCount"/>
-    /// of this anime's related-anime entries we don't have cached yet — so the
-    /// More overlay's "Unknown" media types can resolve on demand instead of
-    /// only ever self-healing when each related anime happens to get visited
-    /// or browsed elsewhere. One paced MAL call per uncached entry.</summary>
-    public async Task<List<RelatedAnimeDto>> RefreshRelatedMediaTypesAsync(int animeId, CancellationToken ct = default)
-    {
-        var anime = await metadataRepository.GetByIdAsync(animeId, ct);
-        if (anime is null)
-            throw new AnimeMetadataNotFoundException(animeId);
-
-        var relatedIds = anime.RelatedAnime.Select(r => r.RelatedAnimeId).Distinct().ToList();
-        var cachedIds = await db.AnimeMetadata.AsNoTracking()
-            .Where(m => relatedIds.Contains(m.Id))
-            .Select(m => m.Id)
-            .ToListAsync(ct);
-        var uncachedIds = relatedIds.Except(cachedIds).Take(MaxRelatedBackfillCount).ToList();
-
-        foreach (var relatedId in uncachedIds)
-        {
-            try
-            {
-                await refreshService.RefreshOneAsync(relatedId, ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to backfill related anime {RelatedAnimeId} for {AnimeId}'s More overlay.", relatedId, animeId);
-            }
-        }
-
-        var mediaTypeByAnimeId = await GetMediaTypesAsync(relatedIds, ct);
-        return anime.RelatedAnime.Select(r => RelatedAnimeDto.FromEntity(r, mediaTypeByAnimeId)).ToList();
-    }
+    private static bool NeedsFullDetailFetch(AnimeMetadata? anime) =>
+        anime is null
+        || anime.Genres is not { Count: > 0 }
+        || (anime.RelatedAnime.Count == 0 && anime.LastSyncedAt < RelatedAnimeMigrationCutoff)
+        || (anime.RelatedAnime.Count > 0
+            && anime.LastSyncedAt < RelatedAnimeMediaTypeMigrationCutoff
+            && anime.RelatedAnime.Any(r => r.MediaType is null));
 
     private async Task<Dictionary<int, string?>> GetMediaTypesAsync(IEnumerable<int> animeIds, CancellationToken ct)
     {

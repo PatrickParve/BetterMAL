@@ -4,6 +4,10 @@ export type MalAuthStatus = {
   connected: boolean
 }
 
+export type HealthStatus = {
+  status: string
+}
+
 export type UserAnimeEntryDto = {
   animeId: number
   status: WatchStatus
@@ -50,7 +54,10 @@ export type IncrementTarget = {
   previousStatus: WatchStatus
   currentScore: number | null
   onSaved: (entry: UserAnimeEntryDto) => void
-  onCompleted?: () => void
+  // Carries the completion-score prompt's saved entry (null if the user
+  // skipped without scoring), so a caller showing only that one anime can
+  // patch its state instead of re-reading.
+  onCompleted?: (entry: UserAnimeEntryDto | null) => void
 }
 
 export type NextEpisodeEtaDto = {

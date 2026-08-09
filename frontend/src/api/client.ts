@@ -4,13 +4,13 @@ import type {
   AiringWeekDto,
   AnimeDetailDto,
   AnimeSearchResult,
+  HealthStatus,
   MainDashboardDto,
   MalAuthStatus,
   MyListItemDto,
   PendingReconciliationDiffDto,
   ProfileDto,
   ReconciliationResultDto,
-  RelatedAnimeDto,
   ResyncStatusDto,
   RewatchedSectionDto,
   SearchPageDto,
@@ -23,20 +23,75 @@ import type {
   UserAnimeEntryDto,
   UserAnimeEntryEditRequest,
 } from './types.ts'
+import { reportReachable, reportUnreachable } from './connectionStatus.ts'
+
+// GETs in flight, keyed by URL: a GET issued while an identical one is still
+// outstanding joins it instead of opening a second request (kills React
+// StrictMode's double-mount fetch, double-mounts, and rapid re-navigation
+// duplicates in one place, for every page). Mutations are never collapsed —
+// two identical in-flight PATCHes are two intended edits. The map stores the
+// shared *Response* promise, not its parsed body, since fetchRaw is also used
+// directly by callers that branch on res.status before parsing; every
+// consumer (including the request that started it) reads its own res.clone(),
+// since a Response body can only be consumed once. The entry is deleted as
+// soon as the request settles, so nothing is cached: a read issued after the
+// previous one completed is a fresh request.
+const inFlightGets = new Map<string, Promise<Response>>()
+
+async function fetchRaw(input: string, init?: RequestInit): Promise<Response> {
+  const isGet = !init?.method || init.method.toUpperCase() === 'GET'
+  if (!isGet) return performFetch(input, init)
+
+  const existing = inFlightGets.get(input)
+  if (existing) return (await existing).clone()
+
+  const promise = performFetch(input, init)
+  inFlightGets.set(input, promise)
+  try {
+    return (await promise).clone()
+  } finally {
+    inFlightGets.delete(input)
+  }
+}
+
+// A response of any kind below 500 proves the backend answered, so it counts
+// as reachable even when it's an error the caller will go on to throw for
+// (404, 400, 401, ...) — those are ordinary application outcomes, not an outage.
+// Runs at most once per de-duplicated group, so reachability is reported once
+// per real network attempt, not once per joined caller.
+async function performFetch(input: string, init?: RequestInit): Promise<Response> {
+  let res: Response
+  try {
+    res = await fetch(input, init)
+  } catch (err) {
+    reportUnreachable()
+    throw err
+  }
+  if (res.status >= 500) reportUnreachable()
+  else reportReachable()
+  return res
+}
 
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, init)
+  const res = await fetchRaw(input, init)
   if (!res.ok) throw new Error(`${input} responded with ${res.status}`)
   return res.json() as Promise<T>
 }
 
 async function fetchVoid(input: string, init?: RequestInit): Promise<void> {
-  const res = await fetch(input, init)
+  const res = await fetchRaw(input, init)
   if (!res.ok) throw new Error(`${input} responded with ${res.status}`)
 }
 
 export function getMalAuthStatus(): Promise<MalAuthStatus> {
   return fetchJson<MalAuthStatus>('/api/mal-auth/status')
+}
+
+// Touches neither the database nor MAL — a true "is the process up" probe.
+// Goes through fetchJson like every other call, so its own success/failure
+// is what reports recovery to connectionStatus; no separate reporting needed.
+export function getHealth(): Promise<HealthStatus> {
+  return fetchJson<HealthStatus>('/api/health')
 }
 
 export function searchAnime(query: string, signal?: AbortSignal): Promise<AnimeSearchResult[]> {
@@ -137,12 +192,6 @@ export function refreshAnime(animeId: number): Promise<void> {
   return fetchVoid(`/api/anime/${animeId}/refresh`, { method: 'POST' })
 }
 
-// Backfills media types for this anime's not-yet-cached related entries
-// (paced, capped server-side) and returns the refreshed related-anime list.
-export function refreshRelatedAnimeMediaTypes(animeId: number): Promise<RelatedAnimeDto[]> {
-  return fetchJson<RelatedAnimeDto[]>(`/api/anime/${animeId}/related-anime/refresh`, { method: 'POST' })
-}
-
 export function getSyncStatus(): Promise<SyncStatusDto> {
   return fetchJson<SyncStatusDto>('/api/sync/status')
 }
@@ -157,7 +206,7 @@ export function runReconciliation(): Promise<ReconciliationResultDto> {
 
 // 204 (no pending diff) resolves to null rather than throwing.
 export async function getPendingReconciliationDiff(): Promise<PendingReconciliationDiffDto | null> {
-  const res = await fetch('/api/sync/reconcile/pending')
+  const res = await fetchRaw('/api/sync/reconcile/pending')
   if (res.status === 204) return null
   if (!res.ok) throw new Error(`/api/sync/reconcile/pending responded with ${res.status}`)
   return res.json() as Promise<PendingReconciliationDiffDto>
@@ -165,14 +214,14 @@ export async function getPendingReconciliationDiff(): Promise<PendingReconciliat
 
 // 404 (nothing pending to accept/cancel) resolves to false rather than throwing.
 export async function acceptReconciliationDiff(): Promise<boolean> {
-  const res = await fetch('/api/sync/reconcile/accept', { method: 'POST' })
+  const res = await fetchRaw('/api/sync/reconcile/accept', { method: 'POST' })
   if (res.status === 404) return false
   if (!res.ok) throw new Error(`/api/sync/reconcile/accept responded with ${res.status}`)
   return true
 }
 
 export async function cancelReconciliationDiff(): Promise<boolean> {
-  const res = await fetch('/api/sync/reconcile/cancel', { method: 'POST' })
+  const res = await fetchRaw('/api/sync/reconcile/cancel', { method: 'POST' })
   if (res.status === 404) return false
   if (!res.ok) throw new Error(`/api/sync/reconcile/cancel responded with ${res.status}`)
   return true

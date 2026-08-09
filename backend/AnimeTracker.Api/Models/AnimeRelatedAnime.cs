@@ -5,7 +5,12 @@ namespace AnimeTracker.Api.Models;
 /// value, kept unnormalized so an unrecognized relation is stored rather than
 /// dropped. <c>RelatedAnimeId</c> is intentionally not an FK: MAL routinely
 /// relates an anime we've never cached, and requiring the target row to exist
-/// would fail the whole upsert.</summary>
+/// would fail the whole upsert. <c>MediaType</c> comes from MAL's
+/// <c>related_anime{node{media_type}}</c> nested field selection — populated
+/// only by a full-detail fetch, so a relation added before this column existed
+/// (or by a lean listing refresh, which never touches related-anime rows at
+/// all) stays null until its owner's next full-detail fetch; callers fall back
+/// to a cache lookup by <c>RelatedAnimeId</c> for those rows.</summary>
 public class AnimeRelatedAnime
 {
     public int AnimeId { get; set; } // owner (MAL id)
@@ -13,6 +18,7 @@ public class AnimeRelatedAnime
     public string RelationType { get; set; } = "";
     public string Title { get; set; } = "";
     public string? PictureUrl { get; set; }
+    public string? MediaType { get; set; }
     public int SortOrder { get; set; } // MAL's own ordering within the anime's related_anime array
 
     public AnimeMetadata Anime { get; set; } = null!;

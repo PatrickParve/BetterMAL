@@ -22,21 +22,4 @@ public class AnimeDetailController(IAnimeDetailService detailService) : Controll
             return NotFound();
         }
     }
-
-    /// <summary>Backfills media types for this anime's not-yet-cached related
-    /// entries (one paced MAL call each, capped) and returns the refreshed
-    /// related-anime list — called when the More overlay opens.</summary>
-    [HttpPost("api/anime/{animeId:int}/related-anime/refresh")]
-    public async Task<IActionResult> RefreshRelatedMediaTypes(int animeId, CancellationToken ct)
-    {
-        try
-        {
-            var result = await detailService.RefreshRelatedMediaTypesAsync(animeId, ct);
-            return Ok(result);
-        }
-        catch (AnimeMetadataNotFoundException)
-        {
-            return NotFound();
-        }
-    }
 }

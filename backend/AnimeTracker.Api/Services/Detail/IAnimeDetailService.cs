@@ -8,9 +8,4 @@ public interface IAnimeDetailService
     /// time this anime's own detail page is opened — if they were never
     /// populated by import, nightly refresh, or a prior visit.</summary>
     Task<AnimeDetailDto> GetDetailAsync(int animeId, CancellationToken ct = default);
-
-    /// <summary>On-demand backfill of media types for this anime's related
-    /// entries that aren't cached yet (capped, one MAL call each), returning
-    /// the refreshed related-anime list.</summary>
-    Task<List<RelatedAnimeDto>> RefreshRelatedMediaTypesAsync(int animeId, CancellationToken ct = default);
 }
