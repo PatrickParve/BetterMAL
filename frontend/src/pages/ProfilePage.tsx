@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getProfile, getRewatchedSection, getTopAnimeSection } from '../api/client.ts'
 import type {
@@ -11,6 +11,9 @@ import type {
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { EditHistoryOverlay } from '../components/EditHistoryOverlay.tsx'
 import { TopAnimeSelectionOverlay } from '../components/TopAnimeSelectionOverlay.tsx'
+import { TruncatedTitle } from '../components/TruncatedTitle.tsx'
+import { usePageData } from '../hooks/usePageData.ts'
+import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { CHANGE_TYPE_LABELS, formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
 import './ProfilePage.css'
 
@@ -33,14 +36,14 @@ const REWATCHED_EMPTY_MESSAGES: Record<TopAnimeMediaType, string> = {
 }
 
 const STAT_LABELS: { key: keyof ProfileDto['stats']; label: string }[] = [
-  { key: 'days', label: 'Days' },
-  { key: 'meanScore', label: 'Mean score' },
-  { key: 'watching', label: 'Watching' },
   { key: 'completed', label: 'Completed' },
+  { key: 'meanScore', label: 'Mean score' },
+  { key: 'totalEntries', label: 'Total entries' },
+  { key: 'watching', label: 'Watching' },
+  { key: 'planToWatch', label: 'Plan to watch' },
   { key: 'onHold', label: 'On-hold' },
   { key: 'dropped', label: 'Dropped' },
-  { key: 'planToWatch', label: 'Plan to watch' },
-  { key: 'totalEntries', label: 'Total entries' },
+  { key: 'days', label: 'Days' },
   { key: 'rewatched', label: 'Rewatched' },
   { key: 'episodes', label: 'Episodes' },
 ]
@@ -50,6 +53,17 @@ function formatStatValue(key: keyof ProfileDto['stats'], value: number | null): 
   if (key === 'days') return value.toFixed(1)
   if (key === 'meanScore') return value.toFixed(2)
   return String(value)
+}
+
+// `<1%` covers a bucket that has anime in it but rounds down to nothing —
+// showing a flat 0% there would read as "no anime has this score", which is
+// false. No share at all renders when nothing is rated, since a percentage
+// of zero is a meaningless comparison.
+function formatShare(count: number, totalRated: number): string | null {
+  if (totalRated === 0) return null
+  const rounded = Math.round((count / totalRated) * 100)
+  if (count > 0 && rounded === 0) return '<1%'
+  return `${rounded}%`
 }
 
 // Shared drag-to-scroll behavior for a horizontal poster strip: a mouse-down
@@ -125,58 +139,46 @@ function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
 // history, top-anime tie-break selection) — everything computed server-side
 // from cached Postgres data.
 export function ProfilePage() {
-  const [profile, setProfile] = useState<ProfileDto | null>(null)
-  const [topAnime, setTopAnime] = useState<TopAnimeSectionDto | null>(null)
-  const [mediaType, setMediaType] = useState<TopAnimeMediaType>('all')
-  const [rewatched, setRewatched] = useState<RewatchedSectionDto | null>(null)
-  const [rewatchedMediaType, setRewatchedMediaType] = useState<TopAnimeMediaType>('all')
-  const [loading, setLoading] = useState(true)
+  const { data: profile, loading } = usePageData<ProfileDto>('profile', getProfile)
+
+  // Each media-type tab is its own resource key, not just a view control on
+  // top of one shared fetch — so restoring a page left on "TV" shows TV data
+  // instead of a background refresh of "All" silently swapping the grid out
+  // from under a tab that still reads as selected.
+  const [mediaType, setMediaType] = useRestorableState<TopAnimeMediaType>('mediaType', 'all')
+  const {
+    data: topAnime,
+    loading: topAnimeLoading,
+    reload: reloadTopAnime,
+  } = usePageData<TopAnimeSectionDto>(`top-anime:${mediaType}`, () => getTopAnimeSection(mediaType))
+
+  const [rewatchedMediaType, setRewatchedMediaType] = useRestorableState<TopAnimeMediaType>(
+    'rewatchedMediaType',
+    'all',
+  )
+  const { data: rewatched, loading: rewatchedLoading } = usePageData<RewatchedSectionDto>(
+    `rewatched:${rewatchedMediaType}`,
+    () => getRewatchedSection(rewatchedMediaType),
+  )
+
+  // Switching media-type tabs picks a new resource key, and usePageData
+  // clears `data` to null until that key's fetch resolves — fine for a page
+  // navigation, but between tabs on the same page it reads as the strip
+  // collapsing and popping back open. Keeping the last-loaded section on
+  // screen until the new one arrives keeps the strip's height (and the tabs
+  // around it) stable across the switch instead of visibly jumping.
+  const topAnimeDisplayRef = useRef<TopAnimeSectionDto | null>(null)
+  if (topAnime) topAnimeDisplayRef.current = topAnime
+  const displayedTopAnime = topAnime ?? topAnimeDisplayRef.current
+
+  const rewatchedDisplayRef = useRef<RewatchedSectionDto | null>(null)
+  if (rewatched) rewatchedDisplayRef.current = rewatched
+  const displayedRewatched = rewatched ?? rewatchedDisplayRef.current
+
   const [showHistory, setShowHistory] = useState(false)
   const [showTopAnimeSelect, setShowTopAnimeSelect] = useState(false)
   const topAnimeDragScroll = useDragScroll()
   const rewatchedDragScroll = useDragScroll()
-
-  function loadProfile() {
-    return getProfile()
-      .then((data) => {
-        setProfile(data)
-        setTopAnime(data.topAnime)
-        setRewatched(data.rewatched)
-      })
-      .catch(() => {
-        // Page just stays empty; nothing else to react to here.
-      })
-  }
-
-  function loadTopAnimeSection(type: TopAnimeMediaType) {
-    return getTopAnimeSection(type)
-      .then(setTopAnime)
-      .catch(() => {
-        // Section just stays as-is; nothing else to react to here.
-      })
-  }
-
-  function selectMediaType(type: TopAnimeMediaType) {
-    setMediaType(type)
-    loadTopAnimeSection(type)
-  }
-
-  function loadRewatchedSection(type: TopAnimeMediaType) {
-    return getRewatchedSection(type)
-      .then(setRewatched)
-      .catch(() => {
-        // Section just stays as-is; nothing else to react to here.
-      })
-  }
-
-  function selectRewatchedMediaType(type: TopAnimeMediaType) {
-    setRewatchedMediaType(type)
-    loadRewatchedSection(type)
-  }
-
-  useEffect(() => {
-    loadProfile().finally(() => setLoading(false))
-  }, [])
 
   if (loading) {
     return <p className="profile-page__loading">Loading…</p>
@@ -187,6 +189,7 @@ export function ProfilePage() {
   }
 
   const totalRated = profile.scoreDistribution.buckets.reduce((sum, b) => sum + b.count, 0)
+  const maxBucketCount = Math.max(0, ...profile.scoreDistribution.buckets.map((b) => b.count))
 
   return (
     <div className="profile-page">
@@ -208,18 +211,24 @@ export function ProfilePage() {
         <section className="profile-box">
           <h2>Rating distribution</h2>
           <div className="score-distribution">
-            {[...profile.scoreDistribution.buckets].reverse().map((bucket) => (
-              <div key={bucket.score} className="score-distribution__row">
-                <span className="score-distribution__label">{bucket.score}</span>
-                <div className="score-distribution__bar-track">
-                  <div
-                    className="score-distribution__bar"
-                    style={{ width: `${totalRated > 0 ? (bucket.count / totalRated) * 100 : 0}%` }}
-                  />
+            {[...profile.scoreDistribution.buckets].reverse().map((bucket) => {
+              const share = formatShare(bucket.count, totalRated)
+              return (
+                <div key={bucket.score} className="score-distribution__row">
+                  <span className="score-distribution__label">{bucket.score}</span>
+                  <div className="score-distribution__bar-track">
+                    <div
+                      className="score-distribution__bar"
+                      style={{ width: `${maxBucketCount > 0 ? (bucket.count / maxBucketCount) * 100 : 0}%` }}
+                    />
+                  </div>
+                  <span className="score-distribution__count">
+                    {bucket.count}
+                    {share ? ` (${share})` : ''}
+                  </span>
                 </div>
-                <span className="score-distribution__count">{bucket.count}</span>
-              </div>
-            ))}
+              )
+            })}
           </div>
           <p className="score-distribution__mean">
             Mean score: {profile.scoreDistribution.meanScore?.toFixed(2) ?? '—'}
@@ -236,7 +245,7 @@ export function ProfilePage() {
           {profile.recentActivity.length === 0 ? (
             <p className="profile-page__section-empty">No activity yet.</p>
           ) : (
-            <ul className="activity-feed">
+            <ul className="activity-feed scroll-y">
               {profile.recentActivity.map((item) => (
                 <li key={item.id} className="profile-list-row">
                   <Link to={`/anime/${item.animeId}`} className="profile-list-row__link">
@@ -249,12 +258,11 @@ export function ProfilePage() {
                       />
                     )}
                     <span className="profile-list-row__info">
-                      <span
-                        className="profile-list-row__title"
+                      <TruncatedTitle
                         title={pickDisplayTitle(item.animeTitle, item.animeEnglishTitle)}
-                      >
-                        {pickDisplayTitle(item.animeTitle, item.animeEnglishTitle)}
-                      </span>
+                        lines={1}
+                        className="profile-list-row__title"
+                      />
                       <span className="profile-list-row__meta">
                         {CHANGE_TYPE_LABELS[item.changeType] ?? item.changeType}
                         {item.changeDetail ? ` — ${item.changeDetail}` : ''}
@@ -272,7 +280,7 @@ export function ProfilePage() {
       <section className="profile-box">
         <div className="profile-box__header-row">
           <h2>My top anime</h2>
-          {topAnime && topAnime.tiers.some((tier) => tier.members.length > 1) && (
+          {displayedTopAnime && displayedTopAnime.tiers.some((tier) => tier.members.length > 1) && (
             <button type="button" className="profile-box__control" onClick={() => setShowTopAnimeSelect(true)}>
               Edit order
             </button>
@@ -289,14 +297,14 @@ export function ProfilePage() {
               className={
                 mediaType === tab.value ? 'profile-media-tabs__tab profile-media-tabs__tab--active' : 'profile-media-tabs__tab'
               }
-              onClick={() => selectMediaType(tab.value)}
+              onClick={() => setMediaType(tab.value)}
             >
               {tab.label}
             </button>
           ))}
         </div>
 
-        {!topAnime || topAnime.items.length === 0 ? (
+        {!displayedTopAnime && topAnimeLoading ? null : !displayedTopAnime || displayedTopAnime.items.length === 0 ? (
           <p className="profile-page__section-empty">
             {mediaType === 'all'
               ? 'Score some anime to build your top list.'
@@ -304,7 +312,7 @@ export function ProfilePage() {
           </p>
         ) : (
           <div className="top-anime-strip" ref={topAnimeDragScroll.ref} {...topAnimeDragScroll.handlers}>
-            {topAnime.items.map((item) => (
+            {displayedTopAnime.items.map((item) => (
               <Link
                 key={item.animeId}
                 to={`/anime/${item.animeId}`}
@@ -347,18 +355,18 @@ export function ProfilePage() {
                   ? 'profile-media-tabs__tab profile-media-tabs__tab--active'
                   : 'profile-media-tabs__tab'
               }
-              onClick={() => selectRewatchedMediaType(tab.value)}
+              onClick={() => setRewatchedMediaType(tab.value)}
             >
               {tab.label}
             </button>
           ))}
         </div>
 
-        {!rewatched || rewatched.items.length === 0 ? (
+        {!displayedRewatched && rewatchedLoading ? null : !displayedRewatched || displayedRewatched.items.length === 0 ? (
           <p className="profile-page__section-empty">{REWATCHED_EMPTY_MESSAGES[rewatchedMediaType]}</p>
         ) : (
           <div className="rewatched-strip" ref={rewatchedDragScroll.ref} {...rewatchedDragScroll.handlers}>
-            {rewatched.items.map((item) => (
+            {displayedRewatched.items.map((item) => (
               <Link
                 key={item.animeId}
                 to={`/anime/${item.animeId}`}
@@ -406,7 +414,7 @@ export function ProfilePage() {
           onClose={() => setShowTopAnimeSelect(false)}
           onSaved={() => {
             setShowTopAnimeSelect(false)
-            loadTopAnimeSection(mediaType)
+            reloadTopAnime()
           }}
         />
       )}

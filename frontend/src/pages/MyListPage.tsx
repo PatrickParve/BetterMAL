@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getMyList, updateEntry } from '../api/client.ts'
 import type { IncrementTarget, MyListItemDto, WatchStatus } from '../api/types.ts'
@@ -6,6 +6,8 @@ import { ProgressBar } from '../components/ProgressBar.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useEpisodeIncrement, useSetEpisodesWatched } from '../context/CompletionPromptContext.tsx'
+import { usePageData } from '../hooks/usePageData.ts'
+import { useRestorableState } from '../hooks/useRestorableState.ts'
 import {
   AIRING_STATUS_LABELS,
   airingStatusShortLabel,
@@ -75,32 +77,23 @@ function sortByKey(items: MyListItemDto[], sort: SortKey, airingStatusFirst: Air
 // ranked list with rank numbers instead — grouping by status and ranking by
 // score don't mix, mirroring how MAL's own list view behaves.
 export function MyListPage() {
-  const [items, setItems] = useState<MyListItemDto[]>([])
-  const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('All')
-  const [sort, setSort] = useState<SortKey>('alphabetical')
-  const [airingStatusFirst, setAiringStatusFirst] = useState<AiringStatus>('finished_airing')
+  const { data, loading, setData: setItems, reload: loadList } = usePageData<MyListItemDto[]>('my-list', getMyList)
+  const items = data ?? []
+  const [statusFilter, setStatusFilter] = useRestorableState<StatusFilter>('statusFilter', 'All')
+  const [sort, setSort] = useRestorableState<SortKey>('sort', 'alphabetical')
+  const [airingStatusFirst, setAiringStatusFirst] = useRestorableState<AiringStatus>(
+    'airingStatusFirst',
+    'finished_airing',
+  )
   const [pendingIncrementId, setPendingIncrementId] = useState<number | null>(null)
   const [pendingScoreId, setPendingScoreId] = useState<number | null>(null)
   const { openEditor } = useEntryEditor()
   const increment = useEpisodeIncrement()
   const setEpisodesWatched = useSetEpisodesWatched()
 
-  const loadList = useCallback(() => {
-    return getMyList()
-      .then(setItems)
-      .catch(() => {
-        // Page just stays empty; nothing else to react to here.
-      })
-  }, [])
-
-  useEffect(() => {
-    loadList().finally(() => setLoading(false))
-  }, [loadList])
-
   function handleSaved(animeId: number) {
     return (saved: MyListItemDto['entry']) => {
-      setItems((prev) => prev.map((item) => (item.animeId === animeId ? { ...item, entry: saved } : item)))
+      setItems((prev) => prev && prev.map((item) => (item.animeId === animeId ? { ...item, entry: saved } : item)))
     }
   }
 

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { getAiringWeek } from '../api/client.ts'
 import type { AiringWeekDto } from '../api/types.ts'
+import { usePageData } from '../hooks/usePageData.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
 import './AiringPage.css'
 
@@ -69,7 +69,7 @@ export function AiringPage() {
   const weekParam = searchParams.get('week')
   const referenceDate = isIsoDate(weekParam) ? weekParam : todayIso()
 
-  const [week, setWeek] = useState<AiringWeekDto | null>(null)
+  const { data: week } = usePageData<AiringWeekDto>(`airing:${referenceDate}`, () => getAiringWeek(referenceDate))
 
   function goToWeek(date: string) {
     setSearchParams((prev) => {
@@ -78,20 +78,6 @@ export function AiringPage() {
       return params
     })
   }
-
-  useEffect(() => {
-    let cancelled = false
-    getAiringWeek(referenceDate)
-      .then((data) => {
-        if (!cancelled) setWeek(data)
-      })
-      .catch(() => {
-        // Airing page just stays on the previous week; the user can retry via the nav controls.
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [referenceDate])
 
   const isCurrentWeek = weekStartIso(referenceDate) === weekStartIso(todayIso())
   const isEmptyWeek = week !== null && week.days.every((day) => day.slots.length === 0)

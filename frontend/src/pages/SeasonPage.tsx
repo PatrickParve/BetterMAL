@@ -6,7 +6,14 @@ import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
 import { useLatestRequest } from '../hooks/useLatestRequest.ts'
+import { usePageData } from '../hooks/usePageData.ts'
 import './SeasonPage.css'
+
+interface SeasonReadState {
+  items: AnimeBrowseItemDto[]
+  totalCount: number
+  lastFetchedAt: string | null
+}
 
 const SEASON_ORDER = ['winter', 'spring', 'summer', 'fall'] as const
 type SeasonName = (typeof SEASON_ORDER)[number]
@@ -81,17 +88,35 @@ export function SeasonPage() {
   const inMyList = inMyListParam !== '0'
   const { hideHentai } = useContentFilter()
 
-  const [items, setItems] = useState<AnimeBrowseItemDto[]>([])
-  const [totalCount, setTotalCount] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null)
+  // Keyed on season/year alone: a different season is a different history
+  // snapshot, so restoring one restores its data regardless of which sort or
+  // filter was active when it was left (D5). Sort/filter changes within the
+  // same season are handled below via `reload`, not a second key.
+  const seasonKey = `season:${year}/${season}`
+  const {
+    data: seasonData,
+    setData: setSeasonData,
+    loading,
+    reload,
+  } = usePageData<SeasonReadState>(seasonKey, () =>
+    getSeasonPage(year, season, { sort, includeMyList: inMyList, hideHentai, offset: 0, limit: PAGE_SIZE }).then(
+      (page) => ({ items: page.items, totalCount: page.totalCount, lastFetchedAt: page.lastFetchedAt }),
+    ),
+  )
+  const items = seasonData?.items ?? []
+  const totalCount = seasonData?.totalCount ?? 0
+  const lastFetchedAt = seasonData?.lastFetchedAt ?? null
+
+  const [loadingMore, setLoadingMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const { start, current, isLatest } = useLatestRequest()
+  const isLoading = loading || loadingMore
 
-  // Read by the debounced refresh effect so it re-reads with whatever sort,
-  // filter, and loaded-page-count are current when the refresh completes,
-  // not whatever was current when the season settled.
+  // Read by the debounced refresh effect and the infinite-scroll effect so
+  // they re-read with whatever sort, filter, and loaded-page-count are
+  // current when they actually run, not whatever was current when they were
+  // scheduled.
   const sortRef = useRef(sort)
   sortRef.current = sort
   const inMyListRef = useRef(inMyList)
@@ -100,6 +125,8 @@ export function SeasonPage() {
   hideHentaiRef.current = hideHentai
   const itemsLengthRef = useRef(items.length)
   itemsLengthRef.current = items.length
+  const reloadRef = useRef(reload)
+  reloadRef.current = reload
 
   const hasMore = items.length < totalCount
   const neverCached = lastFetchedAt === null && items.length === 0
@@ -135,28 +162,28 @@ export function SeasonPage() {
     })
   }
 
-  // Cache-first read: fires on every season/sort/filter change and never
-  // touches MAL. Resets to page one so a sort or filter change behaves like a
-  // fresh navigation.
+  // Any parameter the cache-first read below depends on invalidates
+  // in-flight background-refresh/load-more requests started before the
+  // change (mirroring the generation guard usePageData applies to its own
+  // load internally, for the two fetches that sit outside it).
   useEffect(() => {
-    const requestId = start()
-    setItems([])
-    setTotalCount(0)
-    setLoading(true)
-    getSeasonPage(year, season, { sort, includeMyList: inMyList, hideHentai, offset: 0, limit: PAGE_SIZE })
-      .then((page) => {
-        if (!isLatest(requestId)) return
-        setItems(page.items)
-        setTotalCount(page.totalCount)
-        setLastFetchedAt(page.lastFetchedAt)
-      })
-      .catch(() => {
-        // Season page just stays empty; the user can retry via season nav.
-      })
-      .finally(() => {
-        if (isLatest(requestId)) setLoading(false)
-      })
-  }, [year, season, sort, inMyList, hideHentai])
+    start()
+  }, [seasonKey, sort, inMyList, hideHentai])
+
+  // Sort/filter changed within the same season: the season's initial or
+  // restored load is already covered by usePageData itself (above), so this
+  // only fires on a later change, reusing `reload`'s own generation guard
+  // rather than opening a second, independently-raced fetch. Read through a
+  // ref so a season change (which gives `reload` a new identity) doesn't
+  // also retrigger this effect.
+  const isFirstFilterRun = useRef(true)
+  useEffect(() => {
+    if (isFirstFilterRun.current) {
+      isFirstFilterRun.current = false
+      return
+    }
+    reloadRef.current()
+  }, [sort, inMyList, hideHentai])
 
   // Visit-triggered background refresh: keyed on season alone (via the
   // debounced key below) so sort/filter changes never cause a MAL fetch.
@@ -169,8 +196,8 @@ export function SeasonPage() {
     const [yearPart, seasonPart] = debouncedSeasonKey.split('/')
     const targetYear = Number(yearPart)
     const targetSeason = seasonPart as SeasonName
-    // Captured now, at the moment this season's refresh starts (the read
-    // effect above already bumped it for this same season) — not after
+    // Captured now, at the moment this season's refresh starts (the effect
+    // above already bumped it for this same season) — not after
     // refreshSeason resolves, so a slow refresh whose season has since been
     // navigated away from is still correctly recognized as stale.
     const requestId = current()
@@ -189,9 +216,7 @@ export function SeasonPage() {
           limit: Math.max(itemsLengthRef.current, PAGE_SIZE),
         }).then((page) => {
           if (cancelled || !isLatest(requestId)) return
-          setItems(page.items)
-          setTotalCount(page.totalCount)
-          setLastFetchedAt(page.lastFetchedAt)
+          setSeasonData({ items: page.items, totalCount: page.totalCount, lastFetchedAt: page.lastFetchedAt })
         })
       })
       .catch(() => {
@@ -219,21 +244,22 @@ export function SeasonPage() {
     return () => observer.disconnect()
 
     function loadMore() {
-      if (loading || !hasMore) return
+      if (isLoading || !hasMore) return
       const requestId = current()
-      setLoading(true)
+      setLoadingMore(true)
       getSeasonPage(year, season, { sort, includeMyList: inMyList, hideHentai, offset: items.length, limit: PAGE_SIZE })
         .then((page) => {
           if (!isLatest(requestId)) return
-          setItems((prev) => [...prev, ...page.items])
-          setTotalCount(page.totalCount)
+          setSeasonData((prev) =>
+            prev ? { ...prev, items: [...prev.items, ...page.items], totalCount: page.totalCount } : prev,
+          )
         })
         .catch(() => {})
         .finally(() => {
-          if (isLatest(requestId)) setLoading(false)
+          if (isLatest(requestId)) setLoadingMore(false)
         })
     }
-  }, [items, loading, hasMore, year, season, sort, inMyList, hideHentai])
+  }, [items, isLoading, hasMore, year, season, sort, inMyList, hideHentai])
 
   return (
     <div className="season-page">
@@ -303,7 +329,7 @@ export function SeasonPage() {
         </div>
       </div>
 
-      {items.length === 0 && !loading && !neverCached ? (
+      {items.length === 0 && !isLoading && !neverCached ? (
         <p className="season-page__empty">No anime found for this season.</p>
       ) : items.length > 0 ? (
         <div className="season-page__grid">
@@ -325,7 +351,7 @@ export function SeasonPage() {
       ) : null}
 
       <div ref={sentinelRef} className="season-page__sentinel" />
-      {(loading || neverCached) && <p className="season-page__loading">Loading…</p>}
+      {(isLoading || neverCached) && <p className="season-page__loading">Loading…</p>}
     </div>
   )
 }

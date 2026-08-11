@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getTopAnime, updateEntry } from '../api/client.ts'
 import type { TopAnimeItemDto } from '../api/types.ts'
 import { Pagination } from '../components/Pagination.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
+import { usePageData } from '../hooks/usePageData.ts'
+import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
 import './TopAnimePage.css'
 
@@ -17,29 +19,17 @@ const PAGE_SIZE = 50
 // everywhere else in the app. The ranking covers up to 500 rows, paginated
 // client-side at 50/page.
 export function TopAnimePage() {
-  const [items, setItems] = useState<TopAnimeItemDto[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data, loading, setData: setItems } = usePageData<TopAnimeItemDto[]>('top-anime', getTopAnime)
+  const items = data ?? []
   const [pendingId, setPendingId] = useState<number | null>(null)
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useRestorableState('page', 1)
   const { openEditor } = useEntryEditor()
-
-  useEffect(() => {
-    getTopAnime()
-      .then((data) => {
-        setItems(data)
-        setPage(1)
-      })
-      .catch(() => {
-        // Page just stays empty; nothing else to react to here.
-      })
-      .finally(() => setLoading(false))
-  }, [])
 
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
   const pageItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   function setEntry(animeId: number, entry: TopAnimeItemDto['entry']) {
-    setItems((prev) => prev.map((item) => (item.animeId === animeId ? { ...item, entry } : item)))
+    setItems((prev) => prev && prev.map((item) => (item.animeId === animeId ? { ...item, entry } : item)))
   }
 
   async function handleAdd(item: TopAnimeItemDto) {

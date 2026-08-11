@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getAnimeDetail, refreshAnime, updateEntry } from "../api/client.ts";
 import type {
@@ -14,6 +14,7 @@ import {
   useEpisodeIncrement,
   useSetEpisodesWatched,
 } from "../context/CompletionPromptContext.tsx";
+import { usePageData } from "../hooks/usePageData.ts";
 import { pickDisplayTitle, STATUS_LABELS } from "../utils/anime.ts";
 import "./AnimeDetailPage.css";
 
@@ -109,8 +110,12 @@ function formatDuration(seconds: number | null, totalEpisodes: number | null): s
 export function AnimeDetailPage() {
   const { id } = useParams();
   const animeId = Number(id);
-  const [detail, setDetail] = useState<AnimeDetailDto | null>(null);
-  const [loading, setLoading] = useState(true);
+  const {
+    data: detail,
+    loading,
+    setData: setDetail,
+    reload,
+  } = usePageData<AnimeDetailDto>(`anime:${animeId}`, () => getAnimeDetail(animeId));
   const [refreshing, setRefreshing] = useState(false);
   const [incrementPending, setIncrementPending] = useState(false);
   const [actionPending, setActionPending] = useState(false);
@@ -119,23 +124,12 @@ export function AnimeDetailPage() {
   const increment = useEpisodeIncrement();
   const setEpisodesWatched = useSetEpisodesWatched();
 
-  const load = useCallback(() => {
-    return getAnimeDetail(animeId)
-      .then(setDetail)
-      .catch(() => setDetail(null));
-  }, [animeId]);
-
-  useEffect(() => {
-    setLoading(true);
-    load().finally(() => setLoading(false));
-  }, [load]);
-
   async function handleRefresh() {
     if (refreshing) return;
     setRefreshing(true);
     try {
       await refreshAnime(animeId);
-      await load();
+      await reload();
     } catch {
       // Leave the page showing whatever was already cached.
     } finally {

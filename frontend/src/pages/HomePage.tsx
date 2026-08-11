@@ -1,25 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
 import { getDashboard } from '../api/client.ts'
 import type { MainDashboardDto } from '../api/types.ts'
+import { usePageData } from '../hooks/usePageData.ts'
 import { CurrentlyWatchingCarousel } from '../components/CurrentlyWatchingCarousel.tsx'
 import { AiringTodayList } from '../components/AiringTodayList.tsx'
 import { CurrentSeasonSection } from '../components/CurrentSeasonSection.tsx'
 import './HomePage.css'
 
 export function HomePage() {
-  const [dashboard, setDashboard] = useState<MainDashboardDto | null>(null)
-
-  const loadDashboard = useCallback(() => {
-    return getDashboard()
-      .then(setDashboard)
-      .catch(() => {
-        // Main page just stays empty; the user can reload once the backend catches up.
-      })
-  }, [])
-
-  useEffect(() => {
-    loadDashboard()
-  }, [loadDashboard])
+  const { data: dashboard, setData: setDashboard, reload } = usePageData<MainDashboardDto>('dashboard', getDashboard)
 
   // The same anime can appear in both "Currently watching" and "Followed
   // shows airing" (a current-season title I'm also watching), so an
@@ -39,7 +28,7 @@ export function HomePage() {
           }
         : prev,
     )
-  }, [])
+  }, [setDashboard])
 
   if (!dashboard) return null
 
@@ -51,7 +40,7 @@ export function HomePage() {
         // Reloads rather than patching: completing an anime moves it out of
         // "Currently watching" and possibly into the current-season section's
         // finished state, a server-computed regrouping no mutation response describes.
-        onCompleted={loadDashboard}
+        onCompleted={reload}
       />
       <div className="home-page__row">
         <div className="home-page__aside">

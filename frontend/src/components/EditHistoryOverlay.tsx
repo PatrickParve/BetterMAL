@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Modal } from './Modal.tsx'
+import { TruncatedTitle } from './TruncatedTitle.tsx'
 import { getActivityHistory } from '../api/client.ts'
 import type { ActivityFeedItemDto } from '../api/types.ts'
-import { CHANGE_TYPE_LABELS, formatTimestamp } from '../utils/anime.ts'
+import { CHANGE_TYPE_LABELS, formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
 import './EditHistoryOverlay.css'
 
 type EditHistoryOverlayProps = {
@@ -37,16 +38,27 @@ export function EditHistoryOverlay({ onClose }: EditHistoryOverlayProps) {
         ) : history.length === 0 ? (
           <p className="edit-history__empty">No activity yet.</p>
         ) : (
-          <ul className="edit-history__list">
+          <ul className="edit-history__list scroll-y">
             {history.map((item) => (
               <li key={item.id} className="edit-history__row">
                 <Link to={`/anime/${item.animeId}`} className="edit-history__link" onClick={onClose}>
-                  {item.animeTitle}
+                  {item.pictureUrl ? (
+                    <img src={item.pictureUrl} alt="" className="edit-history__picture" />
+                  ) : (
+                    <div className="edit-history__picture edit-history__picture--placeholder" aria-hidden="true" />
+                  )}
+                  <span className="edit-history__info">
+                    <TruncatedTitle
+                      title={pickDisplayTitle(item.animeTitle, item.animeEnglishTitle)}
+                      lines={2}
+                      className="edit-history__row-title"
+                    />
+                    <span className="edit-history__detail">
+                      {CHANGE_TYPE_LABELS[item.changeType] ?? item.changeType}
+                      {item.changeDetail ? ` — ${item.changeDetail}` : ''}
+                    </span>
+                  </span>
                 </Link>
-                <span className="edit-history__detail">
-                  {CHANGE_TYPE_LABELS[item.changeType] ?? item.changeType}
-                  {item.changeDetail ? ` — ${item.changeDetail}` : ''}
-                </span>
                 <span className="edit-history__timestamp">{formatTimestamp(item.timestamp)}</span>
               </li>
             ))}

@@ -156,3 +156,17 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* macOS overlay scrollbars float over content and take no layout space, so
+   scrollbar-gutter: stable alone reserves a gutter that visually sits empty.
+   The ::-webkit-scrollbar rule is what forces WebKit/Blink out of overlay
+   mode so that reserved gutter is actually used by a visible scrollbar. */
+.scroll-y {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.scroll-y::-webkit-scrollbar {
+  width: 8px;
+}

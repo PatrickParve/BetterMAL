@@ -1,12 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getSearchPage } from '../api/client.ts'
 import type { AnimeBrowseItemDto } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
-import { useLatestRequest } from '../hooks/useLatestRequest.ts'
+import { usePageData } from '../hooks/usePageData.ts'
+import { useRestorableState } from '../hooks/useRestorableState.ts'
 import './SearchPage.css'
 
 type SortKey = 'relevance' | 'popularity' | 'malScore' | 'alphabetical' | 'myScore'
+
+interface SearchReadState {
+  items: AnimeBrowseItemDto[]
+  totalCount: number
+}
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'relevance', label: 'Relevance' },
@@ -35,8 +41,8 @@ function isSortKey(value: string | null): value is SortKey {
 // re-run the live MAL search per chunk — and reveals it in chunks of
 // CHUNK_SIZE via an IntersectionObserver sentinel, the same continuous-scroll
 // pattern as the season page. Query/sort live in the URL so back-navigation
-// from an anime detail page restores exactly where the user left off; the
-// revealed-chunk count is not restored, matching Season's infinite scroll.
+// from an anime detail page restores exactly where the user left off,
+// including how much of the result set had been revealed.
 // A legacy `?page=N` link is simply ignored — the query itself still resolves.
 export function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -45,12 +51,24 @@ export function SearchPage() {
   const sortParam = searchParams.get('sort')
   const sort = isSortKey(sortParam) ? sortParam : 'relevance'
 
-  const [items, setItems] = useState<AnimeBrowseItemDto[]>([])
-  const [totalCount, setTotalCount] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [visibleCount, setVisibleCount] = useState(CHUNK_SIZE)
+  // Keyed on the query alone: a different query is a different history
+  // snapshot, so restoring one restores its results regardless of which sort
+  // was active when it was left (D5). A sort change within the same query is
+  // handled below via `reload`, not a second key.
+  const { data, loading, reload } = usePageData<SearchReadState>(`search:${q}`, () =>
+    q.length === 0
+      ? Promise.resolve({ items: [], totalCount: 0 })
+      : getSearchPage(q, { sort, offset: 0, limit: CANDIDATE_LIMIT }).then((result) => ({
+          items: result.items,
+          totalCount: result.totalCount,
+        })),
+  )
+  const items = data?.items ?? []
+  const totalCount = data?.totalCount ?? 0
+  const [visibleCount, setVisibleCount] = useRestorableState('visibleCount', CHUNK_SIZE)
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const { start, isLatest } = useLatestRequest()
+  const reloadRef = useRef(reload)
+  reloadRef.current = reload
 
   function setSort(next: SortKey) {
     setSearchParams((prev) => {
@@ -60,35 +78,19 @@ export function SearchPage() {
     })
   }
 
-  // Query or sort changed: fetch the whole candidate set once and reset the
-  // reveal to the first chunk. An empty query skips the request entirely.
+  // Sort changed within the same query: the query's initial or restored load
+  // is already covered by usePageData itself (above), so this only fires on
+  // a later change, reusing `reload`'s own generation guard. Read through a
+  // ref so a query change (which gives `reload` a new identity) doesn't also
+  // retrigger this effect.
+  const isFirstSortRun = useRef(true)
   useEffect(() => {
-    setVisibleCount(CHUNK_SIZE)
-
-    if (q.length === 0) {
-      setItems([])
-      setTotalCount(0)
-      setLoading(false)
+    if (isFirstSortRun.current) {
+      isFirstSortRun.current = false
       return
     }
-
-    const requestId = start()
-    setLoading(true)
-    getSearchPage(q, { sort, offset: 0, limit: CANDIDATE_LIMIT })
-      .then((result) => {
-        if (!isLatest(requestId)) return
-        setItems(result.items)
-        setTotalCount(result.totalCount)
-      })
-      .catch(() => {
-        if (!isLatest(requestId)) return
-        setItems([])
-        setTotalCount(0)
-      })
-      .finally(() => {
-        if (isLatest(requestId)) setLoading(false)
-      })
-  }, [q, sort])
+    reloadRef.current()
+  }, [sort])
 
   // Reveal more of the already-loaded array once the sentinel enters view —
   // no network call, everything for this (query, sort) is already in memory.
@@ -103,7 +105,7 @@ export function SearchPage() {
     })
     observer.observe(node)
     return () => observer.disconnect()
-  }, [items])
+  }, [items, setVisibleCount])
 
   const visibleItems = items.slice(0, visibleCount)
 
