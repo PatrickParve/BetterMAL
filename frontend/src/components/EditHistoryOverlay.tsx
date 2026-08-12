@@ -1,21 +1,33 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Modal } from './Modal.tsx'
 import { TruncatedTitle } from './TruncatedTitle.tsx'
 import { getActivityHistory } from '../api/client.ts'
 import type { ActivityFeedItemDto } from '../api/types.ts'
-import { CHANGE_TYPE_LABELS, formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
+import { formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
 import './EditHistoryOverlay.css'
 
 type EditHistoryOverlayProps = {
   onClose: () => void
 }
 
+// A row's local calendar day in the same YYYY-MM-DD shape an
+// `<input type="date">` value uses, so a date bound compares lexically
+// against it as an inclusive whole day in the viewer's own timezone.
+function toLocalDateString(timestamp: string): string {
+  return new Date(timestamp).toLocaleDateString('en-CA')
+}
+
 // Full edit history — everything the "Latest updates" box trims down to its
-// most-recent handful. Fetched fresh each time the overlay opens.
+// most-recent handful. Fetched fresh each time the overlay opens; the title
+// search and date range then filter that one fetch locally, so neither
+// triggers a refetch.
 export function EditHistoryOverlay({ onClose }: EditHistoryOverlayProps) {
   const [history, setHistory] = useState<ActivityFeedItemDto[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
 
   useEffect(() => {
     getActivityHistory()
@@ -26,6 +38,32 @@ export function EditHistoryOverlay({ onClose }: EditHistoryOverlayProps) {
       .finally(() => setLoading(false))
   }, [])
 
+  const hasActiveFilter = search.trim().length > 0 || fromDate.length > 0 || toDate.length > 0
+
+  const filteredHistory = useMemo(() => {
+    const query = search.trim().toLowerCase()
+
+    return history.filter((item) => {
+      if (query) {
+        const matchesTitle = item.animeTitle.toLowerCase().includes(query)
+        const matchesEnglishTitle = item.animeEnglishTitle?.toLowerCase().includes(query) ?? false
+        if (!matchesTitle && !matchesEnglishTitle) return false
+      }
+
+      const day = toLocalDateString(item.timestamp)
+      if (fromDate && day < fromDate) return false
+      if (toDate && day > toDate) return false
+
+      return true
+    })
+  }, [history, search, fromDate, toDate])
+
+  function clearFilters() {
+    setSearch('')
+    setFromDate('')
+    setToDate('')
+  }
+
   return (
     <Modal onClose={onClose} labelledBy="edit-history-title" className="modal--wide">
       <div className="edit-history">
@@ -33,13 +71,50 @@ export function EditHistoryOverlay({ onClose }: EditHistoryOverlayProps) {
           Full edit history
         </h2>
 
+        <div className="edit-history__filters">
+          <input
+            type="text"
+            className="edit-history__search"
+            placeholder="Search by title"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label="Search by anime title"
+          />
+          <div className="edit-history__date-range">
+            <input
+              type="date"
+              className="edit-history__date"
+              value={fromDate}
+              onChange={(event) => setFromDate(event.target.value)}
+              aria-label="From date"
+            />
+            <span className="edit-history__date-separator" aria-hidden="true">
+              –
+            </span>
+            <input
+              type="date"
+              className="edit-history__date"
+              value={toDate}
+              onChange={(event) => setToDate(event.target.value)}
+              aria-label="To date"
+            />
+          </div>
+          {hasActiveFilter && (
+            <button type="button" className="edit-history__clear" onClick={clearFilters}>
+              Clear
+            </button>
+          )}
+        </div>
+
         {loading ? (
           <p className="edit-history__empty">Loading…</p>
         ) : history.length === 0 ? (
           <p className="edit-history__empty">No activity yet.</p>
+        ) : filteredHistory.length === 0 ? (
+          <p className="edit-history__empty">No history matches these filters.</p>
         ) : (
           <ul className="edit-history__list scroll-y">
-            {history.map((item) => (
+            {filteredHistory.map((item) => (
               <li key={item.id} className="edit-history__row">
                 <Link to={`/anime/${item.animeId}`} className="edit-history__link" onClick={onClose}>
                   {item.pictureUrl ? (
@@ -53,10 +128,7 @@ export function EditHistoryOverlay({ onClose }: EditHistoryOverlayProps) {
                       lines={2}
                       className="edit-history__row-title"
                     />
-                    <span className="edit-history__detail">
-                      {CHANGE_TYPE_LABELS[item.changeType] ?? item.changeType}
-                      {item.changeDetail ? ` — ${item.changeDetail}` : ''}
-                    </span>
+                    <span className="edit-history__detail">{item.summary}</span>
                   </span>
                 </Link>
                 <span className="edit-history__timestamp">{formatTimestamp(item.timestamp)}</span>

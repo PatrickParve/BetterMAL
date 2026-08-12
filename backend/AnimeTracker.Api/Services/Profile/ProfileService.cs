@@ -10,10 +10,11 @@ public class ProfileService(
 {
     private const int RecentActivityCount = 20;
 
-    // The feed only keeps additions and genuine episode increases (collapsing
-    // consecutive same-anime increments), so a much larger raw window is
-    // pulled before filtering/collapsing down to RecentActivityCount.
-    private const int RecentActivityFetchWindow = 200;
+    // Filtering and per-anime/per-field-group collapsing are both
+    // subtractive, so a much larger raw window is pulled before collapsing
+    // down to RecentActivityCount — otherwise a long binge or editing
+    // session on one anime could leave the feed short of its 20 items.
+    private const int RecentActivityFetchWindow = 400;
 
     private const int TopAnimeMinimumSize = 10;
 
@@ -114,27 +115,43 @@ public class ProfileService(
         await topAnimeSelectionRepository.ReplaceOrderAsync(finalOrder, ct);
     }
 
-    private static ActivityFeedItemDto ToActivityFeedItem(ActivityLog log) =>
-        new(log.Id, log.Timestamp, log.AnimeId, log.Anime.Title, log.Anime.EnglishTitle, log.Anime.PictureUrl, log.ChangeType, log.ChangeDetail);
+    private static ActivityFeedItemDto ToActivityFeedItem(ActivityLog log, int? mergedScore = null, EpisodeRun? episodeRun = null) =>
+        new(log.Id, log.Timestamp, log.AnimeId, log.Anime.Title, log.Anime.EnglishTitle, log.Anime.PictureUrl, log.ChangeType, log.ChangeDetail,
+            ActivityFeedComposer.Summarize(log, mergedScore, episodeRun));
 
     // history is most-recent-first and, unlike BuildActivityFeed, unfiltered:
-    // the full history is meant to show everything. A binge of consecutive
-    // same-anime genuine episode-watched entries would otherwise be one row
-    // per episode, so a run of two or more collapses into a single "Episodes
-    // low-high" row. Any other change type, a different anime, a non-genuine
-    // (decreasing) entry, or a gap in the log ends the run; runs of one keep
-    // their original "Episode N" text.
+    // the full history is meant to show everything. A score merged into an
+    // adjacent completion (see ActivityFeedComposer) is dropped as its own
+    // row, with its value folded into the completion's row instead. A binge
+    // of consecutive same-anime genuine episode-watched entries would
+    // otherwise be one row per episode, so a run of two or more collapses
+    // into a single "Episodes low-high" row — the completed run's episode
+    // range stays its own row even when the completion right after it is
+    // merged with a score. Any other change type, a different anime, a
+    // non-genuine (decreasing) entry, or a gap in the log ends the run; runs
+    // of one keep their original "Episode N" text.
     private static List<ActivityFeedItemDto> CollapseEpisodeRuns(List<ActivityLog> history)
     {
+        var merges = ActivityFeedComposer.FindCompletionScoreMerges(history);
+        var droppedScoreLogIds = merges.Values.Select(m => m.ScoreLogId).ToHashSet();
+
         var result = new List<ActivityFeedItemDto>();
 
         var index = 0;
         while (index < history.Count)
         {
             var log = history[index];
+
+            if (droppedScoreLogIds.Contains(log.Id))
+            {
+                index++;
+                continue;
+            }
+
             if (log.ChangeType != ActivityChangeType.EpisodeIncremented || !IsGenuineIncrease(log))
             {
-                result.Add(ToActivityFeedItem(log));
+                var mergedScore = merges.TryGetValue(log.Id, out var merge) ? merge.Score : null;
+                result.Add(ToActivityFeedItem(log, mergedScore));
                 index++;
                 continue;
             }
@@ -160,13 +177,11 @@ public class ProfileService(
                     .Select(n => n!.Value)
                     .ToList();
 
-                var detail = episodeNumbers.Count > 0
-                    ? $"Episodes {episodeNumbers.Min()}-{episodeNumbers.Max()}"
-                    : log.ChangeDetail;
+                var episodeRun = episodeNumbers.Count > 0
+                    ? new EpisodeRun(episodeNumbers.Min(), episodeNumbers.Max())
+                    : (EpisodeRun?)null;
 
-                result.Add(new ActivityFeedItemDto(
-                    log.Id, log.Timestamp, log.AnimeId, log.Anime.Title, log.Anime.EnglishTitle, log.Anime.PictureUrl,
-                    log.ChangeType, detail));
+                result.Add(ToActivityFeedItem(log, episodeRun: episodeRun));
             }
 
             index = runEnd + 1;
@@ -175,46 +190,50 @@ public class ProfileService(
         return result;
     }
 
-    // window is most-recent-first. Keep additions, completions, score changes,
-    // and genuine episode increases. EpisodeIncremented and Completed are both
-    // "progress" events for the same anime: a run of consecutive increases
-    // collapses into just the newest one, and a completion supersedes the
-    // increase that produced it (the completion log row is written after its
-    // triggering increase, so in most-recent-first order the completion is
-    // seen first and swallows the run behind it). Completed is never skipped.
+    // window is most-recent-first and contains every change type.
+    // ActivityFeedComposer.FieldGroupOf both selects the types the feed
+    // carries (Added, EpisodeIncremented, Completed, ScoreChanged,
+    // RewatchCountChanged, Removed — status and date changes have no group
+    // and are dropped) and drives the collapsing below. The completion+score
+    // merge runs first so a completion carries its score and the standalone
+    // score row never reaches the feed. After that, the feed keeps at most
+    // one row per (AnimeId, FieldGroup): walking most-recent-first, the first
+    // row seen for a pair is that anime's newest value for that field and
+    // every older row for the same pair is dropped. Grouping Added and
+    // Removed together means an add -> remove -> re-add cycle shows only the
+    // latest membership state. A completion is the newest progress row for
+    // its anime whenever one exists, so it wins over the increases behind it
+    // without a separate adjacency check.
     private static List<ActivityFeedItemDto> BuildActivityFeed(List<ActivityLog> window)
     {
+        var merges = ActivityFeedComposer.FindCompletionScoreMerges(window);
+        var droppedScoreLogIds = merges.Values.Select(m => m.ScoreLogId).ToHashSet();
+
         var feed = new List<ActivityFeedItemDto>();
+        var seenGroups = new HashSet<(int AnimeId, ActivityFieldGroup Group)>();
 
         foreach (var log in window)
         {
-            switch (log.ChangeType)
-            {
-                case ActivityChangeType.EpisodeIncremented:
-                    if (!IsGenuineIncrease(log))
-                        continue;
-                    if (feed.Count > 0 && IsProgressEvent(feed[^1].ChangeType) && feed[^1].AnimeId == log.AnimeId)
-                        continue;
-                    break;
-                case ActivityChangeType.Completed:
-                case ActivityChangeType.Added:
-                case ActivityChangeType.ScoreChanged:
-                case ActivityChangeType.Removed:
-                    break;
-                default:
-                    continue;
-            }
+            if (droppedScoreLogIds.Contains(log.Id))
+                continue;
 
-            feed.Add(ToActivityFeedItem(log));
+            if (log.ChangeType == ActivityChangeType.EpisodeIncremented && !IsGenuineIncrease(log))
+                continue;
+
+            if (ActivityFeedComposer.FieldGroupOf(log.ChangeType) is not { } group)
+                continue;
+
+            if (!seenGroups.Add((log.AnimeId, group)))
+                continue;
+
+            var mergedScore = merges.TryGetValue(log.Id, out var merge) ? merge.Score : null;
+            feed.Add(ToActivityFeedItem(log, mergedScore));
             if (feed.Count == RecentActivityCount)
                 break;
         }
 
         return feed;
     }
-
-    private static bool IsProgressEvent(ActivityChangeType type) =>
-        type is ActivityChangeType.EpisodeIncremented or ActivityChangeType.Completed;
 
     // Pre-migration rows have no PreviousEpisodesWatched; treated as a
     // best-effort increase since direction can't be reconstructed for them.

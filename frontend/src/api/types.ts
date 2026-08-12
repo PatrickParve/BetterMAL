@@ -210,6 +210,7 @@ export type ActivityFeedItemDto = {
   pictureUrl: string | null
   changeType: ActivityChangeType
   changeDetail: string | null
+  summary: string
 }
 
 export type AnimeStatsDto = {

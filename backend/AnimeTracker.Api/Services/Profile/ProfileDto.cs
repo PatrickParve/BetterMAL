@@ -22,7 +22,8 @@ public record ActivityFeedItemDto(
     string? AnimeEnglishTitle,
     string? PictureUrl,
     ActivityChangeType ChangeType,
-    string? ChangeDetail);
+    string? ChangeDetail,
+    string Summary);
 
 public record TopAnimeEntryDto(
     int AnimeId,

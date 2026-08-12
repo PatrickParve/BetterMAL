@@ -9,6 +9,7 @@ public class ActivityLogRepository(AnimeTrackerDbContext db) : IActivityLogRepos
         db.ActivityLogs.AsNoTracking()
             .Include(l => l.Anime)
             .OrderByDescending(l => l.Timestamp)
+            .ThenByDescending(l => l.Id)
             .Take(count)
             .ToListAsync(ct);
 
@@ -16,5 +17,6 @@ public class ActivityLogRepository(AnimeTrackerDbContext db) : IActivityLogRepos
         db.ActivityLogs.AsNoTracking()
             .Include(l => l.Anime)
             .OrderByDescending(l => l.Timestamp)
+            .ThenByDescending(l => l.Id)
             .ToListAsync(ct);
 }

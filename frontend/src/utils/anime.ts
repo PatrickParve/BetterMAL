@@ -73,16 +73,6 @@ export function mediaTypeLabel(raw: string | null | undefined): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }
 
-export const CHANGE_TYPE_LABELS: Record<string, string> = {
-  Added: 'Added',
-  StatusChanged: 'Status changed',
-  EpisodeIncremented: 'Episode watched',
-  ScoreChanged: 'Score changed',
-  Completed: 'Completed',
-  RewatchCountChanged: 'Rewatch count changed',
-  Removed: 'Removed from list',
-}
-
 // "Never" is settings-page phrasing for a field that's always present
 // elsewhere, so callers that don't want it pass a null value instead.
 export function formatTimestamp(value: string | null): string {

@@ -14,7 +14,7 @@ import { TopAnimeSelectionOverlay } from '../components/TopAnimeSelectionOverlay
 import { TruncatedTitle } from '../components/TruncatedTitle.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
-import { CHANGE_TYPE_LABELS, formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
+import { formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
 import './ProfilePage.css'
 
 const MEDIA_TYPE_TABS: { value: TopAnimeMediaType; label: string }[] = [
@@ -263,10 +263,7 @@ export function ProfilePage() {
                         lines={1}
                         className="profile-list-row__title"
                       />
-                      <span className="profile-list-row__meta">
-                        {CHANGE_TYPE_LABELS[item.changeType] ?? item.changeType}
-                        {item.changeDetail ? ` — ${item.changeDetail}` : ''}
-                      </span>
+                      <span className="profile-list-row__meta">{item.summary}</span>
                     </span>
                   </Link>
                   <span className="profile-list-row__trailing">{formatTimestamp(item.timestamp)}</span>

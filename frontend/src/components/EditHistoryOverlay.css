@@ -8,6 +8,68 @@
   margin: 0;
 }
 
+/* Wraps onto its own line(s) on a narrow viewport rather than forcing the
+   modal wider — the list below keeps its own max-height/scroll-y regardless
+   of how many lines this row takes, and the modal's own max-height: 85vh +
+   overflow-y: auto (Modal.css) is what keeps the whole overlay on screen. */
+.edit-history__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-history__search {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  flex: 1 1 160px;
+  min-width: 140px;
+}
+
+.edit-history__date-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.edit-history__date {
+  font: inherit;
+  font-size: 14px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.edit-history__date-separator {
+  color: var(--text);
+  opacity: 0.6;
+}
+
+.edit-history__clear {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.edit-history__clear:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
 .edit-history__list {
   list-style: none;
   margin: 0;
