@@ -51,7 +51,17 @@ public class SeriesService(
                     // all" if one was already stored (relations can thin out
                     // between visits) — falls back to the pre-build snapshot
                     // rather than treating a already-stored series as gone.
-                    series = await graphBuilder.BuildAsync(animeId, fetchBudget, expandLeanMembers: forceRebuild, ct) ?? series;
+                    //
+                    // expandLeanMembers is always on, not just on an explicit
+                    // rebuild: a lean member (season/top-anime browsing) has
+                    // no outgoing relations of its own, so a real season
+                    // reachable only *through* it never gets discovered, and
+                    // main-line classification (sequel/prequel edges only)
+                    // can hand the main line to whichever chain happened to
+                    // be full-fetched. Spending part of the visit budget here
+                    // is what lets a first visit self-heal instead of always
+                    // depending on the user clicking Rebuild.
+                    series = await graphBuilder.BuildAsync(animeId, fetchBudget, expandLeanMembers: true, ct) ?? series;
                 }
             }
         }

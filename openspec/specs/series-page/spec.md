@@ -25,7 +25,9 @@ An anime SHALL belong to at most one series.
 - **THEN** B is still a member of A's series
 
 ### Requirement: Main line and extras
-Within a series the system SHALL identify a main line: the largest connected chain over `sequel`/`prequel` relations among the members — ties broken in favour of the chain containing the earliest-aired member — with members whose media type is `special` or `music` excluded from it. Every other member of the series SHALL be an extra.
+Within a series the system SHALL identify a main line: the largest connected chain over `sequel`/`prequel` relations among the members — ties broken in favour of the chain containing the earliest-aired member — with members whose media type is `special` or `music` excluded from it, and members tagged as a recap of another member (a `summary`/`full_story` relation to it) excluded regardless of media type. Every other member of the series SHALL be an extra.
+
+A recap tag overrides a sequel/prequel edge on the same member: MAL routinely gives a recap special both a `summary`/`full_story` relation to the season it recaps and a `sequel`/`prequel` relation bridging it to the next season, and often types it `tv_special` rather than `special` — the media-type filter alone would not catch it, so the explicit recap tag is checked independently.
 
 Extras SHALL be grouped by media type in the fixed display order Movie, OVA, ONA, Special, Music, TV, Other, and ordered by aired-from date within each group.
 
@@ -40,6 +42,10 @@ Extras SHALL be grouped by media type in the fixed display order Movie, OVA, ONA
 #### Scenario: Side stories and music videos are extras
 - **WHEN** a series contains a side story, an OVA run, and a music video
 - **THEN** none of them are main-line entries, and they appear grouped by media type
+
+#### Scenario: A recap special stays an extra even when it bridges two seasons
+- **WHEN** a `tv_special` recaps one season (`summary`/`full_story`) and also carries a `sequel`/`prequel` edge into the next season
+- **THEN** it is an extra, not a main-line entry, and the two real seasons it bridges are still main line
 
 #### Scenario: Arriving from a spin-off does not make it the main line
 - **WHEN** a series is built starting from the second season of a spin-off whose sequel chain is shorter than the parent series' chain
@@ -78,7 +84,7 @@ The system SHALL NOT store the series' score averages, computing them at read ti
 - **THEN** my series averages reflect the new score with no rebuild
 
 ### Requirement: Bounded series builds
-A series build SHALL be bounded by two limits: at most 60 members, and at most 8 live MAL full-detail fetches on a visit-triggered build or 20 on an explicitly requested rebuild. Fetches SHALL be spent first on members that have no cached metadata row at all, since those cannot be displayed otherwise; a member with a lean cached row SHALL be included without a fetch even though its own relations cannot be expanded.
+A series build SHALL be bounded by two limits: at most 60 members, and at most 8 live MAL full-detail fetches on a visit-triggered build or 20 on an explicitly requested rebuild. Fetches SHALL be spent first on members that have no cached metadata row at all, since those cannot be displayed otherwise; remaining budget SHALL be spent expanding members with a lean cached row (no relations of its own), since an unexpanded lean member can hide a real season from the series or from main-line classification.
 
 A build that exhausts its fetch budget SHALL mark the series partial; a build that reaches the member cap SHALL mark it truncated. A partial series SHALL be rebuilt on the next visit, so successive visits — each starting from more cached data than the last — complete it without any background job.
 
@@ -92,9 +98,13 @@ Concurrent builds of the same series SHALL collapse into one, matching the singl
 - **WHEN** I reopen a series that was left partial
 - **THEN** it is rebuilt, spends its budget on members still missing, and eventually stops being partial
 
-#### Scenario: Lean members cost no fetch
-- **WHEN** a member's metadata was cached by season or top-anime browsing
-- **THEN** it is included in the series without spending a fetch
+#### Scenario: Lean members are expanded within budget
+- **WHEN** a member's metadata was cached by season or top-anime browsing and fetch budget remains
+- **THEN** it is re-fetched so its own relations can extend the series and inform main-line classification
+
+#### Scenario: Lean members are still included when budget runs out
+- **WHEN** a member's metadata was cached by season or top-anime browsing and no fetch budget remains
+- **THEN** it is included in the series without spending a fetch, using only what other members' relations say about it
 
 #### Scenario: Concurrent opens fetch once
 - **WHEN** two requests for the same series arrive while it is being built

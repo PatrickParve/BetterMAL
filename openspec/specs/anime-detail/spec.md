@@ -323,9 +323,11 @@ Titles used to build search links SHALL be URL-encoded.
 - **THEN** the search links encode them so the destination resolves to a search for the full title
 
 ### Requirement: Series link in the relations row
-The detail page's relations row SHALL include a **Series** link to the series page for the anime being viewed, whenever that anime has at least one stored relation of a story type (`sequel`, `prequel`, `side_story`, `parent_story`, `summary`, `full_story`, `spin_off`, `alternative_version`). The link SHALL be decided from the relation data the page already loads, without an extra request to check whether a series exists.
+The detail page's relations row SHALL include a **Series** link to the series page for the anime being viewed, whenever that anime has at least one stored relation of a story type (`sequel`, `prequel`, `side_story`, `parent_story`, `summary`, `full_story`, `spin_off`, `alternative_version`), or the anime is already recorded as a member of a built series. The relation check is decided from data the page already loads, without an extra request; the membership check is a single indexed lookup on the anime's id, not a series build.
 
-An anime whose only relations are non-story ones (e.g. `alternative_setting`, `character`, `other`) SHALL show no Series link. The link SHALL be present on main-line entries and side entries alike, so every anime that belongs to a series can reach it.
+The membership check exists because a member reached only by a *reverse* edge from another anime — its own relations were never fetched, or are otherwise thin — has no story relation of its own for the relation check to find, even though it already belongs to a built series.
+
+An anime whose only relations are non-story ones (e.g. `alternative_setting`, `character`, `other`) and that is not a recorded series member SHALL show no Series link. The link SHALL be present on main-line entries and side entries alike, so every anime that belongs to a series can reach it.
 
 #### Scenario: Series link on a season
 - **WHEN** I open the detail page of an anime that has a sequel relation
@@ -335,8 +337,12 @@ An anime whose only relations are non-story ones (e.g. `alternative_setting`, `c
 - **WHEN** I open the detail page of a special linked to its parent story
 - **THEN** the relations row shows a "Series" link to the same series its parent story belongs to
 
-#### Scenario: No series link without story relations
-- **WHEN** I open the detail page of a standalone anime whose only relations are `character` or `other`
+#### Scenario: Series link on a thin member reached only by a reverse edge
+- **WHEN** I open the detail page of an anime whose own relations are empty but which is already recorded as a member of a built series
+- **THEN** the relations row shows a "Series" link to that series
+
+#### Scenario: No series link without story relations or recorded membership
+- **WHEN** I open the detail page of a standalone anime whose only relations are `character` or `other`, and which is not a member of any built series
 - **THEN** no "Series" link is shown
 
 #### Scenario: Existing relation buttons are unaffected

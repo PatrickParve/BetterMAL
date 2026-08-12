@@ -462,4 +462,5 @@ export type AnimeDetailDto = {
   aniListId: number | null
   relatedAnime: RelatedAnimeDto[]
   entry: UserAnimeEntryDto | null
+  inSeries: boolean
 }

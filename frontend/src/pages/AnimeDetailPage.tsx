@@ -253,10 +253,14 @@ export function AnimeDetailPage() {
     (r) => r !== prequel && r !== sequel && r !== parentStory,
   );
   // Zero-cost check on relation data already loaded — no probe request for a
-  // series that might not exist (design.md decision 11).
-  const hasSeriesRelation = detail.relatedAnime.some((r) =>
-    SERIES_TRAVERSAL_RELATIONS.has(r.relationType),
-  );
+  // series that might not exist (design.md decision 11). `detail.inSeries`
+  // covers the gap this alone misses: a member reached only by a reverse
+  // edge from another anime (this row's own relations are thin or it was
+  // only ever lean-fetched) has no traversable relation of its own, even
+  // though it's already a member of a built series.
+  const hasSeriesRelation =
+    detail.inSeries ||
+    detail.relatedAnime.some((r) => SERIES_TRAVERSAL_RELATIONS.has(r.relationType));
   const hideAddToWatching =
     detail.entry?.status === "Watching" ||
     detail.entry?.status === "Completed" ||

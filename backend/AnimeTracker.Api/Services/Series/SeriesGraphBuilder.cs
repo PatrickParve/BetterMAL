@@ -30,9 +30,12 @@ public class SeriesGraphBuilder(
     /// when the seed's component contains no other member — that's "not part
     /// of a series", not a one-member series. <paramref name="expandLeanMembers"/>
     /// additionally spends budget re-fetching already-cached members with zero
-    /// outgoing relations (see <see cref="TraverseAsync"/>) — set only on an
-    /// explicit rebuild, since it trades the "visit is usually free" property
-    /// for a chance to self-heal a fragmented or wrongly-rooted main line.</summary>
+    /// outgoing relations (see <see cref="TraverseAsync"/>) — callers pass
+    /// this on every build, not just an explicit rebuild, because a lean
+    /// member with unfetched relations is exactly what fragments a franchise
+    /// or hands the main line to the wrong chain (decision 2); the smaller
+    /// visit-triggered budget just means it self-heals over a few visits
+    /// instead of all at once.</summary>
     public async Task<SeriesEntity?> BuildAsync(
         int seedAnimeId, int fetchBudget, bool expandLeanMembers, CancellationToken ct = default)
     {
@@ -111,12 +114,13 @@ public class SeriesGraphBuilder(
                 // full-fetched. Left alone, it contributes no edges to the
                 // sequel/prequel subgraph main-line classification depends on
                 // (decision 2), which can fragment a franchise into multiple
-                // stored series or hand the main line to an unrelated chain
-                // (e.g. a run of recap movies) simply because those happened
-                // to be full-fetched and this wasn't. An explicit rebuild's
-                // larger budget is the one place worth spending a fetch here
-                // to self-heal that, rather than waiting on the user to have
-                // separately opened this anime's own detail page.
+                // stored series, drop a real season entirely (nothing else in
+                // the graph points back at it), or hand the main line to an
+                // unrelated chain (e.g. a run of recap movies) simply because
+                // those happened to be full-fetched and this wasn't. Worth
+                // spending a fetch here on every build, not just a rebuild,
+                // rather than waiting on the user to have separately opened
+                // this anime's own detail page or clicked Rebuild.
                 try
                 {
                     await refreshService.RefreshOneAsync(animeId, ct);
@@ -196,9 +200,9 @@ public class SeriesGraphBuilder(
     }
 
     /// <summary>The largest sequel/prequel chain among the members (ties broken
-    /// by earliest-aired member), minus special/music entries. Falls back to
-    /// the unfiltered chain when that filter empties it out, so a
-    /// specials-only franchise still has a main line to render (design.md
+    /// by earliest-aired member), minus special/music entries and recaps.
+    /// Falls back to the unfiltered chain when that filter empties it out, so
+    /// a specials-only franchise still has a main line to render (design.md
     /// decision 2 and the degenerate case in decision 4/task 2.7).
     ///
     /// Chain candidates are restricted to ones containing at least one `tv`
@@ -230,6 +234,8 @@ public class SeriesGraphBuilder(
             }
         }
 
+        var recapIds = FindRecapIds(members, memberById);
+
         var chains = FindConnectedComponents(memberById.Keys, adjacency);
         var tvChains = chains.Where(chain => chain.Any(id => memberById[id].MediaType == "tv")).ToList();
         var candidateChains = tvChains.Count > 0 ? tvChains : chains;
@@ -239,10 +245,46 @@ public class SeriesGraphBuilder(
             .First();
 
         var filtered = largestChain
-            .Where(id => memberById[id].MediaType is not ("special" or "music"))
+            .Where(id => memberById[id].MediaType is not ("special" or "music") && !recapIds.Contains(id))
             .ToHashSet();
 
         return filtered.Count > 0 ? filtered : largestChain.ToHashSet();
+    }
+
+    /// <summary>Members MAL tags as a recap/condensed retelling of another
+    /// member — the `summary`/`full_story` pair (`A --summary--> B` means B
+    /// recaps A; `B --full_story--> A` says the same from B's side). MAL
+    /// routinely also gives these a `sequel`/`prequel` edge to the season
+    /// they bridge into (e.g. a "commemorative special" recapping season 1
+    /// that itself carries `sequel: season 2`), which would otherwise pull it
+    /// into <see cref="ClassifyMainLineChain"/>'s sequel/prequel subgraph and
+    /// — since it's typically typed `tv_special`, not `special` — survive the
+    /// media-type filter. The explicit summary/full_story tag is a stronger,
+    /// more direct signal than media type that this entry is not new story
+    /// content, so it's excluded regardless of what else links it in.</summary>
+    private static HashSet<int> FindRecapIds(List<AnimeMetadata> members, Dictionary<int, AnimeMetadata> memberById)
+    {
+        var recapIds = new HashSet<int>();
+        foreach (var member in members)
+        {
+            foreach (var relation in member.RelatedAnime)
+            {
+                if (!memberById.ContainsKey(relation.RelatedAnimeId))
+                    continue;
+
+                switch (relation.RelationType)
+                {
+                    case "full_story":
+                        recapIds.Add(member.Id); // this member is the recap of relation.RelatedAnimeId
+                        break;
+                    case "summary":
+                        recapIds.Add(relation.RelatedAnimeId); // the related member is the recap of this one
+                        break;
+                }
+            }
+        }
+
+        return recapIds;
     }
 
     private static List<List<int>> FindConnectedComponents(IEnumerable<int> nodeIds, Dictionary<int, HashSet<int>> adjacency)

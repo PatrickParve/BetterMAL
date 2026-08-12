@@ -35,14 +35,24 @@ public record AnimeDetailDto(
     NextEpisodeEtaDto? NextEpisode,
     int? AniListId,
     List<RelatedAnimeDto> RelatedAnime,
-    UserAnimeEntryDto? Entry)
+    UserAnimeEntryDto? Entry,
+    // True when a Series row already lists this anime as a member — a plain
+    // SeriesMembers PK lookup, no build. RelatedAnime alone can't answer this:
+    // a member reached only by a *reverse* edge from another anime (this row
+    // itself lean or its relations otherwise thin) has no traversable relation
+    // of its own to key a "Series" link off of, even though it already
+    // belongs to a built series. InSeries covers that gap for free; the
+    // relation-based check (SERIES_TRAVERSAL_RELATIONS on the client) still
+    // covers a series that hasn't been built yet at all.
+    bool InSeries)
 {
     public static AnimeDetailDto FromEntity(
         AnimeMetadata anime,
         int? episodesAired,
         NextEpisodeEtaDto? nextEpisode,
         int? aniListId,
-        IReadOnlyDictionary<int, string?> relatedMediaTypeByAnimeId)
+        IReadOnlyDictionary<int, string?> relatedMediaTypeByAnimeId,
+        bool inSeries)
     {
         (int Year, string Season)? season = anime.AiredFrom is { } airedFrom
             ? SeasonCalendar.GetSeasonFor(airedFrom)
@@ -74,6 +84,7 @@ public record AnimeDetailDto(
             nextEpisode,
             aniListId,
             anime.RelatedAnime.Select(r => RelatedAnimeDto.FromEntity(r, relatedMediaTypeByAnimeId)).ToList(),
-            anime.UserEntry is null ? null : UserAnimeEntryDto.FromEntity(anime.UserEntry));
+            anime.UserEntry is null ? null : UserAnimeEntryDto.FromEntity(anime.UserEntry),
+            inSeries);
     }
 }
