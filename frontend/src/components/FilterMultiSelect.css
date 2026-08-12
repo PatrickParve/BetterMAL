@@ -1,0 +1,73 @@
+.filter-multi-select {
+  position: relative;
+}
+
+.filter-multi-select__button {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.filter-multi-select__button:hover,
+.filter-multi-select__button[aria-expanded='true'] {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.filter-multi-select__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+.filter-multi-select__shortcuts {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.filter-multi-select__shortcut {
+  font: inherit;
+  font-size: 12px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.filter-multi-select__shortcut:hover {
+  text-decoration: underline;
+}
+
+.filter-multi-select__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.filter-multi-select__option:hover {
+  color: var(--text-h);
+}

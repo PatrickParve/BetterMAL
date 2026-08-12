@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 import type { EntryEditorTarget } from '../api/types.ts'
 import { EntryEditorOverlay } from '../components/EntryEditorOverlay.tsx'
 
@@ -14,8 +14,13 @@ const EntryEditorContext = createContext<EntryEditorContextValue | null>(null)
 export function EntryEditorProvider({ children }: { children: ReactNode }) {
   const [target, setTarget] = useState<EntryEditorTarget | null>(null)
 
+  // setTarget is guaranteed stable by React, so this value never changes for
+  // the life of the app — consumers bail out of re-rendering when the editor
+  // opens or closes instead of re-rendering on every setTarget call.
+  const value = useMemo(() => ({ openEditor: setTarget }), [])
+
   return (
-    <EntryEditorContext.Provider value={{ openEditor: setTarget }}>
+    <EntryEditorContext.Provider value={value}>
       {children}
       {target && <EntryEditorOverlay key={target.animeId} target={target} onClose={() => setTarget(null)} />}
     </EntryEditorContext.Provider>

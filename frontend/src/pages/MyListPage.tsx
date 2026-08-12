@@ -1,31 +1,29 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { getMyList, updateEntry } from '../api/client.ts'
-import type { IncrementTarget, MyListItemDto, WatchStatus } from '../api/types.ts'
-import { ProgressBar } from '../components/ProgressBar.tsx'
-import { ScoreValue } from '../components/ScoreValue.tsx'
+import type { IncrementTarget, MyListItemDto, UserAnimeEntryDto, WatchStatus } from '../api/types.ts'
+import { FilterMultiSelect, type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
+import { MyListRow } from '../components/MyListRow.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useEpisodeIncrement, useSetEpisodesWatched } from '../context/CompletionPromptContext.tsx'
+import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import {
   AIRING_STATUS_LABELS,
-  airingStatusShortLabel,
-  compareByAiringStatus,
-  compareByMalScoreDesc,
-  compareByTitleAlphabetical,
+  composeComparator,
+  MEDIA_TYPE_ORDER,
+  mediaTypeLabel,
   pickDisplayTitle,
   STATUS_CLASS,
   STATUS_LABELS,
 } from '../utils/anime.ts'
-import type { AiringStatus } from '../utils/anime.ts'
+import type { AiringStatus, SortDirection, SortKey } from '../utils/anime.ts'
 import './MyListPage.css'
 
-type SortKey = 'alphabetical' | 'malScore' | 'myScore' | 'airingStatus'
 type StatusFilter = 'All' | WatchStatus
+type ScoreFilter = 'any' | 'rated' | 'unrated'
 
 const GROUP_ORDER: WatchStatus[] = ['Watching', 'OnHold', 'PlanToWatch', 'Completed', 'Dropped']
-const SCORE_OPTIONS = Array.from({ length: 10 }, (_, i) => i + 1)
 
 const FILTER_TABS: { value: StatusFilter; label: string }[] = [
   { value: 'All', label: 'All' },
@@ -38,14 +36,16 @@ const FILTER_TABS: { value: StatusFilter; label: string }[] = [
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'alphabetical', label: 'Alphabetical' },
-  { value: 'malScore', label: 'MAL score' },
   { value: 'myScore', label: 'My score' },
+  { value: 'malScore', label: 'MAL score' },
+  { value: 'episodesWatched', label: 'Episodes watched' },
+  { value: 'progress', label: 'Progress' },
+  { value: 'totalEpisodes', label: 'Total episodes' },
+  { value: 'airingStatus', label: 'Airing status' },
+  { value: 'type', label: 'Type' },
+  { value: 'startDate', label: 'Start date' },
+  { value: 'finishDate', label: 'Finish date' },
 ]
-
-const AIRING_STATUS_SORT_OPTION: { value: SortKey; label: string } = {
-  value: 'airingStatus',
-  label: 'Airing status',
-}
 
 const AIRING_STATUS_FIRST_OPTIONS: { value: AiringStatus; label: string }[] = [
   { value: 'currently_airing', label: AIRING_STATUS_LABELS.currently_airing },
@@ -53,207 +53,391 @@ const AIRING_STATUS_FIRST_OPTIONS: { value: AiringStatus; label: string }[] = [
   { value: 'not_yet_aired', label: AIRING_STATUS_LABELS.not_yet_aired },
 ]
 
-function sortByKey(items: MyListItemDto[], sort: SortKey, airingStatusFirst: AiringStatus): MyListItemDto[] {
-  const sorted = [...items]
-  switch (sort) {
-    case 'malScore':
-      sorted.sort(compareByMalScoreDesc)
-      break
-    case 'myScore':
-      sorted.sort((a, b) => (b.entry.myScore ?? -1) - (a.entry.myScore ?? -1))
-      break
-    case 'alphabetical':
-      sorted.sort(compareByTitleAlphabetical)
-      break
-    case 'airingStatus':
-      sorted.sort(compareByAiringStatus(airingStatusFirst))
-      break
-  }
-  return sorted
+// Patches one entry into the list by animeId, leaving every other item's
+// reference untouched — the memoised row relies on that to skip re-rendering.
+function patchItem(
+  setItems: Dispatch<SetStateAction<MyListItemDto[] | null>>,
+  animeId: number,
+  saved: UserAnimeEntryDto,
+) {
+  setItems((prev) => prev && prev.map((item) => (item.animeId === animeId ? { ...item, entry: saved } : item)))
 }
 
+function buildIncrementTarget(
+  item: MyListItemDto,
+  setItems: Dispatch<SetStateAction<MyListItemDto[] | null>>,
+  reload: () => Promise<void>,
+): IncrementTarget {
+  return {
+    animeId: item.animeId,
+    animeTitle: pickDisplayTitle(item.title, item.englishTitle),
+    pictureUrl: item.pictureUrl,
+    episodesWatched: item.entry.episodesWatched,
+    previousStatus: item.entry.status,
+    currentScore: item.entry.myScore,
+    onSaved: (saved) => patchItem(setItems, item.animeId, saved),
+    // Reloads rather than patching: completing an anime moves it between
+    // status groups, a server-computed regrouping no mutation response describes.
+    onCompleted: reload,
+  }
+}
+
+type Derivation =
+  | { mode: 'grouped'; total: number; shown: number; groups: { status: WatchStatus; items: MyListItemDto[] }[] }
+  | { mode: 'flat'; total: number; shown: number; items: MyListItemDto[] }
+
 // My list page: grouped by status (Watching -> On hold -> Plan to watch ->
-// Completed -> Dropped) by default. Sorting by score switches to one flat
-// ranked list with rank numbers instead — grouping by status and ranking by
-// score don't mix, mirroring how MAL's own list view behaves.
+// Completed -> Dropped) by default, with a filter bar (find-in-list, type,
+// airing status, score) and a two-level sort (primary + tiebreaker) that
+// composes over the whole page instead of per status group.
 export function MyListPage() {
-  const { data, loading, setData: setItems, reload: loadList } = usePageData<MyListItemDto[]>('my-list', getMyList)
+  const { data, loading, setData: setItems, reload } = usePageData<MyListItemDto[]>('my-list', getMyList)
   const items = data ?? []
+
   const [statusFilter, setStatusFilter] = useRestorableState<StatusFilter>('statusFilter', 'All')
+  const [query, setQuery] = useRestorableState('query', '')
+  const [typeFilter, setTypeFilter] = useRestorableState<string[]>('typeFilter', [])
+  const [airingFilter, setAiringFilter] = useRestorableState<string[]>('airingFilter', [])
+  const [scoreFilter, setScoreFilter] = useRestorableState<ScoreFilter>('scoreFilter', 'any')
   const [sort, setSort] = useRestorableState<SortKey>('sort', 'alphabetical')
+  const [sortDirection, setSortDirection] = useRestorableState<SortDirection>('sortDirection', 'natural')
+  const [sortThen, setSortThen] = useRestorableState<SortKey | null>('sortThen', null)
+  const [groupByStatus, setGroupByStatus] = useRestorableState('groupByStatus', true)
   const [airingStatusFirst, setAiringStatusFirst] = useRestorableState<AiringStatus>(
     'airingStatusFirst',
     'finished_airing',
   )
+
   const [pendingIncrementId, setPendingIncrementId] = useState<number | null>(null)
   const [pendingScoreId, setPendingScoreId] = useState<number | null>(null)
+  // Concurrency guards read synchronously inside the handlers below — a ref
+  // rather than the state above, so the handlers' identity doesn't have to
+  // change on every click (D2). The state stays, feeding only the row props.
+  const pendingIncrementRef = useRef<number | null>(null)
+  const pendingScoreRef = useRef<number | null>(null)
+
   const { openEditor } = useEntryEditor()
   const increment = useEpisodeIncrement()
   const setEpisodesWatched = useSetEpisodesWatched()
 
-  function handleSaved(animeId: number) {
-    return (saved: MyListItemDto['entry']) => {
-      setItems((prev) => prev && prev.map((item) => (item.animeId === animeId ? { ...item, entry: saved } : item)))
-    }
-  }
+  const debouncedQuery = useDebouncedValue(query, 200)
 
-  function openEdit(item: MyListItemDto) {
-    openEditor({
-      animeId: item.animeId,
-      animeTitle: pickDisplayTitle(item.title, item.englishTitle),
-      totalEpisodes: item.totalEpisodes,
-      entry: item.entry,
-      onSaved: handleSaved(item.animeId),
-      onDeleted: () => setItems((prev) => prev && prev.filter((i) => i.animeId !== item.animeId)),
+  const openEdit = useCallback(
+    (item: MyListItemDto) => {
+      openEditor({
+        animeId: item.animeId,
+        animeTitle: pickDisplayTitle(item.title, item.englishTitle),
+        totalEpisodes: item.totalEpisodes,
+        entry: item.entry,
+        onSaved: (saved) => patchItem(setItems, item.animeId, saved),
+        onDeleted: () => setItems((prev) => prev && prev.filter((i) => i.animeId !== item.animeId)),
+      })
+    },
+    [openEditor, setItems],
+  )
+
+  const incrementEpisodes = useCallback(
+    async (item: MyListItemDto) => {
+      if (pendingIncrementRef.current !== null) return
+      pendingIncrementRef.current = item.animeId
+      setPendingIncrementId(item.animeId)
+      try {
+        await increment(buildIncrementTarget(item, setItems, reload))
+      } finally {
+        pendingIncrementRef.current = null
+        setPendingIncrementId(null)
+      }
+    },
+    [increment, setItems, reload],
+  )
+
+  const setEpisodesWatchedForItem = useCallback(
+    async (item: MyListItemDto, value: number) => {
+      if (pendingIncrementRef.current !== null) return
+      pendingIncrementRef.current = item.animeId
+      setPendingIncrementId(item.animeId)
+      try {
+        await setEpisodesWatched(buildIncrementTarget(item, setItems, reload), value)
+      } finally {
+        pendingIncrementRef.current = null
+        setPendingIncrementId(null)
+      }
+    },
+    [setEpisodesWatched, setItems, reload],
+  )
+
+  const changeScore = useCallback(
+    async (item: MyListItemDto, score: number) => {
+      if (pendingScoreRef.current !== null) return
+      pendingScoreRef.current = item.animeId
+      setPendingScoreId(item.animeId)
+      try {
+        const saved = await updateEntry(item.animeId, { myScore: score })
+        patchItem(setItems, item.animeId, saved)
+      } catch {
+        // Leave the score as-is; the user can retry.
+      } finally {
+        pendingScoreRef.current = null
+        setPendingScoreId(null)
+      }
+    },
+    [setItems],
+  )
+
+  // Type/airing filter option lists: only the values actually present in the
+  // list, so a control never offers a choice that returns nothing (D6).
+  const filterOptions = useMemo(() => {
+    const presentTypes = new Set<string>()
+    let hasUnknownType = false
+    const presentAiring = new Set<string>()
+    let hasUnknownAiring = false
+    for (const item of items) {
+      if (item.mediaType) presentTypes.add(item.mediaType)
+      else hasUnknownType = true
+      if (item.airingStatus) presentAiring.add(item.airingStatus)
+      else hasUnknownAiring = true
+    }
+
+    const typeOptions: FilterMultiSelectOption[] = MEDIA_TYPE_ORDER.filter((value) => presentTypes.has(value)).map(
+      (value) => ({ value, label: mediaTypeLabel(value) }),
+    )
+    if (hasUnknownType) typeOptions.push({ value: 'unknown', label: 'Unknown' })
+
+    const airingOptions: FilterMultiSelectOption[] = (Object.keys(AIRING_STATUS_LABELS) as AiringStatus[])
+      .filter((status) => presentAiring.has(status))
+      .map((status) => ({ value: status, label: AIRING_STATUS_LABELS[status] }))
+    if (hasUnknownAiring) airingOptions.push({ value: 'unknown', label: 'Unknown' })
+
+    return { typeOptions, airingOptions }
+  }, [items])
+
+  // One derivation: filter (status -> text -> type -> airing -> score), sort
+  // with the composed comparator, then either group by status or leave flat
+  // (D3). Runs off the debounced query so a keystroke doesn't re-derive over
+  // the whole list.
+  const derived = useMemo<Derivation>(() => {
+    const statusScoped = statusFilter === 'All' ? items : items.filter((item) => item.entry.status === statusFilter)
+    const needle = debouncedQuery.trim().toLowerCase()
+
+    const matched = statusScoped.filter((item) => {
+      if (needle) {
+        const titleMatch = item.title.toLowerCase().includes(needle)
+        const englishMatch = item.englishTitle ? item.englishTitle.toLowerCase().includes(needle) : false
+        if (!titleMatch && !englishMatch) return false
+      }
+      if (typeFilter.length > 0 && !typeFilter.includes(item.mediaType ?? 'unknown')) return false
+      if (airingFilter.length > 0 && !airingFilter.includes(item.airingStatus ?? 'unknown')) return false
+      if (scoreFilter === 'rated' && item.entry.myScore == null) return false
+      if (scoreFilter === 'unrated' && item.entry.myScore != null) return false
+      return true
     })
+
+    const comparator = composeComparator(sort, sortDirection, sortThen, airingStatusFirst)
+
+    if (groupByStatus) {
+      const groups = GROUP_ORDER.filter((status) => statusFilter === 'All' || statusFilter === status)
+        .map((status) => ({
+          status,
+          items: matched.filter((item) => item.entry.status === status).sort(comparator),
+        }))
+        .filter((group) => group.items.length > 0)
+      return { mode: 'grouped', total: statusScoped.length, shown: matched.length, groups }
+    }
+
+    return { mode: 'flat', total: statusScoped.length, shown: matched.length, items: [...matched].sort(comparator) }
+  }, [items, statusFilter, debouncedQuery, typeFilter, airingFilter, scoreFilter, sort, sortDirection, sortThen, airingStatusFirst, groupByStatus])
+
+  const isNarrowed = derived.shown !== derived.total
+  const isOffDefault =
+    query !== '' ||
+    typeFilter.length > 0 ||
+    airingFilter.length > 0 ||
+    scoreFilter !== 'any' ||
+    sort !== 'alphabetical' ||
+    sortDirection !== 'natural' ||
+    sortThen !== null ||
+    !groupByStatus
+
+  function clearFilters() {
+    setQuery('')
+    setTypeFilter([])
+    setAiringFilter([])
+    setScoreFilter('any')
+    setSort('alphabetical')
+    setSortDirection('natural')
+    setSortThen(null)
+    setGroupByStatus(true)
   }
 
-  function buildIncrementTarget(item: MyListItemDto): IncrementTarget {
-    return {
-      animeId: item.animeId,
-      animeTitle: pickDisplayTitle(item.title, item.englishTitle),
-      pictureUrl: item.pictureUrl,
-      episodesWatched: item.entry.episodesWatched,
-      previousStatus: item.entry.status,
-      currentScore: item.entry.myScore,
-      onSaved: handleSaved(item.animeId),
-      // Reloads rather than patching: completing an anime moves it between
-      // status groups, a server-computed regrouping no mutation response describes.
-      onCompleted: loadList,
-    }
+  function handleSortChange(next: SortKey) {
+    setSort(next)
+    // A key can't tiebreak itself — drop it rather than leave a stale
+    // selection the "then by" control no longer offers.
+    setSortThen((prev) => (prev === next ? null : prev))
   }
 
-  async function incrementEpisodes(item: MyListItemDto) {
-    if (pendingIncrementId !== null) return
-    setPendingIncrementId(item.animeId)
-    try {
-      await increment(buildIncrementTarget(item))
-    } finally {
-      setPendingIncrementId(null)
-    }
-  }
-
-  async function setEpisodesWatchedForItem(item: MyListItemDto, value: number) {
-    if (pendingIncrementId !== null) return
-    setPendingIncrementId(item.animeId)
-    try {
-      await setEpisodesWatched(buildIncrementTarget(item), value)
-    } finally {
-      setPendingIncrementId(null)
-    }
-  }
-
-  async function changeScore(item: MyListItemDto, score: number) {
-    if (pendingScoreId !== null) return
-    setPendingScoreId(item.animeId)
-    try {
-      const saved = await updateEntry(item.animeId, { myScore: score })
-      handleSaved(item.animeId)(saved)
-    } catch {
-      // Leave the score as-is; the user can retry.
-    } finally {
-      setPendingScoreId(null)
-    }
-  }
+  // Rank numbers follow the grouping toggle, not the sort key: shown only
+  // when the list is flat and not alphabetical (D9).
+  const showRanks = !groupByStatus && sort !== 'alphabetical'
+  // The airing badge shows on every row while the airing filter is doing
+  // something or airing status is the primary sort — Plan-to-watch rows
+  // always show it regardless (D11), handled per-row below.
+  const airingBadgeActive = airingFilter.length > 0 || sort === 'airingStatus'
 
   function renderRow(item: MyListItemDto, rank?: number) {
-    const airingLabel =
-      item.entry.status === 'PlanToWatch' ? airingStatusShortLabel(item.airingStatus) : null
     return (
-      <li key={item.animeId} className={`my-list-row my-list-row--${STATUS_CLASS[item.entry.status]}`}>
-        {rank !== undefined && <span className="my-list-row__rank">#{rank}</span>}
-        <Link to={`/anime/${item.animeId}`} className="my-list-row__link">
-          {item.pictureUrl ? (
-            <img src={item.pictureUrl} alt="" className="my-list-row__picture" />
-          ) : (
-            <div className="my-list-row__picture my-list-row__picture--placeholder" aria-hidden="true" />
-          )}
-          <span className="my-list-row__info">
-            <span className="my-list-row__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
-              {pickDisplayTitle(item.title, item.englishTitle)}
-            </span>
-            <span className="my-list-row__type">
-              {item.mediaType ? item.mediaType.toUpperCase() : 'Unknown'}
-              {airingLabel && <span className="my-list-row__airing-badge"> · {airingLabel}</span>}
-            </span>
-          </span>
-        </Link>
-        <span className="my-list-row__progress">
-          <ProgressBar
-            watched={item.entry.episodesWatched}
-            total={item.totalEpisodes}
-            onIncrement={() => incrementEpisodes(item)}
-            onSetWatched={(value) => setEpisodesWatchedForItem(item, value)}
-            max={item.episodesAired ?? item.totalEpisodes}
-            incrementPending={pendingIncrementId === item.animeId}
-            incrementLabel={`Increment episodes watched for ${pickDisplayTitle(item.title, item.englishTitle)}`}
-          />
-        </span>
-        <span className="my-list-row__my-score">
-          <select
-            className="my-list-row__score-select"
-            value={item.entry.myScore ?? 0}
-            disabled={pendingScoreId === item.animeId}
-            onChange={(event) => changeScore(item, Number(event.target.value))}
-            aria-label={`Set your score for ${pickDisplayTitle(item.title, item.englishTitle)}`}
-          >
-            <option value={0}>—</option>
-            {SCORE_OPTIONS.map((score) => (
-              <option key={score} value={score}>
-                {score}
-              </option>
-            ))}
-          </select>
-        </span>
-        <span className="my-list-row__mal-score">
-          <ScoreValue value={item.malScore} completed={item.entry.status === 'Completed'} />
-        </span>
-        <button type="button" className="my-list-row__edit" onClick={() => openEdit(item)}>
-          Edit
-        </button>
-      </li>
+      <MyListRow
+        key={item.animeId}
+        item={item}
+        rank={rank}
+        showAiringBadge={item.entry.status === 'PlanToWatch' || airingBadgeActive}
+        incrementPending={pendingIncrementId === item.animeId}
+        scorePending={pendingScoreId === item.animeId}
+        onEdit={openEdit}
+        onIncrement={incrementEpisodes}
+        onSetWatched={setEpisodesWatchedForItem}
+        onScoreChange={changeScore}
+      />
     )
   }
 
-  const filteredItems = statusFilter === 'All' ? items : items.filter((item) => item.entry.status === statusFilter)
-  const showRanked = sort !== 'alphabetical'
-
-  function selectStatusFilter(next: StatusFilter) {
-    if (sort === 'airingStatus' && next !== 'PlanToWatch') setSort('alphabetical')
-    setStatusFilter(next)
-  }
-
-  function renderSortControls() {
-    const options = statusFilter === 'PlanToWatch' ? [...SORT_OPTIONS, AIRING_STATUS_SORT_OPTION] : SORT_OPTIONS
+  function renderFilterBar() {
+    const tiebreakOptions = SORT_OPTIONS.filter((option) => option.value !== sort)
     return (
-      <div className="my-list-page__sort-controls">
-        <select
-          className="my-list-page__sort"
-          value={sort}
-          onChange={(event) => setSort(event.target.value as SortKey)}
-          aria-label="Sort my list"
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        {sort === 'airingStatus' && (
+      <div className="my-list-page__filter-bar">
+        <div className="my-list-page__filter-cluster">
+          <input
+            type="text"
+            className="my-list-page__query"
+            placeholder="Find in list…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            aria-label="Find in list"
+          />
+          <FilterMultiSelect label="Type" options={filterOptions.typeOptions} selected={typeFilter} onChange={setTypeFilter} />
+          <FilterMultiSelect
+            label="Airing"
+            options={filterOptions.airingOptions}
+            selected={airingFilter}
+            onChange={setAiringFilter}
+          />
           <select
             className="my-list-page__sort"
-            value={airingStatusFirst}
-            onChange={(event) => setAiringStatusFirst(event.target.value as AiringStatus)}
-            aria-label="Show which airing status first"
+            value={scoreFilter}
+            onChange={(event) => setScoreFilter(event.target.value as ScoreFilter)}
+            aria-label="Filter by score"
           >
-            {AIRING_STATUS_FIRST_OPTIONS.map((option) => (
+            <option value="any">Score: Any</option>
+            <option value="rated">Score: Rated</option>
+            <option value="unrated">Score: Unrated</option>
+          </select>
+        </div>
+        <div className="my-list-page__order-cluster">
+          <select
+            className="my-list-page__sort"
+            value={sort}
+            onChange={(event) => handleSortChange(event.target.value as SortKey)}
+            aria-label="Sort by"
+          >
+            {SORT_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
-                {option.label} first
+                {option.label}
               </option>
             ))}
           </select>
-        )}
+          <button
+            type="button"
+            className={`my-list-page__tab${sortDirection === 'reversed' ? ' my-list-page__tab--active' : ''}`}
+            aria-pressed={sortDirection === 'reversed'}
+            onClick={() => setSortDirection((prev) => (prev === 'natural' ? 'reversed' : 'natural'))}
+          >
+            Reverse
+          </button>
+          {sort === 'airingStatus' && (
+            <select
+              className="my-list-page__sort"
+              value={airingStatusFirst}
+              onChange={(event) => setAiringStatusFirst(event.target.value as AiringStatus)}
+              aria-label="Show which airing status first"
+            >
+              {AIRING_STATUS_FIRST_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label} first
+                </option>
+              ))}
+            </select>
+          )}
+          <select
+            className="my-list-page__sort"
+            value={sortThen ?? ''}
+            onChange={(event) => setSortThen(event.target.value === '' ? null : (event.target.value as SortKey))}
+            aria-label="Then by"
+          >
+            <option value="">— then by —</option>
+            {tiebreakOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className={`my-list-page__tab${groupByStatus ? ' my-list-page__tab--active' : ''}`}
+            aria-pressed={groupByStatus}
+            onClick={() => setGroupByStatus((prev) => !prev)}
+          >
+            Group by status
+          </button>
+          {isOffDefault && (
+            <button type="button" className="my-list-page__clear-filters" onClick={clearFilters}>
+              Clear filters
+            </button>
+          )}
+        </div>
       </div>
+    )
+  }
+
+  function renderBody() {
+    if (loading) return <p className="my-list-page__loading">Loading…</p>
+
+    if (derived.total === 0) return <p className="my-list-page__empty">Nothing here yet.</p>
+
+    if (derived.shown === 0) {
+      return (
+        <div className="my-list-page__empty">
+          <p>Nothing matches these filters.</p>
+          <button type="button" className="my-list-page__clear-filters" onClick={clearFilters}>
+            Clear filters
+          </button>
+        </div>
+      )
+    }
+
+    if (derived.mode === 'grouped') {
+      return (
+        <>
+          {derived.groups.map((group) => (
+            <section key={group.status} className="my-list-page__group">
+              <div className="my-list-page__group-header">
+                <h2>{STATUS_LABELS[group.status]}</h2>
+              </div>
+              <ul className="my-list-page__list">{group.items.map((item) => renderRow(item))}</ul>
+            </section>
+          ))}
+        </>
+      )
+    }
+
+    return (
+      <section className="my-list-page__group">
+        <div className="my-list-page__group-header">
+          <h2>{statusFilter === 'All' ? 'All' : STATUS_LABELS[statusFilter]}</h2>
+        </div>
+        <ul className="my-list-page__list">
+          {derived.items.map((item, index) => renderRow(item, showRanks ? index + 1 : undefined))}
+        </ul>
+      </section>
     )
   }
 
@@ -275,7 +459,7 @@ export function MyListPage() {
               role="tab"
               aria-selected={statusFilter === tab.value}
               className={classes.join(' ')}
-              onClick={() => selectStatusFilter(tab.value)}
+              onClick={() => setStatusFilter(tab.value)}
             >
               {tab.label}
             </button>
@@ -283,47 +467,14 @@ export function MyListPage() {
         })}
       </div>
 
-      {loading ? (
-        <p className="my-list-page__loading">Loading…</p>
-      ) : filteredItems.length === 0 ? (
-        <p className="my-list-page__empty">Nothing here yet.</p>
-      ) : showRanked ? (
-        <section className="my-list-page__group">
-          <div className="my-list-page__group-header">
-            <h2>{statusFilter === 'All' ? 'All' : STATUS_LABELS[statusFilter]}</h2>
-            {renderSortControls()}
-          </div>
-          <ul className="my-list-page__list">
-            {sortByKey(filteredItems, sort, airingStatusFirst).map((item, index) =>
-              renderRow(item, sort === 'airingStatus' ? undefined : index + 1),
-            )}
-          </ul>
-        </section>
-      ) : (
-        <>
-          {/* "All" grouped view: one sort control above every group instead of
-              one per group header — each group below keeps its own header line
-              free of the control, per D10. */}
-          {statusFilter === 'All' && <div className="my-list-page__sort-header">{renderSortControls()}</div>}
-          {GROUP_ORDER.filter((status) => statusFilter === 'All' || statusFilter === status).map((status) => {
-            const groupItems = sortByKey(
-              filteredItems.filter((item) => item.entry.status === status),
-              sort,
-              airingStatusFirst,
-            )
-            if (groupItems.length === 0) return null
-            return (
-              <section key={status} className="my-list-page__group">
-                <div className="my-list-page__group-header">
-                  <h2>{STATUS_LABELS[status]}</h2>
-                  {statusFilter !== 'All' && renderSortControls()}
-                </div>
-                <ul className="my-list-page__list">{groupItems.map((item) => renderRow(item))}</ul>
-              </section>
-            )
-          })}
-        </>
+      {renderFilterBar()}
+      {isNarrowed && (
+        <p className="my-list-page__count">
+          Showing {derived.shown} of {derived.total}
+        </p>
       )}
+
+      {renderBody()}
     </div>
   )
 }

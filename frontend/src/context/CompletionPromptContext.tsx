@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import type { IncrementTarget, UserAnimeEntryDto } from '../api/types.ts'
 import { updateEntry } from '../api/client.ts'
 import { CompletionScoreOverlay } from '../components/CompletionScoreOverlay.tsx'
@@ -26,7 +26,9 @@ const CompletionPromptContext = createContext<CompletionPromptContextValue | nul
 export function CompletionPromptProvider({ children }: { children: ReactNode }) {
   const [prompt, setPrompt] = useState<PromptState | null>(null)
 
-  async function setEpisodesWatched(target: IncrementTarget, value: number) {
+  // Empty deps: closes over nothing but setPrompt, which React guarantees is
+  // stable, so this identity never changes for the life of the app.
+  const setEpisodesWatched = useCallback(async (target: IncrementTarget, value: number) => {
     let saved: UserAnimeEntryDto
     try {
       saved = await updateEntry(target.animeId, { episodesWatched: value })
@@ -46,11 +48,12 @@ export function CompletionPromptProvider({ children }: { children: ReactNode }) 
       currentScore: target.currentScore,
       onClosed: (saved) => target.onCompleted?.(saved),
     })
-  }
+  }, [])
 
-  function increment(target: IncrementTarget) {
-    return setEpisodesWatched(target, target.episodesWatched + 1)
-  }
+  const increment = useCallback(
+    (target: IncrementTarget) => setEpisodesWatched(target, target.episodesWatched + 1),
+    [setEpisodesWatched],
+  )
 
   function handleClose(saved: UserAnimeEntryDto | null) {
     const onClosed = prompt?.onClosed
@@ -58,8 +61,10 @@ export function CompletionPromptProvider({ children }: { children: ReactNode }) 
     onClosed?.(saved)
   }
 
+  const value = useMemo(() => ({ increment, setEpisodesWatched }), [increment, setEpisodesWatched])
+
   return (
-    <CompletionPromptContext.Provider value={{ increment, setEpisodesWatched }}>
+    <CompletionPromptContext.Provider value={value}>
       {children}
       {prompt && (
         <CompletionScoreOverlay

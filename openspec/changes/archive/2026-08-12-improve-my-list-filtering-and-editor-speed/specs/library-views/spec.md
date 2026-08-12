@@ -1,97 +1,4 @@
-# library-views Specification
-
-## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
-## Requirements
-### Requirement: My list grouped and ordered by status
-The system SHALL present my list as one list grouped and ordered as Currently watching → On hold → Plan to watch → Completed → Dropped, where each entry shows picture, title, type (TV/movie), progress, my score, MAL score (respecting the hide/unhide toggle), and an edit button. For entries in the **Plan to watch** group, each row SHALL additionally show an airing-status indicator alongside the type — **Not aired**, **Airing**, or **Aired** (mapped from the anime's `not_yet_aired`, `currently_airing`, and `finished_airing` values) — so the user can tell at a glance whether a queued show is already out, still airing, or has not yet started; when the airing status is unknown, no indicator is shown.
-
-Rows outside Plan to watch SHALL also show the airing-status indicator while the user is working with airing status — that is, while the airing-status filter has a selection or Airing status is the primary sort key — since the indicator is the value being filtered or ordered on. Outside those cases, rows in other status groups SHALL NOT show the indicator.
-
-#### Scenario: Rendering the grouped list
-- **WHEN** the my-list page loads
-- **THEN** entries appear grouped in the order Currently watching, On hold, Plan to watch, Completed, Dropped, each showing picture, title, type, progress, my score, MAL score, and an edit button
-
-#### Scenario: Plan-to-watch row shows airing status
-- **WHEN** the Plan to watch group renders an entry whose anime has a known airing status
-- **THEN** that row shows an airing-status indicator (Not aired, Airing, or Aired) next to the type
-
-#### Scenario: Airing status shown while filtering or sorting by it
-- **WHEN** the airing-status filter has a selection, or Airing status is the primary sort key
-- **THEN** every row with a known airing status shows the indicator, whatever its watch status
-
-#### Scenario: Airing status otherwise only on Plan to watch
-- **WHEN** no airing-status filter is selected and the sort is not by airing status
-- **THEN** rows outside Plan to watch show the type without an airing-status indicator
-
-#### Scenario: Unknown airing status shows no indicator
-- **WHEN** an entry's anime has no known airing status
-- **THEN** its row shows the type with no airing-status indicator
-
-### Requirement: List-row posters fill the row
-The system SHALL render the poster in a my-list row and a top-anime row flush with the row's top and bottom edges, filling the row's full height with no padding above or below it, so the poster reads as part of the card rather than an image floating inside it. On a top-anime row, or a my-list row preceded by a rank column, the poster SHALL also sit flush with its leading neighbour (the rank column, or the row's leading edge when there is no rank), still filling the row's height. On a my-list row with no rank shown, the poster SHALL instead sit a small fixed gap after the row's status-colour stripe, rather than flush against it, so the stripe and poster read as two distinct elements.
-
-Rows SHALL keep the height they have without the change: the row does not grow to the poster's natural aspect ratio, so adopting this layout does not lengthen the page. The poster's width MAY grow along with its height to avoid cropping the image more tightly than before. A row whose anime has no picture SHALL render its placeholder at the same full-height size, so rows with and without a picture stay aligned.
-
-#### Scenario: Poster fills a my-list row
-- **WHEN** the my-list page renders a row in grouped (unranked) view
-- **THEN** that row's poster touches the row's top and bottom edges, with a small fixed gap between the status-colour stripe and the poster's leading edge
-
-#### Scenario: Poster fills a ranked row
-- **WHEN** a my-list or top-anime row shows a rank number before its poster
-- **THEN** the poster still touches the row's top and bottom edges, sitting after the rank column rather than at the leading edge
-
-#### Scenario: Row heights are unchanged
-- **WHEN** rows adopt the full-height poster
-- **THEN** each row occupies the same height as before, and the list is no longer than it was
-
-#### Scenario: Missing picture keeps the row aligned
-- **WHEN** a row's anime has no poster picture
-- **THEN** its placeholder occupies the same full-height area, keeping the row's content aligned with its neighbours
-
-### Requirement: Rank numbers when sorted by score
-The system SHALL show rank numbers (e.g. `#1`) on the left of my-list entries when the list is flat — that is, when grouping by status is off — and the primary sort key is anything other than Alphabetical, since a rank against an alphabetical ordering carries no meaning. A grouped list SHALL NOT show rank numbers. In flat mode the system SHALL show a single header line naming the active status filter (or "All") above the list.
-
-The rank SHALL occupy a fixed-width column sized for the longest rank the list can produce (at least three digits), independent of the rank actually shown on a given row. The `#` SHALL start at the same horizontal position on every row, and the poster that follows SHALL start at the same horizontal position on every row, so a rank of any length neither shifts the posters out of alignment nor runs underneath one.
-
-#### Scenario: Ranks on a flat sorted list
-- **WHEN** grouping is off and I sort by MAL score, my score, episodes watched, or any key other than Alphabetical
-- **THEN** each entry shows a rank number on the left
-
-#### Scenario: Sorting by airing status
-- **WHEN** grouping is off and I sort by airing status
-- **THEN** each entry shows a rank number on the left, ordered by the chosen show-first status ahead of the other two
-
-#### Scenario: No ranks when grouped
-- **WHEN** grouping by status is on
-- **THEN** no rank numbers are shown, whatever the sort key
-
-#### Scenario: No ranks on an alphabetical flat list
-- **WHEN** grouping is off and the primary sort key is Alphabetical
-- **THEN** no rank numbers are shown
-
-#### Scenario: Flat view shows an active-filter header
-- **WHEN** the my-list page is in flat (ungrouped) mode
-- **THEN** a header line above the list names the active status filter, or "All" when unfiltered
-
-#### Scenario: Three-digit rank stays clear of the poster
-- **WHEN** a ranked row's number reaches three digits (for example `#100`)
-- **THEN** the whole number is visible beside the poster rather than overlapping or sliding under it
-
-#### Scenario: Ranks and posters align down the list
-- **WHEN** a ranked list contains rows with one-, two-, and three-digit ranks
-- **THEN** every row's `#` starts at the same horizontal position and every row's poster starts at the same horizontal position
-
-### Requirement: My list status filter tabs
-The system SHALL provide status filter controls on the my-list page — All, Watching, Completed, Plan to watch, On hold, Dropped — so that selecting one shows only entries in that status.
-
-#### Scenario: Filtering by status
-- **WHEN** I select a status filter other than All
-- **THEN** only entries in that status are shown
-
-#### Scenario: Showing all statuses
-- **WHEN** I select All
-- **THEN** entries in every status are shown, grouped in the standard order
+## ADDED Requirements
 
 ### Requirement: My list filter bar
 The system SHALL present every my-list filter and sort control in a single bar directly below the status filter tabs, above the entries it applies to. The bar SHALL appear exactly once on the page — never repeated per status group — and SHALL apply to every group on screen alike. When the bar is wider than the viewport its controls SHALL wrap onto further lines rather than overflow or scroll horizontally, matching how the status tabs already wrap.
@@ -265,81 +172,65 @@ When filters exclude every entry, the system SHALL say that nothing matches the 
 - **WHEN** the active status tab holds no entries at all and no filter is active
 - **THEN** the page shows its "nothing here yet" message
 
-### Requirement: My list edit opens an overlay
-The system SHALL open the entry editor as an overlay on top of the my-list page when an entry's edit button is used, consistent with the editor overlay used everywhere edit/add-to-list actions appear.
+## MODIFIED Requirements
 
-#### Scenario: Opening the editor overlay
-- **WHEN** I click an entry's edit button
-- **THEN** an editor overlay opens on top of the page for that entry
+### Requirement: My list grouped and ordered by status
+The system SHALL present my list as one list grouped and ordered as Currently watching → On hold → Plan to watch → Completed → Dropped, where each entry shows picture, title, type (TV/movie), progress, my score, MAL score (respecting the hide/unhide toggle), and an edit button. For entries in the **Plan to watch** group, each row SHALL additionally show an airing-status indicator alongside the type — **Not aired**, **Airing**, or **Aired** (mapped from the anime's `not_yet_aired`, `currently_airing`, and `finished_airing` values) — so the user can tell at a glance whether a queued show is already out, still airing, or has not yet started; when the airing status is unknown, no indicator is shown.
 
-### Requirement: My list rows edit the watched count in place
-The system SHALL make the `watched` count in each my-list row's progress cell directly editable in place, per the "Inline editable episode count" requirement, so an entry's episode number can be set without opening the edit overlay. The row's edit button SHALL remain available for status, score, and rewatch-count changes. Saving an in-place count edit SHALL update that row's count and bar without reloading the page or re-sorting the list.
+Rows outside Plan to watch SHALL also show the airing-status indicator while the user is working with airing status — that is, while the airing-status filter has a selection or Airing status is the primary sort key — since the indicator is the value being filtered or ordered on. Outside those cases, rows in other status groups SHALL NOT show the indicator.
 
-#### Scenario: Setting a row's count in place
-- **WHEN** I click the count in a my-list row, type a number, and confirm
-- **THEN** that row's episodes-watched is saved and its count and bar update in place, with no overlay opening
+#### Scenario: Rendering the grouped list
+- **WHEN** the my-list page loads
+- **THEN** entries appear grouped in the order Currently watching, On hold, Plan to watch, Completed, Dropped, each showing picture, title, type, progress, my score, MAL score, and an edit button
 
-#### Scenario: Edit button still opens the overlay
-- **WHEN** I click a row's edit button
-- **THEN** the editor overlay opens as before, unaffected by the in-place count field
+#### Scenario: Plan-to-watch row shows airing status
+- **WHEN** the Plan to watch group renders an entry whose anime has a known airing status
+- **THEN** that row shows an airing-status indicator (Not aired, Airing, or Aired) next to the type
 
-#### Scenario: Row stays in position after an in-place edit
-- **WHEN** I save an in-place count edit on a row partway down the list
-- **THEN** the list is not reloaded or reordered underneath me and the row keeps its position
+#### Scenario: Airing status shown while filtering or sorting by it
+- **WHEN** the airing-status filter has a selection, or Airing status is the primary sort key
+- **THEN** every row with a known airing status shows the indicator, whatever its watch status
 
-### Requirement: Top anime ranked list
-The system SHALL present a Top anime page as a ranked list covering up to rank 500, where each row shows rank number, picture, title, my score, MAL score (right-aligned), and a list-action button. Because this page ranks anime overall, a row's anime may not be in my list; the button SHALL therefore be conditional — "Add" when the anime is not yet in my list, and "Edit" when it is. The list SHALL be paginated at 50 rows per page, with page-number controls plus left/right arrows at the bottom, and left/right arrow controls at the top-right.
+#### Scenario: Airing status otherwise only on Plan to watch
+- **WHEN** no airing-status filter is selected and the sort is not by airing status
+- **THEN** rows outside Plan to watch show the type without an airing-status indicator
 
-The page-number controls SHALL show the first page, the last page, and the current page with at most one page on each side of it, collapsing any gap between those groups into an ellipsis. On page 6 of 10 this yields `1 … 5 6 7 … 10`.
+#### Scenario: Unknown airing status shows no indicator
+- **WHEN** an entry's anime has no known airing status
+- **THEN** its row shows the type with no airing-status indicator
 
-#### Scenario: Rendering the top-anime ranking
-- **WHEN** the top-anime page loads
-- **THEN** it shows the first page of 50 rows, each with its rank number, picture, title, my score, a right-aligned MAL score, and a list-action button
+### Requirement: Rank numbers when sorted by score
+The system SHALL show rank numbers (e.g. `#1`) on the left of my-list entries when the list is flat — that is, when grouping by status is off — and the primary sort key is anything other than Alphabetical, since a rank against an alphabetical ordering carries no meaning. A grouped list SHALL NOT show rank numbers. In flat mode the system SHALL show a single header line naming the active status filter (or "All") above the list.
 
-#### Scenario: Paginating the ranking
-- **WHEN** I use the page-number controls or the left/right arrows (at the bottom or top-right)
-- **THEN** the list shows the corresponding 50-row page, up to rank 500
+The rank SHALL occupy a fixed-width column sized for the longest rank the list can produce (at least three digits), independent of the rank actually shown on a given row. The `#` SHALL start at the same horizontal position on every row, and the poster that follows SHALL start at the same horizontal position on every row, so a rank of any length neither shifts the posters out of alignment nor runs underneath one.
 
-#### Scenario: Page numbers in the middle of the range
-- **WHEN** I am on page 6 of 10
-- **THEN** the page-number controls show 1, an ellipsis, 5, 6, 7, an ellipsis, and 10 — and no other page numbers
+#### Scenario: Ranks on a flat sorted list
+- **WHEN** grouping is off and I sort by MAL score, my score, episodes watched, or any key other than Alphabetical
+- **THEN** each entry shows a rank number on the left
 
-#### Scenario: Page numbers near an edge of the range
-- **WHEN** I am on page 2 of 10
-- **THEN** the page-number controls show 1, 2, 3, an ellipsis, and 10, with no ellipsis between adjacent pages
+#### Scenario: Sorting by airing status
+- **WHEN** grouping is off and I sort by airing status
+- **THEN** each entry shows a rank number on the left, ordered by the chosen show-first status ahead of the other two
 
-#### Scenario: Row not in my list
-- **WHEN** a top-anime row's anime is not in my list
-- **THEN** its button reads "Add"; using it adds the anime with status Plan to watch and the button changes in place to "Edit"
+#### Scenario: No ranks when grouped
+- **WHEN** grouping by status is on
+- **THEN** no rank numbers are shown, whatever the sort key
 
-#### Scenario: Row already in my list
-- **WHEN** a top-anime row's anime is already in my list
-- **THEN** its button reads "Edit" and opens the editor overlay in place when used
+#### Scenario: No ranks on an alphabetical flat list
+- **WHEN** grouping is off and the primary sort key is Alphabetical
+- **THEN** no rank numbers are shown
 
-### Requirement: Daily refresh of the Top Anime ranking
-The system SHALL re-fetch the Top Anime ranking's lean listing fields the first time it is visited on a local calendar day after its last fetch, serving it from cache on same-day revisits. If the ranking has never been visited, it SHALL never be proactively fetched.
+#### Scenario: Flat view shows an active-filter header
+- **WHEN** the my-list page is in flat (ungrouped) mode
+- **THEN** a header line above the list names the active status filter, or "All" when unfiltered
 
-At most one ranking refresh SHALL be in flight at a time: a second request arriving while a refresh is running SHALL wait for it and then serve the refreshed cache, rather than starting a second ranking fetch. A fetch that fails SHALL NOT count as the day's fetch — the next visit retries.
+#### Scenario: Three-digit rank stays clear of the poster
+- **WHEN** a ranked row's number reaches three digits (for example `#100`)
+- **THEN** the whole number is visible beside the poster rather than overlapping or sliding under it
 
-#### Scenario: New-day visit
-- **WHEN** I open the Top Anime page and it has not been fetched yet on the current local calendar day
-- **THEN** the system re-fetches the ranking live and updates the cache
-
-#### Scenario: Same-day revisit
-- **WHEN** I reopen the Top Anime page again on the same local day
-- **THEN** it is served from the cache without a live re-fetch
-
-#### Scenario: Concurrent visits share one refresh
-- **WHEN** a second request for the ranking arrives while its refresh is already running
-- **THEN** no additional MAL fetch is started, and the second request is served from the refreshed cache once the first completes
-
-#### Scenario: A failed fetch does not consume the day
-- **WHEN** the ranking refresh fails and I open the Top Anime page again the same day
-- **THEN** the refresh is retried, because only a successful fetch marks the ranking as fetched for that day
-
-#### Scenario: Never visited stays unfetched
-- **WHEN** the Top Anime ranking has never been visited
-- **THEN** no background job fetches it
+#### Scenario: Ranks and posters align down the list
+- **WHEN** a ranked list contains rows with one-, two-, and three-digit ranks
+- **THEN** every row's `#` starts at the same horizontal position and every row's poster starts at the same horizontal position
 
 ### Requirement: Consistent list placement across my-list view modes
 The system SHALL place the my-list entry list at the same vertical offset below its status header in flat (ungrouped) view as in grouped view, for every status filter. Switching between grouped and flat view, or changing the sort, SHALL NOT shift the list up or down relative to the header it sits under. The header-to-list spacing SHALL be defined by a single rule shared by both view modes, rather than by per-mode values that can diverge.
@@ -355,3 +246,10 @@ The system SHALL place the my-list entry list at the same vertical offset below 
 #### Scenario: Grouped view spacing is unchanged
 - **WHEN** the my-list page is in grouped view
 - **THEN** each status group's list sits directly below its group header at the established spacing, and consecutive status groups remain separated by the page's section spacing
+
+## REMOVED Requirements
+
+### Requirement: My list quick-filter control
+**Reason**: Superseded by the filter bar. The single sort dropdown that lived on a status group's header line — with airing-status sort offered only under Plan to watch, and reset when leaving it — is replaced by "My list filter bar", "My list two-level sorting" and "My list grouping is an explicit choice", which specify a bar holding every filter and sort control once for the whole page, airing-status sort available under every status tab, and grouping chosen explicitly rather than implied by the sort key.
+
+**Migration**: None needed by users — the page opens in the same default view (All, grouped by status, alphabetical), and every ordering the old control could produce is still reachable from the new one.
