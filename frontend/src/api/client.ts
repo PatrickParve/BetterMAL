@@ -16,6 +16,8 @@ import type {
   SearchPageDto,
   SeasonPageDto,
   SeasonRefreshResultDto,
+  SeriesDto,
+  SeriesLookupResult,
   SyncStatusDto,
   TopAnimeItemDto,
   TopAnimeMediaType,
@@ -194,6 +196,21 @@ export function getAnimeDetail(animeId: number): Promise<AnimeDetailDto> {
 
 export function refreshAnime(animeId: number): Promise<void> {
   return fetchVoid(`/api/anime/${animeId}/refresh`, { method: 'POST' })
+}
+
+// 404 ("this anime isn't part of a series") resolves to { found: false }
+// rather than throwing, so the page can tell that apart from a transport
+// failure — which still rejects, same as every other fetchJson call.
+export async function getSeries(animeId: number): Promise<SeriesLookupResult> {
+  const url = `/api/series/by-anime/${animeId}`
+  const res = await fetchRaw(url)
+  if (res.status === 404) return { found: false }
+  if (!res.ok) throw new Error(`${url} responded with ${res.status}`)
+  return { found: true, series: (await res.json()) as SeriesDto }
+}
+
+export function rebuildSeries(animeId: number): Promise<SeriesDto> {
+  return fetchJson<SeriesDto>(`/api/series/by-anime/${animeId}/rebuild`, { method: 'POST' })
 }
 
 export function getSyncStatus(): Promise<SyncStatusDto> {

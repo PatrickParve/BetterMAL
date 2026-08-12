@@ -16,6 +16,7 @@ import { ProfilePage } from './pages/ProfilePage.tsx'
 import { SettingsPage } from './pages/SettingsPage.tsx'
 import { AnimeDetailPage } from './pages/AnimeDetailPage.tsx'
 import { SearchPage } from './pages/SearchPage.tsx'
+import { SeriesPage } from './pages/SeriesPage.tsx'
 
 // Mounted once the "Connect to MAL" gate in App.tsx confirms a token is on
 // file. Providers here (score visibility, entry editor, content filter) are
@@ -41,6 +42,7 @@ export function AppShell() {
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/anime/:id" element={<AnimeDetailPage />} />
                   <Route path="/search" element={<SearchPage />} />
+                  <Route path="/series/:animeId" element={<SeriesPage />} />
                   <Route path="*" element={<HomePage />} />
                 </Routes>
               </main>

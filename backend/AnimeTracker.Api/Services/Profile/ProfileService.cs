@@ -20,8 +20,10 @@ public class ProfileService(
 
     // No per-anime episode duration is cached (MAL's field isn't fetched
     // anywhere), so "Days" approximates using MAL's own fallback assumption
-    // for unknown durations rather than tracking real runtimes.
-    private const int AssumedMinutesPerEpisode = 24;
+    // for unknown durations rather than tracking real runtimes. Internal
+    // (not private) so SeriesService's runtime stats fall back to the same
+    // assumption instead of a second literal.
+    internal const int AssumedMinutesPerEpisode = 24;
 
     public async Task<ProfileDto> GetProfileAsync(CancellationToken ct = default)
     {

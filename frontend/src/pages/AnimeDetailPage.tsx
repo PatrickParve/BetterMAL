@@ -15,7 +15,11 @@ import {
   useSetEpisodesWatched,
 } from "../context/CompletionPromptContext.tsx";
 import { usePageData } from "../hooks/usePageData.ts";
-import { pickDisplayTitle, STATUS_LABELS } from "../utils/anime.ts";
+import {
+  pickDisplayTitle,
+  SERIES_TRAVERSAL_RELATIONS,
+  STATUS_LABELS,
+} from "../utils/anime.ts";
 import "./AnimeDetailPage.css";
 
 const AIRING_STATUS_LABELS: Record<string, string> = {
@@ -248,6 +252,11 @@ export function AnimeDetailPage() {
   const moreRelations = detail.relatedAnime.filter(
     (r) => r !== prequel && r !== sequel && r !== parentStory,
   );
+  // Zero-cost check on relation data already loaded — no probe request for a
+  // series that might not exist (design.md decision 11).
+  const hasSeriesRelation = detail.relatedAnime.some((r) =>
+    SERIES_TRAVERSAL_RELATIONS.has(r.relationType),
+  );
   const hideAddToWatching =
     detail.entry?.status === "Watching" ||
     detail.entry?.status === "Completed" ||
@@ -260,8 +269,16 @@ export function AnimeDetailPage() {
           <h1>{pickDisplayTitle(detail.title, detail.englishTitle)}</h1>
         </div>
 
-        {(prequel || sequel || parentStory || moreRelations.length > 0) && (
+        {(hasSeriesRelation || prequel || sequel || parentStory || moreRelations.length > 0) && (
           <div className="anime-detail-page__related">
+            {hasSeriesRelation && (
+              <Link
+                to={`/series/${detail.animeId}`}
+                className="anime-detail-page__related-link"
+              >
+                Series
+              </Link>
+            )}
             {parentStory && (
               <Link
                 to={`/anime/${parentStory.animeId}`}

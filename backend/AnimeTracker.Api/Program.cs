@@ -15,6 +15,7 @@ using AnimeTracker.Api.Services.Profile;
 using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Season;
+using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Sync;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
@@ -136,6 +137,10 @@ builder.Services.AddScoped<IProfileService, ProfileService>();
 
 // --- Single anime detail page ---
 builder.Services.AddScoped<IAnimeDetailService, AnimeDetailService>();
+
+// --- Series page ---
+builder.Services.AddScoped<SeriesGraphBuilder>();
+builder.Services.AddScoped<ISeriesService, SeriesService>();
 
 var app = builder.Build();
 

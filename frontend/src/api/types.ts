@@ -357,6 +357,84 @@ export type RelatedAnimeDto = {
   relationType: string
 }
 
+// Mirrors backend Services/Series/SeriesDto.cs (tasks 3.1-3.3).
+export type SeriesEntryDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  mediaType: string | null
+  airingStatus: string | null
+  totalEpisodes: number | null
+  averageEpisodeDurationSeconds: number | null
+  airedFrom: string | null
+  malScore: number | null
+  relationType: string | null
+  order: number
+  entry: UserAnimeEntryDto | null
+}
+
+// value is null exactly when scoredCount is 0; otherwise unrounded — render
+// to two decimals at the point of display.
+export type SeriesAverageDto = {
+  value: number | null
+  scoredCount: number
+  totalCount: number
+}
+
+export type SeriesScoresDto = {
+  malMain: SeriesAverageDto
+  malAll: SeriesAverageDto
+  mineMain: SeriesAverageDto
+  mineAll: SeriesAverageDto
+}
+
+export type SeriesStatsDto = {
+  mainLineEpisodeTotal: number
+  mainLineRuntimeSeconds: number
+  hasUnknownEpisodeCounts: boolean
+  extrasEpisodeTotal: number
+  extrasRuntimeSeconds: number
+  myWatchedEpisodes: number
+  myWatchedSeconds: number
+  entriesCompleted: number
+  mainLineCount: number
+  extrasCount: number
+  longestGapDays: number | null
+  longestGapFromAnimeId: number | null
+  longestGapToAnimeId: number | null
+  highestMalScoreAnimeId: number | null
+  myHighestScoreAnimeId: number | null
+  studios: string[]
+  genres: string[]
+}
+
+export type SeriesStatus = 'Ongoing' | 'Upcoming' | 'Finished' | 'Finished · sequel upcoming'
+
+export type SeriesDto = {
+  seriesId: number
+  rootAnimeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  status: SeriesStatus
+  firstYear: number | null
+  lastYear: number | null
+  builtAt: string
+  isPartial: boolean
+  isTruncated: boolean
+  scores: SeriesScoresDto
+  stats: SeriesStatsDto
+  mainLine: SeriesEntryDto[]
+  extras: SeriesEntryDto[]
+}
+
+// getSeries resolves to this rather than throwing on a 404 — "not part of a
+// series" is a normal, renderable outcome, distinct from a transport failure
+// (which still rejects the promise, letting the page fall back to its
+// generic "couldn't load" treatment).
+export type SeriesLookupResult = { found: true; series: SeriesDto } | { found: false }
+
 export type AnimeDetailDto = {
   animeId: number
   title: string

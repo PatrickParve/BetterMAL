@@ -1,0 +1,273 @@
+.series-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.series-page__header {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.series-page__picture {
+  width: 140px;
+  height: 198px;
+  object-fit: cover;
+  border-radius: 12px;
+  background: var(--code-bg);
+  flex: 0 0 auto;
+}
+
+.series-page__picture--placeholder {
+  border: 1px solid var(--border);
+}
+
+.series-page__header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.series-page__label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.6;
+}
+
+.series-page__header-info h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: normal;
+}
+
+.series-page__header-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.series-page__status-pill {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-h);
+}
+
+.series-page__status-pill--ongoing {
+  border-color: var(--status-watching-border);
+  background: var(--status-watching-bg);
+  color: var(--status-watching);
+}
+
+.series-page__status-pill--upcoming {
+  border-color: var(--status-plantowatch-border);
+  background: var(--status-plantowatch-bg);
+  color: var(--status-plantowatch);
+}
+
+.series-page__status-pill--finished {
+  border-color: var(--status-completed-border);
+  background: var(--status-completed-bg);
+  color: var(--status-completed);
+}
+
+.series-page__year-span {
+  font-size: 14px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.series-page__rebuild-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.series-page__rebuild {
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.series-page__rebuild:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.series-page__rebuild:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.series-page__notice {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.series-page__score-boxes {
+  display: flex;
+  gap: 16px;
+}
+
+.series-page__score-boxes .series-box {
+  flex: 1 1 0;
+}
+
+.series-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.series-box h2,
+.series-box h3 {
+  margin: 0;
+}
+
+.series-box h3 {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.series-box p {
+  margin: 0;
+}
+
+.series-box__score {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.series-box__count {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.series-page__stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px 24px;
+  margin: 0;
+}
+
+.series-page__stats-grid dt {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.series-page__stats-grid dd {
+  margin: 0;
+  color: var(--text-h);
+}
+
+.series-page__stats-grid dd a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.series-page__stats-grid dd a:hover {
+  color: var(--accent);
+}
+
+.series-page__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.series-page__extras-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.series-page__extras-group + .series-page__extras-group {
+  margin-top: 12px;
+}
+
+.series-page__extras-group h3 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.series-page__score-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.series-page__score-strip-hidden-note {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.series-page__score-strip-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 72px;
+}
+
+.series-page__score-strip-bar {
+  flex: 1 1 0;
+  min-width: 4px;
+  border-radius: 2px 2px 0 0;
+  background: var(--text);
+  opacity: 0.35;
+}
+
+.series-page__score-strip-row--mal .series-page__score-strip-bar {
+  background: var(--accent);
+  opacity: 0.6;
+}
+
+.series-page__score-strip-bar--mine {
+  background: var(--status-watching, var(--accent));
+  opacity: 0.7;
+}
+
+.series-page__loading,
+.series-page__empty {
+  padding: 48px 0;
+  text-align: center;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+@media (max-width: 900px) {
+  .series-page__score-boxes {
+    flex-direction: column;
+  }
+
+  .series-page__stats-grid {
+    grid-template-columns: 1fr;
+  }
+}

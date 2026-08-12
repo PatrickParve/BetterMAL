@@ -30,14 +30,14 @@ The system SHALL make anime cards clickable everywhere they appear, linking to t
 - **THEN** I stay on the current page and only that control reacts
 
 ### Requirement: Hover highlight on anime cards and rows
-The system SHALL give every anime card a clearly visible hover state — a change in surface and border, not colour alone — so the card under the pointer is unmistakable. This SHALL apply wherever anime cards appear (the main dashboard's currently-watching carousel and current-season section, the season browser, and search results) and to the equivalent full-width anime rows on my list, top anime, and the profile page's latest-updates feed and opinion-divergence lists. The highlight SHALL appear on the whole card or row as one unit, SHALL be reachable by keyboard focus as well as pointer hover, and SHALL NOT shift surrounding layout or clip against a scroll container's edge. The highlight SHALL remain clearly visible regardless of the card's own poster artwork — it SHALL NOT rely on a thin ring drawn over the picture itself, which can wash out against bright or visually busy cover art. This requirement does not apply to the poster-tile strips in the profile page's "My top anime" and "Most rewatched" boxes, which use their own distinct hover treatment (see the `profile-stats` capability).
+The system SHALL give every anime card a clearly visible hover state — a change in surface and border, not colour alone — so the card under the pointer is unmistakable. This SHALL apply wherever anime cards appear (the main dashboard's currently-watching carousel and current-season section, the season browser, and search results) and to the equivalent full-width anime rows on my list, top anime, the series page's main-series and More sections, and the profile page's latest-updates feed and opinion-divergence lists. The highlight SHALL appear on the whole card or row as one unit, SHALL be reachable by keyboard focus as well as pointer hover, and SHALL NOT shift surrounding layout or clip against a scroll container's edge. The highlight SHALL remain clearly visible regardless of the card's own poster artwork — it SHALL NOT rely on a thin ring drawn over the picture itself, which can wash out against bright or visually busy cover art. This requirement does not apply to the poster-tile strips in the profile page's "My top anime" and "Most rewatched" boxes, which use their own distinct hover treatment (see the `profile-stats` capability).
 
 #### Scenario: Hovering a card
 - **WHEN** I move the pointer over an anime card on any page
 - **THEN** the whole card is clearly highlighted and the highlight clears when the pointer leaves
 
 #### Scenario: Hovering a list row
-- **WHEN** I move the pointer over a my-list, top-anime, or profile-page row
+- **WHEN** I move the pointer over a my-list, top-anime, series-page, or profile-page row
 - **THEN** the whole row is clearly highlighted in the same way cards are
 
 #### Scenario: Highlight does not move the layout

@@ -1,0 +1,136 @@
+.series-entry-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* Left padding keeps a gap between the status-colour stripe and the
+     poster, mirroring my-list-row's inset — only top/bottom stay at 0 so
+     the poster still fills the row's full height. */
+  padding: 0 8px 0 10px;
+  min-height: 72px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: 8px;
+}
+
+/* Only the top/right/bottom border colours change on hover — border-left-color
+   stays owned by the status modifier below so the status stripe survives. */
+.series-entry-row:hover,
+.series-entry-row:focus-within {
+  background: var(--accent-bg);
+  border-top-color: var(--accent-border);
+  border-right-color: var(--accent-border);
+  border-bottom-color: var(--accent-border);
+}
+
+.series-entry-row--watching {
+  border-left-color: var(--status-watching);
+}
+.series-entry-row--completed {
+  border-left-color: var(--status-completed);
+}
+.series-entry-row--plantowatch {
+  border-left-color: var(--status-plantowatch);
+}
+.series-entry-row--onhold {
+  border-left-color: var(--status-onhold);
+}
+.series-entry-row--dropped {
+  border-left-color: var(--status-dropped);
+}
+
+.series-entry-row__rank {
+  width: 4ch;
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--text-h);
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.series-entry-row__link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 260px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.series-entry-row__link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.series-entry-row__picture {
+  width: 52px;
+  height: 72px;
+  object-fit: cover;
+  background: var(--code-bg);
+  flex: 0 0 auto;
+}
+
+.series-entry-row__picture--placeholder {
+  border: 1px solid var(--border);
+}
+
+.series-entry-row__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.series-entry-row__title {
+  color: var(--text-h);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.series-entry-row__meta {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.series-entry-row__mal-score {
+  width: 56px;
+  flex: 0 0 auto;
+  text-align: center;
+}
+
+.series-entry-row__my-score {
+  width: 40px;
+  flex: 0 0 auto;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.series-entry-row__status {
+  width: 110px;
+  flex: 0 0 auto;
+  text-align: right;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.series-entry-row__edit {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.series-entry-row__edit:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}

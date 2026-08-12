@@ -6,6 +6,20 @@ export function pickDisplayTitle(title: string, englishTitle: string | null | un
   return englishTitle && englishTitle.trim().length > 0 ? englishTitle : title
 }
 
+// Mirrors backend/AnimeTracker.Api/Services/Series/SeriesRelations.cs
+// TraversalSet — kept in sync by hand rather than fetched, since the detail
+// page only needs a yes/no check on relation types it already has loaded.
+export const SERIES_TRAVERSAL_RELATIONS = new Set([
+  'sequel',
+  'prequel',
+  'side_story',
+  'parent_story',
+  'summary',
+  'full_story',
+  'spin_off',
+  'alternative_version',
+])
+
 export const STATUS_LABELS: Record<WatchStatus, string> = {
   Watching: 'Watching',
   OnHold: 'On hold',
