@@ -166,7 +166,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 8px;
+  padding: 0 8px 0 0;
+  min-height: 56px;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 8px;
 }
@@ -193,10 +195,13 @@
 }
 
 .profile-list-row__picture {
-  width: 32px;
-  height: 44px;
+  /* Widened along with the row's full-bleed height (56px) to keep the
+     poster's original ~32:44 proportions instead of being cropped narrower —
+     fixed, not aspect-ratio: combining aspect-ratio with flex stretch here
+     inflated the row to the image's intrinsic size instead of clamping it. */
+  width: 41px;
+  height: 56px;
   object-fit: cover;
-  border-radius: 4px;
   background: var(--code-bg);
   flex: 0 0 auto;
 }

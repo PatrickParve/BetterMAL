@@ -104,6 +104,7 @@ export function MyListPage() {
       totalEpisodes: item.totalEpisodes,
       entry: item.entry,
       onSaved: handleSaved(item.animeId),
+      onDeleted: () => setItems((prev) => prev && prev.filter((i) => i.animeId !== item.animeId)),
     })
   }
 
@@ -299,23 +300,29 @@ export function MyListPage() {
           </ul>
         </section>
       ) : (
-        GROUP_ORDER.filter((status) => statusFilter === 'All' || statusFilter === status).map((status) => {
-          const groupItems = sortByKey(
-            filteredItems.filter((item) => item.entry.status === status),
-            sort,
-            airingStatusFirst,
-          )
-          if (groupItems.length === 0) return null
-          return (
-            <section key={status} className="my-list-page__group">
-              <div className="my-list-page__group-header">
-                <h2>{STATUS_LABELS[status]}</h2>
-                {renderSortControls()}
-              </div>
-              <ul className="my-list-page__list">{groupItems.map((item) => renderRow(item))}</ul>
-            </section>
-          )
-        })
+        <>
+          {/* "All" grouped view: one sort control above every group instead of
+              one per group header — each group below keeps its own header line
+              free of the control, per D10. */}
+          {statusFilter === 'All' && <div className="my-list-page__sort-header">{renderSortControls()}</div>}
+          {GROUP_ORDER.filter((status) => statusFilter === 'All' || statusFilter === status).map((status) => {
+            const groupItems = sortByKey(
+              filteredItems.filter((item) => item.entry.status === status),
+              sort,
+              airingStatusFirst,
+            )
+            if (groupItems.length === 0) return null
+            return (
+              <section key={status} className="my-list-page__group">
+                <div className="my-list-page__group-header">
+                  <h2>{STATUS_LABELS[status]}</h2>
+                  {statusFilter !== 'All' && renderSortControls()}
+                </div>
+                <ul className="my-list-page__list">{groupItems.map((item) => renderRow(item))}</ul>
+              </section>
+            )
+          })}
+        </>
       )}
     </div>
   )

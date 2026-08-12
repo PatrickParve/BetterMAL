@@ -15,7 +15,9 @@ public class UserAnimeEntryEditService(
     AnimeTrackerDbContext db,
     IEntrySyncScheduler syncScheduler,
     IEpisodeScheduleService scheduleService,
-    IAiringRefreshTrigger airingRefreshTrigger) : IUserAnimeEntryEditService
+    IAiringRefreshTrigger airingRefreshTrigger,
+    IServiceScopeFactory scopeFactory,
+    ILogger<UserAnimeEntryEditService> logger) : IUserAnimeEntryEditService
 {
     public async Task<UserAnimeEntryDto> UpdateEntryAsync(int animeId, UserAnimeEntryEditRequest request, CancellationToken ct = default)
     {
@@ -28,6 +30,13 @@ public class UserAnimeEntryEditService(
         {
             entry = new UserAnimeEntry { AnimeId = animeId, Status = WatchStatus.PlanToWatch };
             db.UserAnimeEntries.Add(entry);
+
+            // Re-adding an anime cancels any removal still queued for it —
+            // otherwise a delete that failed while offline could fire on the
+            // next retry sweep and erase the entry just recreated.
+            var pendingDeletion = await db.PendingEntryDeletions.FirstOrDefaultAsync(d => d.AnimeId == animeId, ct);
+            if (pendingDeletion is not null)
+                db.PendingEntryDeletions.Remove(pendingDeletion);
         }
 
         var today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime);
@@ -42,6 +51,7 @@ public class UserAnimeEntryEditService(
 
         await ApplyEpisodesWatchedAsync(request, entry, anime, originalStatus, today, now, changes, ct);
         ApplyStatus(request, entry, anime, animeId, originalStatus, today, changes);
+        ApplyDates(request, entry, changes);
         ApplyScore(request, entry, changes);
         ApplyRewatchCount(request, entry, changes);
 
@@ -84,6 +94,45 @@ public class UserAnimeEntryEditService(
             airingRefreshTrigger.Enqueue(animeId);
 
         return UserAnimeEntryDto.FromEntity(entry);
+    }
+
+    public async Task RemoveEntryAsync(int animeId, CancellationToken ct = default)
+    {
+        var entry = await db.UserAnimeEntries.FirstOrDefaultAsync(e => e.AnimeId == animeId, ct)
+            ?? throw new EntryNotFoundException(animeId);
+
+        db.UserAnimeEntries.Remove(entry);
+        db.ActivityLogs.Add(new ActivityLog
+        {
+            AnimeId = animeId,
+            Timestamp = DateTimeOffset.UtcNow,
+            ChangeType = ActivityChangeType.Removed,
+            ChangeDetail = "Removed from list",
+        });
+        db.PendingEntryDeletions.Add(new PendingEntryDeletion { AnimeId = animeId, RequestedAt = DateTimeOffset.UtcNow });
+
+        await db.SaveChangesAsync(ct);
+
+        // A removed entry has nothing left to coalesce with, so push it now
+        // instead of through the edit debounce — fire-and-forget (like
+        // airingRefreshTrigger.Enqueue above) so the response doesn't wait on
+        // MAL. Runs in its own scope since this request's DbContext will be
+        // disposed once the response returns.
+        _ = PushRemovalAsync(animeId);
+    }
+
+    private async Task PushRemovalAsync(int animeId)
+    {
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var pushService = scope.ServiceProvider.GetRequiredService<IEntryPushService>();
+            await pushService.PushPendingDeletionAsync(animeId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Immediate removal push failed for anime {AnimeId}; it remains pending.", animeId);
+        }
     }
 
     private async Task ApplyEpisodesWatchedAsync(
@@ -150,6 +199,36 @@ public class UserAnimeEntryEditService(
         entry.Status = newStatus;
     }
 
+    // Runs after ApplyEpisodesWatchedAsync/ApplyStatus so an explicit manual
+    // date in this same request wins over whatever those steps auto-filled —
+    // the automatic rules only ever fill an empty date (entry.StartedAt is
+    // null / entry.CompletedAt ??=), never overwrite one, so a manual value
+    // sent alongside a completing edit is untouched by them.
+    private static void ApplyDates(
+        UserAnimeEntryEditRequest request, UserAnimeEntry entry,
+        List<(ActivityChangeType Type, string Detail, int? PreviousEpisodesWatched)> changes)
+    {
+        if (request.HasStartedAt && request.StartedAt != entry.StartedAt)
+        {
+            entry.StartedAt = request.StartedAt;
+            changes.Add((ActivityChangeType.StartDateChanged,
+                entry.StartedAt is { } started ? $"Start date {started:yyyy-MM-dd}" : "Start date cleared", null));
+        }
+
+        if (request.HasCompletedAt && request.CompletedAt != entry.CompletedAt)
+        {
+            entry.CompletedAt = request.CompletedAt;
+            changes.Add((ActivityChangeType.FinishDateChanged,
+                entry.CompletedAt is { } finished ? $"Finish date {finished:yyyy-MM-dd}" : "Finish date cleared", null));
+        }
+
+        // Compares the resulting (post-edit) values, not the stored ones, so
+        // this catches e.g. a finish date set earlier than a start date left
+        // unchanged from a prior edit, not just both dates changed together.
+        if (entry.StartedAt is { } start && entry.CompletedAt is { } finish && finish < start)
+            throw new ArgumentOutOfRangeException(nameof(request), "Finish date cannot be earlier than start date.");
+    }
+
     private static void ApplyScore(
         UserAnimeEntryEditRequest request, UserAnimeEntry entry,
         List<(ActivityChangeType Type, string Detail, int? PreviousEpisodesWatched)> changes)
@@ -171,8 +250,8 @@ public class UserAnimeEntryEditService(
         if (request.RewatchCount is not { } newRewatchCount || newRewatchCount == entry.RewatchCount)
             return;
 
-        if (newRewatchCount < 0)
-            throw new ArgumentOutOfRangeException(nameof(request), "Rewatch count cannot be negative.");
+        if (newRewatchCount is < 0 or > 100)
+            throw new ArgumentOutOfRangeException(nameof(request), "Rewatch count must be between 0 and 100.");
 
         entry.RewatchCount = newRewatchCount;
         changes.Add((ActivityChangeType.RewatchCountChanged, $"Rewatch count {newRewatchCount}", null));

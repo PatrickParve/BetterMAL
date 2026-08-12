@@ -2,11 +2,24 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* Shared by every select/input in the form, including controls added
+     later, so the form reads as one column instead of a mix of sizes. */
+  --entry-editor-control-height: 38px;
 }
 
 .entry-editor__title {
   margin: 0 0 4px;
   font-size: 20px;
+}
+
+.entry-editor__fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
 }
 
 .entry-editor__field {
@@ -19,12 +32,52 @@
 
 .entry-editor__field select,
 .entry-editor__field input {
+  width: 100%;
+  height: var(--entry-editor-control-height);
+  box-sizing: border-box;
   font: inherit;
   padding: 8px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text-h);
+}
+
+.entry-editor__dates {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+/* The disclosure's own padding and border would otherwise shrink these two
+   controls' 100% width relative to every top-level field — expand back out
+   by exactly that inset (10px padding + 1px border, each side) so they
+   measure the same width as the rest of the form (D7). */
+.entry-editor__dates .entry-editor__field select,
+.entry-editor__dates .entry-editor__field input {
+  width: calc(100% + 22px);
+  margin-left: -11px;
+  margin-right: -11px;
+}
+
+.entry-editor__dates summary {
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.entry-editor__dates .entry-editor__field {
+  margin-top: 10px;
+}
+
+.entry-editor__dates .entry-editor__field:first-of-type {
+  margin-top: 12px;
+}
+
+.entry-editor__confirm-text {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
 }
 
 .entry-editor__error {
@@ -35,6 +88,7 @@
 
 .entry-editor__buttons {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
@@ -50,8 +104,23 @@
   cursor: pointer;
 }
 
-.entry-editor__save {
+/* Specificity bumped to beat .entry-editor__buttons button above, which
+   would otherwise win on source order and mask these colors entirely. */
+.entry-editor__buttons button.entry-editor__save {
   background: var(--accent);
   border-color: var(--accent);
+  color: #fff;
+}
+
+.entry-editor__buttons button.entry-editor__delete {
+  margin-right: auto;
+  border-color: #e5484d;
+  color: #e5484d;
+  background: transparent;
+}
+
+.entry-editor__buttons button.entry-editor__delete-confirm {
+  background: #e5484d;
+  border-color: #e5484d;
   color: #fff;
 }

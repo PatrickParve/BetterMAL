@@ -47,6 +47,7 @@ export const CHANGE_TYPE_LABELS: Record<string, string> = {
   ScoreChanged: 'Score changed',
   Completed: 'Completed',
   RewatchCountChanged: 'Rewatch count changed',
+  Removed: 'Removed from list',
 }
 
 // "Never" is settings-page phrasing for a field that's always present

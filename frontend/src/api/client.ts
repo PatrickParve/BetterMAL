@@ -119,6 +119,10 @@ export function updateEntry(animeId: number, request: UserAnimeEntryEditRequest)
   })
 }
 
+export function deleteEntry(animeId: number): Promise<void> {
+  return fetchVoid(`/api/anime/${animeId}/entry`, { method: 'DELETE' })
+}
+
 export function getDashboard(): Promise<MainDashboardDto> {
   return fetchJson<MainDashboardDto>('/api/dashboard')
 }

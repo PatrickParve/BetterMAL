@@ -17,14 +17,24 @@ public class ReconciliationService(
 
         var localEntries = await db.UserAnimeEntries.ToDictionaryAsync(e => e.AnimeId, ct);
         var existingAnimeIds = (await db.AnimeMetadata.Select(a => a.Id).ToListAsync(ct)).ToHashSet();
+        var pendingDeletionAnimeIds = (await db.PendingEntryDeletions.Select(d => d.AnimeId).ToListAsync(ct)).ToHashSet();
 
-        int added = 0, updated = 0, unchanged = 0, skippedPending = 0;
+        int added = 0, updated = 0, unchanged = 0, skippedPending = 0, skippedRemoval = 0;
         var diffEntries = new List<PendingReconciliationDiffEntry>();
 
         foreach (var edge in remoteEdges)
         {
             ct.ThrowIfCancellationRequested();
             var animeId = edge.Node.Id;
+
+            // MAL still listing an anime whose removal hasn't been pushed yet
+            // is an expected in-flight state, not a difference to review —
+            // including it would offer to restore the entry the user just deleted.
+            if (pendingDeletionAnimeIds.Contains(animeId))
+            {
+                skippedRemoval++;
+                continue;
+            }
 
             // Anime missing locally (e.g. added directly on MAL's site) needs a
             // metadata row cached — this is just cache data, not user data, so
@@ -75,10 +85,10 @@ public class ReconciliationService(
 
         await db.SaveChangesAsync(ct);
         logger.LogInformation(
-            "Reconciliation complete: {Added} added, {Updated} updated, {Unchanged} unchanged, {Skipped} skipped (pending local edits) — diff held for review.",
-            added, updated, unchanged, skippedPending);
+            "Reconciliation complete: {Added} added, {Updated} updated, {Unchanged} unchanged, {Skipped} skipped (pending local edits), {SkippedRemovals} skipped (pending removal) — diff held for review.",
+            added, updated, unchanged, skippedPending, skippedRemoval);
 
-        return new ReconciliationResult(added, updated, unchanged, skippedPending);
+        return new ReconciliationResult(added, updated, unchanged, skippedPending, skippedRemoval);
     }
 
     public async Task<PendingReconciliationDiffDto?> GetPendingDiffAsync(CancellationToken ct = default)

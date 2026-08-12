@@ -25,6 +25,11 @@ export type UserAnimeEntryEditRequest = {
   episodesWatched?: number
   myScore?: number | null
   rewatchCount?: number
+  // Nullable-of-optional: omit entirely to leave the date untouched, or send
+  // `null` to explicitly clear it — `undefined` already means "not being
+  // edited" for every other field here, so it can't also mean "clear".
+  startedAt?: string | null
+  completedAt?: string | null
 }
 
 export type AnimeSearchResult = {
@@ -42,6 +47,7 @@ export type EntryEditorTarget = {
   totalEpisodes: number | null
   entry: UserAnimeEntryDto | null
   onSaved?: (entry: UserAnimeEntryDto) => void
+  onDeleted?: () => void
 }
 
 // Everything the shared episode-increment hook needs to perform the edit and,
@@ -193,6 +199,7 @@ export type ActivityChangeType =
   | 'ScoreChanged'
   | 'Completed'
   | 'RewatchCountChanged'
+  | 'Removed'
 
 export type ActivityFeedItemDto = {
   id: number

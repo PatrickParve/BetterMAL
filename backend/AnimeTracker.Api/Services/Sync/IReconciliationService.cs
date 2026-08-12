@@ -3,7 +3,7 @@ namespace AnimeTracker.Api.Services.Sync;
 /// <summary>Counts from a reconciliation run — Added/Updated describe the diff
 /// computed and held for review, not changes already applied (design.md
 /// decision: "compute-then-review, not auto-apply").</summary>
-public record ReconciliationResult(int Added, int Updated, int Unchanged, int SkippedPending);
+public record ReconciliationResult(int Added, int Updated, int Unchanged, int SkippedPending, int SkippedRemovals);
 
 public record PendingReconciliationDiffEntryDto(
     int AnimeId,

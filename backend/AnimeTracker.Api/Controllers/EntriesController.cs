@@ -29,4 +29,20 @@ public class EntriesController(IUserAnimeEntryEditService editService) : Control
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    /// <summary>Removes the anime from my list — locally at once, and from
+    /// MAL durably in the background.</summary>
+    [HttpDelete("api/anime/{animeId:int}/entry")]
+    public async Task<IActionResult> DeleteEntry(int animeId, CancellationToken ct)
+    {
+        try
+        {
+            await editService.RemoveEntryAsync(animeId, ct);
+            return NoContent();
+        }
+        catch (EntryNotFoundException)
+        {
+            return NotFound();
+        }
+    }
 }

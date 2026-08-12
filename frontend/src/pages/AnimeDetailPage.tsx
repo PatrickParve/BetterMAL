@@ -216,6 +216,8 @@ export function AnimeDetailPage() {
       entry: detail.entry,
       onSaved: (saved) =>
         setDetail((prev) => (prev ? { ...prev, entry: saved } : prev)),
+      onDeleted: () =>
+        setDetail((prev) => (prev ? { ...prev, entry: null } : prev)),
     });
   }
 

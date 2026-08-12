@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AnimeTracker.Api.Services.Mal.Dto;
@@ -95,6 +96,18 @@ public class MalClient(HttpClient http) : IMalClient
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<MalListStatus>(JsonOptions, ct)
             ?? throw new InvalidOperationException("MAL returned an empty my_list_status response.");
+    }
+
+    public async Task DeleteMyListStatusAsync(int animeId, CancellationToken ct = default)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Delete, $"anime/{animeId}/my_list_status");
+        request.Options.Set(MalRequestOptions.AuthModeKey, MalAuthMode.Bearer);
+
+        using var response = await http.SendAsync(request, ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return; // already absent on MAL — the goal state already holds
+
+        response.EnsureSuccessStatusCode();
     }
 
     private async Task<T> GetAsync<T>(string url, MalAuthMode authMode, CancellationToken ct)

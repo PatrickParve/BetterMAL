@@ -199,6 +199,7 @@ public class ProfileService(
                 case ActivityChangeType.Completed:
                 case ActivityChangeType.Added:
                 case ActivityChangeType.ScoreChanged:
+                case ActivityChangeType.Removed:
                     break;
                 default:
                     continue;

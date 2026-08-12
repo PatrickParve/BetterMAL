@@ -53,6 +53,7 @@ export function TopAnimePage() {
       totalEpisodes: item.totalEpisodes,
       entry: item.entry,
       onSaved: (saved) => setEntry(item.animeId, saved),
+      onDeleted: () => setEntry(item.animeId, null),
     })
   }
 

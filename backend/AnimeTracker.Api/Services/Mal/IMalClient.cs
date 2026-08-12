@@ -22,4 +22,8 @@ public interface IMalClient
     Task<MalPagedResponse<MalUserAnimeListEdge>> GetUserAnimeListAsync(string? status = null, int limit = 100, int offset = 0, CancellationToken ct = default);
     Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(CancellationToken ct = default);
     Task<MalListStatus> UpdateMyListStatusAsync(int animeId, MalListStatusUpdate update, CancellationToken ct = default);
+
+    /// <summary>Removes an anime from my MAL list. A 404 (MAL already has no
+    /// such list entry) counts as success — the desired end state already holds.</summary>
+    Task DeleteMyListStatusAsync(int animeId, CancellationToken ct = default);
 }

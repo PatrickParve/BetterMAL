@@ -88,6 +88,11 @@
   border-color: var(--tab-color, var(--accent-border));
 }
 
+.my-list-page__sort-header {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .my-list-page__group-header {
   display: flex;
   align-items: center;
@@ -114,7 +119,12 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 8px 8px 10px;
+  /* Left padding keeps a gap between the status-colour stripe and whatever
+     leads the row (rank or poster) — only top/bottom stay at 0 so the
+     poster still fills the row's full height. */
+  padding: 0 8px 0 10px;
+  min-height: 72px;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-left: 4px solid var(--border);
   border-radius: 8px;
@@ -147,11 +157,11 @@
 }
 
 .my-list-row__rank {
-  width: 32px;
+  width: 4ch;
   flex: 0 0 auto;
   font-weight: 600;
   color: var(--text-h);
-  text-align: right;
+  text-align: left;
   font-variant-numeric: tabular-nums;
 }
 
@@ -171,10 +181,13 @@
 }
 
 .my-list-row__picture {
-  width: 40px;
-  height: 56px;
+  /* Widened along with the row's full-bleed height (72px) to keep the
+     poster's original ~40:56 proportions instead of being cropped narrower —
+     fixed, not aspect-ratio: combining aspect-ratio with flex stretch here
+     inflated the row to the image's intrinsic size instead of clamping it. */
+  width: 52px;
+  height: 72px;
   object-fit: cover;
-  border-radius: 4px;
   background: var(--code-bg);
   flex: 0 0 auto;
 }

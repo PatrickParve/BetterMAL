@@ -8,6 +8,7 @@ namespace AnimeTracker.Api.Services.Sync;
 public class EntryPushService(
     AnimeTrackerDbContext db,
     IMalClient malClient,
+    IEntrySyncScheduler syncScheduler,
     ILogger<EntryPushService> logger) : IEntryPushService
 {
     public async Task<bool> PushIfPendingAsync(int animeId, CancellationToken ct = default)
@@ -55,6 +56,40 @@ public class EntryPushService(
         }
     }
 
+    public async Task<bool> PushPendingDeletionAsync(int animeId, CancellationToken ct = default)
+    {
+        var pending = await db.PendingEntryDeletions.FirstOrDefaultAsync(d => d.AnimeId == animeId, ct);
+        if (pending is null)
+            return false;
+
+        try
+        {
+            await malClient.DeleteMyListStatusAsync(animeId, ct);
+
+            db.PendingEntryDeletions.Remove(pending);
+
+            // The anime may have been re-added while this delete was in
+            // flight (the narrow race UpdateEntryAsync's re-add handling
+            // doesn't cover): push the re-added entry back to MAL rather than
+            // leaving it as a local-only ghost.
+            var entry = await db.UserAnimeEntries.FirstOrDefaultAsync(e => e.AnimeId == animeId, ct);
+            if (entry is not null)
+                entry.PendingSync = true;
+
+            await db.SaveChangesAsync(ct);
+
+            if (entry is not null)
+                syncScheduler.ScheduleSync(animeId);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to push pending deletion for anime {AnimeId}; it remains pending.", animeId);
+            return false;
+        }
+    }
+
     public async Task<int> DrainPendingAsync(CancellationToken ct = default)
     {
         var pendingIds = await db.UserAnimeEntries.AsNoTracking()
@@ -66,6 +101,16 @@ public class EntryPushService(
         foreach (var animeId in pendingIds)
         {
             if (await PushIfPendingAsync(animeId, ct))
+                pushed++;
+        }
+
+        var pendingDeletionIds = await db.PendingEntryDeletions.AsNoTracking()
+            .Select(d => d.AnimeId)
+            .ToListAsync(ct);
+
+        foreach (var animeId in pendingDeletionIds)
+        {
+            if (await PushPendingDeletionAsync(animeId, ct))
                 pushed++;
         }
 

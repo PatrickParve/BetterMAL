@@ -11,7 +11,13 @@ public interface IEntryPushService
     /// push happened and succeeded.</summary>
     Task<bool> PushIfPendingAsync(int animeId, CancellationToken ct = default);
 
-    /// <summary>Pushes every currently pending_sync entry. Returns how many
-    /// pushes succeeded.</summary>
+    /// <summary>Pushes the anime's pending removal, if one exists (a no-op
+    /// otherwise). On success the pending removal record is cleared; on
+    /// failure it is left for the next attempt. Returns whether a push
+    /// happened and succeeded.</summary>
+    Task<bool> PushPendingDeletionAsync(int animeId, CancellationToken ct = default);
+
+    /// <summary>Pushes every currently pending_sync entry and every pending
+    /// removal. Returns how many pushes succeeded.</summary>
     Task<int> DrainPendingAsync(CancellationToken ct = default);
 }

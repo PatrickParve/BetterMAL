@@ -1,5 +1,7 @@
 namespace AnimeTracker.Api.Models;
 
+// Appended only, never reordered or renumbered — existing rows already carry
+// these values in the database.
 public enum ActivityChangeType
 {
     Added,
@@ -8,6 +10,9 @@ public enum ActivityChangeType
     ScoreChanged,
     Completed,
     RewatchCountChanged,
+    Removed,
+    StartDateChanged,
+    FinishDateChanged,
 }
 
 /// <summary>Timestamped change record. The only way to reconstruct a chronological

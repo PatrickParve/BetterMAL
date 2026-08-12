@@ -4,3 +4,5 @@ public class AnimeNotFoundException(int animeId) : Exception($"Anime {animeId} w
 
 public class CannotCompleteUnknownEpisodeCountException(int animeId)
     : Exception($"Anime {animeId} has an unknown total episode count and cannot be marked Completed.");
+
+public class EntryNotFoundException(int animeId) : Exception($"Anime {animeId} is not in my list.");

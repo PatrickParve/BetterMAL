@@ -22,7 +22,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 8px;
+  padding: 0 8px 0 0;
+  min-height: 78px;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 8px;
 }
@@ -49,10 +51,13 @@
 }
 
 .edit-history__picture {
-  width: 48px;
-  height: 66px;
+  /* Widened along with the row's full-bleed height (78px) to keep the
+     poster's original ~48:66 proportions instead of being cropped narrower —
+     fixed, not aspect-ratio: combining aspect-ratio with flex stretch here
+     inflated the row to the image's intrinsic size instead of clamping it. */
+  width: 57px;
+  height: 78px;
   object-fit: cover;
-  border-radius: 4px;
   background: var(--code-bg);
   flex: 0 0 auto;
 }

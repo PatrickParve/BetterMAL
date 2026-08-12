@@ -10,6 +10,7 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<OAuthToken> OAuthTokens => Set<OAuthToken>();
     public DbSet<TopAnimeSelection> TopAnimeSelections => Set<TopAnimeSelection>();
+    public DbSet<PendingEntryDeletion> PendingEntryDeletions => Set<PendingEntryDeletion>();
     public DbSet<PendingReconciliationDiff> PendingReconciliationDiffs => Set<PendingReconciliationDiff>();
     public DbSet<PendingReconciliationDiffEntry> PendingReconciliationDiffEntries => Set<PendingReconciliationDiffEntry>();
     public DbSet<SeasonFetchLog> SeasonFetchLogs => Set<SeasonFetchLog>();
@@ -61,6 +62,15 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
         });
 
         modelBuilder.Entity<TopAnimeSelection>(entity =>
+        {
+            entity.HasKey(e => e.AnimeId);
+            entity.HasOne(e => e.Anime)
+                .WithMany()
+                .HasForeignKey(e => e.AnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PendingEntryDeletion>(entity =>
         {
             entity.HasKey(e => e.AnimeId);
             entity.HasOne(e => e.Anime)
