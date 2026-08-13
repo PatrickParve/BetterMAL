@@ -1,8 +1,5 @@
-# airing-schedule Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
-## Requirements
 ### Requirement: Weekly airing view of my list in local time
 The system SHALL show a week view of time slots for anime in my list, built from stored per-episode airing rows: one slot per stored episode whose air instant falls within the displayed week, labeled by title and episode number, with the instant converted to local time — except that multiple episodes of the same anime airing on the same local day MAY be represented by a single merged slot, per the grouping rule defined separately. Anime that have finished airing SHALL NOT appear in weeks after their last stored episode, even if stale broadcast data exists.
 
@@ -31,54 +28,6 @@ The view SHALL NOT compute or estimate a slot or an episode number for a date th
 #### Scenario: Long-running series across adjacent weeks
 - **WHEN** two adjacent past weeks are displayed for a long-running series
 - **THEN** the episode numbers shown differ by the number of episodes that actually aired between them
-
-### Requirement: Grouping by converted local day
-The system SHALL group each slot by the local day its stored air instant converts to, not by the raw JST day.
-
-#### Scenario: Show crosses the day boundary on conversion
-- **WHEN** an episode's stored air instant converts to a different local day than its JST day
-- **THEN** it appears under the converted local day in the weekly view
-
-#### Scenario: Week bounds follow local days
-- **WHEN** a week spanning a daylight-saving transition is displayed
-- **THEN** it covers exactly seven local days, and each episode falls in the day-column matching its local air date
-
-### Requirement: Week navigation
-The system SHALL allow navigating to other weeks via a `< current >` control near the "Schedule" title bar.
-
-Alongside it the system SHALL provide a month selector and a year selector that jump directly to any week of any year, so that no week is more than two interactions away regardless of how far it is from the current one. The selectors SHALL replace the single date input, which could only be stepped one month at a time.
-
-The month selector SHALL offer the twelve months labelled in the viewer's locale. The year selector SHALL offer years from the current year plus one down to 1960, listed most recent first.
-
-Choosing a month or a year SHALL navigate to the week containing the same day-of-month in the newly chosen month and year, clamped to the last day of that month when the day-of-month does not exist there. Changing only the year SHALL therefore land on the same point in the year.
-
-Both selectors SHALL display the month and year of the currently displayed week, and SHALL stay in sync when the `< current >` buttons move the view across a month or year boundary.
-
-The selected week SHALL survive back-navigation from an anime detail page, as it does today.
-
-#### Scenario: Navigating weeks
-- **WHEN** I navigate to a different week
-- **THEN** the view updates to show that week's airing slots
-
-#### Scenario: Jumping to a different year
-- **WHEN** the view is showing a week in August 2026 and I select 2019 in the year selector
-- **THEN** the view jumps to the week containing the same day of August 2019, in one interaction
-
-#### Scenario: Jumping to a different month
-- **WHEN** I select March in the month selector
-- **THEN** the view jumps to the week containing that same day-of-month in March of the displayed year
-
-#### Scenario: Day-of-month that does not exist in the target month
-- **WHEN** the view is showing a week containing 31 January and I select February
-- **THEN** the view jumps to the week containing the last day of that February rather than overflowing into March
-
-#### Scenario: Selectors follow the week buttons
-- **WHEN** I press the next-week button on the last week of December
-- **THEN** the month selector changes to January and the year selector advances to the next year
-
-#### Scenario: Selected week survives navigation
-- **WHEN** I jump to a week, open an anime from it, and navigate back
-- **THEN** the same week is still displayed, with the selectors showing its month and year
 
 ### Requirement: Seven day-column layout
 The system SHALL lay the week out as seven day-columns left to right, each with a day-label header, stacking each day's time slots (time + small image + title + episode number) beneath its header. The number of slots per day SHALL follow how many of my-list anime air that local day, with no fixed cap, counting a merged slot (see the grouping requirement) as one slot.
@@ -118,6 +67,8 @@ Every slot box SHALL render at the same height regardless of its content. The ti
 #### Scenario: Slot representing a merged range
 - **WHEN** a slot represents more than one episode of the same anime merged together
 - **THEN** its episode row shows the range as `Ep <first>-<last>` instead of a single episode number, and the box matches the height of every other slot
+
+## ADDED Requirements
 
 ### Requirement: Grouping of same-anime episodes on the same local day
 Within a local day, the system SHALL represent multiple episodes of the same anime as a single merged slot when they form a contiguous run: episodes of that anime, ordered by air instant, with no other anime's episode airing strictly between the earliest and the latest of them. Episodes of the same anime separated by another anime's episode airing strictly between them SHALL NOT merge across that interruption, and SHALL instead form separate slots.
@@ -161,11 +112,3 @@ Grouping SHALL NOT cross a local-day boundary, and SHALL NOT merge episodes of d
 #### Scenario: Grouping does not cross a local day
 - **WHEN** an anime airs an episode late on one local day and another episode early the next local day
 - **THEN** the two episodes remain separate slots in their own day-columns rather than merging
-
-### Requirement: Empty-week message
-The system SHALL show a message in the middle of the view when nothing in my list airs during the displayed week.
-
-#### Scenario: Nothing airing this week
-- **WHEN** no my-list anime air during the displayed week
-- **THEN** the view shows a centered message stating nothing is airing that week
-

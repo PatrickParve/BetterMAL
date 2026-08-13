@@ -1,6 +1,6 @@
 import { Link, useSearchParams } from 'react-router-dom'
 import { getAiringWeek } from '../api/client.ts'
-import type { AiringWeekDto } from '../api/types.ts'
+import type { AiringSlotDto, AiringWeekDto } from '../api/types.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
 import './AiringPage.css'
@@ -36,6 +36,16 @@ function dateForMonthYear(referenceDate: string, year: number, month: number): s
   const lastDayOfMonth = new Date(year, month, 0).getDate()
   const clampedDay = Math.min(day, lastDayOfMonth)
   return `${year}-${String(month).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`
+}
+
+// A slot's episode number, or an `Ep {start}-{end}` range when it represents
+// more than one merged episode of the same anime.
+function formatEpisodeLabel(slot: AiringSlotDto): string {
+  if (slot.episodeNumber === null) return 'Ep —'
+  if (slot.episodeNumberEnd !== null && slot.episodeNumberEnd > slot.episodeNumber) {
+    return `Ep ${slot.episodeNumber}-${slot.episodeNumberEnd}`
+  }
+  return `Ep ${slot.episodeNumber}`
 }
 
 function addDaysIso(iso: string, days: number): string {
@@ -147,7 +157,7 @@ export function AiringPage() {
                 </div>
                 <ul className="airing-day__slots">
                   {day.slots.map((slot) => (
-                    <li key={slot.animeId}>
+                    <li key={`${slot.animeId}-${slot.localTime}-${slot.episodeNumber ?? 'x'}`}>
                       <Link to={`/anime/${slot.animeId}`} className="airing-slot">
                         <span className="airing-slot__time">{slot.localTime}</span>
                         <span className="airing-slot__body">
@@ -158,7 +168,7 @@ export function AiringPage() {
                           )}
                           <span className="airing-slot__info">
                             <span className="airing-slot__title">{pickDisplayTitle(slot.title, slot.englishTitle)}</span>
-                            <span className="airing-slot__episode">Ep {slot.episodeNumber ?? '—'}</span>
+                            <span className="airing-slot__episode">{formatEpisodeLabel(slot)}</span>
                           </span>
                         </span>
                       </Link>

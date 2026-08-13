@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="AnimeTracker.Api/AnimeTracker.Api.csproj" />
+  <Project Path="AnimeTracker.Api.Tests/AnimeTracker.Api.Tests.csproj" />
 </Solution>

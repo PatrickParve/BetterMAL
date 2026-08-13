@@ -25,21 +25,22 @@ public class AiringScheduleService(
         var weekEndUtc = broadcastConverter.LocalMidnightUtc(weekStart.AddDays(7));
         var rows = await episodeAiringRepository.GetRowsInRangeAsync(animeById.Keys.ToList(), weekStartUtc, weekEndUtc, ct);
 
-        var slotsByDate = weekDates.ToDictionary(date => date, _ => new List<AiringSlotDto>());
+        var rowsByDate = weekDates.ToDictionary(date => date, _ => new List<AiringDaySlotGrouper.Row>());
         foreach (var row in rows)
         {
             if (!animeById.TryGetValue(row.AnimeId, out var entry))
                 continue;
 
             var localDate = broadcastConverter.GetLocalDate(row.AirsAtUtc);
-            if (!slotsByDate.TryGetValue(localDate, out var slots))
+            if (!rowsByDate.TryGetValue(localDate, out var dayRows))
                 continue; // outside the requested week — guards a boundary edge, shouldn't happen given the range query
 
-            slots.Add(new AiringSlotDto(
+            dayRows.Add(new AiringDaySlotGrouper.Row(
                 entry.AnimeId,
                 entry.Anime.Title,
                 entry.Anime.EnglishTitle,
                 entry.Anime.PictureUrl,
+                row.AirsAtUtc,
                 broadcastConverter.GetLocalTime(row.AirsAtUtc).ToString("HH:mm"),
                 row.Episode));
         }
@@ -48,7 +49,7 @@ public class AiringScheduleService(
             .Select(date => new AiringDayDto(
                 date,
                 date.DayOfWeek,
-                slotsByDate[date].OrderBy(s => s.LocalTime, StringComparer.Ordinal).ToList()))
+                AiringDaySlotGrouper.Group(rowsByDate[date])))
             .ToList();
 
         return new AiringWeekDto(weekStart, weekStart.AddDays(6), days);

@@ -117,6 +117,7 @@ export type AiringSlotDto = {
   pictureUrl: string | null
   localTime: string
   episodeNumber: number | null
+  episodeNumberEnd: number | null
 }
 
 export type AiringDayDto = {

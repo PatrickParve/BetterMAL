@@ -181,12 +181,16 @@
 
 .airing-slot__episode {
   align-self: flex-start;
+  max-width: 100%;
   font-size: 12px;
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--code-bg);
   color: var(--text);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 800px) {
