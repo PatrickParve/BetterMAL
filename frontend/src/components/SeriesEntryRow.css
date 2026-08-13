@@ -110,12 +110,16 @@
 }
 
 .series-entry-row__status {
-  width: 110px;
+  width: 140px;
   flex: 0 0 auto;
   text-align: right;
   font-size: 13px;
   color: var(--text);
   opacity: 0.85;
+}
+
+.series-entry-row__status-progress {
+  font-variant-numeric: tabular-nums;
 }
 
 .series-entry-row__edit {

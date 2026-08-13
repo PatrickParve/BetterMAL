@@ -2,6 +2,18 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
+  /* Page-scoped colour language (design.md decision 4): blue is MAL/broadcast,
+     purple is me. Aliased rather than used raw so the two can diverge from
+     --status-completed/--accent later without touching every rule that means
+     "MAL" or "mine". Declared here rather than on :root so the blast radius
+     stays this page — --status-completed still means "Completed status"
+     everywhere else, including SeriesEntryRow's left-border stripe. */
+  --mal: var(--status-completed);
+  --mal-bg: var(--status-completed-bg);
+  --mal-border: var(--status-completed-border);
+  --mine: var(--accent);
+  --mine-bg: var(--accent-bg);
+  --mine-border: var(--accent-border);
 }
 
 .series-page__header {
@@ -11,8 +23,8 @@
 }
 
 .series-page__picture {
-  width: 140px;
-  height: 198px;
+  width: clamp(140px, 20vw, 200px);
+  aspect-ratio: 140 / 198;
   object-fit: cover;
   border-radius: 12px;
   background: var(--code-bg);
@@ -104,6 +116,15 @@
   color: var(--status-watching);
 }
 
+/* Warning-toned rather than accent-toned, distinct from Caught up/Completed
+   (design.md decision 2 of redesign-series-page) — reuses the amber
+   on-hold tokens since there's no dedicated warning token yet. */
+.series-page__completion-badge--behind {
+  border-color: var(--status-onhold-border);
+  background: var(--status-onhold-bg);
+  color: var(--status-onhold);
+}
+
 .series-page__links {
   display: flex;
   flex-wrap: wrap;
@@ -166,15 +187,6 @@
   opacity: 0.75;
 }
 
-.series-page__score-boxes {
-  display: flex;
-  gap: 16px;
-}
-
-.series-page__score-boxes .series-box {
-  flex: 1 1 0;
-}
-
 .series-box {
   display: flex;
   flex-direction: column;
@@ -184,32 +196,116 @@
   border-radius: 12px;
 }
 
-.series-box h2,
-.series-box h3 {
+.series-box h2 {
   margin: 0;
-}
-
-.series-box h3 {
-  font-size: 13px;
-  color: var(--text);
-  opacity: 0.75;
 }
 
 .series-box p {
   margin: 0;
 }
 
-.series-box__score {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text-h);
+.series-page__score-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
 }
 
-.series-box__count {
-  font-size: 13px;
+.series-page__score-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  min-width: 130px;
+}
+
+.series-page__score-chip--mal {
+  border-color: var(--mal-border);
+  background: var(--mal-bg);
+}
+
+.series-page__score-chip--mine {
+  border-color: var(--mine-border);
+  background: var(--mine-bg);
+}
+
+.series-page__score-chip-label {
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.series-page__score-chip-value {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.series-page__score-chip--mal .series-page__score-chip-value {
+  color: var(--mal);
+}
+
+.series-page__score-chip--mine .series-page__score-chip-value {
+  color: var(--mine);
+}
+
+.series-page__score-chip-count {
+  font-size: 12px;
   font-weight: 400;
   color: var(--text);
   opacity: 0.75;
+}
+
+.series-page__progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  max-width: 420px;
+}
+
+/* The non-ongoing case uses the plain, shared ProgressBar rather than
+   AiringProgressBar (which has its own labelMode prop) — its bare x/y label
+   would just duplicate the named readout drawn below it, so it's hidden here
+   only, leaving ProgressBar's label intact for every other page that uses it. */
+.series-page__progress .progress-bar__label {
+  display: none;
+}
+
+.series-page__progress-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+
+.series-page__progress-figure {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.series-page__progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.series-page__progress-figure--mine .series-page__progress-dot {
+  background: var(--mine);
+}
+
+.series-page__progress-figure--mal .series-page__progress-dot {
+  background: var(--mal);
+}
+
+.series-page__progress-figure--total {
+  color: var(--text);
+  opacity: 0.7;
 }
 
 .series-page__stats-grid {
@@ -297,46 +393,87 @@
 
 .series-page__extras-group h3 {
   margin: 0;
+}
+
+.series-page__more-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.series-page__more-header h2 {
+  margin: 0;
+}
+
+.series-page__toggle-all {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.series-page__toggle-all:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.series-page__extras-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
   font-size: 13px;
   color: var(--text);
-  opacity: 0.75;
+  opacity: 0.85;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  cursor: pointer;
 }
 
-.series-page__score-strip {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.series-page__extras-group-toggle:hover {
+  color: var(--text-h);
+  opacity: 1;
 }
 
-.series-page__score-strip-hidden-note {
-  font-size: 13px;
+.series-page__extras-group-caret {
+  font-size: 10px;
+  width: 1em;
+  text-align: center;
+}
+
+.series-page__extras-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.series-page__extras-group-hint {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 12px;
   color: var(--text);
-  opacity: 0.75;
-}
-
-.series-page__score-strip-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 72px;
-}
-
-.series-page__score-strip-bar {
-  flex: 1 1 0;
-  min-width: 4px;
-  border-radius: 2px 2px 0 0;
-  background: var(--text);
-  opacity: 0.35;
-}
-
-.series-page__score-strip-row--mal .series-page__score-strip-bar {
-  background: var(--accent);
-  opacity: 0.6;
-}
-
-.series-page__score-strip-bar--mine {
-  background: var(--status-watching, var(--accent));
   opacity: 0.7;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+}
+
+.series-page__extras-group-hint:hover {
+  color: var(--text-h);
+  opacity: 1;
 }
 
 .series-page__loading,
@@ -348,8 +485,25 @@
 }
 
 @media (max-width: 900px) {
-  .series-page__score-boxes {
+  .series-page__header {
     flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .series-page__header-info {
+    align-items: center;
+  }
+
+  .series-page__header-meta,
+  .series-page__links,
+  .series-page__score-chips,
+  .series-page__progress-readout {
+    justify-content: center;
+  }
+
+  .series-page__progress {
+    max-width: 100%;
   }
 
   .series-page__stats-grid {

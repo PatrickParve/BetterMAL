@@ -13,6 +13,8 @@ import { AiringProgressBar } from '../components/AiringProgressBar.tsx'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { SeriesEntryRow } from '../components/SeriesEntryRow.tsx'
+import { SeriesExtraTile } from '../components/SeriesExtraTile.tsx'
+import { SeriesTimeline } from '../components/SeriesTimeline.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
@@ -21,6 +23,9 @@ import './SeriesPage.css'
 
 const NO_INFO = '—'
 const MAX_REBUILD_ROUNDS = 12
+// Above this many extras, every More group starts collapsed (design.md
+// decision 5) — roughly one screen of tiles at typical widths.
+const EXTRAS_COLLAPSE_THRESHOLD = 12
 
 const SERIES_STATUS_CLASS: Record<SeriesStatus, string> = {
   Ongoing: 'ongoing',
@@ -56,6 +61,13 @@ function formatEpisodeTotal(total: number, hasUnknown: boolean): string {
 function formatRuntimeTotal(seconds: number, hasUnknown: boolean): string {
   if (seconds === 0 && hasUnknown) return 'Unknown'
   return `${formatRuntime(seconds)}${hasUnknown ? '+' : ''}`
+}
+
+// Mirrors formatEpisodeTotal's lower-bound marker (design.md decision 3) but
+// worded for the progress readout rather than the episode-total stat.
+function formatProgressTotal(total: number, hasUnknown: boolean): string {
+  if (total === 0 && hasUnknown) return 'unknown total'
+  return `${total}${hasUnknown ? '+' : ''} total`
 }
 
 function formatYearSpan(firstYear: number | null, lastYear: number | null): string {
@@ -123,7 +135,10 @@ function recomputeMyHighestIds(prevIds: number[], mainLine: SeriesEntryDto[], ex
 
 // Patches one entry's UserAnimeEntryDto into whichever of mainLine/extras it
 // lives in and recomputes the four averages and the my-favourite tie list
-// from the result — an edit can change both (task 6.6).
+// from the result — an edit can change both (task 6.6). The completion badge
+// is *not* recomputed here: it derives straight from series.mainLine on
+// every render (completionBadge below), so patching the entry array is
+// already enough to keep it current.
 function patchSeriesEntry(series: SeriesDto, animeId: number, entry: UserAnimeEntryDto | null): SeriesDto {
   const patch = (entries: SeriesEntryDto[]) => entries.map((e) => (e.animeId === animeId ? { ...e, entry } : e))
   const mainLine = patch(series.mainLine)
@@ -155,6 +170,10 @@ function groupExtras(extras: SeriesEntryDto[]): { mediaType: string | null; item
   return groups
 }
 
+function extrasGroupKey(group: { mediaType: string | null }, index: number): string {
+  return `${group.mediaType}-${index}`
+}
+
 // Mirrors ScoreValue's own per-row `completed` convention (only reveals when
 // the user has also turned on "always show completed scores"): a group
 // average counts as completed when every member that's actually out —
@@ -162,6 +181,13 @@ function groupExtras(extras: SeriesEntryDto[]): { mediaType: string | null; item
 // still airing don't count against it, since they can't be completed yet.
 function isGroupCompleted(entries: SeriesEntryDto[]): boolean {
   return entries.filter((e) => e.airingStatus === 'finished_airing').every((e) => e.entry?.status === 'Completed')
+}
+
+// A collapsed More group hides the noise of untouched extras, but never
+// something I've actually made progress on or finished — that's exactly the
+// information a collapsed view would otherwise bury.
+function hasWatchProgress(entry: SeriesEntryDto): boolean {
+  return entry.entry != null && (entry.entry.status === 'Completed' || entry.entry.episodesWatched > 0)
 }
 
 // Reveal precedence for a MAL average (design.md decision 9): finishing the
@@ -191,53 +217,112 @@ function isCompletedAndScored(entry: SeriesEntryDto): boolean {
   return entry.entry?.status === 'Completed' && (entry.entry?.myScore ?? 0) > 0
 }
 
-function completionBadge(series: SeriesDto): { label: string; className: string } | null {
-  if (!series.stats.mainLineCompletedByMe) return null
-  return series.status === 'Finished'
-    ? { label: 'Completed', className: 'completed' }
-    : { label: 'Caught up', className: 'caught-up' }
+type CompletionBadge = { label: string; className: string }
+
+// Computed client-side from series.mainLine rather than a server stat
+// (redesign-series-page design.md decision 1/2): it depends on episodesWatched
+// and status, both of which an in-place row edit changes, so deriving it from
+// the entry array the page already patches keeps it current for free.
+function completionBadge(series: SeriesDto): CompletionBadge | null {
+  const finishedAiring = series.mainLine.filter((e) => e.airingStatus === 'finished_airing')
+  const currentlyAiring = series.mainLine.filter((e) => e.airingStatus === 'currently_airing')
+
+  // A finished-airing entry I haven't completed rules out every badge state —
+  // "you haven't watched this series" isn't news the header needs to shout.
+  // Vacuously true when nothing has finished airing yet (e.g. a franchise
+  // whose main line is a single still-running entry, like One Piece), so it
+  // doesn't block the behind-count below.
+  if (!finishedAiring.every((e) => e.entry?.status === 'Completed')) return null
+  // Nothing in the main line has aired at all yet — there's nothing to be
+  // caught up on or behind on.
+  if (finishedAiring.length === 0 && currentlyAiring.length === 0) return null
+
+  if (series.status === 'Finished') {
+    return { label: 'Completed', className: 'completed' }
+  }
+
+  // EpisodesAiredAsOfAsync does no estimation — an unknown broadcast count
+  // means the page can't tell whether I'm current, so it says nothing rather
+  // than claiming "Caught up" or inventing a behind count.
+  if (currentlyAiring.some((e) => e.airedEpisodes === null)) return null
+
+  const behind = currentlyAiring.reduce(
+    (sum, e) => sum + Math.max(0, (e.airedEpisodes ?? 0) - (e.entry?.episodesWatched ?? 0)),
+    0,
+  )
+
+  return behind === 0 ? { label: 'Caught up', className: 'caught-up' } : { label: `${behind} behind`, className: 'behind' }
 }
 
-function MalScoreBox({
-  label,
-  average,
-  completed,
-}: {
-  label: string
-  average: SeriesAverageDto
-  completed: boolean
-}) {
+function MalScoreChip({ label, average, completed }: { label: string; average: SeriesAverageDto; completed: boolean }) {
   return (
-    <section className="series-box">
-      <h3>{label}</h3>
-      <p className="series-box__score">
+    <div className="series-page__score-chip series-page__score-chip--mal">
+      <span className="series-page__score-chip-label">{label}</span>
+      <span className="series-page__score-chip-value">
         <ScoreValue value={average.value} placeholder="No score" completed={completed} />
         {average.value !== null && (
-          <span className="series-box__count">
+          <span className="series-page__score-chip-count">
             {' '}
             · {average.scoredCount} of {average.totalCount} scored
           </span>
         )}
-      </p>
-    </section>
+      </span>
+    </div>
   )
 }
 
-function MineScoreBox({ label, average }: { label: string; average: SeriesAverageDto }) {
+function MineScoreChip({ label, average }: { label: string; average: SeriesAverageDto }) {
   return (
-    <section className="series-box">
-      <h3>{label}</h3>
-      <p className="series-box__score">{formatAverage(average)}</p>
-    </section>
+    <div className="series-page__score-chip series-page__score-chip--mine">
+      <span className="series-page__score-chip-label">{label}</span>
+      <span className="series-page__score-chip-value">{formatAverage(average)}</span>
+    </div>
   )
 }
 
-// Franchise overview page: header, four score averages, series-wide stats, a
-// numbered main-line watch order, a More section for extras, a per-entry
-// MAL-vs-mine comparison strip, and a Rebuild control. Loads through
+// Named watched/aired/total figures beside the progress bar (design.md
+// decision 3) — the bar itself carries no inline label on this page. The
+// aired figure is omitted while nothing is airing, since it would otherwise
+// just repeat the total.
+function ProgressReadout({
+  watched,
+  aired,
+  total,
+  hasUnknownTotal,
+  showAired,
+}: {
+  watched: number
+  aired: number
+  total: number
+  hasUnknownTotal: boolean
+  showAired: boolean
+}) {
+  return (
+    <div className="series-page__progress-readout">
+      <span className="series-page__progress-figure series-page__progress-figure--mine">
+        <span className="series-page__progress-dot" aria-hidden="true" />
+        {watched} watched
+      </span>
+      {showAired && (
+        <span className="series-page__progress-figure series-page__progress-figure--mal">
+          <span className="series-page__progress-dot" aria-hidden="true" />
+          {aired} aired
+        </span>
+      )}
+      <span className="series-page__progress-figure series-page__progress-figure--total">
+        of {formatProgressTotal(total, hasUnknownTotal)}
+      </span>
+    </div>
+  )
+}
+
+// Franchise overview page: a hero header (poster, status, personal badge,
+// external links, score chips, main-line progress), series-wide stats, a
+// timeline ribbon, a numbered main-line watch order, a collapsible More
+// section for extras, and a Rebuild control. Loads through
 // usePageData('series:{animeId}', …) so back/forward restore works like
-// every other page; row edits are applied in place via setData rather than
-// a refetch (design.md decision 11, tasks 5.7/3.9).
+// every other page; row/tile edits are applied in place via setData rather
+// than a refetch (design.md decision 11, tasks 5.7/3.9).
 export function SeriesPage() {
   const { animeId: animeIdParam } = useParams()
   const animeId = Number(animeIdParam)
@@ -246,6 +331,15 @@ export function SeriesPage() {
   const [rebuildCount, setRebuildCount] = useState<number | null>(null)
   const { openEditor } = useEntryEditor()
   const { hidden } = useScoreVisibility()
+
+  // More-section collapse state, keyed by extras group. Initialised once
+  // per mount from series.extras.length > 12 (design.md decision 5) via the
+  // same render-phase-state-update pattern usePageData itself uses for a key
+  // change, so there's no flash of the wrong initial state; it deliberately
+  // does not re-run on a later patch (an edit never changes which groups
+  // exist), and resets on navigation like every other transient view state.
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
+  const [collapseInitialised, setCollapseInitialised] = useState(false)
 
   // Stops an in-flight rebuild loop from issuing another round once the page
   // has navigated away (design.md decision 2) — a round already in flight is
@@ -257,6 +351,17 @@ export function SeriesPage() {
       abortedRef.current = true
     }
   }, [])
+
+  if (data?.found && !collapseInitialised) {
+    const groups = groupExtras(data.series.extras)
+    const startCollapsed = data.series.extras.length > EXTRAS_COLLAPSE_THRESHOLD
+    const initial: Record<string, boolean> = {}
+    groups.forEach((group, index) => {
+      initial[extrasGroupKey(group, index)] = startCollapsed
+    })
+    setCollapsedGroups(initial)
+    setCollapseInitialised(true)
+  }
 
   function patchSeries(updater: (series: SeriesDto) => SeriesDto) {
     setData((prev) => (prev && prev.found ? { found: true, series: updater(prev.series) } : prev))
@@ -321,6 +426,10 @@ export function SeriesPage() {
     })
   }
 
+  function toggleExtrasGroup(key: string) {
+    setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
   if (Number.isNaN(animeId)) {
     return <p className="series-page__empty">Anime not found.</p>
   }
@@ -341,16 +450,34 @@ export function SeriesPage() {
   const { scores, stats } = series
   const displayTitle = pickDisplayTitle(series.title, series.englishTitle)
   const badge = completionBadge(series)
+  const isOngoing = series.status === 'Ongoing'
+  // The bar and readout's own aired figure, summed straight from each
+  // entry's airedEpisodes — distinct from stats.mainLineAiredEpisodes, which
+  // excludes a member with an unknown total so the *episode-total* stat never
+  // undercounts what it claims to be exact. A show like One Piece (unknown
+  // total, known aired count) would otherwise read "0 aired" and show no
+  // blue fill at all, despite the row right below it, and the home/detail
+  // pages, all showing the real count.
+  const mainLineAiredEpisodes = series.mainLine.reduce((sum, e) => sum + (e.airedEpisodes ?? 0), 0)
 
-  const longestGapFrom =
-    stats.longestGapFromAnimeId !== null ? findEntry(series, stats.longestGapFromAnimeId) : undefined
-  const longestGapTo = stats.longestGapToAnimeId !== null ? findEntry(series, stats.longestGapToAnimeId) : undefined
   const highestMalEntries = stats.highestMalScoreAnimeIds
     .map((id) => findEntry(series, id))
     .filter((e): e is SeriesEntryDto => e !== undefined)
   const myHighestEntries = stats.myHighestScoreAnimeIds
     .map((id) => findEntry(series, id))
     .filter((e): e is SeriesEntryDto => e !== undefined)
+
+  const extrasGroups = groupExtras(series.extras)
+  const anyExtrasGroupOpen = extrasGroups.some((group, index) => !collapsedGroups[extrasGroupKey(group, index)])
+
+  function toggleAllExtrasGroups() {
+    const nextCollapsed = anyExtrasGroupOpen
+    const next: Record<string, boolean> = {}
+    extrasGroups.forEach((group, index) => {
+      next[extrasGroupKey(group, index)] = nextCollapsed
+    })
+    setCollapsedGroups(next)
+  }
 
   return (
     <div className="series-page">
@@ -404,6 +531,47 @@ export function SeriesPage() {
               SeriesGraph
             </a>
           </div>
+
+          <div className="series-page__score-chips">
+            <MalScoreChip
+              label="MAL · main series"
+              average={scores.malMain}
+              completed={malGroupRevealed(series.mainLine, series)}
+            />
+            {series.extras.length > 0 && (
+              <MalScoreChip
+                label="MAL · everything"
+                average={scores.malAll}
+                completed={malGroupRevealed([...series.mainLine, ...series.extras], series)}
+              />
+            )}
+            <MineScoreChip label="Mine · main series" average={scores.mineMain} />
+            {series.extras.length > 0 && <MineScoreChip label="Mine · everything" average={scores.mineAll} />}
+          </div>
+
+          <div className="series-page__progress">
+            {isOngoing ? (
+              <AiringProgressBar
+                aired={mainLineAiredEpisodes}
+                watched={stats.myWatchedEpisodes}
+                total={stats.mainLineEpisodeTotal > 0 ? stats.mainLineEpisodeTotal : null}
+                finished={false}
+                labelMode="none"
+              />
+            ) : (
+              <ProgressBar
+                watched={stats.myWatchedEpisodes}
+                total={stats.mainLineEpisodeTotal > 0 ? stats.mainLineEpisodeTotal : null}
+              />
+            )}
+            <ProgressReadout
+              watched={stats.myWatchedEpisodes}
+              aired={mainLineAiredEpisodes}
+              total={stats.mainLineEpisodeTotal}
+              hasUnknownTotal={stats.hasUnknownEpisodeCounts}
+              showAired={isOngoing}
+            />
+          </div>
         </div>
       </div>
 
@@ -413,23 +581,6 @@ export function SeriesPage() {
         </button>
         {series.isPartial && <span className="series-page__notice">Some entries couldn't be loaded yet.</span>}
         {series.isTruncated && <span className="series-page__notice">This series was too large to show in full.</span>}
-      </div>
-
-      <div className="series-page__score-boxes">
-        <MalScoreBox
-          label="MAL · main series"
-          average={scores.malMain}
-          completed={malGroupRevealed(series.mainLine, series)}
-        />
-        {series.extras.length > 0 && (
-          <MalScoreBox
-            label="MAL · everything"
-            average={scores.malAll}
-            completed={malGroupRevealed([...series.mainLine, ...series.extras], series)}
-          />
-        )}
-        <MineScoreBox label="Mine · main series" average={scores.mineMain} />
-        {series.extras.length > 0 && <MineScoreBox label="Mine · everything" average={scores.mineAll} />}
       </div>
 
       <section className="series-box">
@@ -456,24 +607,6 @@ export function SeriesPage() {
             </>
           )}
           <div>
-            <dt>My progress</dt>
-            <dd>
-              {series.status === 'Ongoing' ? (
-                <AiringProgressBar
-                  aired={stats.mainLineAiredEpisodes}
-                  watched={stats.myWatchedEpisodes}
-                  total={stats.mainLineEpisodeTotal > 0 ? stats.mainLineEpisodeTotal : null}
-                  finished={false}
-                />
-              ) : (
-                <ProgressBar
-                  watched={stats.myWatchedEpisodes}
-                  total={stats.mainLineEpisodeTotal > 0 ? stats.mainLineEpisodeTotal : null}
-                />
-              )}
-            </dd>
-          </div>
-          <div>
             <dt>Entries completed</dt>
             <dd>
               {stats.entriesCompleted} of {stats.mainLineCount}
@@ -487,21 +620,6 @@ export function SeriesPage() {
             <dt>Time left</dt>
             <dd>{formatRuntime(Math.max(0, stats.mainLineRuntimeSeconds - stats.myWatchedSeconds))}</dd>
           </div>
-          {longestGapFrom && longestGapTo && stats.longestGapDays !== null && (
-            <div>
-              <dt>Longest gap</dt>
-              <dd>
-                {stats.longestGapDays} days between{' '}
-                <Link to={`/anime/${longestGapFrom.animeId}`}>
-                  {pickDisplayTitle(longestGapFrom.title, longestGapFrom.englishTitle)}
-                </Link>{' '}
-                and{' '}
-                <Link to={`/anime/${longestGapTo.animeId}`}>
-                  {pickDisplayTitle(longestGapTo.title, longestGapTo.englishTitle)}
-                </Link>
-              </dd>
-            </div>
-          )}
           {highestMalEntries.length > 0 && (
             <div>
               <dt>Highest MAL score</dt>
@@ -571,6 +689,19 @@ export function SeriesPage() {
         </dl>
       </section>
 
+      {series.mainLine.length > 0 && (
+        <section className="series-box">
+          <h2>Timeline</h2>
+          <SeriesTimeline
+            entries={series.mainLine}
+            hidden={hidden}
+            longestGapDays={stats.longestGapDays}
+            longestGapFromAnimeId={stats.longestGapFromAnimeId}
+            longestGapToAnimeId={stats.longestGapToAnimeId}
+          />
+        </section>
+      )}
+
       <section className="series-box">
         <h2>Main series</h2>
         <ol className="series-page__list">
@@ -582,49 +713,51 @@ export function SeriesPage() {
 
       {series.extras.length > 0 && (
         <section className="series-box">
-          <h2>More</h2>
-          {groupExtras(series.extras).map((group, index) => (
-            <div key={`${group.mediaType}-${index}`} className="series-page__extras-group">
-              <h3>{mediaTypeLabel(group.mediaType)}</h3>
-              <ul className="series-page__list">
-                {group.items.map((entry) => (
-                  <SeriesEntryRow key={entry.animeId} entry={entry} onEdit={handleEdit} />
-                ))}
-              </ul>
-            </div>
-          ))}
-        </section>
-      )}
-
-      {series.mainLine.length > 0 && (
-        <section className="series-box">
-          <h2>Score comparison</h2>
-          <div className="series-page__score-strip">
-            {hidden ? (
-              <p className="series-page__score-strip-hidden-note">MAL scores are hidden while the toggle is on.</p>
-            ) : (
-              <div className="series-page__score-strip-row series-page__score-strip-row--mal">
-                {series.mainLine.map((entry) => (
-                  <div
-                    key={entry.animeId}
-                    className="series-page__score-strip-bar"
-                    style={{ height: `${((entry.malScore ?? 0) / 10) * 100}%` }}
-                    title={entry.malScore != null ? `MAL ${entry.malScore.toFixed(2)}` : 'No MAL score'}
-                  />
-                ))}
-              </div>
-            )}
-            <div className="series-page__score-strip-row series-page__score-strip-row--mine">
-              {series.mainLine.map((entry) => (
-                <div
-                  key={entry.animeId}
-                  className="series-page__score-strip-bar series-page__score-strip-bar--mine"
-                  style={{ height: `${((entry.entry?.myScore ?? 0) / 10) * 100}%` }}
-                  title={entry.entry?.myScore ? `Me ${entry.entry.myScore}` : 'No score'}
-                />
-              ))}
-            </div>
+          <div className="series-page__more-header">
+            <h2>More</h2>
+            <button type="button" className="series-page__toggle-all" onClick={toggleAllExtrasGroups}>
+              {anyExtrasGroupOpen ? 'Collapse all' : 'Expand all'}
+            </button>
           </div>
+          {extrasGroups.map((group, index) => {
+            const key = extrasGroupKey(group, index)
+            const isCollapsed = collapsedGroups[key] ?? false
+            const groupId = `series-extras-${key}`
+            // Collapsing never hides an entry I've actually watched or
+            // completed — only the untouched ones fold away.
+            const visibleItems = isCollapsed ? group.items.filter(hasWatchProgress) : group.items
+            const hiddenCount = group.items.length - visibleItems.length
+            return (
+              <div key={key} className="series-page__extras-group">
+                <h3>
+                  <button
+                    type="button"
+                    className="series-page__extras-group-toggle"
+                    aria-expanded={!isCollapsed}
+                    aria-controls={groupId}
+                    onClick={() => toggleExtrasGroup(key)}
+                  >
+                    <span className="series-page__extras-group-caret" aria-hidden="true">
+                      {isCollapsed ? '▸' : '▾'}
+                    </span>
+                    {mediaTypeLabel(group.mediaType)} ({group.items.length})
+                  </button>
+                </h3>
+                {visibleItems.length > 0 && (
+                  <ul id={groupId} className="series-page__extras-grid">
+                    {visibleItems.map((entry) => (
+                      <SeriesExtraTile key={entry.animeId} entry={entry} onEdit={handleEdit} />
+                    ))}
+                  </ul>
+                )}
+                {isCollapsed && hiddenCount > 0 && (
+                  <button type="button" className="series-page__extras-group-hint" onClick={() => toggleExtrasGroup(key)}>
+                    +{hiddenCount} more
+                  </button>
+                )}
+              </div>
+            )
+          })}
         </section>
       )}
     </div>

@@ -138,7 +138,8 @@ public class SeriesService(
             .Where(s => s.AnimeId == series.RootAnimeId)
             .Select(s => (int?)s.AniListId)
             .FirstOrDefaultAsync(ct);
-        var mainLineAiredEpisodes = await MainLineAiredEpisodesAsync(mainLineMembers, ct);
+        var airedEpisodesByAnimeId = await AiredEpisodesByAnimeIdAsync(allAnime, ct);
+        var mainLineAiredEpisodes = MainLineAiredEpisodesFromMap(mainLineMembers, airedEpisodesByAnimeId);
 
         return new SeriesDto(
             series.Id,
@@ -155,15 +156,49 @@ public class SeriesService(
             series.IsTruncated,
             BuildScores(mainLineMembers, series.Members),
             BuildStats(mainLineMembers, extraMembers, allAnime, mainLineAiredEpisodes),
-            mainLineMembers.Select(m => ToEntryDto(m, memberAnimeIds)).ToList(),
-            extraMembers.Select(m => ToEntryDto(m, memberAnimeIds)).ToList());
+            mainLineMembers.Select(m => ToEntryDto(m, memberAnimeIds, airedEpisodesByAnimeId)).ToList(),
+            extraMembers.Select(m => ToEntryDto(m, memberAnimeIds, airedEpisodesByAnimeId)).ToList());
     }
 
-    // Only a currently-airing member hits IEpisodeScheduleService — typically
-    // zero or one per series (design.md decision 4).
-    private async Task<int> MainLineAiredEpisodesAsync(List<SeriesMember> mainLineMembers, CancellationToken ct)
+    // Per-member AiredEpisodes (design.md decision 1) for every series member,
+    // main line and extras alike, so both the entry rows and the aggregate
+    // stat below read from one map instead of disagreeing. Only a
+    // currently-airing member hits IEpisodeScheduleService — typically zero
+    // or one per series.
+    private async Task<Dictionary<int, int?>> AiredEpisodesByAnimeIdAsync(List<AnimeMetadata> allAnime, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
+        var result = new Dictionary<int, int?>();
+
+        foreach (var anime in allAnime)
+        {
+            result[anime.Id] = anime.AiringStatus switch
+            {
+                "finished_airing" => anime.TotalEpisodes,
+                "currently_airing" => await CurrentlyAiringEpisodesAsync(anime, now, ct),
+                "not_yet_aired" => 0,
+                _ => null,
+            };
+        }
+
+        return result;
+    }
+
+    private async Task<int?> CurrentlyAiringEpisodesAsync(AnimeMetadata anime, DateTimeOffset now, CancellationToken ct)
+    {
+        var aired = await scheduleService.EpisodesAiredAsOfAsync(anime, now, ct);
+        if (aired is null)
+            return null;
+
+        return anime.TotalEpisodes is { } total ? Math.Min(aired.Value, total) : aired;
+    }
+
+    // Kept distinct from the per-entry AiredEpisodes above: a member with an
+    // unknown TotalEpisodes contributes 0 here even when its own
+    // AiredEpisodes is known, which is what keeps aired ≤ total on the bar
+    // (design.md decision 1).
+    private static int MainLineAiredEpisodesFromMap(List<SeriesMember> mainLineMembers, Dictionary<int, int?> airedEpisodesByAnimeId)
+    {
         var airedEpisodes = 0;
 
         foreach (var member in mainLineMembers)
@@ -175,7 +210,7 @@ public class SeriesService(
             airedEpisodes += anime.AiringStatus switch
             {
                 "finished_airing" => total,
-                "currently_airing" => Math.Min(await scheduleService.EpisodesAiredAsOfAsync(anime, now, ct) ?? 0, total),
+                "currently_airing" => Math.Min(airedEpisodesByAnimeId.GetValueOrDefault(anime.Id) ?? 0, total),
                 _ => 0,
             };
         }
@@ -183,7 +218,7 @@ public class SeriesService(
         return airedEpisodes;
     }
 
-    private static SeriesEntryDto ToEntryDto(SeriesMember member, HashSet<int> memberAnimeIds)
+    private static SeriesEntryDto ToEntryDto(SeriesMember member, HashSet<int> memberAnimeIds, Dictionary<int, int?> airedEpisodesByAnimeId)
     {
         var anime = member.Anime;
         return new SeriesEntryDto(
@@ -196,9 +231,11 @@ public class SeriesService(
             anime.TotalEpisodes,
             anime.AverageEpisodeDurationSeconds,
             anime.AiredFrom,
+            anime.AiredTo,
             anime.MalScore,
             RelationTypeWithinSeries(anime, memberAnimeIds),
             member.Order,
+            airedEpisodesByAnimeId.GetValueOrDefault(anime.Id),
             anime.UserEntry is null ? null : UserAnimeEntryDto.FromEntity(anime.UserEntry));
     }
 

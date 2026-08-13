@@ -7,7 +7,10 @@ namespace AnimeTracker.Api.Services.Series;
 /// decision 1) connecting this anime to another member, taken from this
 /// anime's own outgoing relation rows; a member reached only by a reverse
 /// edge (its own relations were never fetched) or the root itself has no
-/// such row, so it's null.</summary>
+/// such row, so it's null. <c>AiredEpisodes</c> is null-means-unknown
+/// (design.md decision 1): finished → total, currently airing → the
+/// schedule reader's count clamped to total (null when the reader has
+/// nothing stored), not yet aired → 0, unknown airing status → null.</summary>
 public record SeriesEntryDto(
     int AnimeId,
     string Title,
@@ -18,9 +21,11 @@ public record SeriesEntryDto(
     int? TotalEpisodes,
     int? AverageEpisodeDurationSeconds,
     DateOnly? AiredFrom,
+    DateOnly? AiredTo,
     double? MalScore,
     string? RelationType,
     int Order,
+    int? AiredEpisodes,
     UserAnimeEntryDto? Entry);
 
 /// <summary>One unweighted mean plus the count it was computed over, e.g.

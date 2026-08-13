@@ -1,0 +1,151 @@
+.series-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.series-timeline__hidden-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.series-timeline__axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.6;
+}
+
+.series-timeline__scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.series-timeline__row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-width: 100%;
+}
+
+.series-timeline__row--undated {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  gap: 8px;
+}
+
+.series-timeline__undated-label {
+  flex: 0 0 auto;
+  align-self: center;
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.series-timeline__block {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+  flex-basis: 0;
+  padding: 0 3px;
+}
+
+.series-timeline__gap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  flex-basis: 0;
+}
+
+.series-timeline__gap-marker {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text);
+  opacity: 0.75;
+  text-align: center;
+  white-space: normal;
+  max-width: 150px;
+}
+
+.series-timeline__gap-marker a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+}
+
+.series-timeline__gap-marker a:hover {
+  color: var(--accent);
+}
+
+.series-timeline__scores {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  height: 56px;
+}
+
+.series-timeline__score-bar {
+  width: 10px;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+}
+
+.series-timeline__score-bar--mal {
+  background: var(--mal);
+  opacity: 0.7;
+}
+
+.series-timeline__score-bar--mine {
+  background: var(--mine);
+  opacity: 0.85;
+}
+
+.series-timeline__fill-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--code-bg);
+  position: relative;
+  overflow: hidden;
+}
+
+.series-timeline__fill {
+  height: 100%;
+  border-radius: inherit;
+}
+
+.series-timeline__fill--aired {
+  background: var(--mal);
+}
+
+.series-timeline__fill--watched {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: var(--mine);
+}
+
+.series-timeline__label {
+  display: block;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.series-timeline__label:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}

@@ -5,6 +5,10 @@ type AiringProgressBarProps = {
   watched: number
   total: number | null
   finished: boolean
+  /** 'inline' (default) keeps the bar's own `aired/total` label, matching the
+   * home page's usage. 'none' suppresses it for a caller that draws its own
+   * named readout beside the bar (the series page). */
+  labelMode?: 'inline' | 'none'
 }
 
 function pct(value: number, total: number): number {
@@ -27,7 +31,7 @@ function blueFillPct(total: number | null, finished: boolean, aired: number | nu
 // (aired/total), with the viewer's watched progress layered on top in the
 // site's purple accent colour. Distinct from ProgressBar (watched/total),
 // which every other view keeps.
-export function AiringProgressBar({ aired, watched, total, finished }: AiringProgressBarProps) {
+export function AiringProgressBar({ aired, watched, total, finished, labelMode = 'inline' }: AiringProgressBarProps) {
   const airedPct = blueFillPct(total, finished, aired)
 
   // With a known total, purple is the ordinary watched/total proportion.
@@ -61,7 +65,7 @@ export function AiringProgressBar({ aired, watched, total, finished }: AiringPro
           <div className="airing-progress-bar__watched-fill" style={{ width: `${watchedPct}%` }} />
         )}
       </div>
-      <span className="airing-progress-bar__label">{label}</span>
+      {labelMode === 'inline' && <span className="airing-progress-bar__label">{label}</span>}
     </div>
   )
 }

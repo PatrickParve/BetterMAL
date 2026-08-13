@@ -357,7 +357,10 @@ export type RelatedAnimeDto = {
   relationType: string
 }
 
-// Mirrors backend Services/Series/SeriesDto.cs (tasks 3.1-3.3).
+// Mirrors backend Services/Series/SeriesDto.cs (tasks 3.1-3.3). airedEpisodes
+// is null-means-unknown (design.md decision 1 of redesign-series-page):
+// finished -> total, airing -> schedule reader clamped to total (null when
+// unknown), not yet aired -> 0, unknown airing status -> null.
 export type SeriesEntryDto = {
   animeId: number
   title: string
@@ -368,9 +371,11 @@ export type SeriesEntryDto = {
   totalEpisodes: number | null
   averageEpisodeDurationSeconds: number | null
   airedFrom: string | null
+  airedTo: string | null
   malScore: number | null
   relationType: string | null
   order: number
+  airedEpisodes: number | null
   entry: UserAnimeEntryDto | null
 }
 

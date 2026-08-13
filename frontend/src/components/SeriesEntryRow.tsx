@@ -11,6 +11,24 @@ type SeriesEntryRowProps = {
   onEdit: (entry: SeriesEntryDto) => void
 }
 
+// Worded so it can never be read as the entry's own total (redesign-series-page
+// design.md decision 7) — the ambiguity being fixed is exactly that a bare
+// `x/y` doesn't say which axis it's on. Shared with SeriesExtraTile so a row
+// and a tile never word the same fact differently.
+export function airedFigureLabel(entry: SeriesEntryDto): string | null {
+  if (entry.airingStatus !== 'currently_airing' || entry.airedEpisodes === null) return null
+  return `${entry.airedEpisodes} of ${entry.totalEpisodes ?? '?'} aired`
+}
+
+// Only for an entry I've actually started (watched at least one episode) and
+// not yet completed — a PlanToWatch entry with 0 episodes watched isn't "my
+// position", it's just not started.
+export function watchedFigureLabel(entry: SeriesEntryDto): string | null {
+  const userEntry = entry.entry
+  if (!userEntry || userEntry.status === 'Completed' || userEntry.episodesWatched <= 0) return null
+  return `${userEntry.episodesWatched}/${entry.totalEpisodes ?? '?'}`
+}
+
 // One series-page row — poster, title/type/year/episodes, MAL score, my
 // score, my status, and an edit control that opens the app's shared entry
 // editor. Same split-link shape as AnimeCard/MyListRow: the edit button sits
@@ -20,6 +38,8 @@ export function SeriesEntryRow({ entry, rank, onEdit }: SeriesEntryRowProps) {
   const displayTitle = pickDisplayTitle(entry.title, entry.englishTitle)
   const year = entry.airedFrom ? entry.airedFrom.slice(0, 4) : null
   const statusClass = entry.entry ? ` series-entry-row--${STATUS_CLASS[entry.entry.status]}` : ''
+  const aired = airedFigureLabel(entry)
+  const watched = watchedFigureLabel(entry)
 
   return (
     <li className={`series-entry-row${statusClass}`}>
@@ -37,6 +57,7 @@ export function SeriesEntryRow({ entry, rank, onEdit }: SeriesEntryRowProps) {
           <span className="series-entry-row__meta">
             {mediaTypeLabel(entry.mediaType)}
             {year && ` · ${year}`} · {entry.totalEpisodes ?? '?'} ep
+            {aired && ` · ${aired}`}
           </span>
         </span>
       </Link>
@@ -46,6 +67,7 @@ export function SeriesEntryRow({ entry, rank, onEdit }: SeriesEntryRowProps) {
       <span className="series-entry-row__my-score">{entry.entry?.myScore ?? '—'}</span>
       <span className="series-entry-row__status">
         {entry.entry ? STATUS_LABELS[entry.entry.status] : 'Not in list'}
+        {watched && <span className="series-entry-row__status-progress"> · {watched}</span>}
       </span>
       <button type="button" className="series-entry-row__edit" onClick={() => onEdit(entry)}>
         {entry.entry ? 'Edit' : 'Add'}
