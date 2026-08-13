@@ -393,18 +393,20 @@ export type SeriesStatsDto = {
   mainLineEpisodeTotal: number
   mainLineRuntimeSeconds: number
   hasUnknownEpisodeCounts: boolean
+  mainLineAiredEpisodes: number
   extrasEpisodeTotal: number
   extrasRuntimeSeconds: number
   myWatchedEpisodes: number
   myWatchedSeconds: number
   entriesCompleted: number
+  mainLineCompletedByMe: boolean
   mainLineCount: number
   extrasCount: number
   longestGapDays: number | null
   longestGapFromAnimeId: number | null
   longestGapToAnimeId: number | null
-  highestMalScoreAnimeId: number | null
-  myHighestScoreAnimeId: number | null
+  highestMalScoreAnimeIds: number[]
+  myHighestScoreAnimeIds: number[]
   studios: string[]
   genres: string[]
 }
@@ -414,6 +416,7 @@ export type SeriesStatus = 'Ongoing' | 'Upcoming' | 'Finished' | 'Finished · se
 export type SeriesDto = {
   seriesId: number
   rootAnimeId: number
+  rootAniListId: number | null
   title: string
   englishTitle: string | null
   pictureUrl: string | null

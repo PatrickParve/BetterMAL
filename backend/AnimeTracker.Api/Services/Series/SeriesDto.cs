@@ -43,24 +43,34 @@ public record SeriesScoresDto(
 /// so the total is always a true lower bound rather than a guess. My
 /// progress (watched episodes/seconds, entries completed) is scoped to the
 /// main line only, matching "time left" being main-line runtime minus
-/// watched runtime. The highest-scored/favourite/studios/genres figures span
-/// every member, main line and extras alike.</summary>
+/// watched runtime. <c>MainLineAiredEpisodes</c> is summed over the same
+/// known-total main-line set (design.md decision 4): finished entries
+/// contribute their full total, a currently-airing entry contributes its
+/// aired-so-far count, and an entry that hasn't aired yet contributes
+/// nothing — so it can never exceed <c>MainLineEpisodeTotal</c>.
+/// <c>MainLineCompletedByMe</c> mirrors the frontend's
+/// <c>isGroupCompleted</c> convention over the main line (design.md decision
+/// 7). The highest-scored/favourite/studios/genres figures span every
+/// member, main line and extras alike; the highest-scored lists carry every
+/// tied entry rather than one arbitrary winner (design.md decision 8).</summary>
 public record SeriesStatsDto(
     int MainLineEpisodeTotal,
     long MainLineRuntimeSeconds,
     bool HasUnknownEpisodeCounts,
+    int MainLineAiredEpisodes,
     int ExtrasEpisodeTotal,
     long ExtrasRuntimeSeconds,
     int MyWatchedEpisodes,
     long MyWatchedSeconds,
     int EntriesCompleted,
+    bool MainLineCompletedByMe,
     int MainLineCount,
     int ExtrasCount,
     int? LongestGapDays,
     int? LongestGapFromAnimeId,
     int? LongestGapToAnimeId,
-    int? HighestMalScoreAnimeId,
-    int? MyHighestScoreAnimeId,
+    List<int> HighestMalScoreAnimeIds,
+    List<int> MyHighestScoreAnimeIds,
     List<string> Studios,
     List<string> Genres);
 
@@ -69,10 +79,14 @@ public record SeriesStatsDto(
 /// upcoming" (design.md/task 3.4) — computed server-side since it depends on
 /// every member's airing status, not just the root's. <c>Title</c>,
 /// <c>EnglishTitle</c> and <c>PictureUrl</c> come from the root entry
-/// (design.md decision 4).</summary>
+/// (design.md decision 4). <c>RootAniListId</c> is the root's AniList id
+/// when a sync row exists for it, read the same way
+/// <c>AnimeDetailService</c> reads it for a single anime (design.md decision
+/// 6) — null falls back to an AniList title search client-side.</summary>
 public record SeriesDto(
     int SeriesId,
     int RootAnimeId,
+    int? RootAniListId,
     string Title,
     string? EnglishTitle,
     string? PictureUrl,

@@ -12,4 +12,12 @@ public interface ISeriesService
     /// <summary>Forces a rebuild with the larger fetch budget, regardless of
     /// how fresh the stored series is, then returns the same projection.</summary>
     Task<SeriesDto> RebuildSeriesAsync(int animeId, CancellationToken ct = default);
+
+    /// <summary>Writes an explicit favourite order (design.md decision 11):
+    /// the given anime ids receive ranks 0..n-1 in the order given, and every
+    /// other member of the series has its rank cleared. Throws
+    /// <see cref="SeriesIdNotFoundException"/> for an unknown series id, and
+    /// <see cref="UnknownSeriesMemberIdsException"/> when an id isn't a
+    /// member of the series.</summary>
+    Task SetFavouriteOrderAsync(int seriesId, List<int> animeIds, CancellationToken ct = default);
 }

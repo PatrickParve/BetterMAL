@@ -213,6 +213,14 @@ export function rebuildSeries(animeId: number): Promise<SeriesDto> {
   return fetchJson<SeriesDto>(`/api/series/by-anime/${animeId}/rebuild`, { method: 'POST' })
 }
 
+export function setSeriesFavouriteOrder(seriesId: number, animeIds: number[]): Promise<void> {
+  return fetchVoid(`/api/series/${seriesId}/favourite-order`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ animeIds }),
+  })
+}
+
 export function getSyncStatus(): Promise<SyncStatusDto> {
   return fetchJson<SyncStatusDto>('/api/sync/status')
 }

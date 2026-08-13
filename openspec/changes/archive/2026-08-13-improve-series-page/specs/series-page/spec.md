@@ -1,87 +1,4 @@
-# series-page Specification
-
-## Purpose
-TBD - created by archiving change add-series-page. Update Purpose after archive.
-
-## Requirements
-
-### Requirement: Series composition from the relation graph
-The system SHALL derive a series as the connected component of the stored related-anime graph, traversing only story relations: `sequel`, `prequel`, `side_story`, `parent_story`, `summary`, `full_story`, `spin_off`, and `alternative_version`. Every other relation MAL reports — including `alternative_setting`, `character`, `other`, and any unrecognized relation string — SHALL be stored as it already is but SHALL NOT be traversed, so shows that merely share a universe or a cast never merge into one series.
-
-Traversal SHALL be undirected: from a member the system SHALL follow both that anime's own relation rows and relation rows pointing at it, so a member whose own relations have never been fetched still connects the component.
-
-An anime SHALL belong to at most one series.
-
-#### Scenario: Sequels and prequels form one series
-- **WHEN** a series is built from an anime whose relations chain through two sequels and one prequel
-- **THEN** all four anime are members of the same series
-
-#### Scenario: Alternative-setting relations do not merge series
-- **WHEN** an anime is related to another only by `alternative_setting` or `character`
-- **THEN** the other anime is not a member of its series
-
-#### Scenario: Reverse edges keep the component connected
-- **WHEN** anime A stores a `sequel` relation to anime B, and B has never been full-fetched and stores no relations of its own
-- **THEN** B is still a member of A's series
-
-### Requirement: Main line and extras
-Within a series the system SHALL identify a main line: the largest connected chain over `sequel`/`prequel` relations among the members — ties broken in favour of the chain containing the earliest-aired member — with members whose media type is `special` or `music` excluded from it, and members tagged as a recap of another member (a `summary`/`full_story` relation to it) excluded regardless of media type. Every other member of the series SHALL be an extra.
-
-A recap tag overrides a sequel/prequel edge on the same member: MAL routinely gives a recap special both a `summary`/`full_story` relation to the season it recaps and a `sequel`/`prequel` relation bridging it to the next season, and often types it `tv_special` rather than `special` — the media-type filter alone would not catch it, so the explicit recap tag is checked independently.
-
-Extras SHALL be grouped by media type in the fixed display order Movie, OVA, ONA, Special, Music, TV, Other, and ordered by aired-from date within each group.
-
-#### Scenario: Seasons and story movies are main line
-- **WHEN** a series contains three TV seasons and a movie, all linked by sequel relations
-- **THEN** all four are main-line entries
-
-#### Scenario: Specials are extras even when MAL calls them sequels
-- **WHEN** a member whose media type is `special` is linked into the sequel chain
-- **THEN** it is an extra, not a main-line entry
-
-#### Scenario: Side stories and music videos are extras
-- **WHEN** a series contains a side story, an OVA run, and a music video
-- **THEN** none of them are main-line entries, and they appear grouped by media type
-
-#### Scenario: A recap special stays an extra even when it bridges two seasons
-- **WHEN** a `tv_special` recaps one season (`summary`/`full_story`) and also carries a `sequel`/`prequel` edge into the next season
-- **THEN** it is an extra, not a main-line entry, and the two real seasons it bridges are still main line
-
-#### Scenario: Arriving from a spin-off does not make it the main line
-- **WHEN** a series is built starting from the second season of a spin-off whose sequel chain is shorter than the parent series' chain
-- **THEN** the parent series' chain is the main line and the spin-off's entries are extras
-
-### Requirement: Watch order and series root
-The system SHALL order main-line entries by aired-from date ascending, with entries lacking a date placed last and MAL id breaking ties, and SHALL present that ordering as the series' watch order, numbered from 1.
-
-The series root SHALL be the first entry in that ordering. The series SHALL take its title and its main picture from the root.
-
-#### Scenario: Watch order follows release order
-- **WHEN** I open a series whose entries aired in 2013, 2015, a movie in 2016, and 2019
-- **THEN** the main-line list is numbered 1–4 in that chronological order
-
-#### Scenario: Series picture and title come from the first entry
-- **WHEN** I open a series whose earliest main-line entry is its first season
-- **THEN** the page's main picture and the series title are that first season's
-
-### Requirement: Series persistence and identity
-The system SHALL persist each derived series with a stable identifier and its member set, recording for each member whether it is main line and its position within its list, plus the time the series was built.
-
-When a newly computed component overlaps one or more already-stored series, the system SHALL keep the stored series with the largest overlap — preserving its identifier — delete the others, and replace its member set wholesale, so a newly announced entry folds into the existing series rather than creating a competing one.
-
-The system SHALL NOT store the series' score averages, computing them at read time instead, so editing a score never leaves a stale average behind.
-
-#### Scenario: Identity survives a rebuild
-- **WHEN** a series is rebuilt after a new sequel is announced
-- **THEN** the series keeps the identifier it had before, now with the new entry as a member
-
-#### Scenario: Two stored series absorbed into one
-- **WHEN** a build's component covers the members of two separately stored series
-- **THEN** one series remains, holding every member, and the other stored series is deleted
-
-#### Scenario: Editing a score changes the average immediately
-- **WHEN** I change my score on one entry and reopen the series page
-- **THEN** my series averages reflect the new score with no rebuild
+## MODIFIED Requirements
 
 ### Requirement: Bounded series builds
 A series build SHALL be bounded by two limits: at most 400 members, and at most 8 live MAL full-detail fetches on a visit-triggered build or 20 on an explicitly requested rebuild. Fetches SHALL be spent first on members that have no cached metadata row at all, since those cannot be displayed otherwise; remaining budget SHALL be spent expanding members with a lean cached row (no relations of its own), since an unexpanded lean member can hide a real season from the series or from main-line classification.
@@ -122,29 +39,6 @@ Concurrent builds of the same series SHALL collapse into one, matching the singl
 - **WHEN** two requests for the same series arrive while it is being built
 - **THEN** one build runs and both requests are served from it
 
-### Requirement: Series read endpoint and freshness
-The system SHALL expose a read endpoint that resolves a series from any member's anime id, building it when no series is stored for that anime, when the stored series is partial, or when it was built more than 30 days ago, and serving the stored series otherwise without any MAL call.
-
-The system SHALL expose a rebuild endpoint that forces recomputation with the larger fetch budget.
-
-When the component derived for an anime contains only that anime, the system SHALL report that it belongs to no series rather than storing a one-member series.
-
-#### Scenario: Cached series is served without fetching
-- **WHEN** I open a complete series that was built yesterday
-- **THEN** the page renders from stored data and no MAL request is made
-
-#### Scenario: Stale series rebuilds on visit
-- **WHEN** I open a series last built 40 days ago
-- **THEN** it is rebuilt before the page renders
-
-#### Scenario: Resolving from any member
-- **WHEN** I open the series page from the third season's anime id
-- **THEN** I get the same series I would get from the first season's id
-
-#### Scenario: Anime with no series
-- **WHEN** the series endpoint is called for an anime whose story relations resolve to nothing else
-- **THEN** it reports that no series exists rather than returning a series of one
-
 ### Requirement: Series page header
 The series page SHALL show the root entry's picture, the series title, a status pill, and the year span of the series (e.g. `2013 – 2023`, or the single year when every entry aired in one year).
 
@@ -177,21 +71,6 @@ Entries that have not finished airing SHALL NOT count against the badge, since t
 #### Scenario: Unfinished series is not badged
 - **WHEN** one main-line entry that finished airing is not marked Completed in my list
 - **THEN** no personal-completion badge is shown
-
-### Requirement: Series external links
-The series page SHALL offer links out to MyAnimeList, AniList, and SeriesGraph for the series, matching the links the anime detail page offers for a single anime.
-
-All three links SHALL target the series root — the first entry in watch order — since that is the entry under which each site indexes the franchise.
-
-The AniList link SHALL use the root's known AniList id when one is stored, and SHALL otherwise fall back to an AniList title search for the root's display title. The SeriesGraph link SHALL use a title search for the root's display title.
-
-#### Scenario: Links target the first entry
-- **WHEN** I open a series whose first entry in watch order is its first season
-- **THEN** the MyAnimeList link opens that first season's MAL page, not the page of whichever member I arrived from
-
-#### Scenario: AniList link without a stored id
-- **WHEN** the series root has no stored AniList id
-- **THEN** the AniList link opens an AniList search for the root's title rather than a broken link
 
 ### Requirement: Series score averages
 The series page SHALL show, for each of MAL's score and mine, an average across main-line entries and an average across all entries, each with the count it was computed over (e.g. `8.42 · 5 of 6 scored`), rendered to two decimals:
@@ -289,65 +168,6 @@ The highest MAL score SHALL be shown in full rather than blurred when the entry 
 - **WHEN** I have given the same highest score to three entries of a series
 - **THEN** all three are listed as my favourite
 
-### Requirement: Favourite ordering within a series
-When several entries tie for my highest score in a series, the page SHALL let me order them by hand, so that which of them is really my favourite is recorded rather than decided by watch order.
-
-That order SHALL be persisted per series alongside the series' membership, SHALL survive a series rebuild, and SHALL be discarded for an entry only when that entry stops being a member of the series.
-
-Reordering SHALL be offered only when two or more entries are tied. An entry I have never ordered SHALL rank after every entry I have.
-
-An ordering that fails to save SHALL leave the page showing the order that is actually stored, rather than a local order the server does not have.
-
-#### Scenario: Reordering tied favourites
-- **WHEN** three entries tie for my highest score and I move the third to the top
-- **THEN** it is listed first as my favourite, and it is still listed first when I reload the page
-
-#### Scenario: Favourite order survives a rebuild
-- **WHEN** I have ordered my tied favourites and then use the Rebuild control
-- **THEN** the entries that are still members keep the order I gave them
-
-#### Scenario: No reordering without a tie
-- **WHEN** one entry alone holds my highest score in a series
-- **THEN** no reorder controls are shown
-
-#### Scenario: A failed save does not stick
-- **WHEN** I reorder my favourites and the save fails
-- **THEN** the page returns to the previously stored order
-
-### Requirement: Main series and More sections
-The series page SHALL list the main line as numbered rows in watch order, and every extra under a More section grouped by media type. Each row SHALL show the entry's picture, title, media type, year, episode count, MAL score, my score, and my list status, SHALL link to that anime's detail page, and SHALL offer an edit control that opens the app's shared entry editor.
-
-An edit saved from a series row SHALL update that row in place without reloading the page.
-
-#### Scenario: Main line in watch order
-- **WHEN** I open a series with four main-line entries
-- **THEN** they are listed 1–4 in watch order with picture, title, type, year, episodes, MAL score, my score, and my status
-
-#### Scenario: Extras grouped in More
-- **WHEN** a series has two specials, one OVA, and a music video
-- **THEN** the More section shows them grouped by media type under their own headings
-
-#### Scenario: Editing from a row
-- **WHEN** I use a row's edit control and save a new score
-- **THEN** the same entry editor used elsewhere in the app opens, and the row and the series averages reflect the new score without a page reload
-
-#### Scenario: A series with no extras
-- **WHEN** every member of a series is main line
-- **THEN** the More section is not shown
-
-### Requirement: Score comparison strip
-The series page SHALL show a per-entry comparison of MAL scores against my scores across the main line, so a dip or a rise across the series is visible at a glance.
-
-Because the comparison encodes scores as graphical magnitudes, which a blur would not conceal, the MAL side of the comparison SHALL NOT be rendered at all while the hide-scores toggle is on; a short note SHALL take its place, and my own scores SHALL continue to be shown.
-
-#### Scenario: Comparing across the series
-- **WHEN** I open a series where MAL rates the third season lowest and I rate it highest
-- **THEN** the strip shows both scores per entry and the divergence is visible
-
-#### Scenario: Hidden scores are not encoded graphically
-- **WHEN** the hide-scores toggle is on
-- **THEN** the MAL side of the strip is absent from the rendered output entirely, replaced by a note, while my scores still render
-
 ### Requirement: Rebuild control and incomplete-series feedback
 The series page SHALL offer a Rebuild control that forces the series to be recomputed and shows that work is in progress while it runs.
 
@@ -376,3 +196,45 @@ When a series is partial or truncated, the page SHALL say so plainly next to tha
 #### Scenario: Truncated series is disclosed
 - **WHEN** a series hit the member cap
 - **THEN** the page states that the series was too large to show in full
+
+## ADDED Requirements
+
+### Requirement: Series external links
+The series page SHALL offer links out to MyAnimeList, AniList, and SeriesGraph for the series, matching the links the anime detail page offers for a single anime.
+
+All three links SHALL target the series root — the first entry in watch order — since that is the entry under which each site indexes the franchise.
+
+The AniList link SHALL use the root's known AniList id when one is stored, and SHALL otherwise fall back to an AniList title search for the root's display title. The SeriesGraph link SHALL use a title search for the root's display title.
+
+#### Scenario: Links target the first entry
+- **WHEN** I open a series whose first entry in watch order is its first season
+- **THEN** the MyAnimeList link opens that first season's MAL page, not the page of whichever member I arrived from
+
+#### Scenario: AniList link without a stored id
+- **WHEN** the series root has no stored AniList id
+- **THEN** the AniList link opens an AniList search for the root's title rather than a broken link
+
+### Requirement: Favourite ordering within a series
+When several entries tie for my highest score in a series, the page SHALL let me order them by hand, so that which of them is really my favourite is recorded rather than decided by watch order.
+
+That order SHALL be persisted per series alongside the series' membership, SHALL survive a series rebuild, and SHALL be discarded for an entry only when that entry stops being a member of the series.
+
+Reordering SHALL be offered only when two or more entries are tied. An entry I have never ordered SHALL rank after every entry I have.
+
+An ordering that fails to save SHALL leave the page showing the order that is actually stored, rather than a local order the server does not have.
+
+#### Scenario: Reordering tied favourites
+- **WHEN** three entries tie for my highest score and I move the third to the top
+- **THEN** it is listed first as my favourite, and it is still listed first when I reload the page
+
+#### Scenario: Favourite order survives a rebuild
+- **WHEN** I have ordered my tied favourites and then use the Rebuild control
+- **THEN** the entries that are still members keep the order I gave them
+
+#### Scenario: No reordering without a tie
+- **WHEN** one entry alone holds my highest score in a series
+- **THEN** no reorder controls are shown
+
+#### Scenario: A failed save does not stick
+- **WHEN** I reorder my favourites and the save fails
+- **THEN** the page returns to the previously stored order

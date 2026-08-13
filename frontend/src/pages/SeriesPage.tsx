@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getSeries, rebuildSeries } from '../api/client.ts'
+import { getSeries, rebuildSeries, setSeriesFavouriteOrder } from '../api/client.ts'
 import type {
   SeriesAverageDto,
   SeriesDto,
@@ -9,6 +9,7 @@ import type {
   SeriesStatus,
   UserAnimeEntryDto,
 } from '../api/types.ts'
+import { AiringProgressBar } from '../components/AiringProgressBar.tsx'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { SeriesEntryRow } from '../components/SeriesEntryRow.tsx'
@@ -19,6 +20,7 @@ import { mediaTypeLabel, pickDisplayTitle } from '../utils/anime.ts'
 import './SeriesPage.css'
 
 const NO_INFO = '—'
+const MAX_REBUILD_ROUNDS = 12
 
 const SERIES_STATUS_CLASS: Record<SeriesStatus, string> = {
   Ongoing: 'ongoing',
@@ -98,13 +100,42 @@ function recomputeScores(mainLine: SeriesEntryDto[], extras: SeriesEntryDto[]) {
   }
 }
 
+// Mirrors SeriesService's tie-break rule for my-highest-score ties: an
+// entry already present in the previous (server-ordered) tie list keeps its
+// relative order; an entry newly entering the tie has no known favourite
+// rank client-side, so it's unranked — appended in watch order, same as the
+// backend does for an unranked entry (task 6.6). malScore never changes
+// through a row edit, so highestMalScoreAnimeIds needs no equivalent here.
+function recomputeMyHighestIds(prevIds: number[], mainLine: SeriesEntryDto[], extras: SeriesEntryDto[]): number[] {
+  const all = [...mainLine, ...extras]
+  const scored = all.filter((e) => (e.entry?.myScore ?? 0) > 0)
+  if (scored.length === 0) return []
+
+  const max = Math.max(...scored.map((e) => e.entry!.myScore!))
+  const tied = scored.filter((e) => e.entry!.myScore === max)
+  const tiedIds = new Set(tied.map((e) => e.animeId))
+
+  const known = prevIds.filter((id) => tiedIds.has(id))
+  const knownSet = new Set(known)
+  const newlyTied = tied.filter((e) => !knownSet.has(e.animeId)).map((e) => e.animeId)
+  return [...known, ...newlyTied]
+}
+
 // Patches one entry's UserAnimeEntryDto into whichever of mainLine/extras it
-// lives in and recomputes the four averages from the result.
+// lives in and recomputes the four averages and the my-favourite tie list
+// from the result — an edit can change both (task 6.6).
 function patchSeriesEntry(series: SeriesDto, animeId: number, entry: UserAnimeEntryDto | null): SeriesDto {
   const patch = (entries: SeriesEntryDto[]) => entries.map((e) => (e.animeId === animeId ? { ...e, entry } : e))
   const mainLine = patch(series.mainLine)
   const extras = patch(series.extras)
-  return { ...series, mainLine, extras, scores: recomputeScores(mainLine, extras) }
+  const myHighestScoreAnimeIds = recomputeMyHighestIds(series.stats.myHighestScoreAnimeIds, mainLine, extras)
+  return {
+    ...series,
+    mainLine,
+    extras,
+    scores: recomputeScores(mainLine, extras),
+    stats: { ...series.stats, myHighestScoreAnimeIds },
+  }
 }
 
 function findEntry(series: SeriesDto, animeId: number): SeriesEntryDto | undefined {
@@ -131,6 +162,40 @@ function groupExtras(extras: SeriesEntryDto[]): { mediaType: string | null; item
 // still airing don't count against it, since they can't be completed yet.
 function isGroupCompleted(entries: SeriesEntryDto[]): boolean {
   return entries.filter((e) => e.airingStatus === 'finished_airing').every((e) => e.entry?.status === 'Completed')
+}
+
+// Reveal precedence for a MAL average (design.md decision 9): finishing the
+// whole main line reveals both averages unconditionally; short of that, a
+// group reveals only when it's fully completed *and* nothing in the entire
+// series is currently airing — an airing movie or special suppresses even
+// the main-series average.
+//
+// `mainLineCompletedByMe` alone isn't enough for "finished the main line": it
+// only checks entries that have *finished* airing, so it stays true while a
+// main-line season is itself mid-run (the "Caught up" badge state) — that's
+// not "finishing the main line", it's being caught up on a main line that's
+// still going. Rule 1 is only meant for the case a main-line-airing spin-off
+// happens *after* the main line is genuinely done, so it additionally
+// requires no main-line member to be currently airing.
+function malGroupRevealed(group: SeriesEntryDto[], series: SeriesDto): boolean {
+  const mainLineAiring = series.mainLine.some((e) => e.airingStatus === 'currently_airing')
+  if (series.stats.mainLineCompletedByMe && !mainLineAiring) return true
+  const anySeriesAiring = [...series.mainLine, ...series.extras].some((e) => e.airingStatus === 'currently_airing')
+  return isGroupCompleted(group) && !anySeriesAiring
+}
+
+// The highest-MAL-score box reveals in full when the entry holding it is one
+// I've both completed and scored, since I already know that score (design.md
+// decision 8) — distinct from isGroupCompleted, which only checks status.
+function isCompletedAndScored(entry: SeriesEntryDto): boolean {
+  return entry.entry?.status === 'Completed' && (entry.entry?.myScore ?? 0) > 0
+}
+
+function completionBadge(series: SeriesDto): { label: string; className: string } | null {
+  if (!series.stats.mainLineCompletedByMe) return null
+  return series.status === 'Finished'
+    ? { label: 'Completed', className: 'completed' }
+    : { label: 'Caught up', className: 'caught-up' }
 }
 
 function MalScoreBox({
@@ -178,23 +243,70 @@ export function SeriesPage() {
   const animeId = Number(animeIdParam)
   const { data, loading, setData } = usePageData<SeriesLookupResult>(`series:${animeId}`, () => getSeries(animeId))
   const [rebuilding, setRebuilding] = useState(false)
+  const [rebuildCount, setRebuildCount] = useState<number | null>(null)
   const { openEditor } = useEntryEditor()
   const { hidden } = useScoreVisibility()
+
+  // Stops an in-flight rebuild loop from issuing another round once the page
+  // has navigated away (design.md decision 2) — a round already in flight is
+  // simply discarded rather than cancelled mid-request.
+  const abortedRef = useRef(false)
+  useEffect(() => {
+    abortedRef.current = false
+    return () => {
+      abortedRef.current = true
+    }
+  }, [])
 
   function patchSeries(updater: (series: SeriesDto) => SeriesDto) {
     setData((prev) => (prev && prev.found ? { found: true, series: updater(prev.series) } : prev))
   }
 
+  // Issues rounds — each spending the server's fixed rebuild budget — for as
+  // long as the series is still partial and the previous round grew it, so a
+  // franchise needing more fetches than one round allows completes in one
+  // click instead of repeated clicking (design.md decision 2).
   async function handleRebuild() {
-    if (rebuilding) return
+    if (rebuilding || !data?.found) return
     setRebuilding(true)
     try {
-      const series = await rebuildSeries(animeId)
-      setData({ found: true, series })
+      let previousCount = data.series.mainLine.length + data.series.extras.length
+      for (let round = 0; round < MAX_REBUILD_ROUNDS; round++) {
+        if (abortedRef.current) return
+        const series = await rebuildSeries(animeId)
+        if (abortedRef.current) return
+        setData({ found: true, series })
+
+        const count = series.mainLine.length + series.extras.length
+        setRebuildCount(count)
+        if (!series.isPartial || count <= previousCount) break
+        previousCount = count
+      }
     } catch {
       // Leave the page showing whatever was already loaded; the user can retry.
     } finally {
-      setRebuilding(false)
+      if (!abortedRef.current) {
+        setRebuilding(false)
+        setRebuildCount(null)
+      }
+    }
+  }
+
+  // Reorders locally first so the buttons feel immediate, then persists the
+  // whole ordered list; a failed save reverts to the order that was actually
+  // stored (design.md decision 11).
+  async function handleReorderFavourite(seriesId: number, currentOrder: number[], index: number, direction: -1 | 1) {
+    const targetIndex = index + direction
+    if (targetIndex < 0 || targetIndex >= currentOrder.length) return
+
+    const reordered = [...currentOrder]
+    ;[reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]]
+
+    patchSeries((series) => ({ ...series, stats: { ...series.stats, myHighestScoreAnimeIds: reordered } }))
+    try {
+      await setSeriesFavouriteOrder(seriesId, reordered)
+    } catch {
+      patchSeries((series) => ({ ...series, stats: { ...series.stats, myHighestScoreAnimeIds: currentOrder } }))
     }
   }
 
@@ -228,12 +340,17 @@ export function SeriesPage() {
   const series = data.series
   const { scores, stats } = series
   const displayTitle = pickDisplayTitle(series.title, series.englishTitle)
+  const badge = completionBadge(series)
 
   const longestGapFrom =
     stats.longestGapFromAnimeId !== null ? findEntry(series, stats.longestGapFromAnimeId) : undefined
   const longestGapTo = stats.longestGapToAnimeId !== null ? findEntry(series, stats.longestGapToAnimeId) : undefined
-  const highestMal = stats.highestMalScoreAnimeId !== null ? findEntry(series, stats.highestMalScoreAnimeId) : undefined
-  const myHighest = stats.myHighestScoreAnimeId !== null ? findEntry(series, stats.myHighestScoreAnimeId) : undefined
+  const highestMalEntries = stats.highestMalScoreAnimeIds
+    .map((id) => findEntry(series, id))
+    .filter((e): e is SeriesEntryDto => e !== undefined)
+  const myHighestEntries = stats.myHighestScoreAnimeIds
+    .map((id) => findEntry(series, id))
+    .filter((e): e is SeriesEntryDto => e !== undefined)
 
   return (
     <div className="series-page">
@@ -250,28 +367,69 @@ export function SeriesPage() {
             <span className={`series-page__status-pill series-page__status-pill--${SERIES_STATUS_CLASS[series.status]}`}>
               {series.status}
             </span>
+            {badge && (
+              <span className={`series-page__completion-badge series-page__completion-badge--${badge.className}`}>
+                {badge.label}
+              </span>
+            )}
             <span className="series-page__year-span">{formatYearSpan(series.firstYear, series.lastYear)}</span>
+          </div>
+          <div className="series-page__links">
+            <a
+              href={`https://myanimelist.net/anime/${series.rootAnimeId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="series-page__related-link"
+            >
+              MyAnimeList
+            </a>
+            <a
+              href={
+                series.rootAniListId != null
+                  ? `https://anilist.co/anime/${series.rootAniListId}`
+                  : `https://anilist.co/search/anime?search=${encodeURIComponent(displayTitle)}`
+              }
+              target="_blank"
+              rel="noreferrer"
+              className="series-page__related-link"
+            >
+              AniList
+            </a>
+            <a
+              href={`https://seriesgraph.com/show/search/${encodeURIComponent(displayTitle)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="series-page__related-link"
+            >
+              SeriesGraph
+            </a>
           </div>
         </div>
       </div>
 
       <div className="series-page__rebuild-row">
         <button type="button" className="series-page__rebuild" onClick={handleRebuild} disabled={rebuilding}>
-          {rebuilding ? 'Rebuilding…' : 'Rebuild'}
+          {rebuilding ? (rebuildCount !== null ? `Rebuilding… ${rebuildCount} entries` : 'Rebuilding…') : 'Rebuild'}
         </button>
         {series.isPartial && <span className="series-page__notice">Some entries couldn't be loaded yet.</span>}
         {series.isTruncated && <span className="series-page__notice">This series was too large to show in full.</span>}
       </div>
 
       <div className="series-page__score-boxes">
-        <MalScoreBox label="MAL · main series" average={scores.malMain} completed={isGroupCompleted(series.mainLine)} />
         <MalScoreBox
-          label="MAL · everything"
-          average={scores.malAll}
-          completed={isGroupCompleted([...series.mainLine, ...series.extras])}
+          label="MAL · main series"
+          average={scores.malMain}
+          completed={malGroupRevealed(series.mainLine, series)}
         />
+        {series.extras.length > 0 && (
+          <MalScoreBox
+            label="MAL · everything"
+            average={scores.malAll}
+            completed={malGroupRevealed([...series.mainLine, ...series.extras], series)}
+          />
+        )}
         <MineScoreBox label="Mine · main series" average={scores.mineMain} />
-        <MineScoreBox label="Mine · everything" average={scores.mineAll} />
+        {series.extras.length > 0 && <MineScoreBox label="Mine · everything" average={scores.mineAll} />}
       </div>
 
       <section className="series-box">
@@ -300,10 +458,19 @@ export function SeriesPage() {
           <div>
             <dt>My progress</dt>
             <dd>
-              <ProgressBar
-                watched={stats.myWatchedEpisodes}
-                total={stats.mainLineEpisodeTotal > 0 ? stats.mainLineEpisodeTotal : null}
-              />
+              {series.status === 'Ongoing' ? (
+                <AiringProgressBar
+                  aired={stats.mainLineAiredEpisodes}
+                  watched={stats.myWatchedEpisodes}
+                  total={stats.mainLineEpisodeTotal > 0 ? stats.mainLineEpisodeTotal : null}
+                  finished={false}
+                />
+              ) : (
+                <ProgressBar
+                  watched={stats.myWatchedEpisodes}
+                  total={stats.mainLineEpisodeTotal > 0 ? stats.mainLineEpisodeTotal : null}
+                />
+              )}
             </dd>
           </div>
           <div>
@@ -335,25 +502,57 @@ export function SeriesPage() {
               </dd>
             </div>
           )}
-          {highestMal && (
+          {highestMalEntries.length > 0 && (
             <div>
               <dt>Highest MAL score</dt>
               <dd>
-                <Link to={`/anime/${highestMal.animeId}`}>
-                  {pickDisplayTitle(highestMal.title, highestMal.englishTitle)}
-                </Link>{' '}
-                · <ScoreValue value={highestMal.malScore} />
+                <ul className="series-page__tie-list">
+                  {highestMalEntries.map((entry) => (
+                    <li key={entry.animeId}>
+                      <Link to={`/anime/${entry.animeId}`}>{pickDisplayTitle(entry.title, entry.englishTitle)}</Link>{' '}
+                      · <ScoreValue value={entry.malScore} completed={isCompletedAndScored(entry)} />
+                    </li>
+                  ))}
+                </ul>
               </dd>
             </div>
           )}
-          {myHighest && (
+          {myHighestEntries.length > 0 && (
             <div>
               <dt>My favourite</dt>
               <dd>
-                <Link to={`/anime/${myHighest.animeId}`}>
-                  {pickDisplayTitle(myHighest.title, myHighest.englishTitle)}
-                </Link>{' '}
-                · {myHighest.entry?.myScore}
+                <ul className="series-page__tie-list">
+                  {myHighestEntries.map((entry, index) => (
+                    <li key={entry.animeId}>
+                      <Link to={`/anime/${entry.animeId}`}>{pickDisplayTitle(entry.title, entry.englishTitle)}</Link>{' '}
+                      · {entry.entry?.myScore}
+                      {myHighestEntries.length > 1 && (
+                        <span className="series-page__reorder-buttons">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleReorderFavourite(series.seriesId, stats.myHighestScoreAnimeIds, index, -1)
+                            }
+                            disabled={index === 0}
+                            aria-label={`Move ${pickDisplayTitle(entry.title, entry.englishTitle)} up`}
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleReorderFavourite(series.seriesId, stats.myHighestScoreAnimeIds, index, 1)
+                            }
+                            disabled={index === myHighestEntries.length - 1}
+                            aria-label={`Move ${pickDisplayTitle(entry.title, entry.englishTitle)} down`}
+                          >
+                            ▼
+                          </button>
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </dd>
             </div>
           )}

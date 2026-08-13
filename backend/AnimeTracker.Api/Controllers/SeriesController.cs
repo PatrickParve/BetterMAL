@@ -36,4 +36,31 @@ public class SeriesController(ISeriesService seriesService) : ControllerBase
             return NotFound();
         }
     }
+
+    /// <summary>Sets the explicit tie-break order for entries tied at my
+    /// highest score (design.md decision 11): the given ids receive ranks
+    /// 0..n-1 in the order given, and every other member of the series has
+    /// its rank cleared.</summary>
+    [HttpPut("api/series/{seriesId:int}/favourite-order")]
+    public async Task<IActionResult> SetFavouriteOrder(int seriesId, [FromBody] SeriesFavouriteOrderRequest request, CancellationToken ct)
+    {
+        try
+        {
+            await seriesService.SetFavouriteOrderAsync(seriesId, request.AnimeIds, ct);
+            return NoContent();
+        }
+        catch (SeriesIdNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (UnknownSeriesMemberIdsException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+}
+
+public class SeriesFavouriteOrderRequest
+{
+    public List<int> AnimeIds { get; set; } = [];
 }

@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Profile;
@@ -18,7 +19,8 @@ namespace AnimeTracker.Api.Services.Series;
 public class SeriesService(
     AnimeTrackerDbContext db,
     SeriesGraphBuilder graphBuilder,
-    RefreshGate refreshGate) : ISeriesService
+    RefreshGate refreshGate,
+    IEpisodeScheduleService scheduleService) : ISeriesService
 {
     private static readonly TimeSpan StaleAfter = TimeSpan.FromDays(30);
 
@@ -27,6 +29,27 @@ public class SeriesService(
 
     public Task<SeriesDto> RebuildSeriesAsync(int animeId, CancellationToken ct = default) =>
         ResolveAsync(animeId, forceRebuild: true, ct);
+
+    public async Task SetFavouriteOrderAsync(int seriesId, List<int> animeIds, CancellationToken ct = default)
+    {
+        var members = await db.SeriesMembers.Where(m => m.SeriesId == seriesId).ToListAsync(ct);
+        if (members.Count == 0 && !await db.Series.AsNoTracking().AnyAsync(s => s.Id == seriesId, ct))
+            throw new SeriesIdNotFoundException(seriesId);
+
+        var memberIds = members.Select(m => m.AnimeId).ToHashSet();
+        var unknownIds = animeIds.Where(id => !memberIds.Contains(id)).ToList();
+        if (unknownIds.Count > 0)
+            throw new UnknownSeriesMemberIdsException(unknownIds);
+
+        var rankByAnimeId = animeIds
+            .Select((animeId, rank) => (animeId, rank))
+            .ToDictionary(x => x.animeId, x => x.rank);
+
+        foreach (var member in members)
+            member.FavouriteRank = rankByAnimeId.TryGetValue(member.AnimeId, out var rank) ? rank : null;
+
+        await db.SaveChangesAsync(ct);
+    }
 
     private async Task<SeriesDto> ResolveAsync(int animeId, bool forceRebuild, CancellationToken ct)
     {
@@ -72,6 +95,11 @@ public class SeriesService(
         return await ProjectAsync(series.Id, ct);
     }
 
+    // Deliberately does not check IsTruncated: a series genuinely over the
+    // cap would then re-traverse and spend fetch budget on every single
+    // visit, forever. A truncated series instead picks up a raised cap on
+    // the next explicitly requested rebuild or the next staleness-triggered
+    // one (design.md decision 3).
     private static bool NeedsBuild(SeriesEntity? series) =>
         series is null || series.IsPartial || series.BuiltAt < DateTimeOffset.UtcNow - StaleAfter;
 
@@ -106,10 +134,16 @@ public class SeriesService(
 
         var root = allAnime.First(a => a.Id == series.RootAnimeId);
         var (firstYear, lastYear) = YearSpan(allAnime);
+        var rootAniListId = await db.AnimeAiringSyncs.AsNoTracking()
+            .Where(s => s.AnimeId == series.RootAnimeId)
+            .Select(s => (int?)s.AniListId)
+            .FirstOrDefaultAsync(ct);
+        var mainLineAiredEpisodes = await MainLineAiredEpisodesAsync(mainLineMembers, ct);
 
         return new SeriesDto(
             series.Id,
             series.RootAnimeId,
+            rootAniListId,
             root.Title,
             root.EnglishTitle,
             root.PictureUrl,
@@ -120,9 +154,33 @@ public class SeriesService(
             series.IsPartial,
             series.IsTruncated,
             BuildScores(mainLineMembers, series.Members),
-            BuildStats(mainLineMembers, extraMembers, allAnime),
+            BuildStats(mainLineMembers, extraMembers, allAnime, mainLineAiredEpisodes),
             mainLineMembers.Select(m => ToEntryDto(m, memberAnimeIds)).ToList(),
             extraMembers.Select(m => ToEntryDto(m, memberAnimeIds)).ToList());
+    }
+
+    // Only a currently-airing member hits IEpisodeScheduleService — typically
+    // zero or one per series (design.md decision 4).
+    private async Task<int> MainLineAiredEpisodesAsync(List<SeriesMember> mainLineMembers, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var airedEpisodes = 0;
+
+        foreach (var member in mainLineMembers)
+        {
+            var anime = member.Anime;
+            if (anime.TotalEpisodes is not { } total)
+                continue;
+
+            airedEpisodes += anime.AiringStatus switch
+            {
+                "finished_airing" => total,
+                "currently_airing" => Math.Min(await scheduleService.EpisodesAiredAsOfAsync(anime, now, ct) ?? 0, total),
+                _ => 0,
+            };
+        }
+
+        return airedEpisodes;
     }
 
     private static SeriesEntryDto ToEntryDto(SeriesMember member, HashSet<int> memberAnimeIds)
@@ -205,7 +263,8 @@ public class SeriesService(
     // --- Stats (3.3) ---
 
     private static SeriesStatsDto BuildStats(
-        List<SeriesMember> mainLineMembers, List<SeriesMember> extraMembers, List<AnimeMetadata> allAnime)
+        List<SeriesMember> mainLineMembers, List<SeriesMember> extraMembers, List<AnimeMetadata> allAnime,
+        int mainLineAiredEpisodes)
     {
         var mainLineAnime = mainLineMembers.Select(m => m.Anime).ToList();
         var extraAnime = extraMembers.Select(m => m.Anime).ToList();
@@ -216,11 +275,24 @@ public class SeriesService(
         var myWatchedEpisodes = mainLineAnime.Sum(a => a.UserEntry?.EpisodesWatched ?? 0);
         var myWatchedSeconds = mainLineAnime.Sum(a => (long)(a.UserEntry?.EpisodesWatched ?? 0) * EpisodeSeconds(a));
         var entriesCompleted = mainLineAnime.Count(a => a.UserEntry?.Status == WatchStatus.Completed);
+        var mainLineCompletedByMe = MainLineCompletedByMe(mainLineAnime);
 
         var (gapDays, gapFromId, gapToId) = LongestGap(mainLineAnime);
 
-        var highestMal = allAnime.Where(a => a.MalScore is not null).OrderByDescending(a => a.MalScore).FirstOrDefault();
-        var highestMine = allAnime.Where(a => a.UserEntry?.MyScore is > 0).OrderByDescending(a => a.UserEntry!.MyScore).FirstOrDefault();
+        // Watch order for tie-breaking: main line first (already Order-sorted),
+        // then extras (already media-group-then-Order-sorted) — design.md
+        // decision 8.
+        var orderedMembers = mainLineMembers.Concat(extraMembers).ToList();
+        var highestMalIds = TiedTopIds(
+            orderedMembers.Where(m => m.Anime.MalScore is not null),
+            m => m.Anime.MalScore!.Value);
+        var highestMineIds = TiedTopIds(
+            orderedMembers.Where(m => m.Anime.UserEntry?.MyScore is > 0),
+            m => m.Anime.UserEntry!.MyScore!.Value,
+            // Unranked (null) entries sort after every ranked one; ties within
+            // that (including two unranked entries) keep watch order, since
+            // OrderBy is a stable sort over the already watch-ordered sequence.
+            m => m.FavouriteRank ?? int.MaxValue);
 
         var studios = allAnime
             .Select(a => a.Studio)
@@ -239,20 +311,51 @@ public class SeriesService(
             mainEpisodes,
             mainRuntimeSeconds,
             hasUnknown,
+            mainLineAiredEpisodes,
             extraEpisodes,
             extraRuntimeSeconds,
             myWatchedEpisodes,
             myWatchedSeconds,
             entriesCompleted,
+            mainLineCompletedByMe,
             mainLineMembers.Count,
             extraMembers.Count,
             gapDays,
             gapFromId,
             gapToId,
-            highestMal?.Id,
-            highestMine?.Id,
+            highestMalIds,
+            highestMineIds,
             studios,
             genres);
+    }
+
+    // Every finished-airing main-line member is Completed in my list, and at
+    // least one such member exists — entries not yet aired or still airing
+    // don't count against it, since they can't be completed yet (design.md
+    // decision 7).
+    private static bool MainLineCompletedByMe(List<AnimeMetadata> mainLineAnime)
+    {
+        var finishedAiring = mainLineAnime.Where(a => a.AiringStatus == "finished_airing").ToList();
+        return finishedAiring.Count > 0 && finishedAiring.All(a => a.UserEntry?.Status == WatchStatus.Completed);
+    }
+
+    // Every member whose comparable key ties the maximum, in the order given
+    // (already watch order) unless a tieBreakKey is supplied — used for
+    // favourites, which order by FavouriteRank first (design.md decision 8).
+    private static List<int> TiedTopIds<TKey>(
+        IEnumerable<SeriesMember> candidates, Func<SeriesMember, TKey> scoreKey, Func<SeriesMember, int>? tieBreakKey = null)
+        where TKey : IComparable<TKey>
+    {
+        var list = candidates.ToList();
+        if (list.Count == 0)
+            return [];
+
+        var max = list.Max(scoreKey);
+        var tied = list.Where(m => scoreKey(m).CompareTo(max) == 0);
+        if (tieBreakKey is not null)
+            tied = tied.OrderBy(tieBreakKey);
+
+        return tied.Select(m => m.AnimeId).ToList();
     }
 
     // An entry with an unknown TotalEpisodes contributes nothing to either

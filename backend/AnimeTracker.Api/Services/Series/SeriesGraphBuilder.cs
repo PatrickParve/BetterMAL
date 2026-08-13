@@ -20,7 +20,11 @@ public class SeriesGraphBuilder(
     IMetadataRefreshService refreshService,
     ILogger<SeriesGraphBuilder> logger)
 {
-    public const int MemberCap = 60;
+    // A runaway-component safety ceiling, not a working limit: set high
+    // enough that no real franchise reaches it, so reaching it means the
+    // traversal has gone wrong and the truncation notice is meaningful
+    // (design.md decision 1).
+    public const int MemberCap = 400;
     public const int VisitFetchBudget = 8;
     public const int RebuildFetchBudget = 20;
 
@@ -374,6 +378,10 @@ public class SeriesGraphBuilder(
         // Rows that already exist for a member (whether under target or an
         // absorbed stale series) are updated in place rather than deleted and
         // recreated, so a member moving between series is a plain FK update.
+        // This is also why FavouriteRank survives a rebuild for free: it's
+        // simply never touched here for a surviving member, and a member that
+        // leaves the series takes its (now-unused) rank with it through the
+        // row it already owned (design.md decision 11).
         var existingByAnimeId = (await db.SeriesMembers
                 .Where(sm => memberIds.Contains(sm.AnimeId))
                 .ToListAsync(ct))
