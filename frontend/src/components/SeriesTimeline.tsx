@@ -1,21 +1,16 @@
-import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import type { SeriesEntryDto } from '../api/types.ts'
-import { pickDisplayTitle } from '../utils/anime.ts'
+import { mediaTypeLabel, pickDisplayTitle, STATUS_CLASS, STATUS_LABELS } from '../utils/anime.ts'
+import { ScoreValue } from './ScoreValue.tsx'
+import { watchedFigureLabel } from './SeriesEntryRow.tsx'
 import './SeriesTimeline.css'
 
 type SeriesTimelineProps = {
   /** Main-line entries in watch order. */
   entries: SeriesEntryDto[]
-  /** The hide-scores toggle — the MAL side is omitted entirely while on, not blurred. */
-  hidden: boolean
-  longestGapDays: number | null
-  longestGapFromAnimeId: number | null
-  longestGapToAnimeId: number | null
+  onEdit: (entry: SeriesEntryDto) => void
 }
 
-const MIN_BLOCK_WIDTH = 48
-const MIN_GAP_WIDTH = 8
 const DAY_MS = 86_400_000
 
 function dayNumber(iso: string): number {
@@ -30,162 +25,201 @@ function entryEndDay(entry: SeriesEntryDto, todayDay: number): number {
   return dayNumber(entry.airedFrom!)
 }
 
-// "4y 2mo" / "6mo" / "18d" — words for the longest-gap marker. The days value
-// itself always comes from stats.longestGapDays (design decision 6); this
-// only formats it.
-function formatGapWords(days: number): string {
-  if (days >= 365) {
-    const years = Math.floor(days / 365)
-    const months = Math.round((days % 365) / 30)
-    return months > 0 ? `${years}y ${months}mo` : `${years}y`
-  }
-  if (days >= 30) return `${Math.round(days / 30)}mo`
-  return `${days}d`
+type Segment = {
+  key: string
+  /** Real day range this card spans — null for an undated card, which has
+   * no date to place on the axis. */
+  startDay: number | null
+  endDay: number | null
+  entry: SeriesEntryDto
+  undated?: boolean
 }
 
-function scoreBarHeight(score: number | null | undefined): { height: string } {
-  return { height: `${Math.max(0, Math.min(100, ((score ?? 0) / 10) * 100))}%` }
-}
-
-// Franchise chronology (redesign-series-page design.md decision 6): a single
-// flex row alternating gap spacers (flex-grow: gapDays) and entry blocks
-// (flex-grow: max(1, durationDays)), so a long wait between seasons reads as
-// visible empty space rather than only as a number. Flex proportions rather
-// than absolute positioning — a min-width floor on a short block just steals
-// a little proportion from the gaps, and nothing can ever overlap.
-export function SeriesTimeline({
-  entries,
-  hidden,
-  longestGapDays,
-  longestGapFromAnimeId,
-  longestGapToAnimeId,
-}: SeriesTimelineProps) {
-  const rankByAnimeId = new Map(entries.map((entry, index) => [entry.animeId, index + 1]))
-  const dated = entries.filter((e) => e.airedFrom !== null)
-  const undated = entries.filter((e) => e.airedFrom === null)
-  const todayDay = Math.floor(Date.now() / DAY_MS)
-
-  // No main-line entry has a date at all: fall back to equal-width blocks in
-  // watch order, which is exactly the old score-comparison strip.
-  if (dated.length === 0) {
-    return (
-      <div className="series-timeline">
-        {hidden && <p className="series-timeline__hidden-note">MAL scores are hidden while the toggle is on.</p>}
-        <div className="series-timeline__scroll">
-          <div className="series-timeline__row">
-            {entries.map((entry) => (
-              <TimelineBlock key={entry.animeId} entry={entry} rank={rankByAnimeId.get(entry.animeId)!} hidden={hidden} grow={1} />
-            ))}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const firstYear = new Date(dated[0].airedFrom!).getFullYear()
-  const lastYear = new Date(dated[dated.length - 1].airedFrom!).getFullYear()
-
-  const segments: ReactNode[] = []
-  dated.forEach((entry, index) => {
-    if (index > 0) {
-      const prev = dated[index - 1]
-      const gapDays = Math.max(0, dayNumber(entry.airedFrom!) - entryEndDay(prev, todayDay))
-      const isLongestGap =
-        longestGapDays !== null && longestGapFromAnimeId === prev.animeId && longestGapToAnimeId === entry.animeId
-
-      segments.push(
-        <div
-          key={`gap-${prev.animeId}-${entry.animeId}`}
-          className="series-timeline__gap"
-          style={{ flexGrow: Math.max(1, gapDays), minWidth: MIN_GAP_WIDTH }}
-        >
-          {isLongestGap && (
-            <span className="series-timeline__gap-marker">
-              {formatGapWords(longestGapDays!)} between{' '}
-              <Link to={`/anime/${prev.animeId}`}>{pickDisplayTitle(prev.title, prev.englishTitle)}</Link> and{' '}
-              <Link to={`/anime/${entry.animeId}`}>{pickDisplayTitle(entry.title, entry.englishTitle)}</Link>
-            </span>
-          )}
-        </div>,
-      )
+// One card per entry, in watch order — an entry with no air date yet (e.g.
+// an announced-but-unscheduled next season) becomes its own card right
+// where it belongs in the sequence. Every card is the same fixed size and
+// evenly spaced: a card's own width no longer scales with how long that
+// entry took to air (a variable-width, aspect-ratio-locked poster read as
+// "some posters are just bigger than others" rather than as duration).
+// Chronology is instead carried entirely by the year ruler above the row.
+function buildSegments(entries: SeriesEntryDto[], todayDay: number): Segment[] {
+  return entries.map((entry) => {
+    if (entry.airedFrom === null) {
+      return { key: String(entry.animeId), startDay: null, endDay: null, entry, undated: true }
     }
 
-    const durationDays = Math.max(0, entryEndDay(entry, todayDay) - dayNumber(entry.airedFrom!))
-    segments.push(
-      <TimelineBlock
-        key={entry.animeId}
-        entry={entry}
-        rank={rankByAnimeId.get(entry.animeId)!}
-        hidden={hidden}
-        grow={Math.max(1, durationDays)}
-      />,
-    )
+    const startDay = dayNumber(entry.airedFrom)
+    const endDay = entryEndDay(entry, todayDay)
+    return { key: String(entry.animeId), startDay, endDay, entry }
   })
+}
+
+type YearMark = { year: number; fraction: number }
+
+// A year label is roughly this wide, plus a little breathing room — below
+// this pixel gap from the previously placed label, skip it rather than let
+// two labels visually collide (happens easily inside one long-running entry
+// that alone spans several calendar years).
+const MIN_LABEL_GAP_PX = 36
+
+// Matches the fixed width/margin set on .series-timeline__card in the CSS —
+// duplicated here (rather than measured) so the year ruler's math can place
+// labels without a DOM read, and it will exactly match real layout since
+// every card renders at this same fixed size.
+const CARD_WIDTH = 168
+const CARD_MARGIN = 6
+const CARD_STRIDE = CARD_WIDTH + CARD_MARGIN * 2
+
+// Only a year some entry actually aired in gets a label — a year that falls
+// entirely between two entries, with nothing airing, is skipped rather than
+// implying activity that didn't happen. Each year is attributed to exactly
+// one card: the first (earliest, chronologically) card whose own span
+// covers it, so a boundary that falls right as one season ends and the next
+// begins lands on the earlier card rather than being duplicated or stranded
+// in the space between them.
+function assignYearMarks(segments: Segment[]): Map<number, YearMark[]> {
+  const marks = new Map<number, YearMark[]>()
+  const assignedYears = new Set<number>()
+  let lastPx = -Infinity
+  let cumulativePx = 0
+
+  segments.forEach((seg, index) => {
+    if (seg.startDay === null || seg.endDay === null) {
+      cumulativePx += CARD_STRIDE
+      return
+    }
+
+    const span = Math.max(1, seg.endDay - seg.startDay)
+    const startYear = new Date(seg.startDay * DAY_MS).getUTCFullYear()
+    const endYear = new Date(seg.endDay * DAY_MS).getUTCFullYear()
+
+    const list: YearMark[] = []
+    for (let y = startYear; y <= endYear; y++) {
+      if (assignedYears.has(y)) continue
+      assignedYears.add(y)
+
+      const boundaryDay = dayNumber(`${y}-01-01`)
+      const fraction = Math.max(0, Math.min(1, (boundaryDay - seg.startDay) / span))
+      const px = cumulativePx + fraction * CARD_WIDTH
+      if (px - lastPx < MIN_LABEL_GAP_PX) continue
+
+      lastPx = px
+      list.push({ year: y, fraction })
+    }
+    if (list.length > 0) marks.set(index, list)
+    cumulativePx += CARD_STRIDE
+  })
+
+  return marks
+}
+
+// Franchise chronology as a single main-line list (design.md decision 3 of
+// series-page-improvements): a flex row of fixed-size, evenly-spaced cards
+// in watch order — including an unreleased upcoming entry right where it
+// belongs. A year ruler shares the exact same per-card width so it scrolls
+// in lockstep with the cards beneath it, labelling only years something
+// actually aired in. This is the page's sole presentation of the main line;
+// there is no separate non-chronological list elsewhere.
+export function SeriesTimeline({ entries, onEdit }: SeriesTimelineProps) {
+  const todayDay = Math.floor(Date.now() / DAY_MS)
+  const segments = buildSegments(entries, todayDay)
+  const yearMarks = assignYearMarks(segments)
 
   return (
     <div className="series-timeline">
-      {hidden && <p className="series-timeline__hidden-note">MAL scores are hidden while the toggle is on.</p>}
-      <div className="series-timeline__axis">
-        <span>{firstYear}</span>
-        <span>{lastYear}</span>
-      </div>
       <div className="series-timeline__scroll">
-        <div className="series-timeline__row">{segments}</div>
-        {undated.length > 0 && (
-          <div className="series-timeline__row series-timeline__row--undated">
-            <span className="series-timeline__undated-label">No air date</span>
-            {undated.map((entry) => (
-              <TimelineBlock key={entry.animeId} entry={entry} rank={rankByAnimeId.get(entry.animeId)!} hidden={hidden} grow={1} />
+        {yearMarks.size > 0 && (
+          <div className="series-timeline__axis">
+            {segments.map((seg, index) => (
+              <div key={`axis-${seg.key}`} className="series-timeline__axis-segment">
+                {(yearMarks.get(index) ?? []).map((mark) => (
+                  <span key={mark.year} className="series-timeline__axis-year" style={{ left: `${mark.fraction * 100}%` }}>
+                    {mark.year}
+                  </span>
+                ))}
+              </div>
             ))}
           </div>
         )}
+        <div className="series-timeline__row">
+          {segments.map((seg) => (
+            <TimelineCard key={seg.key} entry={seg.entry} undated={!!seg.undated} onEdit={onEdit} />
+          ))}
+        </div>
       </div>
     </div>
   )
 }
 
-function TimelineBlock({
+function TimelineCard({
   entry,
-  rank,
-  hidden,
-  grow,
+  undated = false,
+  onEdit,
 }: {
   entry: SeriesEntryDto
-  rank: number
-  hidden: boolean
-  grow: number
+  undated?: boolean
+  onEdit: (entry: SeriesEntryDto) => void
 }) {
   const displayTitle = pickDisplayTitle(entry.title, entry.englishTitle)
   const total = entry.totalEpisodes
-  const watched = entry.entry?.episodesWatched ?? 0
+  const watchedEpisodes = entry.entry?.episodesWatched ?? 0
   const airing = entry.airingStatus === 'currently_airing'
-  const watchedPct = total ? Math.min(100, (watched / total) * 100) : 0
+  const watchedPct = total ? Math.min(100, (watchedEpisodes / total) * 100) : 0
   const airedPct = total && entry.airedEpisodes !== null ? Math.min(100, (entry.airedEpisodes / total) * 100) : 0
-  const year = entry.airedFrom ? entry.airedFrom.slice(0, 4) : '—'
+  const year = entry.airedFrom ? entry.airedFrom.slice(0, 4) : null
+  const statusClass = entry.entry ? ` series-timeline__card--${STATUS_CLASS[entry.entry.status]}` : ''
+  const watched = watchedFigureLabel(entry)
+  const completed = entry.entry?.status === 'Completed'
 
   return (
-    <div className="series-timeline__block" style={{ flexGrow: grow, minWidth: MIN_BLOCK_WIDTH }}>
-      <div className="series-timeline__scores">
-        {!hidden && (
-          <div
-            className="series-timeline__score-bar series-timeline__score-bar--mal"
-            style={scoreBarHeight(entry.malScore)}
-            title={entry.malScore != null ? `MAL ${entry.malScore.toFixed(2)}` : 'No MAL score'}
-          />
+    <div className={`series-timeline__card${statusClass}${undated ? ' series-timeline__card--undated' : ''}`}>
+      <Link to={`/anime/${entry.animeId}`} className="series-timeline__card-link">
+        {entry.pictureUrl ? (
+          <img src={entry.pictureUrl} alt="" className="series-timeline__card-picture" />
+        ) : (
+          <div className="series-timeline__card-picture series-timeline__card-picture--placeholder" aria-hidden="true" />
         )}
-        <div
-          className="series-timeline__score-bar series-timeline__score-bar--mine"
-          style={scoreBarHeight(entry.entry?.myScore)}
-          title={entry.entry?.myScore ? `Me ${entry.entry.myScore}` : 'No score'}
-        />
-      </div>
+        {/* The fill-track below already shows aired-vs-watched progress
+            graphically, so "airing" is signalled here rather than by also
+            spelling out an aired-of-total count in the meta line — that kept
+            pushing the line onto a second row and, since cards otherwise all
+            have identical heights, left an uneven gap above the footer on
+            every other card in the row. */}
+        {airing && <span className="series-timeline__airing-badge">Airing</span>}
+        <span className="series-timeline__card-body">
+          <span className="series-timeline__card-title" title={displayTitle}>
+            {displayTitle}
+          </span>
+          <span className="series-timeline__card-meta">
+            {mediaTypeLabel(entry.mediaType)} ·{' '}
+            {year ?? <span className="series-timeline__no-date-tag">No air date</span>} · {total ?? '?'} ep
+          </span>
+        </span>
+      </Link>
       <div className="series-timeline__fill-track">
         {airing && <div className="series-timeline__fill series-timeline__fill--aired" style={{ width: `${airedPct}%` }} />}
         <div className="series-timeline__fill series-timeline__fill--watched" style={{ width: `${watchedPct}%` }} />
       </div>
-      <Link to={`/anime/${entry.animeId}`} className="series-timeline__label" title={displayTitle} aria-label={displayTitle}>
-        #{rank} · {year}
-      </Link>
+      <div className="series-timeline__card-chips">
+        <span className="series-timeline__card-chip series-timeline__card-chip--mal">
+          <ScoreValue value={entry.malScore} placeholder="No score" completed={completed} />
+        </span>
+        <span className="series-timeline__card-chip series-timeline__card-chip--mine">{entry.entry?.myScore ?? '—'}</span>
+      </div>
+      <div className="series-timeline__card-footer">
+        <span className="series-timeline__card-status">
+          {entry.entry ? STATUS_LABELS[entry.entry.status] : 'Not in list'}
+          {watched && <span className="series-timeline__card-status-progress"> · {watched}</span>}
+          {!!entry.entry?.rewatchCount && (
+            <span className="series-rewatch-badge" title={`Rewatched ${entry.entry.rewatchCount} times`}>
+              ↻ {entry.entry.rewatchCount}
+            </span>
+          )}
+        </span>
+        <button type="button" className="series-timeline__card-edit" onClick={() => onEdit(entry)}>
+          {entry.entry ? 'Edit' : 'Add'}
+        </button>
+      </div>
     </div>
   )
 }

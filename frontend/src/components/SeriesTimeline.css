@@ -4,19 +4,41 @@
   gap: 6px;
 }
 
-.series-timeline__hidden-note {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text);
-  opacity: 0.75;
-}
-
+/* Shares the exact same fixed per-card width as .series-timeline__row below
+   it (built from the same segment list, CARD_WIDTH/CARD_MARGIN in the TSX),
+   so it scrolls in lockstep and each year lands exactly where that year
+   falls on its card, rather than being two fixed endpoints floating above a
+   row that scrolls independently. padding-top plus a touch of extra height
+   keeps a label's line box from ever brushing .series-timeline__scroll's own
+   top edge, where its overflow-y: hidden would otherwise clip a couple of
+   pixels off the top of the glyphs. */
 .series-timeline__axis {
   display: flex;
-  justify-content: space-between;
-  font-size: 12px;
+  min-width: 100%;
+  height: 20px;
+  padding-top: 3px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  line-height: 1;
   color: var(--text);
   opacity: 0.6;
+}
+
+.series-timeline__axis-segment {
+  position: relative;
+  flex: 0 0 auto;
+  width: 168px;
+  margin: 0 6px;
+}
+
+/* Nudged slightly left of the position it marks, like a ruler tick sitting
+   just before the region it labels, rather than flush against its first
+   pixel. */
+.series-timeline__axis-year {
+  position: absolute;
+  top: 0;
+  transform: translateX(-4px);
+  white-space: nowrap;
 }
 
 .series-timeline__scroll {
@@ -31,86 +53,142 @@
   min-width: 100%;
 }
 
-.series-timeline__row--undated {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--border);
-  gap: 8px;
-}
-
-.series-timeline__undated-label {
+/* Fixed size rather than flex-grow-by-duration — a variable-width,
+   aspect-ratio-locked poster read as "some posters are just bigger" rather
+   than as a duration signal, so every card (dated or not) is now the same
+   size, evenly spaced by a plain margin. The wait between two seasons is
+   carried by the year ruler above, not by card width or gap size. */
+.series-timeline__card {
+  position: relative;
+  display: flex;
   flex: 0 0 auto;
-  align-self: center;
-  font-size: 12px;
-  color: var(--text);
-  opacity: 0.6;
-  white-space: nowrap;
+  flex-direction: column;
+  width: 168px;
+  margin: 0 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: 8px;
 }
 
-.series-timeline__block {
+.series-timeline__card:hover,
+.series-timeline__card:focus-within {
+  border-top-color: var(--accent-border);
+  border-right-color: var(--accent-border);
+  border-bottom-color: var(--accent-border);
+}
+
+.series-timeline__card--watching {
+  border-left-color: var(--status-watching);
+}
+.series-timeline__card--completed {
+  border-left-color: var(--status-completed);
+}
+.series-timeline__card--plantowatch {
+  border-left-color: var(--status-plantowatch);
+}
+.series-timeline__card--onhold {
+  border-left-color: var(--status-onhold);
+}
+.series-timeline__card--dropped {
+  border-left-color: var(--status-dropped);
+}
+
+/* No-date treatment (design.md decision 3 of series-page-improvements): a
+   muted dashed border keeps an undated card readable while making it
+   unambiguous that it has no chronological position, rather than looking
+   like a dated card with missing information. It still sits inline in watch
+   order rather than in a separate lane. */
+.series-timeline__card--undated {
+  border-style: dashed;
+  opacity: 0.9;
+}
+
+.series-timeline__card-link {
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  gap: 4px;
-  flex-shrink: 0;
-  flex-basis: 0;
-  padding: 0 3px;
+  color: inherit;
+  text-decoration: none;
 }
 
-.series-timeline__gap {
+.series-timeline__card-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.series-timeline__card-picture {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  background: var(--code-bg);
+}
+
+.series-timeline__card-picture--placeholder {
+  border-bottom: 1px solid var(--border);
+}
+
+.series-timeline__airing-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--status-watching-bg);
+  border: 1px solid var(--status-watching-border);
+  color: var(--status-watching);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.series-timeline__card-body {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  flex-basis: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 8px 0;
 }
 
-.series-timeline__gap-marker {
+/* min-height reserves exactly two lines regardless of actual line count, so
+   a one-line title leaves blank space beneath it instead of pulling the
+   meta/chips/footer of that card out of alignment with its neighbours. */
+.series-timeline__card-title {
+  color: var(--text-h);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.3;
+  min-height: 2.6em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Always exactly one line — combined with the title's reserved two lines,
+   this keeps every card's content the same height above the footer, so
+   .series-timeline__card-footer's margin-top: auto never has to absorb a
+   different amount of leftover space from one card to the next. */
+.series-timeline__card-meta {
   font-size: 11px;
-  line-height: 1.4;
   color: var(--text);
   opacity: 0.75;
-  text-align: center;
-  white-space: normal;
-  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.series-timeline__gap-marker a {
-  color: inherit;
-  text-decoration: underline;
-  text-decoration-color: var(--border);
-}
-
-.series-timeline__gap-marker a:hover {
-  color: var(--accent);
-}
-
-.series-timeline__scores {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 3px;
-  height: 56px;
-}
-
-.series-timeline__score-bar {
-  width: 10px;
-  min-height: 2px;
-  border-radius: 2px 2px 0 0;
-}
-
-.series-timeline__score-bar--mal {
-  background: var(--mal);
-  opacity: 0.7;
-}
-
-.series-timeline__score-bar--mine {
-  background: var(--mine);
-  opacity: 0.85;
+.series-timeline__no-date-tag {
+  display: inline-block;
+  padding: 0 4px;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text);
 }
 
 .series-timeline__fill-track {
-  height: 6px;
+  height: 5px;
+  margin: 6px 8px 0;
   border-radius: 3px;
   background: var(--code-bg);
   position: relative;
@@ -133,19 +211,83 @@
   background: var(--mine);
 }
 
-.series-timeline__label {
-  display: block;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-  text-align: center;
-  text-decoration: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.series-timeline__card-chips {
+  display: flex;
+  gap: 5px;
+  padding: 5px 8px 0;
 }
 
-.series-timeline__label:hover {
-  color: var(--accent);
-  text-decoration: underline;
+.series-timeline__card-chip {
+  flex: 1 1 0;
+  text-align: center;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 4px;
+  border-radius: 5px;
+}
+
+.series-timeline__card-chip--mal {
+  background: var(--mal-bg);
+  color: var(--mal);
+}
+
+.series-timeline__card-chip--mine {
+  background: var(--mine-bg);
+  color: var(--mine);
+}
+
+.series-timeline__card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  margin-top: auto;
+}
+
+.series-timeline__card-status {
+  font-size: 10px;
+  color: var(--text);
+  opacity: 0.85;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.series-timeline__card-status-progress {
+  font-variant-numeric: tabular-nums;
+}
+
+.series-timeline__card-edit {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.series-timeline__card-edit:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+/* Shared with SeriesEntryRow/SeriesExtraTile so a rewatch count reads the
+   same way wherever it appears on the series page. */
+.series-rewatch-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--text);
+  opacity: 0.85;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }

@@ -153,6 +153,14 @@
   border-color: var(--accent-border);
 }
 
+.series-page__stats-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .series-page__rebuild-row {
   display: flex;
   align-items: center;
@@ -344,6 +352,15 @@
   gap: 4px;
 }
 
+/* Stands in for the title/link/score of a Highest MAL score entry I haven't
+   completed and scored yet — withheld regardless of the hide-scores toggle,
+   since this is a spoiler concern rather than a score-privacy one. */
+.series-page__tie-list-placeholder {
+  color: var(--text);
+  opacity: 0.6;
+  font-style: italic;
+}
+
 .series-page__reorder-buttons {
   display: inline-flex;
   gap: 2px;
@@ -370,15 +387,6 @@
 .series-page__reorder-buttons button:disabled {
   opacity: 0.35;
   cursor: default;
-}
-
-.series-page__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
 .series-page__extras-group {
@@ -440,6 +448,17 @@
 .series-page__extras-group-toggle:hover {
   color: var(--text-h);
   opacity: 1;
+}
+
+/* Replaces the toggle button once every extra is already Completed — same
+   text position/weight, just not interactive since there's nothing to hide. */
+.series-page__extras-group-label {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.85;
+  padding: 4px 0;
 }
 
 .series-page__extras-group-caret {

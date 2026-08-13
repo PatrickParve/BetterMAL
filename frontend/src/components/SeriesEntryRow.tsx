@@ -68,6 +68,11 @@ export function SeriesEntryRow({ entry, rank, onEdit }: SeriesEntryRowProps) {
       <span className="series-entry-row__status">
         {entry.entry ? STATUS_LABELS[entry.entry.status] : 'Not in list'}
         {watched && <span className="series-entry-row__status-progress"> · {watched}</span>}
+        {!!entry.entry?.rewatchCount && (
+          <span className="series-rewatch-badge" title={`Rewatched ${entry.entry.rewatchCount} times`}>
+            ↻ {entry.entry.rewatchCount}
+          </span>
+        )}
       </span>
       <button type="button" className="series-entry-row__edit" onClick={() => onEdit(entry)}>
         {entry.entry ? 'Edit' : 'Add'}

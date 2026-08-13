@@ -413,6 +413,7 @@ export type SeriesStatsDto = {
   longestGapToAnimeId: number | null
   highestMalScoreAnimeIds: number[]
   myHighestScoreAnimeIds: number[]
+  mostRewatchedAnimeIds: number[]
   studios: string[]
   genres: string[]
 }

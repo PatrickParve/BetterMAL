@@ -60,11 +60,15 @@
   padding: 8px 10px 0;
 }
 
+/* min-height reserves exactly two lines regardless of actual line count, so
+   a one-line title leaves blank space beneath it instead of pulling the
+   meta/chips/footer of that tile out of alignment with its row neighbours. */
 .series-extra-tile__title {
   color: var(--text-h);
   font-weight: 500;
   font-size: 13px;
   line-height: 1.3;
+  min-height: 2.6em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -119,6 +123,22 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Shared with SeriesEntryRow/SeriesTimeline so a rewatch count reads the
+   same way wherever it appears on the series page. */
+.series-rewatch-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--text);
+  opacity: 0.85;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 

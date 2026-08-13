@@ -155,7 +155,7 @@ public class SeriesService(
             series.IsPartial,
             series.IsTruncated,
             BuildScores(mainLineMembers, series.Members),
-            BuildStats(mainLineMembers, extraMembers, allAnime, mainLineAiredEpisodes),
+            BuildStats(mainLineMembers, extraMembers, allAnime, mainLineAiredEpisodes, airedEpisodesByAnimeId),
             mainLineMembers.Select(m => ToEntryDto(m, memberAnimeIds, airedEpisodesByAnimeId)).ToList(),
             extraMembers.Select(m => ToEntryDto(m, memberAnimeIds, airedEpisodesByAnimeId)).ToList());
     }
@@ -299,15 +299,18 @@ public class SeriesService(
 
     // --- Stats (3.3) ---
 
-    private static SeriesStatsDto BuildStats(
+    // Internal (not private) so tests can exercise the aired-count fallback
+    // and tied-stat computations directly against plain in-memory models,
+    // without standing up a database.
+    internal static SeriesStatsDto BuildStats(
         List<SeriesMember> mainLineMembers, List<SeriesMember> extraMembers, List<AnimeMetadata> allAnime,
-        int mainLineAiredEpisodes)
+        int mainLineAiredEpisodes, Dictionary<int, int?> airedEpisodesByAnimeId)
     {
         var mainLineAnime = mainLineMembers.Select(m => m.Anime).ToList();
         var extraAnime = extraMembers.Select(m => m.Anime).ToList();
 
-        var (mainEpisodes, mainRuntimeSeconds, hasUnknown) = EpisodesAndRuntime(mainLineAnime);
-        var (extraEpisodes, extraRuntimeSeconds, _) = EpisodesAndRuntime(extraAnime);
+        var (mainEpisodes, mainRuntimeSeconds, hasUnknown) = EpisodesAndRuntime(mainLineAnime, airedEpisodesByAnimeId);
+        var (extraEpisodes, extraRuntimeSeconds, _) = EpisodesAndRuntime(extraAnime, airedEpisodesByAnimeId);
 
         var myWatchedEpisodes = mainLineAnime.Sum(a => a.UserEntry?.EpisodesWatched ?? 0);
         var myWatchedSeconds = mainLineAnime.Sum(a => (long)(a.UserEntry?.EpisodesWatched ?? 0) * EpisodeSeconds(a));
@@ -330,6 +333,9 @@ public class SeriesService(
             // that (including two unranked entries) keep watch order, since
             // OrderBy is a stable sort over the already watch-ordered sequence.
             m => m.FavouriteRank ?? int.MaxValue);
+        var mostRewatchedIds = TiedTopIds(
+            orderedMembers.Where(m => m.Anime.UserEntry?.RewatchCount is > 0),
+            m => m.Anime.UserEntry!.RewatchCount);
 
         var studios = allAnime
             .Select(a => a.Studio)
@@ -362,6 +368,7 @@ public class SeriesService(
             gapToId,
             highestMalIds,
             highestMineIds,
+            mostRewatchedIds,
             studios,
             genres);
     }
@@ -395,10 +402,12 @@ public class SeriesService(
         return tied.Select(m => m.AnimeId).ToList();
     }
 
-    // An entry with an unknown TotalEpisodes contributes nothing to either
-    // total and flips HasUnknown, rather than guessing at episodes aired so
-    // far — the resulting total is always a true lower bound.
-    private static (int Episodes, long RuntimeSeconds, bool HasUnknown) EpisodesAndRuntime(List<AnimeMetadata> anime)
+    // An entry with an unknown TotalEpisodes still contributes its known
+    // aired-so-far count (0 when that's unknown too) and flips HasUnknown,
+    // so the resulting total is a tighter lower bound rather than dropping
+    // the entry entirely.
+    private static (int Episodes, long RuntimeSeconds, bool HasUnknown) EpisodesAndRuntime(
+        List<AnimeMetadata> anime, Dictionary<int, int?> airedEpisodesByAnimeId)
     {
         var episodes = 0;
         var runtimeSeconds = 0L;
@@ -409,6 +418,9 @@ public class SeriesService(
             if (a.TotalEpisodes is not { } total)
             {
                 hasUnknown = true;
+                var aired = airedEpisodesByAnimeId.GetValueOrDefault(a.Id) ?? 0;
+                episodes += aired;
+                runtimeSeconds += (long)aired * EpisodeSeconds(a);
                 continue;
             }
 

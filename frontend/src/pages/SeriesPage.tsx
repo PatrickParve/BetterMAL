@@ -12,11 +12,9 @@ import type {
 import { AiringProgressBar } from '../components/AiringProgressBar.tsx'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
-import { SeriesEntryRow } from '../components/SeriesEntryRow.tsx'
 import { SeriesExtraTile } from '../components/SeriesExtraTile.tsx'
 import { SeriesTimeline } from '../components/SeriesTimeline.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
-import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { mediaTypeLabel, pickDisplayTitle } from '../utils/anime.ts'
 import './SeriesPage.css'
@@ -330,7 +328,6 @@ export function SeriesPage() {
   const [rebuilding, setRebuilding] = useState(false)
   const [rebuildCount, setRebuildCount] = useState<number | null>(null)
   const { openEditor } = useEntryEditor()
-  const { hidden } = useScoreVisibility()
 
   // More-section collapse state, keyed by extras group. Initialised once
   // per mount from series.extras.length > 12 (design.md decision 5) via the
@@ -466,9 +463,16 @@ export function SeriesPage() {
   const myHighestEntries = stats.myHighestScoreAnimeIds
     .map((id) => findEntry(series, id))
     .filter((e): e is SeriesEntryDto => e !== undefined)
+  const mostRewatchedEntries = stats.mostRewatchedAnimeIds
+    .map((id) => findEntry(series, id))
+    .filter((e): e is SeriesEntryDto => e !== undefined)
 
   const extrasGroups = groupExtras(series.extras)
   const anyExtrasGroupOpen = extrasGroups.some((group, index) => !collapsedGroups[extrasGroupKey(group, index)])
+  // No group offers a collapse control once every extra is already Completed
+  // — there is nothing left worth hiding (design.md decision 6 of
+  // series-page-improvements).
+  const allExtrasCompleted = series.extras.length > 0 && series.extras.every((e) => e.entry?.status === 'Completed')
 
   function toggleAllExtrasGroups() {
     const nextCollapsed = anyExtrasGroupOpen
@@ -575,16 +579,17 @@ export function SeriesPage() {
         </div>
       </div>
 
-      <div className="series-page__rebuild-row">
-        <button type="button" className="series-page__rebuild" onClick={handleRebuild} disabled={rebuilding}>
-          {rebuilding ? (rebuildCount !== null ? `Rebuilding… ${rebuildCount} entries` : 'Rebuilding…') : 'Rebuild'}
-        </button>
-        {series.isPartial && <span className="series-page__notice">Some entries couldn't be loaded yet.</span>}
-        {series.isTruncated && <span className="series-page__notice">This series was too large to show in full.</span>}
-      </div>
-
       <section className="series-box">
-        <h2>Series stats</h2>
+        <div className="series-page__stats-header">
+          <h2>Series stats</h2>
+          <div className="series-page__rebuild-row">
+            <button type="button" className="series-page__rebuild" onClick={handleRebuild} disabled={rebuilding}>
+              {rebuilding ? (rebuildCount !== null ? `Rebuilding… ${rebuildCount} entries` : 'Rebuilding…') : 'Rebuild'}
+            </button>
+            {series.isPartial && <span className="series-page__notice">Some entries couldn't be loaded yet.</span>}
+            {series.isTruncated && <span className="series-page__notice">This series was too large to show in full.</span>}
+          </div>
+        </div>
         <dl className="series-page__stats-grid">
           <div>
             <dt>Main series episodes</dt>
@@ -625,10 +630,34 @@ export function SeriesPage() {
               <dt>Highest MAL score</dt>
               <dd>
                 <ul className="series-page__tie-list">
-                  {highestMalEntries.map((entry) => (
+                  {highestMalEntries.map((entry) => {
+                    const revealed = isCompletedAndScored(entry)
+                    return (
+                      <li key={entry.animeId}>
+                        {revealed ? (
+                          <>
+                            <Link to={`/anime/${entry.animeId}`}>{pickDisplayTitle(entry.title, entry.englishTitle)}</Link>{' '}
+                            · <ScoreValue value={entry.malScore} completed={revealed} />
+                          </>
+                        ) : (
+                          <span className="series-page__tie-list-placeholder">Not yet watched</span>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </dd>
+            </div>
+          )}
+          {mostRewatchedEntries.length > 0 && (
+            <div>
+              <dt>Most rewatched</dt>
+              <dd>
+                <ul className="series-page__tie-list">
+                  {mostRewatchedEntries.map((entry) => (
                     <li key={entry.animeId}>
                       <Link to={`/anime/${entry.animeId}`}>{pickDisplayTitle(entry.title, entry.englishTitle)}</Link>{' '}
-                      · <ScoreValue value={entry.malScore} completed={isCompletedAndScored(entry)} />
+                      · ×{entry.entry?.rewatchCount}
                     </li>
                   ))}
                 </ul>
@@ -691,37 +720,33 @@ export function SeriesPage() {
 
       {series.mainLine.length > 0 && (
         <section className="series-box">
-          <h2>Timeline</h2>
-          <SeriesTimeline
-            entries={series.mainLine}
-            hidden={hidden}
-            longestGapDays={stats.longestGapDays}
-            longestGapFromAnimeId={stats.longestGapFromAnimeId}
-            longestGapToAnimeId={stats.longestGapToAnimeId}
-          />
+          <h2>Main series</h2>
+          <SeriesTimeline entries={series.mainLine} onEdit={handleEdit} />
         </section>
       )}
-
-      <section className="series-box">
-        <h2>Main series</h2>
-        <ol className="series-page__list">
-          {series.mainLine.map((entry, index) => (
-            <SeriesEntryRow key={entry.animeId} entry={entry} rank={index + 1} onEdit={handleEdit} />
-          ))}
-        </ol>
-      </section>
 
       {series.extras.length > 0 && (
         <section className="series-box">
           <div className="series-page__more-header">
             <h2>More</h2>
-            <button type="button" className="series-page__toggle-all" onClick={toggleAllExtrasGroups}>
-              {anyExtrasGroupOpen ? 'Collapse all' : 'Expand all'}
-            </button>
+            {!allExtrasCompleted && (
+              <button type="button" className="series-page__toggle-all" onClick={toggleAllExtrasGroups}>
+                {extrasGroups.length > 1
+                  ? anyExtrasGroupOpen
+                    ? 'Collapse all'
+                    : 'Expand all'
+                  : anyExtrasGroupOpen
+                    ? 'Collapse'
+                    : 'Expand'}
+              </button>
+            )}
           </div>
           {extrasGroups.map((group, index) => {
             const key = extrasGroupKey(group, index)
-            const isCollapsed = collapsedGroups[key] ?? false
+            // Every group renders fully expanded once every extra is
+            // Completed — the stored collapsedGroups state (including the
+            // >12-extras auto-collapse) is simply not consulted then.
+            const isCollapsed = !allExtrasCompleted && (collapsedGroups[key] ?? false)
             const groupId = `series-extras-${key}`
             // Collapsing never hides an entry I've actually watched or
             // completed — only the untouched ones fold away.
@@ -730,18 +755,24 @@ export function SeriesPage() {
             return (
               <div key={key} className="series-page__extras-group">
                 <h3>
-                  <button
-                    type="button"
-                    className="series-page__extras-group-toggle"
-                    aria-expanded={!isCollapsed}
-                    aria-controls={groupId}
-                    onClick={() => toggleExtrasGroup(key)}
-                  >
-                    <span className="series-page__extras-group-caret" aria-hidden="true">
-                      {isCollapsed ? '▸' : '▾'}
+                  {allExtrasCompleted ? (
+                    <span className="series-page__extras-group-label">
+                      {mediaTypeLabel(group.mediaType)} ({group.items.length})
                     </span>
-                    {mediaTypeLabel(group.mediaType)} ({group.items.length})
-                  </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="series-page__extras-group-toggle"
+                      aria-expanded={!isCollapsed}
+                      aria-controls={groupId}
+                      onClick={() => toggleExtrasGroup(key)}
+                    >
+                      <span className="series-page__extras-group-caret" aria-hidden="true">
+                        {isCollapsed ? '▸' : '▾'}
+                      </span>
+                      {mediaTypeLabel(group.mediaType)} ({group.items.length})
+                    </button>
+                  )}
                 </h3>
                 {visibleItems.length > 0 && (
                   <ul id={groupId} className="series-page__extras-grid">

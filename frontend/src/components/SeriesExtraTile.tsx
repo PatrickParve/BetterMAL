@@ -51,6 +51,11 @@ export function SeriesExtraTile({ entry, onEdit }: SeriesExtraTileProps) {
         <span className="series-extra-tile__status">
           {entry.entry ? STATUS_LABELS[entry.entry.status] : 'Not in list'}
           {watched && ` · ${watched}`}
+          {!!entry.entry?.rewatchCount && (
+            <span className="series-rewatch-badge" title={`Rewatched ${entry.entry.rewatchCount} times`}>
+              ↻ {entry.entry.rewatchCount}
+            </span>
+          )}
         </span>
         <button type="button" className="series-extra-tile__edit" onClick={() => onEdit(entry)}>
           {entry.entry ? 'Edit' : 'Add'}

@@ -43,9 +43,10 @@ public record SeriesScoresDto(
     SeriesAverageDto MineAll);
 
 /// <summary>Series-wide stats (design.md decision 9). Episode/runtime totals
-/// count only members with a known <c>TotalEpisodes</c> — an entry with an
-/// unknown count contributes nothing and sets <c>HasUnknownEpisodeCounts</c>,
-/// so the total is always a true lower bound rather than a guess. My
+/// count every member: one with a known <c>TotalEpisodes</c> contributes it
+/// in full, one without contributes its known aired-so-far count instead
+/// (0 when that's unknown too) and sets <c>HasUnknownEpisodeCounts</c>, so
+/// the total is always a true lower bound rather than a guess. My
 /// progress (watched episodes/seconds, entries completed) is scoped to the
 /// main line only, matching "time left" being main-line runtime minus
 /// watched runtime. <c>MainLineAiredEpisodes</c> is summed over the same
@@ -55,9 +56,11 @@ public record SeriesScoresDto(
 /// nothing — so it can never exceed <c>MainLineEpisodeTotal</c>.
 /// <c>MainLineCompletedByMe</c> mirrors the frontend's
 /// <c>isGroupCompleted</c> convention over the main line (design.md decision
-/// 7). The highest-scored/favourite/studios/genres figures span every
-/// member, main line and extras alike; the highest-scored lists carry every
-/// tied entry rather than one arbitrary winner (design.md decision 8).</summary>
+/// 7). The highest-scored/most-rewatched/favourite/studios/genres figures
+/// span every member, main line and extras alike; the highest-scored and
+/// most-rewatched lists carry every tied entry rather than one arbitrary
+/// winner (design.md decision 8), and <c>MostRewatchedAnimeIds</c> is empty
+/// when no member has been rewatched at all.</summary>
 public record SeriesStatsDto(
     int MainLineEpisodeTotal,
     long MainLineRuntimeSeconds,
@@ -76,6 +79,7 @@ public record SeriesStatsDto(
     int? LongestGapToAnimeId,
     List<int> HighestMalScoreAnimeIds,
     List<int> MyHighestScoreAnimeIds,
+    List<int> MostRewatchedAnimeIds,
     List<string> Studios,
     List<string> Genres);
 

@@ -122,6 +122,22 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Shared with SeriesExtraTile/SeriesTimeline so a rewatch count reads the
+   same way wherever it appears on the series page. */
+.series-rewatch-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--text);
+  opacity: 0.85;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .series-entry-row__edit {
   font: inherit;
   font-size: 13px;
