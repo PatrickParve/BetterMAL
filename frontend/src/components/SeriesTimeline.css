@@ -4,14 +4,11 @@
   gap: 6px;
 }
 
-/* Padding on every side (not just the horizontal scroll axis) gives a
-   currently-airing card's box-shadow ring room to render in full before
-   this container's own clip edge — overflow-y: hidden, and overflow-x:
-   auto's matching ink-overflow clip on its axis, would otherwise cut the
-   ring off flush against the row, top/bottom always and left/right for
-   whichever card sits at that end of the row. scrollbar-width/
-   -webkit-scrollbar hide the horizontal scrollbar chrome without touching
-   scroll behaviour — the row still scrolls, it just doesn't show a track. */
+/* Padding on every side gives the row breathing room against the section
+   heading above and stops the first and last card butting against this
+   container's edge mid-scroll. scrollbar-width/-webkit-scrollbar hide the
+   horizontal scrollbar chrome without touching scroll behaviour — the row
+   still scrolls, it just doesn't show a track. */
 .series-timeline__scroll {
   overflow-x: auto;
   overflow-y: hidden;
@@ -61,60 +58,6 @@
 .series-timeline__card--undated {
   border-style: dashed;
   opacity: 0.9;
-}
-
-/* The airing cue is a ring, not a border thickness change — box-shadow
-   costs no layout, so it can never shift this card's contents relative to
-   its row neighbours the way growing a border would. The hard ring plus a
-   softer outer glow keeps the card unmissable regardless of poster colour,
-   and both persist through :hover/:focus-within so the existing accent
-   border reads as an inner purple edge inside the blue ring rather than
-   replacing it. */
-.series-timeline__card--airing {
-  /* Not overridden by :hover/:focus-within — the existing accent border
-     rule only touches border-color, so the ring persists through both
-     unchanged. Sized (blur + spread) to stay within
-     .series-timeline__scroll's 20px padding at the pulse's widest point,
-     so the ring is never clipped. */
-  box-shadow:
-    0 0 0 2px var(--mal),
-    0 0 10px 2px var(--mal-border);
-  animation: series-timeline-airing-pulse 2.4s ease-in-out infinite;
-}
-
-@keyframes series-timeline-airing-pulse {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 2px var(--mal),
-      0 0 10px 2px var(--mal-border);
-  }
-  50% {
-    box-shadow:
-      0 0 0 2px var(--mal),
-      0 0 15px 3px var(--mal-border);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .series-timeline__card--airing {
-    animation: none;
-  }
-}
-
-/* Visually hidden but still reachable by assistive tech — pairs with the
-   purely graphical airing ring above so a screen reader still announces
-   what the ring means. */
-.series-timeline__sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 .series-timeline__card-link {
@@ -193,6 +136,17 @@
   font-size: 10px;
   line-height: 1.5;
   color: var(--text);
+}
+
+.series-timeline__airing-tag {
+  display: inline-block;
+  padding: 0 4px;
+  border: 1px solid var(--airing-border);
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--airing);
+  background: var(--airing-bg);
 }
 
 .series-timeline__fill-track {

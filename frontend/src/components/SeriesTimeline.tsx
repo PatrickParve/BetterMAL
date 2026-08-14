@@ -17,15 +17,16 @@ const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep
 // dropped from the start ("Apr – Jun 2013"), a year that isn't shared is
 // spelled out on both ends ("Oct 2013 – Mar 2014"), an entry confined to one
 // month collapses to that single month/year rather than repeating it, and a
-// still-airing entry reads as running to "ongoing" rather than inventing an
-// end date.
+// still-airing entry returns its start month/year alone — the Airing label
+// TimelineCard renders alongside it completes the line rather than inventing
+// an end date.
 function formatAirRange(entry: SeriesEntryDto): string {
   const start = new Date(entry.airedFrom!)
   const startMonth = MONTH_ABBR[start.getUTCMonth()]
   const startYear = start.getUTCFullYear()
 
   if (entry.airingStatus === 'currently_airing') {
-    return `${startMonth} ${startYear} – ongoing`
+    return `${startMonth} ${startYear}`
   }
   if (!entry.airedTo) {
     return `${startMonth} ${startYear}`
@@ -78,7 +79,7 @@ function TimelineCard({ entry, onEdit }: { entry: SeriesEntryDto; onEdit: (entry
 
   return (
     <div
-      className={`series-timeline__card${airing ? ' series-timeline__card--airing' : ''}${undated ? ' series-timeline__card--undated' : ''}`}
+      className={`series-timeline__card${undated ? ' series-timeline__card--undated' : ''}`}
     >
       <Link to={`/anime/${entry.animeId}`} className="series-timeline__card-link">
         {entry.pictureUrl ? (
@@ -94,8 +95,19 @@ function TimelineCard({ entry, onEdit }: { entry: SeriesEntryDto; onEdit: (entry
             <span className="series-timeline__card-meta-line">
               {mediaTypeLabel(entry.mediaType)} · {total ?? '?'} ep
             </span>
-            <span className="series-timeline__card-meta-line" title={airRange ?? undefined}>
-              {undated ? <span className="series-timeline__no-date-tag">No air date</span> : airRange}
+            <span
+              className="series-timeline__card-meta-line"
+              title={airing ? `${airRange} · Currently airing` : (airRange ?? undefined)}
+            >
+              {undated ? (
+                <span className="series-timeline__no-date-tag">No air date</span>
+              ) : airing ? (
+                <>
+                  {airRange} · <span className="series-timeline__airing-tag">Airing</span>
+                </>
+              ) : (
+                airRange
+              )}
             </span>
           </span>
         </span>
@@ -124,9 +136,6 @@ function TimelineCard({ entry, onEdit }: { entry: SeriesEntryDto; onEdit: (entry
           {entry.entry ? 'Edit' : 'Add'}
         </button>
       </div>
-      {/* The ring is purely graphical chrome, so a currently-airing card
-          needs an accessible-text equivalent naming what it means. */}
-      {airing && <span className="series-timeline__sr-only">Currently airing</span>}
     </div>
   )
 }

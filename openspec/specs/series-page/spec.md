@@ -429,13 +429,15 @@ The series page SHALL present the main line as one chronological list of cards, 
 
 Every card SHALL be the same fixed size regardless of how long that entry ran, and every pair of adjacent cards SHALL be separated by the same fixed spacing regardless of how long the real wait between them was — a variable-width, aspect-ratio-locked poster reads as inconsistent image sizing rather than as a duration or gap signal, so neither a card's width nor the space around it varies with real elapsed time.
 
-Elapsed time on a card SHALL be stated in words rather than implied by position on a scale the cards do not have. There SHALL NOT be a year ruler above the cards, and there SHALL NOT be a connector or any other element between cards stating the wait between them. Instead, each dated card SHALL state its own air range — the month and year it started and the month and year it ended — abbreviating to a single date for an entry that aired on one day, and reading as ongoing for an entry that is still broadcasting.
+Elapsed time on a card SHALL be stated in words rather than implied by position on a scale the cards do not have. There SHALL NOT be a year ruler above the cards, and there SHALL NOT be a connector or any other element between cards stating the wait between them. Instead, each dated card SHALL state its own air range — the month and year it started and the month and year it ended — abbreviating to a single date for an entry that aired on one day. A dated entry that is still broadcasting SHALL state its start month and year and SHALL be marked as still running by its airing indicator rather than by an invented end date.
 
 A calendar year in which no main-line entry aired SHALL never be presented anywhere on the timeline.
 
 Each card SHALL show its picture, title, media type, air range (or an explicit no-date indicator for an entry with none), episode count, my list status, and SHALL link to that anime's detail page and offer an edit control that opens the app's shared entry editor. A card's title SHALL reserve the same vertical space regardless of whether it wraps to one line or two, and a card's air range and episode count SHALL each occupy the same reserved space on every card whatever their content, so no card's layout falls out of alignment with its row neighbours. A card for a currently-airing entry SHALL carry a distinct "airing" indicator rather than restating in text how many episodes have broadcast so far, since that count is already shown as a graphical fill on the card. A card for an entry I have started but not completed SHALL additionally state my watched episode count against that entry's total. A card SHALL show its entry's rewatch count when it is greater than zero.
 
-The airing indicator SHALL be a ring around the whole card, drawn in the page's broadcast colour, and SHALL NOT be a badge or label drawn over the poster art — a mark over the artwork can be camouflaged by a poster of a similar colour, while card chrome cannot. The ring SHALL remain visible while the card is hovered or focused, SHALL NOT change the card's size or shift its contents relative to any other card, and SHALL be accompanied by accessible text naming the card as currently airing, since the visible cue is purely graphical. Any animation of the ring SHALL be suppressed when the viewer has asked for reduced motion. The ring SHALL render in full on every side of the card, regardless of the card's position in the row — the timeline's own scrolling container SHALL NOT clip any part of it.
+The airing indicator SHALL name the state in words — a label reading "airing" — rather than relying on chrome alone to carry the meaning, and SHALL be drawn in the page's airing colour rather than in its broadcast colour, so a currently-airing card can never read as a card that is merely selected or focused. It SHALL sit inline in the card's air-range line, in the same position an undated card's no-date indicator occupies, and SHALL NOT be drawn over the poster art — a mark over the artwork can be camouflaged by a poster of a similar colour, while card chrome cannot. Because the indicator is real text, it SHALL be announced by assistive technology without a separate visually-hidden equivalent.
+
+The currently-airing card SHALL additionally be marked at card level by rendering its existing border in the page's airing colour. That card-level mark SHALL NOT surround the card with a glow, SHALL NOT pulse or otherwise animate, and SHALL NOT change the card's size or shift its contents relative to any other card — so it needs no extra room outside the card, and the timeline's own scrolling container cannot clip it. The airing indicator itself SHALL remain visible while the card is hovered or focused; the card-level border MAY take the same hover and focus treatment as any other card, since the indicator and not the border carries the meaning.
 
 Timeline cards SHALL NOT carry a status-coloured edge or border; my list status on a card SHALL be conveyed by its footer text alone. Card chrome SHALL therefore vary only to mark an entry as currently airing or as having no air date, so a coloured card reads unambiguously as one of those two things rather than as one of several list statuses.
 
@@ -459,29 +461,33 @@ The timeline SHALL scroll within its own container when it does not fit, rather 
 - **WHEN** a main-line entry aired from April 2013 to June 2013
 - **THEN** its card states that range rather than a bare start year
 
-#### Scenario: A still-airing card's range reads as ongoing
+#### Scenario: A still-airing card states its start and is marked as airing
 - **WHEN** a main-line entry started in April 2026 and is still broadcasting
-- **THEN** its card's air range reads as running from April 2026 and ongoing, with no invented end date
+- **THEN** its card's air-range line states April 2026 followed by the airing indicator, with no invented end date
 
 #### Scenario: A multi-year gap is never presented as labelled empty years
 - **WHEN** a series has a two-year stretch with nothing airing between two seasons
 - **THEN** neither of those years appears anywhere on the timeline
 
-#### Scenario: An airing card is ringed rather than badged
+#### Scenario: An airing card is labelled rather than badged over its poster
 - **WHEN** a main-line entry is currently airing
-- **THEN** its card is ringed in the page's broadcast colour, no airing badge is drawn over its poster, and its episode count reads as its total rather than restating in text how many have broadcast so far
+- **THEN** its card carries an "airing" label in the page's airing colour within its air-range line, no airing badge is drawn over its poster, and its episode count reads as its total rather than restating in text how many have broadcast so far
 
-#### Scenario: The airing ring survives hover
+#### Scenario: The airing card is not made to look selected
+- **WHEN** a main-line entry is currently airing and no card is hovered, focused, or otherwise selected
+- **THEN** its card carries no glow around it and nothing on it animates, and its card-level mark is its own border drawn in the airing colour rather than in the page's broadcast colour
+
+#### Scenario: The airing indicator survives hover
 - **WHEN** I hover a currently-airing card
-- **THEN** its ring is still visible, and neither the card's size nor the position of its contents changes
+- **THEN** its airing label is still visible, and neither the card's size nor the position of its contents changes
 
-#### Scenario: The airing ring is named for assistive tech
+#### Scenario: The airing indicator is read as text
 - **WHEN** a currently-airing card is read by a screen reader
-- **THEN** it is announced as currently airing, rather than the ring being the only indication
+- **THEN** it is announced as airing from the card's own visible text, with no separate visually-hidden duplicate of that announcement
 
-#### Scenario: The airing ring is never clipped
+#### Scenario: The airing indicator is never clipped
 - **WHEN** a currently-airing entry's card is the first or last card in the row
-- **THEN** its ring still renders in full on every side, uncut by the timeline's own scrolling container
+- **THEN** its airing label and its coloured border both render in full, uncut by the timeline's own scrolling container
 
 #### Scenario: A long timeline scrolls without a visible scrollbar
 - **WHEN** a series has enough main-line entries that the row overflows its container
@@ -518,11 +524,17 @@ The timeline SHALL scroll within its own container when it does not fit, rather 
 ### Requirement: Score and progress colour language
 The series page SHALL use one colour convention throughout: MAL's figures and broadcast progress SHALL use the app's blue — the colour the airing-progress bar already fills with for episodes aired — and my own figures and my watched progress SHALL use the app's purple accent. This SHALL apply to the score averages, the per-entry score bars on the timeline, and the progress fills alike, so which side of a figure is "the world" and which is "me" is readable without labels.
 
+The page SHALL additionally use green to mark that something is on air right now. Green SHALL mark that state only — it SHALL NOT be used for any figure, score, or progress fill, so it never competes with blue-for-MAL/broadcast or purple-for-mine. Broadcast progress on a currently-airing card SHALL therefore stay blue while the card's airing indicator is green: blue measures how much has broadcast, green says it is still broadcasting.
+
 The score averages SHALL be rendered as compact chips within the header rather than as full-width panels, each naming what it averages, its value, and the count it was computed over, and each honouring its existing reveal rules under the hide-scores toggle.
 
 #### Scenario: MAL and my averages are colour-keyed
 - **WHEN** I open a series
 - **THEN** the MAL average chips carry the same colour as the aired fill of the progress bar, and my average chips carry the same colour as my watched fill
+
+#### Scenario: Green marks airing and nothing else
+- **WHEN** I open a series whose latest season is currently airing
+- **THEN** that card's airing indicator is green, while its broadcast fill stays the page's blue and its score chips stay blue and purple
 
 #### Scenario: Averages sit in the header
 - **WHEN** I open a series

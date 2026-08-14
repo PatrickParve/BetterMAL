@@ -3,17 +3,22 @@
   flex-direction: column;
   gap: 24px;
   /* Page-scoped colour language (design.md decision 4): blue is MAL/broadcast,
-     purple is me. Aliased rather than used raw so the two can diverge from
-     --status-completed/--accent later without touching every rule that means
-     "MAL" or "mine". Declared here rather than on :root so the blast radius
-     stays this page — --status-completed still means "Completed status"
-     everywhere else, including SeriesEntryRow's left-border stripe. */
+     purple is me, green is "on air now". Aliased rather than used raw so the
+     three can diverge from --status-completed/--accent/--status-watching
+     later without touching every rule that means "MAL", "mine", or "airing".
+     Declared here rather than on :root so the blast radius stays this page —
+     --status-completed still means "Completed status" everywhere else,
+     including SeriesEntryRow's left-border stripe, and --status-watching
+     still means "Watching status" there too. */
   --mal: var(--status-completed);
   --mal-bg: var(--status-completed-bg);
   --mal-border: var(--status-completed-border);
   --mine: var(--accent);
   --mine-bg: var(--accent-bg);
   --mine-border: var(--accent-border);
+  --airing: var(--status-watching);
+  --airing-bg: var(--status-watching-bg);
+  --airing-border: var(--status-watching-border);
 }
 
 .series-page__header {
