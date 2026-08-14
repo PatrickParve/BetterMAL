@@ -4,94 +4,53 @@
   gap: 6px;
 }
 
-/* Shares the exact same fixed per-card width as .series-timeline__row below
-   it (built from the same segment list, CARD_WIDTH/CARD_MARGIN in the TSX),
-   so it scrolls in lockstep and each year lands exactly where that year
-   falls on its card, rather than being two fixed endpoints floating above a
-   row that scrolls independently. padding-top plus a touch of extra height
-   keeps a label's line box from ever brushing .series-timeline__scroll's own
-   top edge, where its overflow-y: hidden would otherwise clip a couple of
-   pixels off the top of the glyphs. */
-.series-timeline__axis {
-  display: flex;
-  min-width: 100%;
-  height: 20px;
-  padding-top: 3px;
-  margin-bottom: 4px;
-  font-size: 11px;
-  line-height: 1;
-  color: var(--text);
-  opacity: 0.6;
-}
-
-.series-timeline__axis-segment {
-  position: relative;
-  flex: 0 0 auto;
-  width: 168px;
-  margin: 0 6px;
-}
-
-/* Nudged slightly left of the position it marks, like a ruler tick sitting
-   just before the region it labels, rather than flush against its first
-   pixel. */
-.series-timeline__axis-year {
-  position: absolute;
-  top: 0;
-  transform: translateX(-4px);
-  white-space: nowrap;
-}
-
+/* Padding on every side (not just the horizontal scroll axis) gives a
+   currently-airing card's box-shadow ring room to render in full before
+   this container's own clip edge — overflow-y: hidden, and overflow-x:
+   auto's matching ink-overflow clip on its axis, would otherwise cut the
+   ring off flush against the row, top/bottom always and left/right for
+   whichever card sits at that end of the row. scrollbar-width/
+   -webkit-scrollbar hide the horizontal scrollbar chrome without touching
+   scroll behaviour — the row still scrolls, it just doesn't show a track. */
 .series-timeline__scroll {
   overflow-x: auto;
   overflow-y: hidden;
+  padding: 20px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.series-timeline__scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .series-timeline__row {
   display: flex;
   align-items: stretch;
-  gap: 0;
+  gap: 12px;
   min-width: 100%;
 }
 
 /* Fixed size rather than flex-grow-by-duration — a variable-width,
    aspect-ratio-locked poster read as "some posters are just bigger" rather
    than as a duration signal, so every card (dated or not) is now the same
-   size, evenly spaced by a plain margin. The wait between two seasons is
-   carried by the year ruler above, not by card width or gap size. */
+   size, evenly spaced by a plain fixed gap. Elapsed time is carried by each
+   card's own air-range text, not by card width, gap size, or a coloured
+   edge. */
 .series-timeline__card {
   position: relative;
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
   width: 168px;
-  margin: 0 6px;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-left: 4px solid var(--border);
   border-radius: 8px;
 }
 
 .series-timeline__card:hover,
 .series-timeline__card:focus-within {
-  border-top-color: var(--accent-border);
-  border-right-color: var(--accent-border);
-  border-bottom-color: var(--accent-border);
-}
-
-.series-timeline__card--watching {
-  border-left-color: var(--status-watching);
-}
-.series-timeline__card--completed {
-  border-left-color: var(--status-completed);
-}
-.series-timeline__card--plantowatch {
-  border-left-color: var(--status-plantowatch);
-}
-.series-timeline__card--onhold {
-  border-left-color: var(--status-onhold);
-}
-.series-timeline__card--dropped {
-  border-left-color: var(--status-dropped);
+  border-color: var(--accent-border);
 }
 
 /* No-date treatment (design.md decision 3 of series-page-improvements): a
@@ -102,6 +61,60 @@
 .series-timeline__card--undated {
   border-style: dashed;
   opacity: 0.9;
+}
+
+/* The airing cue is a ring, not a border thickness change — box-shadow
+   costs no layout, so it can never shift this card's contents relative to
+   its row neighbours the way growing a border would. The hard ring plus a
+   softer outer glow keeps the card unmissable regardless of poster colour,
+   and both persist through :hover/:focus-within so the existing accent
+   border reads as an inner purple edge inside the blue ring rather than
+   replacing it. */
+.series-timeline__card--airing {
+  /* Not overridden by :hover/:focus-within — the existing accent border
+     rule only touches border-color, so the ring persists through both
+     unchanged. Sized (blur + spread) to stay within
+     .series-timeline__scroll's 20px padding at the pulse's widest point,
+     so the ring is never clipped. */
+  box-shadow:
+    0 0 0 2px var(--mal),
+    0 0 10px 2px var(--mal-border);
+  animation: series-timeline-airing-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes series-timeline-airing-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px var(--mal),
+      0 0 10px 2px var(--mal-border);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px var(--mal),
+      0 0 15px 3px var(--mal-border);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .series-timeline__card--airing {
+    animation: none;
+  }
+}
+
+/* Visually hidden but still reachable by assistive tech — pairs with the
+   purely graphical airing ring above so a screen reader still announces
+   what the ring means. */
+.series-timeline__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .series-timeline__card-link {
@@ -127,20 +140,6 @@
   border-bottom: 1px solid var(--border);
 }
 
-.series-timeline__airing-badge {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 1;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--status-watching-bg);
-  border: 1px solid var(--status-watching-border);
-  color: var(--status-watching);
-  font-size: 10px;
-  font-weight: 600;
-}
-
 .series-timeline__card-body {
   display: flex;
   flex-direction: column;
@@ -163,12 +162,22 @@
   overflow: hidden;
 }
 
-/* Always exactly one line — combined with the title's reserved two lines,
-   this keeps every card's content the same height above the footer, so
-   .series-timeline__card-footer's margin-top: auto never has to absorb a
-   different amount of leftover space from one card to the next. */
+/* Two fixed single lines — type/episodes, then the air range (or the
+   no-date indicator) — rather than one combined line, so a card's own air
+   range has somewhere to live without pushing onto a second row. Combined
+   with the title's reserved two lines, this keeps every card's content the
+   same height above the footer, so .series-timeline__card-footer's
+   margin-top: auto never has to absorb a different amount of leftover space
+   from one card to the next. */
 .series-timeline__card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.series-timeline__card-meta-line {
   font-size: 11px;
+  line-height: 1.4;
   color: var(--text);
   opacity: 0.75;
   white-space: nowrap;

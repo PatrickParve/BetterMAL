@@ -173,7 +173,7 @@ When I have watching progress on that anime — episodes watched greater than ze
 
 When an episode is incremented elsewhere on the home page for an anime that also appears in this section, that anime's purple fill here SHALL update to match without a page reload.
 
-This bar SHALL apply only to the home page's followed-shows-airing section. The watched/total progress bar SHALL remain unchanged everywhere else it is used, including My List, the anime detail page, and the currently-watching carousel.
+This bar — the `aired/total`-labelled bar specified here, with no editable count — SHALL apply only to the home page's followed-shows-airing section. Broadcast progress itself is not exclusive to this section: the anime detail page draws its own aired fill behind my watched fill while an anime is currently airing, per the anime-detail capability, and the series page does the same for its own progress figures. The watched/total progress bar SHALL remain unchanged everywhere else it is used, including My List and the currently-watching carousel.
 
 #### Scenario: Filtering current season
 - **WHEN** I choose a sort/filter (popularity, MAL score, alphabetical, or my score)
@@ -260,8 +260,12 @@ This bar SHALL apply only to the home page's followed-shows-airing section. The 
 - **THEN** that anime's purple fill in the followed-shows-airing section grows to match, without a page reload
 
 #### Scenario: Other views keep the watched progress bar
-- **WHEN** I view My List, an anime detail page, or the currently-watching carousel
+- **WHEN** I view My List or the currently-watching carousel
 - **THEN** the episode bar there still shows watched/total with no aired fill and no purple overlay
+
+#### Scenario: The detail page draws its own aired fill
+- **WHEN** I open the detail page of a currently airing anime
+- **THEN** its progress bar shows an aired fill behind my watched fill, per the anime-detail capability, rather than this section's `aired/total`-labelled bar
 
 ### Requirement: Aired-episode count for followed airing shows
 The dashboard data for the followed-shows-airing section SHALL include, per anime, the number of episodes that have aired as of the current instant. The count SHALL be the highest episode number among that anime's stored per-episode airing rows whose air instant has passed. An episode SHALL be counted as aired only once its stored air instant has passed.

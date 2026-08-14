@@ -349,6 +349,7 @@ export function AnimeDetailPage() {
             <ProgressBar
               watched={detail.entry?.episodesWatched ?? 0}
               total={detail.totalEpisodes}
+              aired={detail.airingStatus === "currently_airing" ? detail.episodesAired : null}
               onIncrement={detail.entry ? handleIncrement : undefined}
               onSetWatched={detail.entry ? handleSetWatched : undefined}
               max={detail.episodesAired ?? detail.totalEpisodes}

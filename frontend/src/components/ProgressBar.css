@@ -9,13 +9,29 @@
   height: 5px;
   border-radius: 3px;
   background: var(--code-bg);
+  position: relative;
   overflow: hidden;
 }
 
+/* Absolutely positioned so it renders identically whether or not an aired
+   fill precedes it in the track — with no aired fill it's the only child and
+   fills the track exactly as a static block would; with one, it overlays the
+   aired fill from the left edge, matching AiringProgressBar's layering. */
 .progress-bar__fill {
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 100%;
   background: var(--accent);
   border-radius: inherit;
+}
+
+/* Broadcast progress, drawn behind the watched fill — same blue as the home
+   page's airing-progress bar. Not absolutely positioned: it sits in normal
+   flow so the watched fill above can overlay it from the left. */
+.progress-bar__fill--aired {
+  position: static;
+  background: var(--status-completed);
 }
 
 .progress-bar__label {

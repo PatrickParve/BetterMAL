@@ -429,9 +429,15 @@ The series page SHALL present the main line as one chronological list of cards, 
 
 Every card SHALL be the same fixed size regardless of how long that entry ran, and every pair of adjacent cards SHALL be separated by the same fixed spacing regardless of how long the real wait between them was — a variable-width, aspect-ratio-locked poster reads as inconsistent image sizing rather than as a duration or gap signal, so neither a card's width nor the space around it varies with real elapsed time.
 
-A year ruler SHALL run above the cards, scrolling together with them so a year's label stays aligned with the card it belongs to. The ruler SHALL label only a year in which some main-line entry actually aired; a year that falls entirely between two entries, with nothing airing, SHALL NOT be labelled, so the ruler never implies activity that did not happen. Each labelled year SHALL be positioned at the point on its own card where that year begins, so a season that itself spans several calendar years shows a label for each of those years across its own card, and a year whose boundary falls right as one season ends and the next begins is attributed to the earlier season's card rather than being duplicated or stranded between them. When no main-line entry has an air date, the ruler SHALL be omitted entirely.
+Elapsed time on a card SHALL be stated in words rather than implied by position on a scale the cards do not have. There SHALL NOT be a year ruler above the cards, and there SHALL NOT be a connector or any other element between cards stating the wait between them. Instead, each dated card SHALL state its own air range — the month and year it started and the month and year it ended — abbreviating to a single date for an entry that aired on one day, and reading as ongoing for an entry that is still broadcasting.
 
-Each card SHALL show its picture, title, media type, year (or an explicit no-date indicator for an entry with none), episode count, my list status, and SHALL link to that anime's detail page and offer an edit control that opens the app's shared entry editor. A card's title SHALL reserve the same vertical space regardless of whether it wraps to one line or two, so a short title does not throw the rest of that card's layout out of alignment with its row neighbours. A card for a currently-airing entry SHALL carry a distinct "airing" indicator rather than restating in text how many episodes have broadcast so far, since that count is already shown as a graphical fill on the card. A card for an entry I have started but not completed SHALL additionally state my watched episode count against that entry's total. A card SHALL show its entry's rewatch count when it is greater than zero.
+A calendar year in which no main-line entry aired SHALL never be presented anywhere on the timeline.
+
+Each card SHALL show its picture, title, media type, air range (or an explicit no-date indicator for an entry with none), episode count, my list status, and SHALL link to that anime's detail page and offer an edit control that opens the app's shared entry editor. A card's title SHALL reserve the same vertical space regardless of whether it wraps to one line or two, and a card's air range and episode count SHALL each occupy the same reserved space on every card whatever their content, so no card's layout falls out of alignment with its row neighbours. A card for a currently-airing entry SHALL carry a distinct "airing" indicator rather than restating in text how many episodes have broadcast so far, since that count is already shown as a graphical fill on the card. A card for an entry I have started but not completed SHALL additionally state my watched episode count against that entry's total. A card SHALL show its entry's rewatch count when it is greater than zero.
+
+The airing indicator SHALL be a ring around the whole card, drawn in the page's broadcast colour, and SHALL NOT be a badge or label drawn over the poster art — a mark over the artwork can be camouflaged by a poster of a similar colour, while card chrome cannot. The ring SHALL remain visible while the card is hovered or focused, SHALL NOT change the card's size or shift its contents relative to any other card, and SHALL be accompanied by accessible text naming the card as currently airing, since the visible cue is purely graphical. Any animation of the ring SHALL be suppressed when the viewer has asked for reduced motion. The ring SHALL render in full on every side of the card, regardless of the card's position in the row — the timeline's own scrolling container SHALL NOT clip any part of it.
+
+Timeline cards SHALL NOT carry a status-coloured edge or border; my list status on a card SHALL be conveyed by its footer text alone. Card chrome SHALL therefore vary only to mark an entry as currently airing or as having no air date, so a coloured card reads unambiguously as one of those two things rather than as one of several list statuses.
 
 Each card SHALL be filled to show how much of that entry I have watched, and SHALL show broadcast progress behind my own fill while that entry is airing.
 
@@ -439,27 +445,51 @@ Each card SHALL carry a paired score readout — MAL's score for that entry and 
 
 Main-line entries with no air date SHALL be shown in their correct watch-order position among the dated cards rather than set apart in their own lane, carrying an explicit no-date indicator so it reads unambiguously as dateless rather than as a dated card with missing information.
 
-The timeline SHALL scroll within its own container when it does not fit, rather than making the page scroll sideways.
+The timeline SHALL scroll within its own container when it does not fit, rather than making the page scroll sideways, and SHALL do so without showing a scrollbar — the row SHALL remain scrollable by drag, wheel, or trackpad, but SHALL NOT display a scrollbar track or thumb.
 
 #### Scenario: Main line in watch order
 - **WHEN** I open a series with four main-line entries
-- **THEN** they are shown in watch order on the timeline, each the same size, showing its picture, title, type, year, episodes, MAL score, my score, and my status
+- **THEN** they are shown in watch order on the timeline, each the same size, showing its picture, title, type, air range, episodes, MAL score, my score, and my status
 
 #### Scenario: Cards are the same size and evenly spaced regardless of duration
 - **WHEN** a series has one entry that ran for a single cour and another that ran continuously for several years
 - **THEN** both cards render at the same size, and the spacing between every pair of cards on the timeline is the same
 
-#### Scenario: A year with nothing airing is not labelled
+#### Scenario: A card states its own air range
+- **WHEN** a main-line entry aired from April 2013 to June 2013
+- **THEN** its card states that range rather than a bare start year
+
+#### Scenario: A still-airing card's range reads as ongoing
+- **WHEN** a main-line entry started in April 2026 and is still broadcasting
+- **THEN** its card's air range reads as running from April 2026 and ongoing, with no invented end date
+
+#### Scenario: A multi-year gap is never presented as labelled empty years
 - **WHEN** a series has a two-year stretch with nothing airing between two seasons
-- **THEN** neither of those two years appears on the year ruler
+- **THEN** neither of those years appears anywhere on the timeline
 
-#### Scenario: A year is attributed to the season that was airing
-- **WHEN** one season ends and the next begins within the same calendar year
-- **THEN** that year's label appears once, on the earlier season's card
-
-#### Scenario: An airing card is marked rather than captioned
+#### Scenario: An airing card is ringed rather than badged
 - **WHEN** a main-line entry is currently airing
-- **THEN** its card carries an airing indicator, and its episode count reads as its total rather than restating in text how many have broadcast so far
+- **THEN** its card is ringed in the page's broadcast colour, no airing badge is drawn over its poster, and its episode count reads as its total rather than restating in text how many have broadcast so far
+
+#### Scenario: The airing ring survives hover
+- **WHEN** I hover a currently-airing card
+- **THEN** its ring is still visible, and neither the card's size nor the position of its contents changes
+
+#### Scenario: The airing ring is named for assistive tech
+- **WHEN** a currently-airing card is read by a screen reader
+- **THEN** it is announced as currently airing, rather than the ring being the only indication
+
+#### Scenario: The airing ring is never clipped
+- **WHEN** a currently-airing entry's card is the first or last card in the row
+- **THEN** its ring still renders in full on every side, uncut by the timeline's own scrolling container
+
+#### Scenario: A long timeline scrolls without a visible scrollbar
+- **WHEN** a series has enough main-line entries that the row overflows its container
+- **THEN** the row can still be scrolled horizontally, but no scrollbar track is shown beneath it
+
+#### Scenario: Cards carry no status colour
+- **WHEN** I open a series with entries I am watching, have completed, and have dropped
+- **THEN** none of those cards carries a status-coloured edge, and each states its status in its footer text
 
 #### Scenario: A partly-watched card states my position
 - **WHEN** I have watched 5 episodes of a 24-episode entry and have not completed it
