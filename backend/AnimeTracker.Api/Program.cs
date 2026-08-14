@@ -97,6 +97,7 @@ builder.Services.AddSingleton<RefreshGate>();
 builder.Services.AddSingleton<IBroadcastLocalTimeConverter, BroadcastLocalTimeConverter>();
 
 // --- Search ---
+builder.Services.AddScoped<SeriesSearchLookup>();
 builder.Services.AddScoped<IAnimeSearchService, AnimeSearchService>();
 
 // --- Main dashboard ---
@@ -118,6 +119,11 @@ builder.Services.AddScoped<IEpisodeScheduleRefreshService, EpisodeScheduleRefres
 builder.Services.AddHostedService<EpisodeScheduleRefreshBackgroundService>();
 builder.Services.AddSingleton<IAiringRefreshTrigger, AiringRefreshTrigger>();
 builder.Services.AddHostedService<AiringRefreshTriggerBackgroundService>();
+
+// Background series build, scheduled from search when a top match has no
+// stored series yet (design.md decision 6) — same trigger shape as above.
+builder.Services.AddSingleton<ISeriesBuildTrigger, SeriesBuildTrigger>();
+builder.Services.AddHostedService<SeriesBuildTriggerBackgroundService>();
 
 // Manual "refresh all airing data" (settings page) — mirrors the corrective
 // MAL re-sync's trigger/progress-tracker/background-service shape.

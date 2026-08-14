@@ -8,6 +8,8 @@ type AnimeCardProps = {
   title: string
   englishTitle?: string | null
   pictureUrl?: string | null
+  /** Overrides the default `/anime/{animeId}` target — used by search's series cards, which link to the series page instead. */
+  to?: string
   /** Extra content shown below the title (progress bar, score, etc.) — rendered inside the link. */
   children?: ReactNode
   /** Interactive controls (e.g. an increment button) rendered outside the link so they don't trigger navigation. */
@@ -23,10 +25,10 @@ type AnimeCardProps = {
 // `actions` (absolute, top-right, outside the link), and `footer` (below the
 // link, outside it — never navigates). Callers compose page-specific content
 // via these.
-export function AnimeCard({ animeId, title, englishTitle, pictureUrl, children, actions, footer, className }: AnimeCardProps) {
+export function AnimeCard({ animeId, title, englishTitle, pictureUrl, to, children, actions, footer, className }: AnimeCardProps) {
   return (
     <div className={className ? `anime-card ${className}` : 'anime-card'}>
-      <Link to={`/anime/${animeId}`} className="anime-card__link">
+      <Link to={to ?? `/anime/${animeId}`} className="anime-card__link">
         {pictureUrl ? (
           <img src={pictureUrl} alt="" className="anime-card__picture" />
         ) : (

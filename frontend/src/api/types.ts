@@ -32,12 +32,30 @@ export type UserAnimeEntryEditRequest = {
   completedAt?: string | null
 }
 
-export type AnimeSearchResult = {
+// The dropdown's "series" row (design.md decision 5) — id is the series id,
+// rootAnimeId is the navigation target, entryCount covers every member.
+export type SeriesSearchResult = {
+  kind: 'series'
   id: number
   title: string
   englishTitle: string | null
   pictureUrl: string | null
+  rootAnimeId: number
+  entryCount: number
 }
+
+// Type-ahead dropdown row: discriminated on `kind` so series rows (pinned
+// first, capped at 2) and anime rows share one flat list — mirrors backend
+// AnimeSearchResultDto.
+export type AnimeSearchResult =
+  | {
+      kind: 'anime'
+      id: number
+      title: string
+      englishTitle: string | null
+      pictureUrl: string | null
+    }
+  | SeriesSearchResult
 
 // Everything the reusable entry editor overlay needs to render for one anime.
 // `entry` is null when the anime isn't in my list yet (add-to-list mode).
@@ -161,12 +179,25 @@ export type SeasonRefreshResultDto = {
   refreshed: boolean
 }
 
+// The results page's series row — separate shape from SeriesSearchResult
+// (no `kind`) since it rides in its own `series` array rather than a
+// discriminated `items` union (design.md decision 5).
+export type SeriesSearchResultDto = {
+  seriesId: number
+  rootAnimeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  entryCount: number
+}
+
 export type SearchPageDto = {
   query: string
   items: AnimeBrowseItemDto[]
   offset: number
   limit: number
   totalCount: number
+  series: SeriesSearchResultDto[]
 }
 
 export type MyListItemDto = {

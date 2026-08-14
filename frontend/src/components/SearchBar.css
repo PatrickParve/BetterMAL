@@ -91,3 +91,16 @@
   border-radius: 4px;
   flex-shrink: 0;
 }
+
+.search-bar__result-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.search-bar__result-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

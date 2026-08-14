@@ -352,7 +352,10 @@ function AnimeRefreshPicker() {
   const [refreshing, setRefreshing] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const { results, open, setOpen } = useAnimeSearch(query)
+  const { results: rawResults, open, setOpen } = useAnimeSearch(query)
+  // This picker refreshes a single anime's cached metadata — a series has no
+  // such target, so its rows are filtered out rather than offered here.
+  const results = rawResults.filter((result) => result.kind === 'anime')
 
   useClickOutside(containerRef, () => setOpen(false))
 

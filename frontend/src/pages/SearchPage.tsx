@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getSearchPage } from '../api/client.ts'
-import type { AnimeBrowseItemDto } from '../api/types.ts'
+import type { AnimeBrowseItemDto, SeriesSearchResultDto } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
+import { SeriesBadge } from '../components/SeriesBadge.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import './SearchPage.css'
@@ -12,6 +13,7 @@ type SortKey = 'relevance' | 'popularity' | 'malScore' | 'alphabetical' | 'mySco
 interface SearchReadState {
   items: AnimeBrowseItemDto[]
   totalCount: number
+  series: SeriesSearchResultDto[]
 }
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
@@ -57,14 +59,16 @@ export function SearchPage() {
   // handled below via `reload`, not a second key.
   const { data, loading, reload } = usePageData<SearchReadState>(`search:${q}`, () =>
     q.length === 0
-      ? Promise.resolve({ items: [], totalCount: 0 })
+      ? Promise.resolve({ items: [], totalCount: 0, series: [] })
       : getSearchPage(q, { sort, offset: 0, limit: CANDIDATE_LIMIT }).then((result) => ({
           items: result.items,
           totalCount: result.totalCount,
+          series: result.series,
         })),
   )
   const items = data?.items ?? []
   const totalCount = data?.totalCount ?? 0
+  const series = data?.series ?? []
   const [visibleCount, setVisibleCount] = useRestorableState('visibleCount', CHUNK_SIZE)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const reloadRef = useRef(reload)
@@ -132,10 +136,23 @@ export function SearchPage() {
 
       {q.length === 0 ? (
         <p className="search-page__empty">Enter a search term to begin.</p>
-      ) : items.length === 0 && !loading ? (
+      ) : items.length === 0 && series.length === 0 && !loading ? (
         <p className="search-page__empty">No anime found.</p>
       ) : (
         <div className="search-page__grid">
+          {series.map((s) => (
+            <AnimeCard
+              key={`series-${s.seriesId}`}
+              animeId={s.rootAnimeId}
+              title={s.title}
+              englishTitle={s.englishTitle}
+              pictureUrl={s.pictureUrl}
+              to={`/series/${s.rootAnimeId}`}
+              className="anime-card--fluid"
+            >
+              <SeriesBadge entryCount={s.entryCount} />
+            </AnimeCard>
+          ))}
           {visibleItems.map((item) => (
             <AnimeCard
               key={item.animeId}

@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAnimeSearch } from '../hooks/useAnimeSearch.ts'
 import { useClickOutside } from '../hooks/useClickOutside.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
+import { SeriesBadge } from './SeriesBadge.tsx'
 import './SearchBar.css'
 
 // Centered navbar type-ahead: debounced. Ranking (local cache merged with live
@@ -33,6 +34,12 @@ export function SearchBar() {
     navigate(`/anime/${id}`)
   }
 
+  function goToSeries(rootAnimeId: number) {
+    setOpen(false)
+    setQuery('')
+    navigate(`/series/${rootAnimeId}`)
+  }
+
   function submitSearch() {
     const q = query.trim()
     if (q.length === 0) return
@@ -60,14 +67,30 @@ export function SearchBar() {
       </button>
       {open && results.length > 0 && (
         <ul className="search-bar__dropdown">
-          {results.map((result) => (
-            <li key={result.id}>
-              <button type="button" className="search-bar__result" onClick={() => goToAnime(result.id)}>
-                {result.pictureUrl && <img src={result.pictureUrl} alt="" className="search-bar__thumb" />}
-                <span>{pickDisplayTitle(result.title, result.englishTitle)}</span>
-              </button>
-            </li>
-          ))}
+          {results.map((result) =>
+            result.kind === 'series' ? (
+              <li key={`series-${result.id}`}>
+                <button
+                  type="button"
+                  className="search-bar__result search-bar__result--series"
+                  onClick={() => goToSeries(result.rootAnimeId)}
+                >
+                  {result.pictureUrl && <img src={result.pictureUrl} alt="" className="search-bar__thumb" />}
+                  <span className="search-bar__result-text">
+                    <span className="search-bar__result-title">{pickDisplayTitle(result.title, result.englishTitle)}</span>
+                    <SeriesBadge entryCount={result.entryCount} />
+                  </span>
+                </button>
+              </li>
+            ) : (
+              <li key={`anime-${result.id}`}>
+                <button type="button" className="search-bar__result" onClick={() => goToAnime(result.id)}>
+                  {result.pictureUrl && <img src={result.pictureUrl} alt="" className="search-bar__thumb" />}
+                  <span>{pickDisplayTitle(result.title, result.englishTitle)}</span>
+                </button>
+              </li>
+            ),
+          )}
         </ul>
       )}
     </div>
