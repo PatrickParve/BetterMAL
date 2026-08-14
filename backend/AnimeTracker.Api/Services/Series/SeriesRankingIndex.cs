@@ -52,9 +52,15 @@ public sealed class SeriesRankingIndex
                 mainLine.Select(m => (m.AiringStatus, m.EntryStatus)));
             var malRevealed = mainLineCompletedByMe && !mainLineAiring;
 
+            // An announced main-line entry that hasn't started airing yet has
+            // no episodes out, so it shouldn't count toward "this is a
+            // multi-entry franchise" for the Top series filter — only
+            // currently_airing/finished_airing main-line members do.
+            var mainLineAiredCount = mainLine.Count(m => m.AiringStatus != "not_yet_aired");
+
             results.Add(new SeriesRankingResult(
                 group.Key, root.RootAnimeId, root.Title, root.EnglishTitle, root.PictureUrl,
-                members.Count, malAverage, mineAverage, malRevealed));
+                members.Count, mainLineAiredCount, malAverage, mineAverage, malRevealed));
         }
 
         return results;
@@ -62,7 +68,8 @@ public sealed class SeriesRankingIndex
 }
 
 /// <summary>One series' worth of Top series data: display fields from the
-/// root member, its total member count (main line and extras), and its two
+/// root member, its total member count (main line and extras), its
+/// main-line count that has actually started airing, and its two
 /// main-series averages with the MAL reveal boolean (design.md decision
 /// 5).</summary>
 public sealed record SeriesRankingResult(
@@ -72,6 +79,7 @@ public sealed record SeriesRankingResult(
     string? EnglishTitle,
     string? PictureUrl,
     int EntryCount,
+    int MainLineAiredCount,
     SeriesAverageDto MalMain,
     SeriesAverageDto MineMain,
     bool MalRevealed);

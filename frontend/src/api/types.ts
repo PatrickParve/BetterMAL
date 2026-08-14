@@ -346,6 +346,7 @@ export type TopSeriesItemDto = {
   englishTitle: string | null
   pictureUrl: string | null
   entryCount: number
+  mainLineAiredCount: number
   malMain: SeriesAverageDto
   mineMain: SeriesAverageDto
   malRevealed: boolean

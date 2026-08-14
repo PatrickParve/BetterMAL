@@ -61,6 +61,12 @@
   border-color: var(--accent-border);
 }
 
+.profile-box__control--active {
+  color: var(--text-h);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
 .profile-stats {
   margin: 0;
   display: flex;

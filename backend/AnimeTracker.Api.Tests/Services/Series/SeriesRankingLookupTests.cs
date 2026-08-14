@@ -131,6 +131,26 @@ public class SeriesRankingLookupTests
     }
 
     [Fact]
+    public async Task MainLineAiredCount_ExcludesNotYetAiredMainLineMembers()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, malScore: 8.0, airingStatus: "finished_airing");
+        AddAnime(db, 101, airingStatus: "not_yet_aired"); // announced season 2, zero episodes out
+        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 1, animeId: 101, isMainLine: true, order: 1);
+        AddEntry(db, 100, WatchStatus.Completed, myScore: 9);
+        AddEntry(db, 101, WatchStatus.PlanToWatch, myScore: null);
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var series = Assert.Single(index.EligibleSeries());
+
+        Assert.Equal(2, series.EntryCount); // total membership still counts the not-yet-aired entry
+        Assert.Equal(1, series.MainLineAiredCount); // but it doesn't count as an aired main-line entry
+    }
+
+    [Fact]
     public async Task HasSeries_ReflectsStoredMembership()
     {
         using var db = CreateDb();

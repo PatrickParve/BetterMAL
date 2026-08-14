@@ -92,7 +92,8 @@ public class ProfileService(
     }
 
     private static TopSeriesItemDto ToTopSeriesItem(SeriesRankingResult s) =>
-        new(s.SeriesId, s.RootAnimeId, s.Title, s.EnglishTitle, s.PictureUrl, s.EntryCount, s.MalMain, s.MineMain, s.MalRevealed);
+        new(s.SeriesId, s.RootAnimeId, s.Title, s.EnglishTitle, s.PictureUrl, s.EntryCount, s.MainLineAiredCount,
+            s.MalMain, s.MineMain, s.MalRevealed);
 
     // Fire-and-forget: enqueues a bounded batch of my-list anime with no
     // stored series onto the existing background build queue, reusing the

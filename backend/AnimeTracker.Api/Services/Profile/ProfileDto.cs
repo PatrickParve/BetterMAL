@@ -68,7 +68,11 @@ public record RewatchedSectionDto(List<RewatchedEntryDto> Items, string MediaTyp
 /// decision 1), so the two surfaces can never disagree. <c>MalRevealed</c> is
 /// the server-computed "may this be shown under 'always show completed
 /// scores'" boolean (design.md decision 5) — the client passes it straight
-/// into ScoreValue's <c>completed</c> prop.</summary>
+/// into ScoreValue's <c>completed</c> prop. <c>MainLineAiredCount</c> is the
+/// main-line member count excluding entries that are announced but haven't
+/// started airing — a main-line sequel with zero episodes out doesn't make
+/// the franchise multi-entry yet, so the client's multi-entry filter reads
+/// this instead of <c>MalMain.TotalCount</c>/<c>MineMain.TotalCount</c>.</summary>
 public record TopSeriesItemDto(
     int SeriesId,
     int RootAnimeId,
@@ -76,6 +80,7 @@ public record TopSeriesItemDto(
     string? EnglishTitle,
     string? PictureUrl,
     int EntryCount,
+    int MainLineAiredCount,
     SeriesAverageDto MalMain,
     SeriesAverageDto MineMain,
     bool MalRevealed);

@@ -31,6 +31,14 @@ function topSeriesBasisValue(item: TopSeriesItemDto, basis: TopSeriesBasis): num
   return basis === 'mine' ? item.mineMain.value : item.malMain.value
 }
 
+// mainLineAiredCount is the main line minus any announced-but-not-yet-aired
+// entries — a second season with zero episodes out shouldn't make a series
+// read as multi-entry. malMain/mineMain.totalCount would over-count (they
+// include not-yet-aired members) and entryCount is main line plus extras.
+function mainLineEntryCount(item: TopSeriesItemDto): number {
+  return item.mainLineAiredCount
+}
+
 function topSeriesBasisScoredCount(item: TopSeriesItemDto, basis: TopSeriesBasis): number {
   return basis === 'mine' ? item.mineMain.scoredCount : item.malMain.scoredCount
 }
@@ -51,6 +59,13 @@ function rankTopSeries(items: TopSeriesItemDto[], basis: TopSeriesBasis): TopSer
       if (countDiff !== 0) return countDiff
       return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
     })
+}
+
+// A separate step from rankTopSeries (design.md decision 3) — filtering
+// never reorders the survivors, so "which series belong in this strip at
+// all" and "how they're ordered" stay independently readable.
+function filterMultiEntry(items: TopSeriesItemDto[]): TopSeriesItemDto[] {
+  return items.filter((item) => mainLineEntryCount(item) > 1)
 }
 
 // The tooltip carries only the "N of M scored" counts, never the averages
@@ -233,7 +248,9 @@ export function ProfilePage() {
     getTopSeriesSection,
   )
   const [topSeriesBasis, setTopSeriesBasis] = useRestorableState<TopSeriesBasis>('topSeriesBasis', 'mine')
+  const [topSeriesMultiOnly, setTopSeriesMultiOnly] = useRestorableState<boolean>('topSeriesMultiOnly', false)
   const rankedTopSeries = topSeries ? rankTopSeries(topSeries.items, topSeriesBasis) : []
+  const displayedTopSeries = topSeriesMultiOnly ? filterMultiEntry(rankedTopSeries) : rankedTopSeries
 
   const [showHistory, setShowHistory] = useState(false)
   const [showTopAnimeSelect, setShowTopAnimeSelect] = useState(false)
@@ -401,6 +418,16 @@ export function ProfilePage() {
       <section className="profile-box">
         <div className="profile-box__header-row">
           <h2>Top series</h2>
+          <button
+            type="button"
+            className={
+              topSeriesMultiOnly ? 'profile-box__control profile-box__control--active' : 'profile-box__control'
+            }
+            aria-pressed={topSeriesMultiOnly}
+            onClick={() => setTopSeriesMultiOnly(!topSeriesMultiOnly)}
+          >
+            Multi-entry only
+          </button>
         </div>
 
         <div className="profile-media-tabs" role="tablist" aria-label="Rank by">
@@ -431,9 +458,13 @@ export function ProfilePage() {
           <p className="profile-page__section-empty">
             None of your series have a {topSeriesBasis === 'mine' ? 'my-score' : 'MAL'} main-line average yet.
           </p>
+        ) : displayedTopSeries.length === 0 ? (
+          <p className="profile-page__section-empty">
+            The multi-entry filter left nothing to show. Switch it off to see single-entry series.
+          </p>
         ) : (
           <div className="top-series-strip" ref={topSeriesDragScroll.ref} {...topSeriesDragScroll.handlers}>
-            {rankedTopSeries.map((item) => (
+            {displayedTopSeries.map((item) => (
               <Link
                 key={item.seriesId}
                 to={`/series/${item.rootAnimeId}`}
