@@ -100,6 +100,9 @@ builder.Services.AddSingleton<IBroadcastLocalTimeConverter, BroadcastLocalTimeCo
 builder.Services.AddScoped<SeriesSearchLookup>();
 builder.Services.AddScoped<IAnimeSearchService, AnimeSearchService>();
 
+// --- Series ranking (Top series) ---
+builder.Services.AddScoped<SeriesRankingLookup>();
+
 // --- Main dashboard ---
 builder.Services.AddScoped<IMainDashboardService, MainDashboardService>();
 
@@ -130,6 +133,12 @@ builder.Services.AddHostedService<SeriesBuildTriggerBackgroundService>();
 builder.Services.AddSingleton<IAiringFullRefreshTrigger, AiringFullRefreshTrigger>();
 builder.Services.AddSingleton<IAiringFullRefreshProgressTracker, AiringFullRefreshProgressTracker>();
 builder.Services.AddHostedService<AiringFullRefreshBackgroundService>();
+
+// Manual "build all series from my list" (settings page) — mirrors the same
+// trigger/progress-tracker/background-service shape (design.md decision 6).
+builder.Services.AddSingleton<ISeriesBulkBuildTrigger, SeriesBulkBuildTrigger>();
+builder.Services.AddSingleton<ISeriesBulkBuildProgressTracker, SeriesBulkBuildProgressTracker>();
+builder.Services.AddHostedService<SeriesBulkBuildBackgroundService>();
 
 // --- Season browsing ---
 builder.Services.AddScoped<ISeasonBrowseService, SeasonBrowseService>();

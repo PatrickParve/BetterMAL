@@ -16,6 +16,15 @@ public interface IProfileService
     /// <see cref="GetProfileAsync"/>.</summary>
     Task<RewatchedSectionDto> GetRewatchedSectionAsync(string mediaType, CancellationToken ct = default);
 
+    /// <summary>The "Top series" section: every franchise with a member in my
+    /// list, each carrying both main-series averages computed the same way
+    /// the series page computes them (design.md decision 1/2), pre-ordered by
+    /// my average descending. Also schedules background builds for a bounded
+    /// batch of my-list anime that belong to no stored series yet (design.md
+    /// decision 6), so the ranking's coverage grows a little on every
+    /// read.</summary>
+    Task<TopSeriesSectionDto> GetTopSeriesSectionAsync(CancellationToken ct = default);
+
     /// <summary>Applies an edited tier order — as displayed under some scope,
     /// which may omit tier members that scope's filter hides — via the
     /// slot-preserving merge: every edited tier's full membership becomes

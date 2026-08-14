@@ -275,27 +275,10 @@ public class SeriesService(
 
     private static SeriesScoresDto BuildScores(List<SeriesMember> mainLineMembers, List<SeriesMember> allMembers) =>
         new(
-            MalMain: MalAverage(mainLineMembers),
-            MalAll: MalAverage(allMembers),
-            MineMain: MyAverage(mainLineMembers),
-            MineAll: MyAverage(allMembers));
-
-    private static SeriesAverageDto MalAverage(List<SeriesMember> members)
-    {
-        var scored = members.Where(m => m.Anime.MalScore is not null).Select(m => m.Anime.MalScore!.Value).ToList();
-        return new SeriesAverageDto(scored.Count > 0 ? scored.Average() : null, scored.Count, members.Count);
-    }
-
-    // MAL's score of 0 means "unscored", not a rating (design.md decision 8).
-    private static SeriesAverageDto MyAverage(List<SeriesMember> members)
-    {
-        var scored = members
-            .Select(m => m.Anime.UserEntry?.MyScore)
-            .Where(score => score is > 0)
-            .Select(score => (double)score!.Value)
-            .ToList();
-        return new SeriesAverageDto(scored.Count > 0 ? scored.Average() : null, scored.Count, members.Count);
-    }
+            MalMain: SeriesAverages.Mal(mainLineMembers.Select(m => m.Anime.MalScore)),
+            MalAll: SeriesAverages.Mal(allMembers.Select(m => m.Anime.MalScore)),
+            MineMain: SeriesAverages.Mine(mainLineMembers.Select(m => m.Anime.UserEntry?.MyScore)),
+            MineAll: SeriesAverages.Mine(allMembers.Select(m => m.Anime.UserEntry?.MyScore)));
 
     // --- Stats (3.3) ---
 
@@ -315,7 +298,8 @@ public class SeriesService(
         var myWatchedEpisodes = mainLineAnime.Sum(a => a.UserEntry?.EpisodesWatched ?? 0);
         var myWatchedSeconds = mainLineAnime.Sum(a => (long)(a.UserEntry?.EpisodesWatched ?? 0) * EpisodeSeconds(a));
         var entriesCompleted = mainLineAnime.Count(a => a.UserEntry?.Status == WatchStatus.Completed);
-        var mainLineCompletedByMe = MainLineCompletedByMe(mainLineAnime);
+        var mainLineCompletedByMe = SeriesAverages.MainLineCompletedByMe(
+            mainLineAnime.Select(a => (a.AiringStatus, a.UserEntry?.Status)));
 
         var (gapDays, gapFromId, gapToId) = LongestGap(mainLineAnime);
 
@@ -371,16 +355,6 @@ public class SeriesService(
             mostRewatchedIds,
             studios,
             genres);
-    }
-
-    // Every finished-airing main-line member is Completed in my list, and at
-    // least one such member exists — entries not yet aired or still airing
-    // don't count against it, since they can't be completed yet (design.md
-    // decision 7).
-    private static bool MainLineCompletedByMe(List<AnimeMetadata> mainLineAnime)
-    {
-        var finishedAiring = mainLineAnime.Where(a => a.AiringStatus == "finished_airing").ToList();
-        return finishedAiring.Count > 0 && finishedAiring.All(a => a.UserEntry?.Status == WatchStatus.Completed);
     }
 
     // Every member whose comparable key ties the maximum, in the order given

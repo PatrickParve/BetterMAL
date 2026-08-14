@@ -61,10 +61,10 @@ export function SeriesEntryRow({ entry, rank, onEdit }: SeriesEntryRowProps) {
           </span>
         </span>
       </Link>
-      <span className="series-entry-row__mal-score">
+      <span className="series-entry-row__mal-score score--mal">
         <ScoreValue value={entry.malScore} completed={entry.entry?.status === 'Completed'} />
       </span>
-      <span className="series-entry-row__my-score">{entry.entry?.myScore ?? '—'}</span>
+      <span className="series-entry-row__my-score score--mine">{entry.entry?.myScore ?? '—'}</span>
       <span className="series-entry-row__status">
         {entry.entry ? STATUS_LABELS[entry.entry.status] : 'Not in list'}
         {watched && <span className="series-entry-row__status-progress"> · {watched}</span>}

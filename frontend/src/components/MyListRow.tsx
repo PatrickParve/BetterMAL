@@ -70,7 +70,9 @@ export const MyListRow = memo(function MyListRow({
       </span>
       <span className="my-list-row__my-score">
         <select
-          className="my-list-row__score-select"
+          className={`my-list-row__score-select${
+            item.entry.myScore ? ' my-list-row__score-select--mine' : ''
+          }`}
           value={item.entry.myScore ?? 0}
           disabled={scorePending}
           onChange={(event) => onScoreChange(item, Number(event.target.value))}
@@ -84,7 +86,7 @@ export const MyListRow = memo(function MyListRow({
           ))}
         </select>
       </span>
-      <span className="my-list-row__mal-score">
+      <span className="my-list-row__mal-score score--mal">
         <ScoreValue value={item.malScore} completed={item.entry.status === 'Completed'} />
       </span>
       <button type="button" className="my-list-row__edit" onClick={() => onEdit(item)}>

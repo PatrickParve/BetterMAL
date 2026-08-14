@@ -43,6 +43,15 @@
   color: var(--text-h);
 }
 
+/* "Mine" role (design.md decision 9): a score I've actually set looks like
+   the score it sets. The unscored state ("No score") keeps the neutral
+   styling above — there's no score to colour. */
+.entry-editor__score-select.entry-editor__score-select--mine {
+  border-color: var(--mine-border);
+  background: var(--mine-bg);
+  color: var(--mine);
+}
+
 .entry-editor__dates {
   border: 1px solid var(--border);
   border-radius: 6px;

@@ -85,8 +85,8 @@ export function TopAnimePage() {
                   {pickDisplayTitle(item.title, item.englishTitle)}
                 </span>
               </Link>
-              <span className="top-anime-row__my-score">{item.entry?.myScore ?? '—'}</span>
-              <span className="top-anime-row__mal-score">
+              <span className="top-anime-row__my-score score--mine">{item.entry?.myScore ?? '—'}</span>
+              <span className="top-anime-row__mal-score score--mal">
                 <ScoreValue value={item.malScore} completed={item.entry?.status === 'Completed'} />
               </span>
               {item.entry ? (

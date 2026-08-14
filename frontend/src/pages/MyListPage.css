@@ -275,6 +275,7 @@
 
 .my-list-row__score-select {
   width: 100%;
+  box-sizing: border-box;
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -300,6 +301,21 @@
 .my-list-row__score-select:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* "Mine" role (design.md decision 9): a score I've actually set looks like
+   the score it sets. The unscored state (value 0, "—") keeps the neutral
+   styling above — there's no score to colour. */
+.my-list-row__score-select.my-list-row__score-select--mine {
+  border: 1px solid var(--mine-border);
+  background: var(--mine-bg);
+  color: var(--mine);
+}
+
+.my-list-row__score-select.my-list-row__score-select--mine:hover,
+.my-list-row__score-select.my-list-row__score-select--mine:focus-visible {
+  color: var(--mine);
+  background: var(--mine-bg);
 }
 
 .my-list-row__mal-score {

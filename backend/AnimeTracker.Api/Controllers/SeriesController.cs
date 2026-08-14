@@ -4,7 +4,10 @@ using Microsoft.AspNetCore.Mvc;
 namespace AnimeTracker.Api.Controllers;
 
 [ApiController]
-public class SeriesController(ISeriesService seriesService) : ControllerBase
+public class SeriesController(
+    ISeriesService seriesService,
+    ISeriesBulkBuildTrigger bulkBuildTrigger,
+    ISeriesBulkBuildProgressTracker bulkBuildProgress) : ControllerBase
 {
     /// <summary>Series page read, resolved from any member's anime id —
     /// builds or refreshes the series first when it's missing, partial, or
@@ -58,6 +61,30 @@ public class SeriesController(ISeriesService seriesService) : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    /// <summary>Kicks off the settings page's manual "build all series from my
+    /// list" action: builds a series for every my-list anime that belongs to
+    /// no stored series yet. Runs in the background (through the same fetch
+    /// budget and single-flight gate as every other build) — poll the status
+    /// endpoint below rather than waiting on this call.</summary>
+    [HttpPost("api/series/build-all")]
+    public IActionResult TriggerBulkBuild()
+    {
+        bulkBuildTrigger.Signal();
+        return Accepted(ToDto(bulkBuildProgress.Snapshot));
+    }
+
+    /// <summary>Progress of the manual "build all series from my list" action,
+    /// for the settings page's progress indicator.</summary>
+    [HttpGet("api/series/build-all/status")]
+    public IActionResult GetBulkBuildStatus() => Ok(ToDto(bulkBuildProgress.Snapshot));
+
+    private static object ToDto(SeriesBulkBuildStatusSnapshot snapshot) => new
+    {
+        phase = snapshot.Phase.ToString(),
+        built = snapshot.Built,
+        total = snapshot.Total,
+    };
 }
 
 public class SeriesFavouriteOrderRequest

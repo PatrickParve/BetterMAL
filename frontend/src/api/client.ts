@@ -16,12 +16,14 @@ import type {
   SearchPageDto,
   SeasonPageDto,
   SeasonRefreshResultDto,
+  SeriesBulkBuildStatusDto,
   SeriesDto,
   SeriesLookupResult,
   SyncStatusDto,
   TopAnimeItemDto,
   TopAnimeMediaType,
   TopAnimeSectionDto,
+  TopSeriesSectionDto,
   UserAnimeEntryDto,
   UserAnimeEntryEditRequest,
 } from './types.ts'
@@ -179,6 +181,14 @@ export function getRewatchedSection(mediaType: TopAnimeMediaType): Promise<Rewat
   return fetchJson<RewatchedSectionDto>(`/api/profile/rewatched?mediaType=${encodeURIComponent(mediaType)}`)
 }
 
+// Every eligible series with both its main-series averages in one payload;
+// the basis toggle re-sorts/filters this same array client-side rather than
+// refetching (design.md decision 4). Also schedules a bounded batch of
+// background series builds server-side — invisible to this call.
+export function getTopSeriesSection(): Promise<TopSeriesSectionDto> {
+  return fetchJson<TopSeriesSectionDto>('/api/profile/top-series')
+}
+
 export function putTopAnimeOrder(
   mediaType: TopAnimeMediaType,
   tiers: { score: number; animeIds: number[] }[],
@@ -276,4 +286,15 @@ export function triggerAiringFullRefresh(): Promise<AiringFullRefreshStatusDto> 
 
 export function getAiringFullRefreshStatus(): Promise<AiringFullRefreshStatusDto> {
   return fetchJson<AiringFullRefreshStatusDto>('/api/airing/refresh-all/status')
+}
+
+// Manual "build all series from my list" (settings page): kicks off a
+// background run rather than waiting on it; poll getSeriesBulkBuildStatus
+// for progress.
+export function triggerSeriesBulkBuild(): Promise<SeriesBulkBuildStatusDto> {
+  return fetchJson<SeriesBulkBuildStatusDto>('/api/series/build-all', { method: 'POST' })
+}
+
+export function getSeriesBulkBuildStatus(): Promise<SeriesBulkBuildStatusDto> {
+  return fetchJson<SeriesBulkBuildStatusDto>('/api/series/build-all/status')
 }

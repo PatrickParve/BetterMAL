@@ -1,0 +1,71 @@
+.score-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  min-width: 130px;
+}
+
+.score-chip--mal {
+  border-color: var(--mal-border);
+  background: var(--mal-bg);
+}
+
+.score-chip--mine {
+  border-color: var(--mine-border);
+  background: var(--mine-bg);
+}
+
+.score-chip__label {
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.score-chip__value {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-chip--mal .score-chip__value {
+  color: var(--mal);
+}
+
+.score-chip--mine .score-chip__value {
+  color: var(--mine);
+}
+
+.score-chip__count {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+/* Compact tile-card density (SeriesTimeline/SeriesExtraTile): no border, no
+   label row, evenly fills its share of the row alongside a sibling chip. */
+.score-chip--compact {
+  flex: 1 1 0;
+  align-items: center;
+  gap: 0;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 5px;
+  min-width: 0;
+}
+
+.score-chip--compact .score-chip__value {
+  font-size: 11px;
+  font-weight: 400;
+}
+
+/* A hidden MAL score's blur placeholder otherwise inherits ScoreValue's
+   neutral --text tone; inside a MAL chip it should read as the MAL slot
+   instead (design.md decision 10). */
+.score-chip--mal .score-value__blur {
+  color: var(--mal);
+  opacity: 0.7;
+}

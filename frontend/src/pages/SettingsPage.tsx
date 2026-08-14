@@ -6,12 +6,14 @@ import {
   getMalAuthStatus,
   getPendingReconciliationDiff,
   getResyncFromMalStatus,
+  getSeriesBulkBuildStatus,
   getSyncStatus,
   refreshAnime,
   runReconciliation,
   syncNow,
   triggerAiringFullRefresh,
   triggerResyncFromMal,
+  triggerSeriesBulkBuild,
 } from '../api/client.ts'
 import type {
   AiringFullRefreshStatusDto,
@@ -19,6 +21,7 @@ import type {
   MalAuthStatus,
   PendingReconciliationDiffDto,
   ResyncStatusDto,
+  SeriesBulkBuildStatusDto,
   SyncStatusDto,
 } from '../api/types.ts'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
@@ -39,6 +42,7 @@ export function SettingsPage() {
   const [authStatus, setAuthStatus] = useState<MalAuthStatus | null>(null)
   const [resyncStatus, setResyncStatus] = useState<ResyncStatusDto | null>(null)
   const [airingRefreshStatus, setAiringRefreshStatus] = useState<AiringFullRefreshStatusDto | null>(null)
+  const [seriesBulkBuildStatus, setSeriesBulkBuildStatus] = useState<SeriesBulkBuildStatusDto | null>(null)
   const [loading, setLoading] = useState(true)
 
   const [resyncing, setResyncing] = useState(false)
@@ -47,6 +51,7 @@ export function SettingsPage() {
   const [diffError, setDiffError] = useState<string | null>(null)
   const [startingFullResync, setStartingFullResync] = useState(false)
   const [startingAiringRefresh, setStartingAiringRefresh] = useState(false)
+  const [startingSeriesBulkBuild, setStartingSeriesBulkBuild] = useState(false)
 
   const { alwaysShowCompletedScores, toggleAlwaysShowCompletedScores } = useScoreVisibility()
   const { hideHentai, toggleHideHentai } = useContentFilter()
@@ -68,6 +73,9 @@ export function SettingsPage() {
       getAiringFullRefreshStatus()
         .then(setAiringRefreshStatus)
         .catch(() => setAiringRefreshStatus(null)),
+      getSeriesBulkBuildStatus()
+        .then(setSeriesBulkBuildStatus)
+        .catch(() => setSeriesBulkBuildStatus(null)),
     ])
   }, [])
 
@@ -99,6 +107,18 @@ export function SettingsPage() {
     }, 2000)
     return () => clearInterval(id)
   }, [airingRefreshStatus?.phase])
+
+  // Poll while the "build all series from my list" run is in flight — stops
+  // as soon as the backend reports it's no longer running.
+  useEffect(() => {
+    if (seriesBulkBuildStatus?.phase !== 'Running') return
+    const id = setInterval(() => {
+      getSeriesBulkBuildStatus()
+        .then(setSeriesBulkBuildStatus)
+        .catch(() => {})
+    }, 2000)
+    return () => clearInterval(id)
+  }, [seriesBulkBuildStatus?.phase])
 
   async function handleResyncNow() {
     if (resyncing) return
@@ -134,6 +154,18 @@ export function SettingsPage() {
       // Leave whatever status was already there; the button stays retryable.
     } finally {
       setStartingAiringRefresh(false)
+    }
+  }
+
+  async function handleSeriesBulkBuild() {
+    if (startingSeriesBulkBuild || seriesBulkBuildStatus?.phase === 'Running') return
+    setStartingSeriesBulkBuild(true)
+    try {
+      setSeriesBulkBuildStatus(await triggerSeriesBulkBuild())
+    } catch {
+      // Leave whatever status was already there; the button stays retryable.
+    } finally {
+      setStartingSeriesBulkBuild(false)
     }
   }
 
@@ -286,6 +318,31 @@ export function SettingsPage() {
             disabled={startingAiringRefresh || airingRefreshStatus?.phase === 'Running'}
           >
             {airingRefreshStatus?.phase === 'Running' ? 'Refreshing…' : 'Refresh all airing dates'}
+          </button>
+        </div>
+      </section>
+
+      <section className="settings-box">
+        <h2>Build all series</h2>
+        <p className="settings-box__hint">
+          Builds a franchise for every anime in my list that isn't part of one yet, so the profile page's Top series
+          ranking can be completed on demand instead of only filling in a little on each profile visit. Runs in the
+          background; can take a while for a large list.
+        </p>
+        {seriesBulkBuildStatus && seriesBulkBuildStatus.phase !== 'NotStarted' && (
+          <p className="settings-box__hint">
+            {seriesBulkBuildStatus.phase === 'Running'
+              ? `Building… ${seriesBulkBuildStatus.built}/${seriesBulkBuildStatus.total}`
+              : `Last run complete: ${seriesBulkBuildStatus.built}/${seriesBulkBuildStatus.total} processed.`}
+          </p>
+        )}
+        <div className="settings-box__buttons">
+          <button
+            type="button"
+            onClick={handleSeriesBulkBuild}
+            disabled={startingSeriesBulkBuild || seriesBulkBuildStatus?.phase === 'Running'}
+          >
+            {seriesBulkBuildStatus?.phase === 'Running' ? 'Building…' : 'Build all series from my list'}
           </button>
         </div>
       </section>

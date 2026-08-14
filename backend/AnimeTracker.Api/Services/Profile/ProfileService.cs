@@ -1,14 +1,23 @@
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Series;
 
 namespace AnimeTracker.Api.Services.Profile;
 
 public class ProfileService(
     IUserAnimeEntryRepository entryRepository,
     IActivityLogRepository activityLogRepository,
-    ITopAnimeSelectionRepository topAnimeSelectionRepository) : IProfileService
+    ITopAnimeSelectionRepository topAnimeSelectionRepository,
+    SeriesRankingLookup seriesRankingLookup,
+    ISeriesBuildTrigger seriesBuildTrigger) : IProfileService
 {
     private const int RecentActivityCount = 20;
+
+    // Bounded per read so a cold install's my-list (which can hold thousands
+    // of anime with no series) doesn't turn opening the profile page into
+    // tens of thousands of queued MAL fetches — coverage instead grows a
+    // batch at a time across visits (design.md decision 6/task 4.2).
+    private const int MaxSeriesBackfillPerRead = 20;
 
     // Filtering and per-anime/per-field-group collapsing are both
     // subtractive, so a much larger raw window is pulled before collapsing
@@ -60,6 +69,48 @@ public class ProfileService(
     {
         var entries = await entryRepository.GetAllAsync(ct);
         return BuildRewatchedSection(entries, mediaType);
+    }
+
+    public async Task<TopSeriesSectionDto> GetTopSeriesSectionAsync(CancellationToken ct = default)
+    {
+        var rankingIndex = await seriesRankingLookup.LoadAsync(ct);
+
+        var items = rankingIndex.EligibleSeries()
+            // Base ordering (design.md decision 3/task 3.3): my average
+            // descending (nulls last), then scored main-line count
+            // descending, then raw title — the client re-sorts/filters this
+            // same array when the basis is switched (design.md decision 4).
+            .OrderByDescending(s => s.MineMain.Value ?? double.NegativeInfinity)
+            .ThenByDescending(s => s.MineMain.ScoredCount)
+            .ThenBy(s => s.Title, StringComparer.OrdinalIgnoreCase)
+            .Select(ToTopSeriesItem)
+            .ToList();
+
+        await ScheduleMissingSeriesBuildsAsync(rankingIndex, ct);
+
+        return new TopSeriesSectionDto(items);
+    }
+
+    private static TopSeriesItemDto ToTopSeriesItem(SeriesRankingResult s) =>
+        new(s.SeriesId, s.RootAnimeId, s.Title, s.EnglishTitle, s.PictureUrl, s.EntryCount, s.MalMain, s.MineMain, s.MalRevealed);
+
+    // Fire-and-forget: enqueues a bounded batch of my-list anime with no
+    // stored series onto the existing background build queue, reusing the
+    // ranking projection's membership set rather than issuing a second query
+    // (design.md decision 6/task 4.1). Enqueue itself never blocks or
+    // throws, so nothing here can slow or fail the response (task 4.2); the
+    // trigger's own dedupe means repeat reads advance to new ids instead of
+    // re-queueing the same batch (task 4.3).
+    private async Task ScheduleMissingSeriesBuildsAsync(SeriesRankingIndex rankingIndex, CancellationToken ct)
+    {
+        var entries = await entryRepository.GetAllAsync(ct);
+        var missingIds = entries
+            .Select(e => e.AnimeId)
+            .Where(id => !rankingIndex.HasSeries(id))
+            .Take(MaxSeriesBackfillPerRead);
+
+        foreach (var animeId in missingIds)
+            seriesBuildTrigger.Enqueue(animeId);
     }
 
     public async Task ApplyTopAnimeOrderAsync(List<TopAnimeTierOrderRequest> tiers, CancellationToken ct = default)

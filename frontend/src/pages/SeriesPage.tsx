@@ -11,6 +11,7 @@ import type {
 } from '../api/types.ts'
 import { AiringProgressBar } from '../components/AiringProgressBar.tsx'
 import { ProgressBar } from '../components/ProgressBar.tsx'
+import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { SeriesExtraTile } from '../components/SeriesExtraTile.tsx'
 import { SeriesTimeline } from '../components/SeriesTimeline.tsx'
@@ -254,27 +255,23 @@ function completionBadge(series: SeriesDto): CompletionBadge | null {
 
 function MalScoreChip({ label, average, completed }: { label: string; average: SeriesAverageDto; completed: boolean }) {
   return (
-    <div className="series-page__score-chip series-page__score-chip--mal">
-      <span className="series-page__score-chip-label">{label}</span>
-      <span className="series-page__score-chip-value">
-        <ScoreValue value={average.value} placeholder="No score" completed={completed} />
-        {average.value !== null && (
-          <span className="series-page__score-chip-count">
-            {' '}
-            · {average.scoredCount} of {average.totalCount} scored
-          </span>
-        )}
-      </span>
-    </div>
+    <ScoreChip role="mal" label={label}>
+      <ScoreValue value={average.value} placeholder="No score" completed={completed} />
+      {average.value !== null && (
+        <span className="score-chip__count">
+          {' '}
+          · {average.scoredCount} of {average.totalCount} scored
+        </span>
+      )}
+    </ScoreChip>
   )
 }
 
 function MineScoreChip({ label, average }: { label: string; average: SeriesAverageDto }) {
   return (
-    <div className="series-page__score-chip series-page__score-chip--mine">
-      <span className="series-page__score-chip-label">{label}</span>
-      <span className="series-page__score-chip-value">{formatAverage(average)}</span>
-    </div>
+    <ScoreChip role="mine" label={label}>
+      {formatAverage(average)}
+    </ScoreChip>
   )
 }
 
@@ -637,7 +634,10 @@ export function SeriesPage() {
                         {revealed ? (
                           <>
                             <Link to={`/anime/${entry.animeId}`}>{pickDisplayTitle(entry.title, entry.englishTitle)}</Link>{' '}
-                            · <ScoreValue value={entry.malScore} completed={revealed} />
+                            ·{' '}
+                            <span className="score--mal">
+                              <ScoreValue value={entry.malScore} completed={revealed} />
+                            </span>
                           </>
                         ) : (
                           <span className="series-page__tie-list-placeholder">Not yet watched</span>
@@ -672,7 +672,7 @@ export function SeriesPage() {
                   {myHighestEntries.map((entry, index) => (
                     <li key={entry.animeId}>
                       <Link to={`/anime/${entry.animeId}`}>{pickDisplayTitle(entry.title, entry.englishTitle)}</Link>{' '}
-                      · {entry.entry?.myScore}
+                      · <span className="score--mine">{entry.entry?.myScore}</span>
                       {myHighestEntries.length > 1 && (
                         <span className="series-page__reorder-buttons">
                           <button

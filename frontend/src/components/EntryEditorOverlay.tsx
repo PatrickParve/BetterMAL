@@ -148,7 +148,11 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
 
           <label className="entry-editor__field">
             <span>Score</span>
-            <select value={myScore} onChange={(event) => setMyScore(Number(event.target.value))}>
+            <select
+              className={`entry-editor__score-select${myScore ? ' entry-editor__score-select--mine' : ''}`}
+              value={myScore}
+              onChange={(event) => setMyScore(Number(event.target.value))}
+            >
               <option value={0}>No score</option>
               {Array.from({ length: 10 }, (_, i) => i + 1).map((score) => (
                 <option key={score} value={score}>

@@ -180,25 +180,6 @@
   padding: 5px 8px 0;
 }
 
-.series-timeline__card-chip {
-  flex: 1 1 0;
-  text-align: center;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  padding: 2px 4px;
-  border-radius: 5px;
-}
-
-.series-timeline__card-chip--mal {
-  background: var(--mal-bg);
-  color: var(--mal);
-}
-
-.series-timeline__card-chip--mine {
-  background: var(--mine-bg);
-  color: var(--mine);
-}
-
 .series-timeline__card-footer {
   display: flex;
   align-items: center;

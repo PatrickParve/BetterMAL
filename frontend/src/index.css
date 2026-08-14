@@ -27,6 +27,21 @@
   --status-dropped-bg: rgba(220, 38, 38, 0.12);
   --status-dropped-border: rgba(220, 38, 38, 0.45);
 
+  /* App-wide score colour language: blue is MAL/broadcast, purple is me.
+     Aliased rather than used raw so the two can diverge from
+     --status-completed/--accent later without touching every rule that
+     means "MAL" or "mine" — --status-completed still means "Completed
+     status" everywhere else, including SeriesEntryRow's left-border stripe
+     and its status pills. "On air now" green (--airing) stays scoped to
+     .series-page in SeriesPage.css — it names a series-timeline concept,
+     not a score. */
+  --mal: var(--status-completed);
+  --mal-bg: var(--status-completed-bg);
+  --mal-border: var(--status-completed-border);
+  --mine: var(--accent);
+  --mine-bg: var(--accent-bg);
+  --mine-border: var(--accent-border);
+
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
@@ -77,6 +92,13 @@
     --status-dropped: #f87171;
     --status-dropped-bg: rgba(248, 113, 113, 0.16);
     --status-dropped-border: rgba(248, 113, 113, 0.5);
+
+    --mal: var(--status-completed);
+    --mal-bg: var(--status-completed-bg);
+    --mal-border: var(--status-completed-border);
+    --mine: var(--accent);
+    --mine-bg: var(--accent-bg);
+    --mine-border: var(--accent-border);
   }
 
   #social .button-icon {
@@ -169,4 +191,26 @@ code {
 
 .scroll-y::-webkit-scrollbar {
   width: 8px;
+}
+
+/* App-wide score colour-only density (design.md decision 8): the value
+   alone, colour-keyed and tabular, with no chip around it — used in dense
+   rows of cells (MyListRow, TopAnimePage, ProfilePage's divergence lines)
+   where a boxed ScoreChip per cell would bloat the row. A hidden MAL score's
+   blur placeholder still carries the MAL tone rather than the neutral
+   --text ScoreValue uses by default, so it reads as a MAL slot even without
+   a chip around it. */
+.score--mal {
+  color: var(--mal);
+  font-variant-numeric: tabular-nums;
+}
+
+.score--mine {
+  color: var(--mine);
+  font-variant-numeric: tabular-nums;
+}
+
+.score--mal .score-value__blur {
+  color: var(--mal);
+  opacity: 0.7;
 }

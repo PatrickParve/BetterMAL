@@ -48,4 +48,22 @@ public class ProfileController(IProfileService profileService) : ControllerBase
         var section = await profileService.GetRewatchedSectionAsync(mediaType, ct);
         return Ok(section);
     }
+
+    /// <summary>"Top series": every franchise with a member in my list,
+    /// ranked by both its MAL main-series average and my main-series average
+    /// in one payload (design.md decision 4) — the client re-sorts/filters
+    /// the same array locally when the ranking basis is switched rather than
+    /// this endpoint being called again. Deliberately not embedded in <see
+    /// cref="Get"/>: unlike TopAnime/Rewatched, which just recompute over the
+    /// entries that call already loads, this section runs its own
+    /// SeriesMembers ⋈ AnimeMetadata join and enqueues background series
+    /// builds (design.md decision 6/task 3.5) — costs that shouldn't land on
+    /// every profile visit when the section may not even be scrolled
+    /// to.</summary>
+    [HttpGet("api/profile/top-series")]
+    public async Task<IActionResult> GetTopSeries(CancellationToken ct)
+    {
+        var section = await profileService.GetTopSeriesSectionAsync(ct);
+        return Ok(section);
+    }
 }

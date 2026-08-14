@@ -332,6 +332,34 @@ export type ProfileDto = {
   iLikedItTheyDidnt: OpinionDivergenceItemDto[]
 }
 
+// One franchise ranked by Top series: display fields from its root anime,
+// its total member count, and its two main-series averages (SeriesAverageDto,
+// defined below) — identical in shape and computation to the series page's
+// `MAL · main series`/`Mine · main series` chips (design.md decision 1).
+// malRevealed is the server-computed "may this be shown under 'always show
+// completed scores'" boolean (design.md decision 5) — pass it straight into
+// ScoreValue's `completed` prop.
+export type TopSeriesItemDto = {
+  seriesId: number
+  rootAnimeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  entryCount: number
+  malMain: SeriesAverageDto
+  mineMain: SeriesAverageDto
+  malRevealed: boolean
+}
+
+// Every series with at least one member in my list (design.md decision 2),
+// pre-ordered by my main-series average descending, then scored main-line
+// count descending, then raw title case-insensitively — the client re-sorts
+// and re-filters this same array locally when the ranking basis is switched
+// (design.md decision 4).
+export type TopSeriesSectionDto = {
+  items: TopSeriesItemDto[]
+}
+
 export type SyncStatusDto = {
   pendingCount: number
   lastSyncedAt: string | null
@@ -350,6 +378,17 @@ export type AiringFullRefreshPhase = 'NotStarted' | 'Running' | 'Complete'
 export type AiringFullRefreshStatusDto = {
   phase: AiringFullRefreshPhase
   synced: number
+  total: number
+}
+
+export type SeriesBulkBuildPhase = 'NotStarted' | 'Running' | 'Complete'
+
+// Progress of the settings page's "Build all series from my list" action.
+// Built counts targets processed, not builds run — one build can cover
+// several other targets' membership at once (design.md decision 6).
+export type SeriesBulkBuildStatusDto = {
+  phase: SeriesBulkBuildPhase
+  built: number
   total: number
 }
 

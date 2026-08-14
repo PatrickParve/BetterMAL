@@ -2,20 +2,12 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  /* Page-scoped colour language (design.md decision 4): blue is MAL/broadcast,
-     purple is me, green is "on air now". Aliased rather than used raw so the
-     three can diverge from --status-completed/--accent/--status-watching
-     later without touching every rule that means "MAL", "mine", or "airing".
-     Declared here rather than on :root so the blast radius stays this page —
-     --status-completed still means "Completed status" everywhere else,
-     including SeriesEntryRow's left-border stripe, and --status-watching
-     still means "Watching status" there too. */
-  --mal: var(--status-completed);
-  --mal-bg: var(--status-completed-bg);
-  --mal-border: var(--status-completed-border);
-  --mine: var(--accent);
-  --mine-bg: var(--accent-bg);
-  --mine-border: var(--accent-border);
+  /* --mal/--mine live on :root (index.css) — the score colour language is
+     app-wide. --airing stays scoped here: green means "on air right now",
+     a series-timeline concept, not a score, so it has no reason to spread
+     beyond the page that draws that timeline. Aliased rather than using
+     --status-watching directly so this page's own meaning of "airing" can
+     diverge from "Watching status" later without touching either. */
   --airing: var(--status-watching);
   --airing-bg: var(--status-watching-bg);
   --airing-border: var(--status-watching-border);
@@ -222,52 +214,6 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 2px;
-}
-
-.series-page__score-chip {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  min-width: 130px;
-}
-
-.series-page__score-chip--mal {
-  border-color: var(--mal-border);
-  background: var(--mal-bg);
-}
-
-.series-page__score-chip--mine {
-  border-color: var(--mine-border);
-  background: var(--mine-bg);
-}
-
-.series-page__score-chip-label {
-  font-size: 11px;
-  color: var(--text);
-  opacity: 0.75;
-}
-
-.series-page__score-chip-value {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.series-page__score-chip--mal .series-page__score-chip-value {
-  color: var(--mal);
-}
-
-.series-page__score-chip--mine .series-page__score-chip-value {
-  color: var(--mine);
-}
-
-.series-page__score-chip-count {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--text);
-  opacity: 0.75;
 }
 
 .series-page__progress {

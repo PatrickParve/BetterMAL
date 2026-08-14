@@ -88,25 +88,6 @@
   padding: 6px 10px 0;
 }
 
-.series-extra-tile__chip {
-  flex: 1 1 0;
-  text-align: center;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  padding: 2px 4px;
-  border-radius: 5px;
-}
-
-.series-extra-tile__chip--mal {
-  background: var(--mal-bg);
-  color: var(--mal);
-}
-
-.series-extra-tile__chip--mine {
-  background: var(--mine-bg);
-  color: var(--mine);
-}
-
 .series-extra-tile__footer {
   display: flex;
   align-items: center;

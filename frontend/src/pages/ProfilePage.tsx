@@ -1,13 +1,16 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getProfile, getRewatchedSection, getTopAnimeSection } from '../api/client.ts'
+import { getProfile, getRewatchedSection, getTopAnimeSection, getTopSeriesSection } from '../api/client.ts'
 import type {
   OpinionDivergenceItemDto,
   ProfileDto,
   RewatchedSectionDto,
   TopAnimeMediaType,
   TopAnimeSectionDto,
+  TopSeriesItemDto,
+  TopSeriesSectionDto,
 } from '../api/types.ts'
+import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { EditHistoryOverlay } from '../components/EditHistoryOverlay.tsx'
 import { TopAnimeSelectionOverlay } from '../components/TopAnimeSelectionOverlay.tsx'
@@ -16,6 +19,49 @@ import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
 import './ProfilePage.css'
+
+type TopSeriesBasis = 'mine' | 'mal'
+
+const TOP_SERIES_BASIS_TABS: { value: TopSeriesBasis; label: string }[] = [
+  { value: 'mine', label: 'My score' },
+  { value: 'mal', label: 'MAL score' },
+]
+
+function topSeriesBasisValue(item: TopSeriesItemDto, basis: TopSeriesBasis): number | null {
+  return basis === 'mine' ? item.mineMain.value : item.malMain.value
+}
+
+function topSeriesBasisScoredCount(item: TopSeriesItemDto, basis: TopSeriesBasis): number {
+  return basis === 'mine' ? item.mineMain.scoredCount : item.malMain.scoredCount
+}
+
+// Basis toggle re-sorts and re-filters the already-loaded array rather than
+// refetching (design.md decision 4): average descending, then scored
+// main-line count descending (an average earned across more entries places
+// higher), then title case-insensitively. A series with no value under the
+// selected basis is omitted rather than parked at the end (design.md
+// decision 3).
+function rankTopSeries(items: TopSeriesItemDto[], basis: TopSeriesBasis): TopSeriesItemDto[] {
+  return items
+    .filter((item) => topSeriesBasisValue(item, basis) !== null)
+    .sort((a, b) => {
+      const valueDiff = topSeriesBasisValue(b, basis)! - topSeriesBasisValue(a, basis)!
+      if (valueDiff !== 0) return valueDiff
+      const countDiff = topSeriesBasisScoredCount(b, basis) - topSeriesBasisScoredCount(a, basis)
+      if (countDiff !== 0) return countDiff
+      return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+    })
+}
+
+// The tooltip carries only the "N of M scored" counts, never the averages
+// themselves — the values can be behind the hide-scores toggle, and a raw
+// title attribute isn't subject to ScoreValue's reveal gating.
+function topSeriesCountsTitle(item: TopSeriesItemDto): string {
+  return (
+    `MAL: ${item.malMain.scoredCount} of ${item.malMain.totalCount} scored · ` +
+    `Mine: ${item.mineMain.scoredCount} of ${item.mineMain.totalCount} scored`
+  )
+}
 
 const MEDIA_TYPE_TABS: { value: TopAnimeMediaType; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -126,7 +172,10 @@ function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
             </span>
           </Link>
           <span className="profile-list-row__trailing">
-            Me {item.myScore} · MAL <ScoreValue value={item.malScore} completed={item.isCompleted} />
+            Me <span className="score--mine">{item.myScore}</span> · MAL{' '}
+            <span className="score--mal">
+              <ScoreValue value={item.malScore} completed={item.isCompleted} />
+            </span>
           </span>
         </li>
       ))}
@@ -175,10 +224,22 @@ export function ProfilePage() {
   if (rewatched) rewatchedDisplayRef.current = rewatched
   const displayedRewatched = rewatched ?? rewatchedDisplayRef.current
 
+  // Loaded once — the basis toggle re-sorts/re-filters this same array
+  // client-side rather than refetching (design.md decision 4), so there's no
+  // need for the "hold the last section on screen" workaround the other two
+  // strips use to avoid collapsing on a filter change.
+  const { data: topSeries, loading: topSeriesLoading } = usePageData<TopSeriesSectionDto>(
+    'top-series',
+    getTopSeriesSection,
+  )
+  const [topSeriesBasis, setTopSeriesBasis] = useRestorableState<TopSeriesBasis>('topSeriesBasis', 'mine')
+  const rankedTopSeries = topSeries ? rankTopSeries(topSeries.items, topSeriesBasis) : []
+
   const [showHistory, setShowHistory] = useState(false)
   const [showTopAnimeSelect, setShowTopAnimeSelect] = useState(false)
   const topAnimeDragScroll = useDragScroll()
   const rewatchedDragScroll = useDragScroll()
+  const topSeriesDragScroll = useDragScroll()
 
   if (loading) {
     return <p className="profile-page__loading">Loading…</p>
@@ -331,6 +392,77 @@ export function ProfilePage() {
                   />
                 )}
                 <span className="top-anime-strip__score">{item.myScore}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="profile-box">
+        <div className="profile-box__header-row">
+          <h2>Top series</h2>
+        </div>
+
+        <div className="profile-media-tabs" role="tablist" aria-label="Rank by">
+          {TOP_SERIES_BASIS_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              aria-selected={topSeriesBasis === tab.value}
+              className={
+                topSeriesBasis === tab.value
+                  ? 'profile-media-tabs__tab profile-media-tabs__tab--active'
+                  : 'profile-media-tabs__tab'
+              }
+              onClick={() => setTopSeriesBasis(tab.value)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {!topSeries && topSeriesLoading ? null : !topSeries || topSeries.items.length === 0 ? (
+          <p className="profile-page__section-empty">
+            Series are still being discovered from your list. Use{' '}
+            <Link to="/settings">"Build all series from my list"</Link> on the Settings page to fill this in now.
+          </p>
+        ) : rankedTopSeries.length === 0 ? (
+          <p className="profile-page__section-empty">
+            None of your series have a {topSeriesBasis === 'mine' ? 'my-score' : 'MAL'} main-line average yet.
+          </p>
+        ) : (
+          <div className="top-series-strip" ref={topSeriesDragScroll.ref} {...topSeriesDragScroll.handlers}>
+            {rankedTopSeries.map((item) => (
+              <Link
+                key={item.seriesId}
+                to={`/series/${item.rootAnimeId}`}
+                className="top-series-strip__item"
+                draggable={false}
+                title={topSeriesCountsTitle(item)}
+                onClick={topSeriesDragScroll.onItemClick}
+              >
+                {item.pictureUrl ? (
+                  <img
+                    src={item.pictureUrl}
+                    alt={pickDisplayTitle(item.title, item.englishTitle)}
+                    className="top-series-strip__picture"
+                    draggable={false}
+                  />
+                ) : (
+                  <div
+                    className="top-series-strip__picture top-series-strip__picture--placeholder"
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="top-series-strip__chips">
+                  <ScoreChip role="mal" size="compact">
+                    <ScoreValue value={item.malMain.value} completed={item.malRevealed} />
+                  </ScoreChip>
+                  <ScoreChip role="mine" size="compact">
+                    {item.mineMain.value !== null ? item.mineMain.value.toFixed(2) : '—'}
+                  </ScoreChip>
+                </span>
               </Link>
             ))}
           </div>

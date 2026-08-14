@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { SeriesEntryDto } from '../api/types.ts'
 import { mediaTypeLabel, pickDisplayTitle, STATUS_LABELS } from '../utils/anime.ts'
+import { ScoreChip } from './ScoreChip.tsx'
 import { ScoreValue } from './ScoreValue.tsx'
 import { watchedFigureLabel } from './SeriesEntryRow.tsx'
 import './SeriesTimeline.css'
@@ -117,10 +118,10 @@ function TimelineCard({ entry, onEdit }: { entry: SeriesEntryDto; onEdit: (entry
         <div className="series-timeline__fill series-timeline__fill--watched" style={{ width: `${watchedPct}%` }} />
       </div>
       <div className="series-timeline__card-chips">
-        <span className="series-timeline__card-chip series-timeline__card-chip--mal">
+        <ScoreChip role="mal" size="compact">
           <ScoreValue value={entry.malScore} placeholder="No score" completed={completed} />
-        </span>
-        <span className="series-timeline__card-chip series-timeline__card-chip--mine">{entry.entry?.myScore ?? '—'}</span>
+        </ScoreChip>
+        <ScoreChip role="mine" size="compact">{entry.entry?.myScore ?? '—'}</ScoreChip>
       </div>
       <div className="series-timeline__card-footer">
         <span className="series-timeline__card-status">

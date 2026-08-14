@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Series;
 
 namespace AnimeTracker.Api.Services.Profile;
 
@@ -59,6 +60,34 @@ public record RewatchedEntryDto(
 /// <summary>Every rewatched entry (RewatchCount > 0) for MediaType's scope,
 /// ordered by rewatch count descending with no tiers and no cap.</summary>
 public record RewatchedSectionDto(List<RewatchedEntryDto> Items, string MediaType);
+
+/// <summary>One franchise ranked by Top series: display fields from its root
+/// anime, its total member count, and its two main-series averages —
+/// identical in shape and computation to the series page's own
+/// <c>MAL · main series</c>/<c>Mine · main series</c> chips (design.md
+/// decision 1), so the two surfaces can never disagree. <c>MalRevealed</c> is
+/// the server-computed "may this be shown under 'always show completed
+/// scores'" boolean (design.md decision 5) — the client passes it straight
+/// into ScoreValue's <c>completed</c> prop.</summary>
+public record TopSeriesItemDto(
+    int SeriesId,
+    int RootAnimeId,
+    string Title,
+    string? EnglishTitle,
+    string? PictureUrl,
+    int EntryCount,
+    SeriesAverageDto MalMain,
+    SeriesAverageDto MineMain,
+    bool MalRevealed);
+
+/// <summary>Every series with at least one member in my list (design.md
+/// decision 2), ordered by my main-series average descending, then scored
+/// main-line count descending, then raw title case-insensitively — a
+/// sensible default for a client that does nothing with the ranking-basis
+/// control (design.md decision 3/task 3.3). The client re-sorts and filters
+/// this same array locally when the basis is switched (design.md decision
+/// 4).</summary>
+public record TopSeriesSectionDto(List<TopSeriesItemDto> Items);
 
 public record ScoreDistributionBucketDto(int Score, int Count);
 
