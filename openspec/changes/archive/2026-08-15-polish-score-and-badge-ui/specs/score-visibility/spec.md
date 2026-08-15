@@ -1,8 +1,5 @@
-# score-visibility Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
-## Requirements
 ### Requirement: Global MAL-score hide toggle
 The system SHALL provide a global toggle that, when hidden, replaces every MAL score everywhere with a placeholder that does not leak the underlying value. The placeholder SHALL consist of the score's reveal control alone — no stand-in digits, dots, or other characters representing the value. The toggle's on/off state SHALL persist across page reloads and new tabs (client-side, e.g. `localStorage`), so a user who hides scores does not see them reappear on refresh.
 
@@ -55,6 +52,8 @@ The system SHALL provide a setting on the Settings page, "Always show MAL scores
 - **WHEN** I enable "Always show MAL scores for completed shows" and then reload the page or open the app in a new tab
 - **THEN** the setting is still enabled without my having to toggle it again
 
+## ADDED Requirements
+
 ### Requirement: A hidden score occupies the same slot as a shown score
 A hidden MAL score SHALL occupy the same horizontal space its value would occupy if shown, with its reveal control centred in that space. Hiding or revealing a score SHALL NOT change the width of the score's slot, and SHALL therefore not reflow, shift, or re-align the text, controls, or tiles around it.
 
@@ -77,4 +76,3 @@ This rule SHALL hold in both score densities — inside a score chip and as a ba
 #### Scenario: The control is centred in a chip
 - **WHEN** the hide toggle is on and I look at a compact MAL score chip, such as a profile top-series tile's chip pair
 - **THEN** the reveal control sits centred within the chip, in the position the value would have occupied
-

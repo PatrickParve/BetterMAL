@@ -62,10 +62,3 @@
   font-weight: 400;
 }
 
-/* A hidden MAL score's blur placeholder otherwise inherits ScoreValue's
-   neutral --text tone; inside a MAL chip it should read as the MAL slot
-   instead (design.md decision 10). */
-.score-chip--mal .score-value__blur {
-  color: var(--mal);
-  opacity: 0.7;
-}

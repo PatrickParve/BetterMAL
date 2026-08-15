@@ -123,6 +123,10 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
                   <ProgressBar
                     watched={item.episodesWatched}
                     total={item.totalEpisodes}
+                    // Gated on airing status, not just an aired count being present:
+                    // a finished show's aired count equals its total, so an ungated
+                    // fill would paint every finished card's track solid blue.
+                    aired={item.currentlyAiring ? item.episodesAired : null}
                     onIncrement={() => increment(item)}
                     onSetWatched={(value) => setWatched(item, value)}
                     max={item.episodesAired ?? item.totalEpisodes}

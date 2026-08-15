@@ -1,17 +1,13 @@
 .score-value {
-  font-variant-numeric: tabular-nums;
-}
-
-.score-value--hidden {
   display: inline-flex;
+  justify-content: center;
   align-items: center;
-  gap: 4px;
-}
-
-.score-value__blur {
-  letter-spacing: 1px;
-  color: var(--text);
-  opacity: 0.6;
+  min-width: 4ch;
+  /* The hidden branch's only child is a <button> with no text baseline, so
+     without this the inline-flex box falls back to a synthesized baseline
+     (its own bottom edge) and sits noticeably higher than surrounding text. */
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
 }
 
 .score-value__reveal {
@@ -21,7 +17,7 @@
   padding: 2px;
   border: none;
   background: none;
-  color: var(--text);
+  color: inherit;
   cursor: pointer;
   opacity: 0.7;
 

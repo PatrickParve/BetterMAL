@@ -10,8 +10,8 @@ type ScoreValueProps = {
 
 // Renders a MAL score respecting the global hide toggle. While hidden and not
 // individually revealed, the numeric value is never placed in the DOM at all —
-// only the blur placeholder and reveal control are rendered — so it can't leak
-// via devtools/text-selection. `revealed` is local state, so it naturally
+// only the reveal control is rendered, alone — so it can't leak via
+// devtools/text-selection. `revealed` is local state, so it naturally
 // resets (re-hides) whenever the surrounding page unmounts on navigation.
 // `completed` opts a score into the "always show for completed shows"
 // setting: when that setting is on, a completed entry's score is shown in
@@ -27,10 +27,7 @@ export function ScoreValue({ value, placeholder = '—', completed = false }: Sc
   }
 
   return (
-    <span className="score-value score-value--hidden">
-      <span className="score-value__blur" aria-hidden="true">
-        ••••
-      </span>
+    <span className="score-value">
       <button
         type="button"
         className="score-value__reveal"

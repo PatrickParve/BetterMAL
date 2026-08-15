@@ -33,6 +33,7 @@ public class MainDashboardService(
                 e.EpisodesWatched,
                 e.Anime.TotalEpisodes,
                 await scheduleService.EpisodesAiredAsOfAsync(e.Anime, now, ct),
+                e.Anime.AiringStatus == "currently_airing",
                 ToEta(await scheduleService.NextAiringInstantAsync(e.Anime, now, ct), now)));
         }
 

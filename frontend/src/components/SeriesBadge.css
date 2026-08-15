@@ -2,17 +2,21 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 10px;
   color: var(--text);
   opacity: 0.85;
 }
 
+/* Sized to match .anime-card__meta's ~16px line box (12px text, default
+   line-height) so a series card's badge line is no taller than an anime
+   card's TYPE · N ep line, keeping grid rows the same height. */
 .series-badge__pill {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  padding: 2px 8px;
+  padding: 0 8px;
+  line-height: 14px;
   border-radius: 999px;
   border: 1px solid var(--accent-border);
   background: var(--accent-bg);

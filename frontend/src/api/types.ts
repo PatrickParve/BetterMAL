@@ -97,6 +97,7 @@ export type CurrentlyWatchingItemDto = {
   episodesWatched: number
   totalEpisodes: number | null
   episodesAired: number | null
+  currentlyAiring: boolean
   nextEpisode: NextEpisodeEtaDto | null
 }
 

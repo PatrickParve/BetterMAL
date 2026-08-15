@@ -10,6 +10,7 @@ public record CurrentlyWatchingItemDto(
     int EpisodesWatched,
     int? TotalEpisodes,
     int? EpisodesAired,
+    bool CurrentlyAiring,
     NextEpisodeEtaDto? NextEpisode);
 
 public record AiringTodayItemDto(

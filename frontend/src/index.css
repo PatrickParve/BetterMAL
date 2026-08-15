@@ -197,9 +197,9 @@ code {
    alone, colour-keyed and tabular, with no chip around it — used in dense
    rows of cells (MyListRow, TopAnimePage, ProfilePage's divergence lines)
    where a boxed ScoreChip per cell would bloat the row. A hidden MAL score's
-   blur placeholder still carries the MAL tone rather than the neutral
-   --text ScoreValue uses by default, so it reads as a MAL slot even without
-   a chip around it. */
+   reveal control inherits this colour rather than ScoreValue's default
+   neutral --text, so it still reads as a MAL slot even without a chip
+   around it. */
 .score--mal {
   color: var(--mal);
   font-variant-numeric: tabular-nums;
@@ -208,9 +208,4 @@ code {
 .score--mine {
   color: var(--mine);
   font-variant-numeric: tabular-nums;
-}
-
-.score--mal .score-value__blur {
-  color: var(--mal);
-  opacity: 0.7;
 }
