@@ -111,7 +111,9 @@
 .season-page__sort {
   font: inherit;
   font-size: 14px;
-  padding: 6px 10px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -119,12 +121,14 @@
 }
 
 .season-page__checkbox {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 14px;
   color: var(--text);
-  padding: 6px 10px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
   cursor: pointer;

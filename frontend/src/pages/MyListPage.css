@@ -40,7 +40,9 @@
 .my-list-page__query {
   font: inherit;
   font-size: 14px;
-  padding: 6px 10px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -51,7 +53,11 @@
 .my-list-page__clear-filters {
   font: inherit;
   font-size: 13px;
-  padding: 6px 12px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -74,7 +80,9 @@
 .my-list-page__sort {
   font: inherit;
   font-size: 14px;
-  padding: 6px 10px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -90,7 +98,11 @@
 .my-list-page__tab {
   font: inherit;
   font-size: 14px;
-  padding: 6px 14px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
   border-radius: 999px;
   border: 1px solid var(--tab-border, var(--border));
   background: var(--bg);

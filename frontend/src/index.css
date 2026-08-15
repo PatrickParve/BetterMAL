@@ -46,6 +46,13 @@
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
+  /* Height of a control in a filter/sort cluster (Season/Search/My List's
+     Type filter, sort/year/season selects, checkbox, etc.) — not an
+     app-wide control size. Leaves a 32px content box, which fits both a
+     <select>'s browser-normalized line box and the tallest line box the
+     fluid root font ever produces. */
+  --control-h: 34px;
+
   /* Fluid instead of a hard breakpoint switch: a binary 18px/16px flip at
      exactly 1024px means any viewport-width fluctuation around that
      threshold (e.g. a window landing at a slightly different logical width
@@ -227,4 +234,11 @@ code {
 .score--mine {
   color: var(--mine);
   font-variant-numeric: tabular-nums;
+}
+
+/* Covers every search field the app renders (navbar SearchBar, Settings'
+   refresh picker) with one rule. WebKit/Blink-only by nature — Firefox
+   renders no native clear control, so this is inert there. */
+input[type='search']::-webkit-search-cancel-button {
+  cursor: pointer;
 }
