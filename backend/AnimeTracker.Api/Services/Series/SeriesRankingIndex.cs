@@ -42,6 +42,22 @@ public sealed class SeriesRankingIndex
             var root = members.First(m => m.AnimeId == m.RootAnimeId);
             var mainLine = members.Where(m => m.IsMainLine).ToList();
 
+            // An announced main-line entry that hasn't started airing yet has
+            // no episodes out, so it shouldn't count toward "this is a
+            // multi-entry franchise" for the Top series filter — only
+            // currently_airing/finished_airing main-line members do.
+            var mainLineAired = mainLine.Where(m => m.AiringStatus != "not_yet_aired").ToList();
+            var mainLineAiredCount = mainLineAired.Count;
+
+            // Watched-coverage rule (design.md decisions 6/7): a franchise
+            // whose main line has two or more aired entries needs at least
+            // two of them in my list — any status, plan-to-watch included —
+            // or its averages would rank a whole franchise on a single
+            // entry's worth of my viewing.
+            var mainLineAiredInList = mainLineAired.Count(m => m.EntryStatus is not null);
+            if (mainLineAiredCount >= 2 && mainLineAiredInList <= 1)
+                continue;
+
             var malAverage = SeriesAverages.Mal(mainLine.Select(m => m.MalScore));
             var mineAverage = SeriesAverages.Mine(mainLine.Select(m => m.MyScore));
 
@@ -51,12 +67,6 @@ public sealed class SeriesRankingIndex
             var mainLineCompletedByMe = SeriesAverages.MainLineCompletedByMe(
                 mainLine.Select(m => (m.AiringStatus, m.EntryStatus)));
             var malRevealed = mainLineCompletedByMe && !mainLineAiring;
-
-            // An announced main-line entry that hasn't started airing yet has
-            // no episodes out, so it shouldn't count toward "this is a
-            // multi-entry franchise" for the Top series filter — only
-            // currently_airing/finished_airing main-line members do.
-            var mainLineAiredCount = mainLine.Count(m => m.AiringStatus != "not_yet_aired");
 
             results.Add(new SeriesRankingResult(
                 group.Key, root.RootAnimeId, root.Title, root.EnglishTitle, root.PictureUrl,

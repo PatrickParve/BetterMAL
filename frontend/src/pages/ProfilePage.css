@@ -306,11 +306,27 @@
   overflow-y: hidden;
   cursor: grab;
   user-select: none;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+
+.top-anime-strip::-webkit-scrollbar {
+  display: none;
 }
 
 .top-anime-strip:active {
   cursor: grabbing;
+}
+
+/* A strip holding no more entries than fit across it (design.md decision 4):
+   padding, gap, and tile sizing are untouched so nothing shifts when a strip
+   crosses the threshold, only whether it can scroll at all. */
+.top-anime-strip--fits {
+  overflow-x: hidden;
+  cursor: default;
+}
+
+.top-anime-strip--fits:active {
+  cursor: default;
 }
 
 .top-anime-strip__item {
@@ -377,11 +393,24 @@
   overflow-y: hidden;
   cursor: grab;
   user-select: none;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+
+.rewatched-strip::-webkit-scrollbar {
+  display: none;
 }
 
 .rewatched-strip:active {
   cursor: grabbing;
+}
+
+.rewatched-strip--fits {
+  overflow-x: hidden;
+  cursor: default;
+}
+
+.rewatched-strip--fits:active {
+  cursor: default;
 }
 
 .rewatched-strip__item {
@@ -447,11 +476,24 @@
   overflow-y: hidden;
   cursor: grab;
   user-select: none;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+
+.top-series-strip::-webkit-scrollbar {
+  display: none;
 }
 
 .top-series-strip:active {
   cursor: grabbing;
+}
+
+.top-series-strip--fits {
+  overflow-x: hidden;
+  cursor: default;
+}
+
+.top-series-strip--fits:active {
+  cursor: default;
 }
 
 .top-series-strip__item {

@@ -37,6 +37,22 @@ public class ProfileServiceTopSeriesTests
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = rootAnimeId, Status = WatchStatus.Completed, MyScore = myScore });
     }
 
+    // Multi-member variant for the watched-coverage tests below: one Series
+    // row plus per-member airing status and (optional) list membership, so a
+    // franchise's main line can be built up entry by entry.
+    private static void AddSeriesShell(AnimeTrackerDbContext db, int seriesId, int rootAnimeId) =>
+        db.Series.Add(new SeriesModel { Id = seriesId, RootAnimeId = rootAnimeId, BuiltAt = DateTimeOffset.UtcNow });
+
+    private static void AddMember(
+        AnimeTrackerDbContext db, int seriesId, int animeId, bool isMainLine, int order,
+        string airingStatus = "finished_airing", WatchStatus? status = null, int? myScore = null)
+    {
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = animeId, Title = $"Anime {animeId}", MalScore = 7.0, AiringStatus = airingStatus });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = animeId, SeriesId = seriesId, IsMainLine = isMainLine, Order = order });
+        if (status is not null)
+            db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = animeId, Status = status.Value, MyScore = myScore });
+    }
+
     [Fact]
     public async Task BaseOrdering_MyAverageDescendingThenTitle()
     {
@@ -107,6 +123,87 @@ public class ProfileServiceTopSeriesTests
         Assert.NotNull(item.MineMain);
         Assert.Equal(8.0, item.MineMain.Value);
         Assert.Equal(7.0, item.MalMain.Value);
+    }
+
+    // Watched-coverage rule (design.md decisions 6/7, task 6.1): a franchise
+    // whose main line has two or more aired entries needs at least two of
+    // them in my list, any status, or it's excluded from Top series.
+    [Fact]
+    public async Task WatchedCoverage_ThreeAiredMainLineOneInList_Excluded()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 1, 100);
+        AddMember(db, 1, 100, isMainLine: true, order: 0, status: WatchStatus.Completed, myScore: 8);
+        AddMember(db, 1, 101, isMainLine: true, order: 1);
+        AddMember(db, 1, 102, isMainLine: true, order: 2);
+        await db.SaveChangesAsync();
+
+        var entries = await db.UserAnimeEntries.AsNoTracking().ToListAsync();
+        var section = await CreateService(db, entries).GetTopSeriesSectionAsync();
+
+        Assert.Empty(section.Items);
+    }
+
+    [Fact]
+    public async Task WatchedCoverage_ThreeAiredMainLineTwoInList_Included()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 1, 100);
+        AddMember(db, 1, 100, isMainLine: true, order: 0, status: WatchStatus.Completed, myScore: 8);
+        AddMember(db, 1, 101, isMainLine: true, order: 1, status: WatchStatus.Completed, myScore: 7);
+        AddMember(db, 1, 102, isMainLine: true, order: 2);
+        await db.SaveChangesAsync();
+
+        var entries = await db.UserAnimeEntries.AsNoTracking().ToListAsync();
+        var section = await CreateService(db, entries).GetTopSeriesSectionAsync();
+
+        Assert.Single(section.Items);
+    }
+
+    [Fact]
+    public async Task WatchedCoverage_OneAiredPlusUnairedSequelBothCounted_Included()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 1, 100);
+        AddMember(db, 1, 100, isMainLine: true, order: 0, status: WatchStatus.Completed, myScore: 8);
+        AddMember(db, 1, 101, isMainLine: true, order: 1, airingStatus: "not_yet_aired");
+        await db.SaveChangesAsync();
+
+        var entries = await db.UserAnimeEntries.AsNoTracking().ToListAsync();
+        var section = await CreateService(db, entries).GetTopSeriesSectionAsync();
+
+        Assert.Single(section.Items);
+    }
+
+    [Fact]
+    public async Task WatchedCoverage_TwoAiredOneCompletedOnePlanToWatch_Included()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 1, 100);
+        AddMember(db, 1, 100, isMainLine: true, order: 0, status: WatchStatus.Completed, myScore: 8);
+        AddMember(db, 1, 101, isMainLine: true, order: 1, status: WatchStatus.PlanToWatch, myScore: null);
+        await db.SaveChangesAsync();
+
+        var entries = await db.UserAnimeEntries.AsNoTracking().ToListAsync();
+        var section = await CreateService(db, entries).GetTopSeriesSectionAsync();
+
+        Assert.Single(section.Items);
+    }
+
+    [Fact]
+    public async Task WatchedCoverage_TwoAiredMainLineOnlyAnExtraInList_Excluded()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 1, 100);
+        AddMember(db, 1, 100, isMainLine: true, order: 0);
+        AddMember(db, 1, 101, isMainLine: true, order: 1);
+        AddMember(db, 1, 102, isMainLine: false, order: 2, status: WatchStatus.Completed, myScore: 6);
+        await db.SaveChangesAsync();
+
+        var entries = await db.UserAnimeEntries.AsNoTracking().ToListAsync();
+        var section = await CreateService(db, entries).GetTopSeriesSectionAsync();
+
+        Assert.Empty(section.Items);
     }
 
     private sealed class FakeUserAnimeEntryRepository(List<UserAnimeEntry> entries) : IUserAnimeEntryRepository

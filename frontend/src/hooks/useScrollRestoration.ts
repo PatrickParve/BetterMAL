@@ -1,10 +1,28 @@
-import { useEffect, useLayoutEffect } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useLocation, useNavigationType } from 'react-router-dom'
 import { usePageState } from '../state/PageStateContext.tsx'
+import * as pageStateStore from '../state/pageStateStore.ts'
 
 // How long the retry loop keeps trying to reach a scroll target on a page
-// whose height still depends on a completing fetch.
-const RETRY_BUDGET_MS = 500
+// whose height still depends on a completing fetch — long enough to cover a
+// section whose data was never seeded before the page was left. The loop
+// still stops on the first frame the target is reachable, so a longer budget
+// costs nothing when the page settles quickly.
+const RETRY_BUDGET_MS = 1500
+
+// Keys that move the page and should cancel a restore in progress, alongside
+// wheel and touch input.
+const SCROLL_KEYS = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'PageUp',
+  'PageDown',
+  'Home',
+  'End',
+  ' ',
+])
 
 // Mounted once in AppShell so it wraps every route. Pairs with
 // `history.scrollRestoration = 'manual'` in main.tsx, which tells the browser
@@ -12,23 +30,29 @@ const RETRY_BUDGET_MS = 500
 export function useScrollRestoration(): void {
   const location = useLocation()
   const navigationType = useNavigationType()
-  const { isRestore, snapshot } = usePageState()
+  const { key, isRestore, snapshot } = usePageState()
 
-  // Recorded continuously (not just at navigation time) so the value is
-  // already correct whenever an entry is left, by any means.
+  // Assigned during render, so it already points at the entry being
+  // displayed before any layout effect of a navigation runs — including the
+  // fresh-visit `scrollTo(0, 0)` below and any scroll event that produces.
+  const keyRef = useRef(key)
+  keyRef.current = key
+
+  // Recorded synchronously against whichever entry is on screen right now.
+  // This used to defer to a requestAnimationFrame and close over the
+  // snapshot object captured when the effect ran: a scroll event fired just
+  // before navigating could have its frame fire *after* the next page's
+  // layout effect had already scrolled it to the top, writing that page's
+  // `0` into the departing entry's snapshot through the stale closure.
+  // Writing immediately, through a key read fresh off the ref, means a stray
+  // event can only ever land on the entry actually being displayed.
   useEffect(() => {
-    let scheduled = false
     function onScroll() {
-      if (scheduled) return
-      scheduled = true
-      requestAnimationFrame(() => {
-        snapshot.scrollY = window.scrollY
-        scheduled = false
-      })
+      pageStateStore.putScroll(keyRef.current, window.scrollY)
     }
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
-  }, [snapshot])
+  }, [])
 
   // Applied once per navigation, before paint, so a restore never flashes at
   // the top before jumping to the saved position.
@@ -40,7 +64,6 @@ export function useScrollRestoration(): void {
 
     const target = snapshot.scrollY
     let cancelled = false
-    let programmatic = false
     let rafId = 0
 
     const deadline = performance.now() + RETRY_BUDGET_MS
@@ -52,27 +75,33 @@ export function useScrollRestoration(): void {
       // the page hadn't reached yet when `scrollTo` actually ran, stopping
       // the retry one frame before the target was truly reachable.
       const reachable = document.documentElement.scrollHeight - window.innerHeight >= target
-      programmatic = true
       window.scrollTo(0, target)
       rafId = requestAnimationFrame(() => {
-        programmatic = false
         if (reachable || performance.now() >= deadline) return
         attempt()
       })
     }
 
-    function onUserScroll() {
-      if (programmatic) return
+    // Cancelled on real user input rather than on scroll events: those are
+    // asynchronous and carry nothing identifying a clamped `scrollTo`'s own
+    // scroll event from the user's, so watching them cancelled the loop
+    // before the target was reached whenever the clamp's event arrived late.
+    function onUserInput(event: Event) {
+      if (event instanceof KeyboardEvent && !SCROLL_KEYS.has(event.key)) return
       cancelled = true
     }
 
-    window.addEventListener('scroll', onUserScroll, { passive: true })
+    window.addEventListener('wheel', onUserInput, { passive: true })
+    window.addEventListener('touchstart', onUserInput, { passive: true })
+    window.addEventListener('keydown', onUserInput)
     attempt()
 
     return () => {
       cancelled = true
       cancelAnimationFrame(rafId)
-      window.removeEventListener('scroll', onUserScroll)
+      window.removeEventListener('wheel', onUserInput)
+      window.removeEventListener('touchstart', onUserInput)
+      window.removeEventListener('keydown', onUserInput)
     }
   }, [location.key, navigationType, isRestore, snapshot])
 }

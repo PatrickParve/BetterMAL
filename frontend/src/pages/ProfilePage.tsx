@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getProfile, getRewatchedSection, getTopAnimeSection, getTopSeriesSection } from '../api/client.ts'
 import type {
@@ -17,8 +17,15 @@ import { TopAnimeSelectionOverlay } from '../components/TopAnimeSelectionOverlay
 import { TruncatedTitle } from '../components/TruncatedTitle.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
+import { usePageState } from '../state/PageStateContext.tsx'
+import * as pageStateStore from '../state/pageStateStore.ts'
 import { formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
 import './ProfilePage.css'
+
+// The strip's defining constant (design.md decision 4): must agree with the
+// tile `flex` basis in ProfilePage.css (`calc((100% - 9 * 10px) / 10)`),
+// which lays out exactly this many tiles across the strip's visible width.
+const STRIP_VISIBLE_TILES = 10
 
 type TopSeriesBasis = 'mine' | 'mal'
 
@@ -127,23 +134,44 @@ function formatShare(count: number, totalRated: number): string | null {
   return `${rounded}%`
 }
 
-// Shared drag-to-scroll behavior for a horizontal poster strip: a mouse-down
-// on the strip starts tracking, mouse-move scrolls it and flags a drag once
-// the pointer has moved past a small threshold, and onItemClick suppresses
-// the resulting navigation click so a drag doesn't also open the tile.
-function useDragScroll() {
-  const scrollRef = useRef<HTMLDivElement>(null)
+// Drag-to-scroll plus scroll-offset restoration for a horizontal poster
+// strip: a mouse-down on the strip starts tracking, mouse-move scrolls it and
+// flags a drag once the pointer has moved past a small threshold, and
+// onItemClick suppresses the resulting navigation click so a drag doesn't
+// also open the tile. `restoreKey` identifies this strip's section (and, for
+// sections with a view control, the control's current value) so its offset
+// is recorded and restored independently of the page's other strips
+// (design.md decision 3).
+function useStripScroll(restoreKey: string) {
+  const elRef = useRef<HTMLDivElement | null>(null)
   const drag = useRef({ isDown: false, startX: 0, scrollLeft: 0, dragged: false })
+  const { key, isRestore, snapshot } = usePageState()
+
+  // Read by the ref callback below, which — unlike an effect keyed on
+  // `restoreKey` — only runs when React actually attaches or detaches the
+  // strip's DOM node. A strip whose section is still loading on first mount
+  // (topAnime/rewatched, held empty until their fetch resolves) attaches
+  // that node later, on a render an effect with an unrelated dependency list
+  // would never repeat for; refs sidestep that by always being current
+  // whenever the callback next fires.
+  const keyRef = useRef(key)
+  keyRef.current = key
+  const restoreKeyRef = useRef(restoreKey)
+  restoreKeyRef.current = restoreKey
+  const isRestoreRef = useRef(isRestore)
+  isRestoreRef.current = isRestore
+  const snapshotRef = useRef(snapshot)
+  snapshotRef.current = snapshot
 
   function onMouseDown(event: React.MouseEvent<HTMLDivElement>) {
-    const el = scrollRef.current
+    const el = elRef.current
     if (!el) return
     drag.current = { isDown: true, startX: event.pageX, scrollLeft: el.scrollLeft, dragged: false }
   }
 
   function onMouseMove(event: React.MouseEvent<HTMLDivElement>) {
     const state = drag.current
-    const el = scrollRef.current
+    const el = elRef.current
     if (!state.isDown || !el) return
     event.preventDefault()
     const delta = event.pageX - state.startX
@@ -161,8 +189,73 @@ function useDragScroll() {
     }
   }
 
+  // Wiring lives in a ref callback, not an effect: the strip's div mounts
+  // and unmounts as its section switches between loading and loaded (the
+  // conditional rendering above), so "the DOM node exists" isn't something
+  // an effect dependency list can express — the callback fires exactly when
+  // React attaches or detaches the node, whatever render that happens on.
+  const setRef = useCallback((el: HTMLDivElement | null) => {
+    elRef.current = el
+    if (!el) return
+    const node = el
+
+    // Recorded synchronously, same reasoning as the page's own scroll
+    // position (useScrollRestoration decision 1).
+    function onScroll() {
+      pageStateStore.putStripScroll(keyRef.current, restoreKeyRef.current, node.scrollLeft)
+    }
+    node.addEventListener('scroll', onScroll, { passive: true })
+
+    // Applied on a restore only, once the strip's tiles are laid out —
+    // usePageData seeds restored data synchronously, so on the first paint
+    // of a restore the tiles are already in the DOM and the offset is
+    // reachable. A cheap analogue of the page-level retry loop, without a
+    // timer: a ResizeObserver re-applies the offset if the strip was too
+    // narrow to reach it when first measured, and stops for good once it's
+    // reached or the user scrolls the strip themselves. On a fresh visit
+    // this does nothing, leaving the strip at its start.
+    let observer: ResizeObserver | undefined
+    let onUserInput: (() => void) | undefined
+
+    if (isRestoreRef.current) {
+      const target = snapshotRef.current.strips.get(restoreKeyRef.current)
+      if (target !== undefined) {
+        let done = false
+        let stopped = false
+
+        const attempt = () => {
+          if (done || stopped) return
+          const reachable = node.scrollWidth - node.clientWidth >= target
+          node.scrollLeft = target
+          if (reachable) done = true
+        }
+        attempt()
+
+        observer = new ResizeObserver(() => attempt())
+        observer.observe(node)
+
+        onUserInput = () => {
+          stopped = true
+        }
+        node.addEventListener('wheel', onUserInput, { passive: true })
+        node.addEventListener('touchstart', onUserInput, { passive: true })
+        node.addEventListener('mousedown', onUserInput)
+      }
+    }
+
+    return () => {
+      node.removeEventListener('scroll', onScroll)
+      observer?.disconnect()
+      if (onUserInput) {
+        node.removeEventListener('wheel', onUserInput)
+        node.removeEventListener('touchstart', onUserInput)
+        node.removeEventListener('mousedown', onUserInput)
+      }
+    }
+  }, [])
+
   return {
-    ref: scrollRef,
+    ref: setRef,
     handlers: { onMouseDown, onMouseMove, onMouseUp, onMouseLeave: onMouseUp },
     onItemClick,
   }
@@ -254,9 +347,9 @@ export function ProfilePage() {
 
   const [showHistory, setShowHistory] = useState(false)
   const [showTopAnimeSelect, setShowTopAnimeSelect] = useState(false)
-  const topAnimeDragScroll = useDragScroll()
-  const rewatchedDragScroll = useDragScroll()
-  const topSeriesDragScroll = useDragScroll()
+  const topAnimeStripScroll = useStripScroll(`top-anime:${mediaType}`)
+  const rewatchedStripScroll = useStripScroll(`rewatched:${rewatchedMediaType}`)
+  const topSeriesStripScroll = useStripScroll('top-series')
 
   if (loading) {
     return <p className="profile-page__loading">Loading…</p>
@@ -386,14 +479,20 @@ export function ProfilePage() {
               : `No scored ${MEDIA_TYPE_TABS.find((tab) => tab.value === mediaType)?.label} yet.`}
           </p>
         ) : (
-          <div className="top-anime-strip" ref={topAnimeDragScroll.ref} {...topAnimeDragScroll.handlers}>
+          <div
+            className={
+              displayedTopAnime.items.length <= STRIP_VISIBLE_TILES ? 'top-anime-strip top-anime-strip--fits' : 'top-anime-strip'
+            }
+            ref={topAnimeStripScroll.ref}
+            {...topAnimeStripScroll.handlers}
+          >
             {displayedTopAnime.items.map((item) => (
               <Link
                 key={item.animeId}
                 to={`/anime/${item.animeId}`}
                 className="top-anime-strip__item"
                 draggable={false}
-                onClick={topAnimeDragScroll.onItemClick}
+                onClick={topAnimeStripScroll.onItemClick}
               >
                 {item.pictureUrl ? (
                   <img
@@ -463,7 +562,15 @@ export function ProfilePage() {
             The multi-entry filter left nothing to show. Switch it off to see single-entry series.
           </p>
         ) : (
-          <div className="top-series-strip" ref={topSeriesDragScroll.ref} {...topSeriesDragScroll.handlers}>
+          <div
+            className={
+              displayedTopSeries.length <= STRIP_VISIBLE_TILES
+                ? 'top-series-strip top-series-strip--fits'
+                : 'top-series-strip'
+            }
+            ref={topSeriesStripScroll.ref}
+            {...topSeriesStripScroll.handlers}
+          >
             {displayedTopSeries.map((item) => (
               <Link
                 key={item.seriesId}
@@ -471,7 +578,7 @@ export function ProfilePage() {
                 className="top-series-strip__item"
                 draggable={false}
                 title={topSeriesCountsTitle(item)}
-                onClick={topSeriesDragScroll.onItemClick}
+                onClick={topSeriesStripScroll.onItemClick}
               >
                 {item.pictureUrl ? (
                   <img
@@ -525,14 +632,22 @@ export function ProfilePage() {
         {!displayedRewatched && rewatchedLoading ? null : !displayedRewatched || displayedRewatched.items.length === 0 ? (
           <p className="profile-page__section-empty">{REWATCHED_EMPTY_MESSAGES[rewatchedMediaType]}</p>
         ) : (
-          <div className="rewatched-strip" ref={rewatchedDragScroll.ref} {...rewatchedDragScroll.handlers}>
+          <div
+            className={
+              displayedRewatched.items.length <= STRIP_VISIBLE_TILES
+                ? 'rewatched-strip rewatched-strip--fits'
+                : 'rewatched-strip'
+            }
+            ref={rewatchedStripScroll.ref}
+            {...rewatchedStripScroll.handlers}
+          >
             {displayedRewatched.items.map((item) => (
               <Link
                 key={item.animeId}
                 to={`/anime/${item.animeId}`}
                 className="rewatched-strip__item"
                 draggable={false}
-                onClick={rewatchedDragScroll.onItemClick}
+                onClick={rewatchedStripScroll.onItemClick}
               >
                 {item.pictureUrl ? (
                   <img
