@@ -266,7 +266,7 @@ function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
     return <p className="profile-page__section-empty">Nothing here yet.</p>
   }
   return (
-    <ul className="divergence-list">
+    <ul className="divergence-list scroll-y">
       {items.map((item) => (
         <li key={item.animeId} className="profile-list-row">
           <Link to={`/anime/${item.animeId}`} className="profile-list-row__link">

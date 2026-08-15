@@ -162,10 +162,40 @@
   gap: 8px;
 }
 
+/* max-height, not height (design.md decision 4): a short list renders only
+   its own rows, not ten rows' worth of empty space. Ten rows at their 58px
+   outer height (56px content + 1px top/bottom border) plus nine 8px gaps
+   between them = 652px; the eleventh row starts past the cap and is reached
+   by scrolling instead of showing a sliver. */
+.divergence-list {
+  max-height: calc(10 * 58px + 9 * 8px);
+}
+
+/* Size container (design.md decision 2): publishes a row height derived from
+   the feed's own height so five rows fill the box exactly at any window
+   width, instead of a fixed max-height leaving a sliver of a sixth row. The
+   42px is four 8px gaps between five rows plus five rows' 1px top-and-bottom
+   borders (5 * 2px) — rows stay content-box (see .activity-feed
+   .profile-list-row below), so their border width has to come out of the
+   available height separately from the gaps. min-height is today's effective
+   height (5 * 60px content + the same 42px), so a short row of boxes can't
+   collapse the feed below where it sits now. */
 .activity-feed {
   flex: 1 1 auto;
+  min-height: calc(5 * 60px + 42px);
+  container-type: size;
+  --activity-row-h: calc((100cqh - 4 * 8px - 5 * 2px) / 5);
+}
+
+.activity-feed .profile-list-row {
+  flex: 0 0 auto;
+  height: var(--activity-row-h);
   min-height: 0;
-  max-height: 340px;
+}
+
+.activity-feed .profile-list-row__picture {
+  height: var(--activity-row-h);
+  width: calc(var(--activity-row-h) * 41 / 56);
 }
 
 .profile-list-row {
@@ -329,8 +359,14 @@
   cursor: default;
 }
 
+/* border-box (design.md decision 1): under the default content-box, this
+   tile's 1px border is added on top of its flex basis, so ten tiles overflow
+   the strip by 20px and the tenth gets clipped. border-box folds the border
+   into the basis so ten tiles plus nine gaps equal the strip's width exactly.
+   Same fix on .top-series-strip__item and .rewatched-strip__item below. */
 .top-anime-strip__item {
   position: relative;
+  box-sizing: border-box;
   flex: 0 0 calc((100% - 9 * 10px) / 10);
   min-width: 0;
   aspect-ratio: 2 / 3;
@@ -415,6 +451,7 @@
 
 .rewatched-strip__item {
   position: relative;
+  box-sizing: border-box;
   flex: 0 0 calc((100% - 9 * 10px) / 10);
   min-width: 0;
   aspect-ratio: 2 / 3;
@@ -498,6 +535,7 @@
 
 .top-series-strip__item {
   position: relative;
+  box-sizing: border-box;
   flex: 0 0 calc((100% - 9 * 10px) / 10);
   min-width: 0;
   display: flex;

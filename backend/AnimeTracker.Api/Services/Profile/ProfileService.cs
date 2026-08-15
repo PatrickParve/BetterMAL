@@ -27,6 +27,31 @@ public class ProfileService(
 
     private const int TopAnimeMinimumSize = 10;
 
+    // Opinion divergence (design.md decision 3): both scales are compressed
+    // to a common unit — standard deviations from their own mean — before
+    // being compared, so the threshold below is symmetric even though MAL's
+    // community averages (SD ~0.75 measured) occupy a far narrower band than
+    // personal 1-10 scores (SD ~1.44).
+    private const double OpinionDivergenceThresholdSd = 1.0;
+
+    // Label-gate boundaries, applied in raw score terms so they match what
+    // each list's heading actually claims. 5 and 8 are MAL's own score
+    // labels: 5 is "Average" and everything worse sits below it; 8 is "Very
+    // Good" and everything better sits above it. That leaves 6 ("Fine") and 7
+    // ("Good") as a neutral band between them, deliberately in neither list.
+    private const int OpinionDivergenceMyDislikeCeiling = 5;
+    private const int OpinionDivergenceMyLikeFloor = 8;
+
+    // Same boundary in both directions: it splits MAL's community scale
+    // between its "Good" and "Very Good" labels, so a 7.5+ average reads as a
+    // community like and a 7.5-or-below average is not a community dislike.
+    private const double OpinionDivergenceMalLikeFloorAndDislikeCeiling = 7.5;
+
+    // A mean and standard deviation computed over fewer pairs than this don't
+    // describe a spread worth normalizing against — the rule needs a
+    // population, not a handful of points.
+    private const int OpinionDivergenceMinimumRatedPairs = 10;
+
     // No per-anime episode duration is cached (MAL's field isn't fetched
     // anywhere), so "Days" approximates using MAL's own fallback assumption
     // for unknown durations rather than tracking real runtimes. Internal
@@ -409,20 +434,54 @@ public class ProfileService(
         BuildOpinionDivergence(List<UserAnimeEntry> entries)
     {
         var rated = entries.Where(e => e.MyScore is not null && e.Anime.MalScore is not null).ToList();
+        if (rated.Count < OpinionDivergenceMinimumRatedPairs)
+            return ([], []);
 
-        var theyLikedItIDidnt = rated
-            .Where(e => e.Anime.MalScore!.Value - e.MyScore!.Value >= 3)
-            .OrderByDescending(e => e.Anime.MalScore!.Value - e.MyScore!.Value)
-            .Select(ToDivergenceItem)
+        var myMean = rated.Average(e => e.MyScore!.Value);
+        var malMean = rated.Average(e => e.Anime.MalScore!.Value);
+        var mySd = PopulationStandardDeviation(rated.Select(e => (double)e.MyScore!.Value), myMean);
+        var malSd = PopulationStandardDeviation(rated.Select(e => e.Anime.MalScore!.Value), malMean);
+        if (mySd == 0 || malSd == 0)
+            return ([], []);
+
+        // divergence > 0 means MAL sits further above its mean than I sit
+        // above mine — a "they liked it more than I did" direction; < 0 is
+        // the reverse (design.md decision 3).
+        var scored = rated
+            .Select(e => (
+                Entry: e,
+                Divergence: (e.Anime.MalScore!.Value - malMean) / malSd - (e.MyScore!.Value - myMean) / mySd))
             .ToList();
 
-        var iLikedItTheyDidnt = rated
-            .Where(e => e.Anime.MalScore!.Value < 7 && e.MyScore!.Value - e.Anime.MalScore!.Value >= 2)
-            .OrderByDescending(e => e.MyScore!.Value - e.Anime.MalScore!.Value)
-            .Select(ToDivergenceItem)
+        var theyLikedItIDidnt = scored
+            .Where(x => x.Divergence >= OpinionDivergenceThresholdSd
+                && x.Entry.MyScore!.Value <= OpinionDivergenceMyDislikeCeiling
+                && x.Entry.Anime.MalScore!.Value >= OpinionDivergenceMalLikeFloorAndDislikeCeiling)
+            .OrderByDescending(x => x.Divergence)
+            .ThenBy(x => x.Entry.Anime.Title, StringComparer.OrdinalIgnoreCase)
+            .Select(x => ToDivergenceItem(x.Entry))
+            .ToList();
+
+        var iLikedItTheyDidnt = scored
+            .Where(x => -x.Divergence >= OpinionDivergenceThresholdSd
+                && x.Entry.MyScore!.Value >= OpinionDivergenceMyLikeFloor
+                && x.Entry.Anime.MalScore!.Value <= OpinionDivergenceMalLikeFloorAndDislikeCeiling)
+            .OrderByDescending(x => -x.Divergence)
+            .ThenBy(x => x.Entry.Anime.Title, StringComparer.OrdinalIgnoreCase)
+            .Select(x => ToDivergenceItem(x.Entry))
             .ToList();
 
         return (theyLikedItIDidnt, iLikedItTheyDidnt);
+    }
+
+    // Population SD, not sample SD (design.md decision 3): the rated pairs
+    // are the whole population being ranked, not a sample standing in for a
+    // larger one.
+    private static double PopulationStandardDeviation(IEnumerable<double> values, double mean)
+    {
+        var list = values as IReadOnlyCollection<double> ?? values.ToList();
+        var variance = list.Sum(v => (v - mean) * (v - mean)) / list.Count;
+        return Math.Sqrt(variance);
     }
 
     private static OpinionDivergenceItemDto ToDivergenceItem(UserAnimeEntry e) =>
