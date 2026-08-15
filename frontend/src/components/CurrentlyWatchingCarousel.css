@@ -17,8 +17,9 @@
   max-width: calc(5 * 160px + 4 * 16px + 2 * 6px);
   padding: 6px;
   overflow-x: auto;
-  /* Stops a flick past the track's end from chaining to the document
-     (index.css's overscroll-behavior-x: none handles the document side);
+  overflow-y: hidden;
+  /* Stops a flick past the track's end from chaining to the document, and
+     stops that same flick from being read as a back/forward navigation;
      `contain`, not `none`, so the track keeps its own end-of-scroll bounce. */
   overscroll-behavior-x: contain;
   scrollbar-width: none;

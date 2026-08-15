@@ -139,13 +139,18 @@
   text-align: left;
 }
 
-/* Stops the document's own horizontal rubber-band and the browser's
-   swipe-to-navigate gesture. Declared on html explicitly rather than
-   relying on body-to-viewport propagation, which only applies when html
-   says nothing. */
+/* Stops the document's own vertical rubber-band, so a scroll-up at the top
+   of a page can't drag the shell down and expose empty space above the
+   navbar. Declared on html explicitly rather than relying on
+   body-to-viewport propagation, which only applies when html says nothing.
+   The x axis is deliberately left at its default: setting it to `none` here
+   also switches off the browser's two-finger back/forward gesture. Sideways
+   drift is prevented at the source instead — every horizontally scrolling
+   region sets `overscroll-behavior-x: contain` on itself, which stops both
+   chaining to the page and an accidental history navigation. */
 html,
 body {
-  overscroll-behavior-x: none;
+  overscroll-behavior-y: none;
 }
 
 body {
