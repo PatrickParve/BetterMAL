@@ -21,6 +21,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-self: center;
 }
 
 .anime-detail-page__related {

@@ -15,7 +15,7 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
             .FirstOrDefaultAsync(ct);
 
     public async Task<(List<SeasonAnimeItem> Items, int TotalCount)> GetPageAsync(
-        int year, string season, SeasonSortKey sort, bool includeMyList, bool hideHentai, int offset, int limit, CancellationToken ct = default)
+        int year, string season, SeasonSortKey sort, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default)
     {
         // Listing membership is authoritative: SeasonBrowseService already files
         // each anime under MAL's own start_season, which can differ from the quarter
@@ -32,6 +32,19 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
         // anime is never hidden on suspicion, only a confirmed "rx" is excluded.
         if (hideHentai)
             query = query.Where(l => l.Anime.Rating != HentaiRating);
+
+        if (types is { Count: > 0 })
+        {
+            // "unknown" (an untyped anime) can't be matched by Contains against
+            // MediaType's real values, so it needs its own null check — mirrors
+            // the client-side `item.mediaType ?? 'unknown'` convention used by
+            // My List's and Search's type filters.
+            var includeUnknown = types.Contains("unknown");
+            var knownTypes = types.Where(t => t != "unknown").ToArray();
+            query = query.Where(l =>
+                (includeUnknown && l.Anime.MediaType == null) ||
+                (l.Anime.MediaType != null && knownTypes.Contains(l.Anime.MediaType)));
+        }
 
         var projected = query.Select(l => new
         {

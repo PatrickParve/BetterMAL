@@ -292,6 +292,8 @@ The system SHALL present a Top anime page as a ranked list covering up to rank 5
 
 The page-number controls SHALL show the first page, the last page, and the current page with at most one page on each side of it, collapsing any gap between those groups into an ellipsis. On page 6 of 10 this yields `1 … 5 6 7 … 10`.
 
+Rows ranked 1 through 3 SHALL be visually distinguished from the rest of the list: each SHALL render with a larger poster and row height than rank 4 and below, and a distinct rank badge or accent colour per position (a gold, silver, and bronze family for ranks 1, 2, and 3 respectively) in place of the plain `#1`/`#2`/`#3` text used elsewhere in the list. This treatment SHALL apply only on page 1, where ranks 1–3 render; it SHALL NOT apply to any other page.
+
 #### Scenario: Rendering the top-anime ranking
 - **WHEN** the top-anime page loads
 - **THEN** it shows the first page of 50 rows, each with its rank number, picture, title, my score, a right-aligned MAL score, and a list-action button
@@ -315,6 +317,14 @@ The page-number controls SHALL show the first page, the last page, and the curre
 #### Scenario: Row already in my list
 - **WHEN** a top-anime row's anime is already in my list
 - **THEN** its button reads "Edit" and opens the editor overlay in place when used
+
+#### Scenario: Top 3 rows stand out from the rest of the list
+- **WHEN** the top-anime page's first page renders
+- **THEN** ranks 1, 2, and 3 each render with a larger poster and row height and a distinct gold/silver/bronze rank badge, visibly different from rank 4 and below
+
+#### Scenario: Podium treatment does not appear on later pages
+- **WHEN** I view page 2 or later of the top-anime ranking
+- **THEN** no row on that page uses the larger podium styling, since ranks 1–3 only appear on page 1
 
 ### Requirement: Daily refresh of the Top Anime ranking
 The system SHALL re-fetch the Top Anime ranking's lean listing fields the first time it is visited on a local calendar day after its last fetch, serving it from cache on same-day revisits. If the ranking has never been visited, it SHALL never be proactively fetched.

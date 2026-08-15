@@ -18,6 +18,7 @@ public class SeasonController(ISeasonBrowseService seasonBrowseService) : Contro
         [FromQuery] string sort = "popularity",
         [FromQuery] bool includeMyList = true,
         [FromQuery] bool hideHentai = false,
+        [FromQuery] string? type = null,
         [FromQuery] int offset = 0,
         [FromQuery] int limit = 24,
         CancellationToken ct = default)
@@ -25,7 +26,8 @@ public class SeasonController(ISeasonBrowseService seasonBrowseService) : Contro
         if (!ValidSeasons.Contains(season))
             return BadRequest(new { error = $"Unknown season '{season}'." });
 
-        var page = await seasonBrowseService.GetPageAsync(year, season, sort, includeMyList, hideHentai, offset, Math.Clamp(limit, 1, 100), ct);
+        var types = string.IsNullOrWhiteSpace(type) ? null : type.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        var page = await seasonBrowseService.GetPageAsync(year, season, sort, includeMyList, hideHentai, types, offset, Math.Clamp(limit, 1, 100), ct);
         return Ok(page);
     }
 

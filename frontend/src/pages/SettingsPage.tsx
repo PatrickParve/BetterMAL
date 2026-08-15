@@ -216,7 +216,10 @@ export function SettingsPage() {
 
   return (
     <div className="settings-page">
-      <h1>Settings</h1>
+      <div className="settings-page__header">
+        <h1>Settings</h1>
+        <p className="settings-page__subtitle">Sync status, corrective tools, and account connections.</p>
+      </div>
 
       <section className="settings-box">
         <h2>Score display</h2>

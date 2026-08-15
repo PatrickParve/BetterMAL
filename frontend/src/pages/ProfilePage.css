@@ -4,6 +4,28 @@
   gap: 24px;
 }
 
+.profile-page__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-page__header h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+
+.profile-page__subtitle {
+  margin: 0;
+  color: var(--text);
+  opacity: 0.75;
+  font-size: 14px;
+}
+
 .profile-page__top-row {
   display: grid;
   grid-template-columns: clamp(200px, 18%, 260px) minmax(0, 1fr) minmax(0, 1.15fr);

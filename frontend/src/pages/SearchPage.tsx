@@ -1,11 +1,13 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getSearchPage } from '../api/client.ts'
 import type { AnimeBrowseItemDto, SeriesSearchResultDto } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
+import { FilterMultiSelect, type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
 import { SeriesBadge } from '../components/SeriesBadge.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
+import { MEDIA_TYPE_ORDER, mediaTypeLabel } from '../utils/anime.ts'
 import './SearchPage.css'
 
 type SortKey = 'relevance' | 'popularity' | 'malScore' | 'alphabetical' | 'myScore'
@@ -52,6 +54,8 @@ export function SearchPage() {
   const q = searchParams.get('q') ?? ''
   const sortParam = searchParams.get('sort')
   const sort = isSortKey(sortParam) ? sortParam : 'relevance'
+  const typeParam = searchParams.get('type')
+  const typeFilter = typeParam ? typeParam.split(',').filter(Boolean) : []
 
   // Keyed on the query alone: a different query is a different history
   // snapshot, so restoring one restores its results regardless of which sort
@@ -82,6 +86,15 @@ export function SearchPage() {
     })
   }
 
+  function setTypeFilter(next: string[]) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      if (next.length > 0) params.set('type', next.join(','))
+      else params.delete('type')
+      return params
+    })
+  }
+
   // Sort changed within the same query: the query's initial or restored load
   // is already covered by usePageData itself (above), so this only fires on
   // a later change, reusing `reload`'s own generation guard. Read through a
@@ -96,6 +109,28 @@ export function SearchPage() {
     reloadRef.current()
   }, [sort])
 
+  // Type filter options: only the media types actually present in the loaded
+  // candidate set, mirroring MyListPage's presentTypes/hasUnknownType (D6).
+  const typeOptions = useMemo(() => {
+    const presentTypes = new Set<string>()
+    let hasUnknownType = false
+    for (const item of items) {
+      if (item.mediaType) presentTypes.add(item.mediaType)
+      else hasUnknownType = true
+    }
+    const options: FilterMultiSelectOption[] = MEDIA_TYPE_ORDER.filter((value) => presentTypes.has(value)).map(
+      (value) => ({ value, label: mediaTypeLabel(value) }),
+    )
+    if (hasUnknownType) options.push({ value: 'unknown', label: 'Unknown' })
+    return options
+  }, [items])
+
+  const filteredItems = useMemo(
+    () =>
+      typeFilter.length === 0 ? items : items.filter((item) => typeFilter.includes(item.mediaType ?? 'unknown')),
+    [items, typeFilter],
+  )
+
   // Reveal more of the already-loaded array once the sentinel enters view —
   // no network call, everything for this (query, sort) is already in memory.
   useEffect(() => {
@@ -104,21 +139,24 @@ export function SearchPage() {
 
     const observer = new IntersectionObserver((entries) => {
       if (entries[0]?.isIntersecting) {
-        setVisibleCount((prev) => Math.min(prev + CHUNK_SIZE, items.length))
+        setVisibleCount((prev) => Math.min(prev + CHUNK_SIZE, filteredItems.length))
       }
     })
     observer.observe(node)
     return () => observer.disconnect()
-  }, [items, setVisibleCount])
+  }, [filteredItems, setVisibleCount])
 
-  const visibleItems = items.slice(0, visibleCount)
+  const visibleItems = filteredItems.slice(0, visibleCount)
 
   return (
     <div className="search-page">
       <div className="search-page__header">
         <h1>{q.length > 0 ? <>Results for “{q}”</> : 'Search'}</h1>
         <div className="search-page__controls">
-          {totalCount > 0 && <span className="search-page__count">{totalCount} results</span>}
+          {totalCount > 0 && <span className="search-page__count">{filteredItems.length} results</span>}
+          {typeOptions.length > 0 && (
+            <FilterMultiSelect label="Type" options={typeOptions} selected={typeFilter} onChange={setTypeFilter} />
+          )}
           <select
             className="search-page__sort"
             value={sort}

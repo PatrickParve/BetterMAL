@@ -306,6 +306,8 @@ Under the default relevance order, matched series (see "Series appear in search 
 
 Results SHALL be loaded with continuous (infinite) scroll rather than numbered pages: an initial chunk renders immediately and further chunks are appended automatically as the user scrolls toward the end of the loaded results, with no pagination controls anywhere on the page. Sorting SHALL be applied server-side across the whole candidate result set before it is chunked, so the order is global rather than per-chunk and an item never moves between chunks as more load. Changing the sort SHALL reset the accumulated results to the first chunk. Series cards SHALL all be shown up front rather than participating in chunked reveal.
 
+The system SHALL provide a multi-select Type filter on the search results page, using the same control and display labels as My List's type filter, offering only the media types actually present among the currently loaded candidate results. Selecting one or more types SHALL immediately narrow the displayed anime cards to matching types, applied over the already-loaded candidate set without issuing a new search request. With no type selected, no type restriction applies. The result count line SHALL reflect the type-filtered anime count rather than the full unfiltered candidate count. Series cards SHALL be unaffected by the type filter and SHALL continue to be shown under the default relevance order regardless of which types are selected, since a series is not itself a single media-typed row.
+
 #### Scenario: Viewing full results for a query
 - **WHEN** I submit a search
 - **THEN** the search page shows all matching anime as cards with picture, title, type, and episode count, in the API's relevance order by default
@@ -353,6 +355,18 @@ Results SHALL be loaded with continuous (infinite) scroll rather than numbered p
 #### Scenario: The result count reports anime only
 - **WHEN** a query matches one series and twenty anime
 - **THEN** the count line reads twenty results, and the series card is shown in addition to those twenty
+
+#### Scenario: Filtering results by type
+- **WHEN** I select Movie in the search page's type filter
+- **THEN** only movie cards remain visible among the loaded results, and the result count line reflects only the movie count
+
+#### Scenario: Only present types are offered
+- **WHEN** the loaded search results contain no music videos
+- **THEN** the type filter does not offer Music as an option
+
+#### Scenario: Clearing the type filter
+- **WHEN** no type is selected in the search page's type filter
+- **THEN** anime cards of every loaded type are shown
 
 ### Requirement: Searching schedules a series build for an unknown franchise
 When a search's top-ranked anime match belongs to no stored series, the system SHALL schedule that anime's series to be built in the background, so the franchise becomes searchable on a later search without the user having to open its series page.

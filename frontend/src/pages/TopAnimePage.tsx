@@ -27,6 +27,12 @@ export function TopAnimePage() {
 
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
   const pageItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  // Ranks 1-3 and 4-10 only ever occur on page 1 (page size is 50), so
+  // slicing by rank alone naturally scopes the podium/card sections to that
+  // page without checking `page` directly.
+  const podiumItems = pageItems.filter((item) => item.rank <= 3)
+  const cardItems = pageItems.filter((item) => item.rank > 3 && item.rank <= 10)
+  const restItems = pageItems.filter((item) => item.rank > 10)
 
   function setEntry(animeId: number, entry: TopAnimeItemDto['entry']) {
     setItems((prev) => prev && prev.map((item) => (item.animeId === animeId ? { ...item, entry } : item)))
@@ -57,6 +63,25 @@ export function TopAnimePage() {
     })
   }
 
+  // Shared across the podium, card grid, and flat list — only the button's
+  // own class differs per layout.
+  function renderActionButton(item: TopAnimeItemDto, className: string) {
+    return item.entry ? (
+      <button type="button" className={className} onClick={() => handleEdit(item)}>
+        Edit
+      </button>
+    ) : (
+      <button
+        type="button"
+        className={className}
+        disabled={pendingId === item.animeId}
+        onClick={() => handleAdd(item)}
+      >
+        {pendingId === item.animeId ? 'Adding…' : 'Add'}
+      </button>
+    )
+  }
+
   return (
     <div className="top-anime-page">
       <div className="top-anime-page__header">
@@ -71,41 +96,95 @@ export function TopAnimePage() {
       ) : items.length === 0 ? (
         <p className="top-anime-page__empty">No ranking data yet.</p>
       ) : (
-        <ol className="top-anime-page__list">
-          {pageItems.map((item) => (
-            <li key={item.animeId} className="top-anime-row">
-              <span className="top-anime-row__rank">#{item.rank}</span>
-              <Link to={`/anime/${item.animeId}`} className="top-anime-row__link">
-                {item.pictureUrl ? (
-                  <img src={item.pictureUrl} alt="" className="top-anime-row__picture" />
-                ) : (
-                  <div className="top-anime-row__picture top-anime-row__picture--placeholder" aria-hidden="true" />
-                )}
-                <span className="top-anime-row__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
-                  {pickDisplayTitle(item.title, item.englishTitle)}
-                </span>
-              </Link>
-              <span className="top-anime-row__my-score score--mine">{item.entry?.myScore ?? '—'}</span>
-              <span className="top-anime-row__mal-score score--mal">
-                <ScoreValue value={item.malScore} completed={item.entry?.status === 'Completed'} />
-              </span>
-              {item.entry ? (
-                <button type="button" className="top-anime-row__action" onClick={() => handleEdit(item)}>
-                  Edit
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="top-anime-row__action"
-                  disabled={pendingId === item.animeId}
-                  onClick={() => handleAdd(item)}
-                >
-                  {pendingId === item.animeId ? 'Adding…' : 'Add'}
-                </button>
-              )}
-            </li>
-          ))}
-        </ol>
+        <>
+          {podiumItems.length > 0 && (
+            <div className="top-anime-podium">
+              {podiumItems.map((item) => (
+                <div key={item.animeId} className={`top-anime-podium__item top-anime-podium__item--rank-${item.rank}`}>
+                  <Link to={`/anime/${item.animeId}`} className="top-anime-podium__link">
+                    {item.pictureUrl ? (
+                      <img src={item.pictureUrl} alt="" className="top-anime-podium__picture" />
+                    ) : (
+                      <div
+                        className="top-anime-podium__picture top-anime-podium__picture--placeholder"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span
+                      className="top-anime-podium__title"
+                      title={pickDisplayTitle(item.title, item.englishTitle)}
+                    >
+                      {pickDisplayTitle(item.title, item.englishTitle)}
+                    </span>
+                  </Link>
+                  <span className="top-anime-podium__scores">
+                    <span className="score--mine">{item.entry?.myScore ?? '—'}</span>
+                    <span className="score--mal">
+                      <ScoreValue value={item.malScore} completed={item.entry?.status === 'Completed'} />
+                    </span>
+                  </span>
+                  {renderActionButton(item, 'top-anime-podium__action')}
+                  <div className="top-anime-podium__stand">#{item.rank}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {cardItems.length > 0 && (
+            <ul className="top-anime-cards">
+              {cardItems.map((item) => (
+                <li key={item.animeId} className="top-anime-card">
+                  <span className="top-anime-card__rank">#{item.rank}</span>
+                  <Link to={`/anime/${item.animeId}`} className="top-anime-card__link">
+                    {item.pictureUrl ? (
+                      <img src={item.pictureUrl} alt="" className="top-anime-card__picture" />
+                    ) : (
+                      <div
+                        className="top-anime-card__picture top-anime-card__picture--placeholder"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span className="top-anime-card__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
+                      {pickDisplayTitle(item.title, item.englishTitle)}
+                    </span>
+                  </Link>
+                  <span className="top-anime-card__scores">
+                    <span className="score--mine">{item.entry?.myScore ?? '—'}</span>
+                    <span className="score--mal">
+                      <ScoreValue value={item.malScore} completed={item.entry?.status === 'Completed'} />
+                    </span>
+                  </span>
+                  {renderActionButton(item, 'top-anime-card__action')}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {restItems.length > 0 && (
+            <ol className="top-anime-page__list">
+              {restItems.map((item) => (
+                <li key={item.animeId} className="top-anime-row">
+                  <span className="top-anime-row__rank">#{item.rank}</span>
+                  <Link to={`/anime/${item.animeId}`} className="top-anime-row__link">
+                    {item.pictureUrl ? (
+                      <img src={item.pictureUrl} alt="" className="top-anime-row__picture" />
+                    ) : (
+                      <div className="top-anime-row__picture top-anime-row__picture--placeholder" aria-hidden="true" />
+                    )}
+                    <span className="top-anime-row__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
+                      {pickDisplayTitle(item.title, item.englishTitle)}
+                    </span>
+                  </Link>
+                  <span className="top-anime-row__my-score score--mine">{item.entry?.myScore ?? '—'}</span>
+                  <span className="top-anime-row__mal-score score--mal">
+                    <ScoreValue value={item.malScore} completed={item.entry?.status === 'Completed'} />
+                  </span>
+                  {renderActionButton(item, 'top-anime-row__action')}
+                </li>
+              ))}
+            </ol>
+          )}
+        </>
       )}
 
       {items.length > 0 && (

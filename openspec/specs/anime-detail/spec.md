@@ -367,6 +367,8 @@ The SeriesGraph link SHALL point at a SeriesGraph title search for that anime, s
 
 Titles used to build search links SHALL be URL-encoded.
 
+The three link buttons SHALL keep a fixed, content-sized shape regardless of how many lines the adjacent genres line wraps to: they SHALL NOT stretch to fill the height of the info-grid row they share with the genres field. When the genres line wraps onto two lines and grows taller than the buttons, the button row SHALL be vertically centered against that taller genres block rather than stretched to fill it or anchored to its top.
+
 #### Scenario: Building the MyAnimeList link
 - **WHEN** the detail page renders
 - **THEN** it shows a MyAnimeList link constructed from the MAL id without making an API call
@@ -390,6 +392,14 @@ Titles used to build search links SHALL be URL-encoded.
 #### Scenario: Title with characters needing encoding
 - **WHEN** the anime's title contains spaces, `&`, or `#`
 - **THEN** the search links encode them so the destination resolves to a search for the full title
+
+#### Scenario: Buttons stay a fixed size when genres wrap to two lines
+- **WHEN** the genres line wraps onto two lines
+- **THEN** the three link buttons remain the same size they are when genres fit on one line, and are vertically centered alongside the genres block rather than stretched to match its height
+
+#### Scenario: Buttons are the same size whether genres wrap or not
+- **WHEN** I compare the link buttons on an anime whose genres fit one line to one whose genres wrap to two lines
+- **THEN** the buttons are exactly the same size in both cases
 
 ### Requirement: Series link in the relations row
 The detail page's relations row SHALL include a **Series** link to the series page for the anime being viewed, whenever that anime has at least one stored relation of a story type (`sequel`, `prequel`, `side_story`, `parent_story`, `summary`, `full_story`, `spin_off`, `alternative_version`), or the anime is already recorded as a member of a built series. The relation check is decided from data the page already loads, without an extra request; the membership check is a single indexed lookup on the anime's id, not a series build.

@@ -364,7 +364,10 @@ export function ProfilePage() {
 
   return (
     <div className="profile-page">
-      <h1>Profile</h1>
+      <div className="profile-page__header">
+        <h1>Profile</h1>
+        <p className="profile-page__subtitle">Your stats, ratings, and favorites, all in one place.</p>
+      </div>
 
       <div className="profile-page__top-row">
         <section className="profile-box">

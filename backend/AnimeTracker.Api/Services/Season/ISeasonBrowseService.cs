@@ -8,7 +8,7 @@ public interface ISeasonBrowseService
 {
     /// <summary>Repository-only read — never calls MAL. Returns the page plus
     /// when this season was last fetched (null if never).</summary>
-    Task<SeasonPageDto> GetPageAsync(int year, string season, string sortKey, bool includeMyList, bool hideHentai, int offset, int limit, CancellationToken ct = default);
+    Task<SeasonPageDto> GetPageAsync(int year, string season, string sortKey, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default);
 
     /// <summary>Fetches this season from MAL if it hasn't already been fetched
     /// successfully today, subject to a per-season single-flight guard.

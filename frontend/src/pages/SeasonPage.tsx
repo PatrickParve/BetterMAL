@@ -3,10 +3,12 @@ import { useSearchParams } from 'react-router-dom'
 import { getSeasonPage, refreshSeason } from '../api/client.ts'
 import type { AnimeBrowseItemDto } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
+import { FilterMultiSelect, type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
 import { useLatestRequest } from '../hooks/useLatestRequest.ts'
 import { usePageData } from '../hooks/usePageData.ts'
+import { MEDIA_TYPE_ORDER, mediaTypeLabel } from '../utils/anime.ts'
 import './SeasonPage.css'
 
 interface SeasonReadState {
@@ -81,11 +83,13 @@ export function SeasonPage() {
   const seasonParam = searchParams.get('season')
   const sortParam = searchParams.get('sort')
   const inMyListParam = searchParams.get('inMyList')
+  const typeParam = searchParams.get('type')
 
   const year = Number.isInteger(yearParam) && yearParam > 0 ? yearParam : fallback.year
   const season = isSeasonName(seasonParam) ? seasonParam : fallback.season
   const sort = isSortKey(sortParam) ? sortParam : 'popularity'
   const inMyList = inMyListParam !== '0'
+  const typeFilter = typeParam ? typeParam.split(',').filter(Boolean) : []
   const { hideHentai } = useContentFilter()
 
   // Keyed on season/year alone: a different season is a different history
@@ -99,9 +103,14 @@ export function SeasonPage() {
     loading,
     reload,
   } = usePageData<SeasonReadState>(seasonKey, () =>
-    getSeasonPage(year, season, { sort, includeMyList: inMyList, hideHentai, offset: 0, limit: PAGE_SIZE }).then(
-      (page) => ({ items: page.items, totalCount: page.totalCount, lastFetchedAt: page.lastFetchedAt }),
-    ),
+    getSeasonPage(year, season, {
+      sort,
+      includeMyList: inMyList,
+      hideHentai,
+      types: typeFilter,
+      offset: 0,
+      limit: PAGE_SIZE,
+    }).then((page) => ({ items: page.items, totalCount: page.totalCount, lastFetchedAt: page.lastFetchedAt })),
   )
   const items = seasonData?.items ?? []
   const totalCount = seasonData?.totalCount ?? 0
@@ -123,6 +132,13 @@ export function SeasonPage() {
   inMyListRef.current = inMyList
   const hideHentaiRef = useRef(hideHentai)
   hideHentaiRef.current = hideHentai
+  const typeFilterRef = useRef(typeFilter)
+  typeFilterRef.current = typeFilter
+  const seenTypesRef = useRef<{ key: string; types: Set<string>; hasUnknown: boolean }>({
+    key: seasonKey,
+    types: new Set<string>(),
+    hasUnknown: false,
+  })
   const itemsLengthRef = useRef(items.length)
   itemsLengthRef.current = items.length
   const reloadRef = useRef(reload)
@@ -135,6 +151,32 @@ export function SeasonPage() {
     const latest = Math.max(year, fallback.year) + 1
     return Array.from({ length: latest - EARLIEST_YEAR + 1 }, (_, i) => latest - i)
   }, [year, fallback.year])
+
+  // Type filter options: every media type seen across this season's loaded
+  // pages, mirroring MyListPage's presentTypes/hasUnknownType (D6) but
+  // accumulated rather than a one-shot read of `items` — the filter runs
+  // server-side, so once a type is selected `items` only ever contains that
+  // type again, and a naive re-derivation from `items` alone would make every
+  // other type disappear from the picker the moment one is chosen. Reset when
+  // the season itself changes; mutated directly during render (not an effect)
+  // so newly discovered types are reflected in the same pass that loaded them.
+  if (seenTypesRef.current.key !== seasonKey) {
+    seenTypesRef.current = { key: seasonKey, types: new Set<string>(), hasUnknown: false }
+  }
+  for (const item of items) {
+    if (item.mediaType) seenTypesRef.current.types.add(item.mediaType)
+    else seenTypesRef.current.hasUnknown = true
+  }
+
+  const typeOptions = useMemo(() => {
+    const { types: presentTypes, hasUnknown: hasUnknownType } = seenTypesRef.current
+    const options: FilterMultiSelectOption[] = MEDIA_TYPE_ORDER.filter((value) => presentTypes.has(value)).map(
+      (value) => ({ value, label: mediaTypeLabel(value) }),
+    )
+    if (hasUnknownType) options.push({ value: 'unknown', label: 'Unknown' })
+    return options
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, seasonKey])
 
   function setTarget(next: { year: number; season: SeasonName }) {
     setSearchParams((prev) => {
@@ -162,13 +204,22 @@ export function SeasonPage() {
     })
   }
 
+  function setTypeFilter(next: string[]) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      if (next.length > 0) params.set('type', next.join(','))
+      else params.delete('type')
+      return params
+    })
+  }
+
   // Any parameter the cache-first read below depends on invalidates
   // in-flight background-refresh/load-more requests started before the
   // change (mirroring the generation guard usePageData applies to its own
   // load internally, for the two fetches that sit outside it).
   useEffect(() => {
     start()
-  }, [seasonKey, sort, inMyList, hideHentai])
+  }, [seasonKey, sort, inMyList, hideHentai, typeParam])
 
   // Sort/filter changed within the same season: the season's initial or
   // restored load is already covered by usePageData itself (above), so this
@@ -183,7 +234,7 @@ export function SeasonPage() {
       return
     }
     reloadRef.current()
-  }, [sort, inMyList, hideHentai])
+  }, [sort, inMyList, hideHentai, typeParam])
 
   // Visit-triggered background refresh: keyed on season alone (via the
   // debounced key below) so sort/filter changes never cause a MAL fetch.
@@ -212,6 +263,7 @@ export function SeasonPage() {
           sort: sortRef.current,
           includeMyList: inMyListRef.current,
           hideHentai: hideHentaiRef.current,
+          types: typeFilterRef.current,
           offset: 0,
           limit: Math.max(itemsLengthRef.current, PAGE_SIZE),
         }).then((page) => {
@@ -247,7 +299,14 @@ export function SeasonPage() {
       if (isLoading || !hasMore) return
       const requestId = current()
       setLoadingMore(true)
-      getSeasonPage(year, season, { sort, includeMyList: inMyList, hideHentai, offset: items.length, limit: PAGE_SIZE })
+      getSeasonPage(year, season, {
+        sort,
+        includeMyList: inMyList,
+        hideHentai,
+        types: typeFilter,
+        offset: items.length,
+        limit: PAGE_SIZE,
+      })
         .then((page) => {
           if (!isLatest(requestId)) return
           setSeasonData((prev) =>
@@ -256,10 +315,15 @@ export function SeasonPage() {
         })
         .catch(() => {})
         .finally(() => {
-          if (isLatest(requestId)) setLoadingMore(false)
+          // Unconditional: a superseded request must still clear the
+          // in-flight flag or a param change (sort/filter) that invalidates
+          // it mid-request leaves `loadingMore` stuck true forever, silently
+          // blocking every future scroll-triggered load. Only *applying* a
+          // stale result to state is gated by isLatest, in the .then above.
+          setLoadingMore(false)
         })
     }
-  }, [items, isLoading, hasMore, year, season, sort, inMyList, hideHentai])
+  }, [items, isLoading, hasMore, year, season, sort, inMyList, hideHentai, typeParam])
 
   return (
     <div className="season-page">
@@ -322,6 +386,9 @@ export function SeasonPage() {
               </option>
             ))}
           </select>
+          {typeOptions.length > 0 && (
+            <FilterMultiSelect label="Type" options={typeOptions} selected={typeFilter} onChange={setTypeFilter} />
+          )}
           <label className="season-page__checkbox">
             <input type="checkbox" checked={inMyList} onChange={(event) => setInMyList(event.target.checked)} />
             In my list

@@ -13,6 +13,9 @@
 
 .airing-page__header h1 {
   margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: normal;
 }
 
 .airing-page__nav {

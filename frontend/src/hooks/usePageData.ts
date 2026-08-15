@@ -31,6 +31,17 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
   // current — the same class of race `useLatestRequest` guards elsewhere.
   const generationRef = useRef(0)
 
+  // Tracks which generation is currently responsible for clearing `loading`
+  // — separate from `generationRef` (which only gates whether a result gets
+  // applied to `data`). A page's own PageStateContext key changes on every
+  // URL update (e.g. a filter toggle via setSearchParams), which can start a
+  // second, competing `runLoad(true)` here while an explicit `reload()`
+  // (showLoading: false) from the page is also in flight for the same
+  // change. Without this, whichever call finishes first would find itself
+  // no longer "the latest" generation and skip clearing `loading`, leaving
+  // it stuck true forever with nothing left to reset it.
+  const loadingGenerationRef = useRef<number | null>(null)
+
   const isSeeded = isRestore && snapshot.data.has(key)
   const seededValue = () => (isSeeded ? (snapshot.data.get(key) as T) : null)
 
@@ -62,7 +73,10 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
   const runLoad = useCallback(
     (showLoading: boolean) => {
       const generation = ++generationRef.current
-      if (showLoading) setLoading(true)
+      if (showLoading) {
+        loadingGenerationRef.current = generation
+        setLoading(true)
+      }
       return loadRef
         .current()
         .then((result) => {
@@ -75,7 +89,12 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
           // load with nothing to show simply stays empty.
         })
         .finally(() => {
-          if (generationRef.current === generation && showLoading) setLoading(false)
+          // Only the call currently holding the loading flag clears it — see
+          // loadingGenerationRef above.
+          if (loadingGenerationRef.current === generation) {
+            loadingGenerationRef.current = null
+            setLoading(false)
+          }
         })
     },
     [snapshot, key],
