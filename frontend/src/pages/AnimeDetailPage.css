@@ -146,10 +146,6 @@
   padding: 12px 16px;
 }
 
-.anime-detail-page__score-boxes .score-chip {
-  min-width: 0;
-}
-
 .detail-box {
   display: flex;
   flex-direction: column;

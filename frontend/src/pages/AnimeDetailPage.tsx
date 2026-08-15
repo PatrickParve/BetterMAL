@@ -8,7 +8,6 @@ import type {
 } from "../api/types.ts";
 import { ProgressBar } from "../components/ProgressBar.tsx";
 import { RelatedAnimeOverlay } from "../components/RelatedAnimeOverlay.tsx";
-import { ScoreChip } from "../components/ScoreChip.tsx";
 import { ScoreValue } from "../components/ScoreValue.tsx";
 import { useEntryEditor } from "../context/EntryEditorContext.tsx";
 import {
@@ -410,18 +409,23 @@ export function AnimeDetailPage() {
         <div className="anime-detail-page__main">
           <div className="anime-detail-page__score-boxes">
             <section className="detail-box">
+              <p>
+                MAL score:{" "}
+                <span className="score--mal">
+                  <ScoreValue value={detail.malScore} completed={detail.entry?.status === 'Completed'} />
+                </span>
+              </p>
               <p>Rank: {detail.rank ? `#${detail.rank}` : "—"}</p>
               <p>
                 Popularity:{" "}
                 {detail.popularityRank ? `#${detail.popularityRank}` : "—"}
               </p>
-              <ScoreChip role="mal" label="MAL score">
-                <ScoreValue value={detail.malScore} completed={detail.entry?.status === 'Completed'} />
-              </ScoreChip>
             </section>
             {detail.entry && detail.entry.myScore != null && (
               <section className="detail-box">
-                <ScoreChip role="mine" label="My score">{detail.entry.myScore}</ScoreChip>
+                <p>
+                  My score: <span className="score--mine">{detail.entry.myScore}</span>
+                </p>
                 {detail.entry.rewatchCount !== 0 && (
                   <p>Rewatch count: {detail.entry.rewatchCount}</p>
                 )}

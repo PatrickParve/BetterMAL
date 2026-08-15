@@ -4,6 +4,17 @@
   align-items: stretch;
   width: 100%;
   max-width: 360px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+/* The input's own outline is suppressed here because the wrapper draws the
+   focus indicator instead — an inset ring, so it renders inside the field's
+   border box and can never reach the magnifier beside it. */
+.search-bar:focus-within {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .search-bar__input {
@@ -12,16 +23,13 @@
   box-sizing: border-box;
   font: inherit;
   padding: 8px 12px;
-  border-radius: 8px 0 0 8px;
-  border: 1px solid var(--border);
-  border-right: none;
-  background: var(--bg);
+  border: none;
+  background: none;
   color: var(--text-h);
 }
 
 .search-bar__input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: none;
 }
 
 .search-bar__submit {
@@ -31,7 +39,7 @@
   justify-content: center;
   width: 38px;
   padding: 0;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 0 8px 8px 0;
   background: transparent;
   color: var(--text);
@@ -64,11 +72,17 @@
   z-index: 50;
 }
 
+/* Fixed rather than left to the content: a series row's title+badge stack
+   and an anime row's bare title would otherwise measure to different
+   heights, making the dropdown grow or shrink as matches change mid-typing.
+   52px = the 40px thumbnail plus this row's own 6px top/bottom padding. */
 .search-bar__result {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
+  height: 52px;
+  box-sizing: border-box;
   padding: 6px 8px;
   border: none;
   background: none;
@@ -99,8 +113,18 @@
   min-width: 0;
 }
 
+/* The root's 145% line-height computes to a length (~23px) on :root and
+   inherits as that length, not as a ratio — so both the title and the badge
+   line sat in ~23px line boxes here, which is what made a series row taller
+   than an anime row. Pinned to fit the row's 40px content box: 20 + 2px gap
+   + 16 = 38px. */
 .search-bar__result-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 20px;
+}
+
+.search-bar__result .series-badge {
+  line-height: 16px;
 }

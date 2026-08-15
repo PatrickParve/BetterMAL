@@ -17,6 +17,15 @@
 }
 
 .dashboard-section--carousel {
+  /* .dashboard-section's content-box default lets max-width: 100% cap only
+     the content area, so this section's own padding+border (52px) pushed
+     the border-box that much past the viewport whenever the carousel track
+     inside actually overflowed (index.css's #root now has overflow-x: clip
+     as a backstop, which would otherwise clip this away silently instead of
+     it being reachable via document scroll as it is today). border-box
+     folds padding+border inside the 100% cap like #root/.page-content
+     already do. */
+  box-sizing: border-box;
   width: fit-content;
   max-width: 100%;
   margin: 0 auto;

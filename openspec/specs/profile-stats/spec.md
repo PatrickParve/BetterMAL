@@ -135,7 +135,11 @@ Each row of the "Latest updates" feed SHALL show its anime's title on a single l
 ### Requirement: Full edit-history overlay
 The system SHALL provide, in the top-right corner of the "Latest updates" box, a control that opens a full history of every edit as an overlay on top of the page, which closes on Esc or a click outside it.
 
+The overlay SHALL also be dismissable from a close control in its own top-right corner, aligned with its title: an icon control (a ✕) rather than a labelled button beneath the list. It SHALL carry an accessible label naming what it does, SHALL be reachable and operable by keyboard, and SHALL show a hover state in the same style as the app's other icon controls. It SHALL remain visible and in place regardless of how far the history list is scrolled. No other close control SHALL be offered.
+
 Each history row SHALL show the anime's poster picture alongside its title, in the same style as the rows of the "Latest updates" box, and SHALL show the anime's English title when one is available, falling back to the default title otherwise. A row's title SHALL be truncated to at most two lines, with the full title available on hover.
+
+The history list SHALL show five whole rows when the overlay opens, with no part of a sixth row visible beneath them and no row clipped part-way. Its height SHALL be derived from the height of a row rather than from the viewport, so the same five whole rows are shown at any window height; the rest of the history SHALL be reached by scrolling the list. A history holding fewer than five rows SHALL show what it has without reserving the height of five.
 
 Each history row SHALL describe its change as a single phrase, using the same phrasing as the "Latest updates" feed, and SHALL NOT pair a change-type label with a detail that restates it. Change types the feed omits — status changes, start-date changes, and finish-date changes — SHALL appear in the history, each named once by the same rule: a status change reporting the status it moved from and to, a date change reporting the new date or that the date was cleared.
 
@@ -158,6 +162,30 @@ The overlay SHALL let me narrow the history by anime title and by date:
 #### Scenario: Closing the history overlay
 - **WHEN** the history overlay is open and I press Esc or click outside it
 - **THEN** the overlay closes
+
+#### Scenario: Closing from the corner control
+- **WHEN** I click the ✕ in the overlay's top-right corner
+- **THEN** the overlay closes, and no separate Close button is shown beneath the list
+
+#### Scenario: The close control is keyboard-operable
+- **WHEN** I tab to the ✕ and press Enter or Space
+- **THEN** the overlay closes, and while focused the control is clearly marked as focused
+
+#### Scenario: Five whole rows on open
+- **WHEN** the overlay opens on a history with more than five entries
+- **THEN** five rows are visible in full, no part of a sixth is shown, and no row is cut through the middle
+
+#### Scenario: Whole rows at any window height
+- **WHEN** the overlay is opened in a taller or shorter window
+- **THEN** it still shows five whole rows rather than a fraction of a row
+
+#### Scenario: The rest of the history is still reachable
+- **WHEN** the history holds more than five rows
+- **THEN** the remainder is reached by scrolling the list, and the ✕ stays in place while it scrolls
+
+#### Scenario: A short history
+- **WHEN** the history holds two rows
+- **THEN** the overlay shows those two rows without reserving the height of five
 
 #### Scenario: English titles in the history
 - **WHEN** a history row's anime has a stored English title

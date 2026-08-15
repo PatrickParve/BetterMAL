@@ -334,6 +334,10 @@
   padding: 8px;
   overflow-x: auto;
   overflow-y: hidden;
+  /* Stops a flick past the strip's last tile from chaining to the document
+     (index.css's overscroll-behavior-x: none handles the document side);
+     `contain`, not `none`, so the strip keeps its own end-of-scroll bounce. */
+  overscroll-behavior-x: contain;
   cursor: grab;
   user-select: none;
   scrollbar-width: none;
@@ -427,6 +431,9 @@
   padding: 8px;
   overflow-x: auto;
   overflow-y: hidden;
+  /* See .top-anime-strip: stops end-of-strip flicks from chaining to the
+     document. */
+  overscroll-behavior-x: contain;
   cursor: grab;
   user-select: none;
   scrollbar-width: none;
@@ -516,6 +523,9 @@
   padding: 8px;
   overflow-x: auto;
   overflow-y: hidden;
+  /* See .top-anime-strip: stops end-of-strip flicks from chaining to the
+     document. */
+  overscroll-behavior-x: contain;
   cursor: grab;
   user-select: none;
   scrollbar-width: none;

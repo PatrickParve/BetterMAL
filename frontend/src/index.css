@@ -124,6 +124,11 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  /* Backstop against any child that overflows the shell. `clip`, not
+     `hidden`: `hidden` would make #root a scroll container (forcing the
+     vertical axis into one too), while `clip` doesn't — and nothing here
+     uses position: sticky, so there's no sticky context to break. */
+  overflow-x: clip;
 }
 
 .page-content {
@@ -132,6 +137,15 @@
   box-sizing: border-box;
   padding: 24px;
   text-align: left;
+}
+
+/* Stops the document's own horizontal rubber-band and the browser's
+   swipe-to-navigate gesture. Declared on html explicitly rather than
+   relying on body-to-viewport propagation, which only applies when html
+   says nothing. */
+html,
+body {
+  overscroll-behavior-x: none;
 }
 
 body {

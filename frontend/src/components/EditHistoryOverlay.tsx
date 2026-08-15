@@ -67,9 +67,14 @@ export function EditHistoryOverlay({ onClose }: EditHistoryOverlayProps) {
   return (
     <Modal onClose={onClose} labelledBy="edit-history-title" className="modal--wide">
       <div className="edit-history">
-        <h2 id="edit-history-title" className="edit-history__title">
-          Full edit history
-        </h2>
+        <div className="edit-history__header">
+          <h2 id="edit-history-title" className="edit-history__title">
+            Full edit history
+          </h2>
+          <button type="button" className="edit-history__close" aria-label="Close history" onClick={onClose}>
+            <CloseIcon />
+          </button>
+        </div>
 
         <div className="edit-history__filters">
           <input
@@ -113,36 +118,41 @@ export function EditHistoryOverlay({ onClose }: EditHistoryOverlayProps) {
         ) : filteredHistory.length === 0 ? (
           <p className="edit-history__empty">No history matches these filters.</p>
         ) : (
-          <ul className="edit-history__list scroll-y">
-            {filteredHistory.map((item) => (
-              <li key={item.id} className="edit-history__row">
-                <Link to={`/anime/${item.animeId}`} className="edit-history__link" onClick={onClose}>
-                  {item.pictureUrl ? (
-                    <img src={item.pictureUrl} alt="" className="edit-history__picture" />
-                  ) : (
-                    <div className="edit-history__picture edit-history__picture--placeholder" aria-hidden="true" />
-                  )}
-                  <span className="edit-history__info">
-                    <TruncatedTitle
-                      title={pickDisplayTitle(item.animeTitle, item.animeEnglishTitle)}
-                      lines={2}
-                      className="edit-history__row-title"
-                    />
-                    <span className="edit-history__detail">{item.summary}</span>
-                  </span>
-                </Link>
-                <span className="edit-history__timestamp">{formatTimestamp(item.timestamp)}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="edit-history__list-frame">
+            <ul className="edit-history__list scroll-y">
+              {filteredHistory.map((item) => (
+                <li key={item.id} className="edit-history__row">
+                  <Link to={`/anime/${item.animeId}`} className="edit-history__link" onClick={onClose}>
+                    {item.pictureUrl ? (
+                      <img src={item.pictureUrl} alt="" className="edit-history__picture" />
+                    ) : (
+                      <div className="edit-history__picture edit-history__picture--placeholder" aria-hidden="true" />
+                    )}
+                    <span className="edit-history__info">
+                      <TruncatedTitle
+                        title={pickDisplayTitle(item.animeTitle, item.animeEnglishTitle)}
+                        lines={2}
+                        className="edit-history__row-title"
+                      />
+                      <span className="edit-history__detail">{item.summary}</span>
+                    </span>
+                  </Link>
+                  <span className="edit-history__timestamp">{formatTimestamp(item.timestamp)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
-
-        <div className="edit-history__buttons">
-          <button type="button" onClick={onClose}>
-            Close
-          </button>
-        </div>
       </div>
     </Modal>
+  )
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <line x1="6" y1="6" x2="18" y2="18" />
+      <line x1="18" y1="6" x2="6" y2="18" />
+    </svg>
   )
 }
