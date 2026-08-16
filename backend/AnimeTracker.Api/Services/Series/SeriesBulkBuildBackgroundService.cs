@@ -41,6 +41,7 @@ public class SeriesBulkBuildBackgroundService(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Manual series bulk build failed.");
+                progress.Fail();
             }
         }
     }
@@ -64,8 +65,15 @@ public class SeriesBulkBuildBackgroundService(
             // franchise can store several of its other members too, so a
             // later target in this same run may already be covered — count
             // it as processed without building it again, so progress reflects
-            // real remaining work (design.md decision 6).
-            var alreadyCovered = await db.SeriesMembers.AsNoTracking().AnyAsync(m => m.AnimeId == animeId, ct);
+            // real remaining work (design.md decision 6). "Covered" also
+            // requires the member's series to be built under the current
+            // classification rules, so a franchise rebuilt earlier in this
+            // same run short-circuits its other members while one that
+            // predates the run and hasn't been touched yet still gets
+            // rebuilt (design.md decision 4).
+            var alreadyCovered = await db.SeriesMembers.AsNoTracking()
+                .Join(db.Series.AsNoTracking(), m => m.SeriesId, s => s.Id, (m, s) => new { m.AnimeId, s.BuiltAt })
+                .AnyAsync(x => x.AnimeId == animeId && x.BuiltAt >= SeriesGraphBuilder.ClassificationRevisedAt, ct);
             if (!alreadyCovered)
             {
                 try
@@ -91,19 +99,25 @@ public class SeriesBulkBuildBackgroundService(
         progress.Complete();
     }
 
-    // My-list anime with no SeriesMembers row yet.
+    // My-list anime with no SeriesMembers row yet, plus my-list anime whose
+    // stored series was built before the current classification rules took
+    // effect — so one press of the Settings button both fills in missing
+    // series and heals ones stored under superseded rules (design.md
+    // decision 4).
     private static async Task<List<int>> GetTargetsAsync(
         AnimeTrackerDbContext db, IUserAnimeEntryRepository entryRepository, CancellationToken ct)
     {
         var entries = await entryRepository.GetAllAsync(ct);
         var animeIds = entries.Select(e => e.AnimeId).Distinct().ToList();
 
-        var alreadyMembers = (await db.SeriesMembers.AsNoTracking()
+        var upToDateMembers = (await db.SeriesMembers.AsNoTracking()
             .Where(m => animeIds.Contains(m.AnimeId))
-            .Select(m => m.AnimeId)
+            .Join(db.Series.AsNoTracking(), m => m.SeriesId, s => s.Id, (m, s) => new { m.AnimeId, s.BuiltAt })
+            .Where(x => x.BuiltAt >= SeriesGraphBuilder.ClassificationRevisedAt)
+            .Select(x => x.AnimeId)
             .ToListAsync(ct))
             .ToHashSet();
 
-        return animeIds.Where(id => !alreadyMembers.Contains(id)).ToList();
+        return animeIds.Where(id => !upToDateMembers.Contains(id)).ToList();
     }
 }

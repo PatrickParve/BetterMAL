@@ -1,0 +1,10 @@
+ SeriesId | AnimeId |                                    Title                                    | MediaType | IsMainLine 
+----------+---------+-----------------------------------------------------------------------------+-----------+------------
+       19 |   49236 | Youjo Senki: Sabaku no Pasta Daisakusen                                     | ona       | t
+       27 |      82 | Kidou Senshi Gundam 0080: Pocket no Naka no Sensou                          | ova       | t
+       73 |   61633 | Tu Bian Yingxiong X Concept Movie                                           | ona       | t
+       76 |   32801 | Dungeon ni Deai wo Motomeru no wa Machigatteiru Darou ka OVA                | ova       | t
+       76 |   37348 | Dungeon ni Deai wo Motomeru no wa Machigatteiru Darou ka Movie: Orion no Ya | movie     | t
+      105 |   32268 | Koyomimonogatari                                                            | ona       | t
+(6 rows)
+

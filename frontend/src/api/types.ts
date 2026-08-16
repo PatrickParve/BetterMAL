@@ -383,7 +383,7 @@ export type AiringFullRefreshStatusDto = {
   total: number
 }
 
-export type SeriesBulkBuildPhase = 'NotStarted' | 'Running' | 'Complete'
+export type SeriesBulkBuildPhase = 'NotStarted' | 'Running' | 'Complete' | 'Failed'
 
 // Progress of the settings page's "Build all series from my list" action.
 // Built counts targets processed, not builds run — one build can cover

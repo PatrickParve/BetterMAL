@@ -99,9 +99,14 @@ public class SeriesService(
     // cap would then re-traverse and spend fetch budget on every single
     // visit, forever. A truncated series instead picks up a raised cap on
     // the next explicitly requested rebuild or the next staleness-triggered
-    // one (design.md decision 3).
+    // one (design.md decision 3). The ClassificationRevisedAt clause is the
+    // same "row predates X, heal it on first read" pattern, one-shot rather
+    // than recurring: it rebuilds every series built under superseded
+    // main-line rules exactly once, on its next read, without a schema
+    // change or a manual migration.
     private static bool NeedsBuild(SeriesEntity? series) =>
-        series is null || series.IsPartial || series.BuiltAt < DateTimeOffset.UtcNow - StaleAfter;
+        series is null || series.IsPartial || series.BuiltAt < DateTimeOffset.UtcNow - StaleAfter
+        || series.BuiltAt < SeriesGraphBuilder.ClassificationRevisedAt;
 
     private async Task<SeriesEntity?> FindSeriesAsync(int animeId, CancellationToken ct)
     {

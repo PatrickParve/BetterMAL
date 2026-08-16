@@ -336,7 +336,9 @@ export function SettingsPage() {
           <p className="settings-box__hint">
             {seriesBulkBuildStatus.phase === 'Running'
               ? `Building… ${seriesBulkBuildStatus.built}/${seriesBulkBuildStatus.total}`
-              : `Last run complete: ${seriesBulkBuildStatus.built}/${seriesBulkBuildStatus.total} processed.`}
+              : seriesBulkBuildStatus.phase === 'Failed'
+                ? `Last run failed after ${seriesBulkBuildStatus.built}/${seriesBulkBuildStatus.total} processed — see backend logs.`
+                : `Last run complete: ${seriesBulkBuildStatus.built}/${seriesBulkBuildStatus.total} processed.`}
           </p>
         )}
         <div className="settings-box__buttons">

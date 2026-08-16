@@ -64,12 +64,17 @@ public class SeriesController(
 
     /// <summary>Kicks off the settings page's manual "build all series from my
     /// list" action: builds a series for every my-list anime that belongs to
-    /// no stored series yet. Runs in the background (through the same fetch
+    /// no stored series yet, or whose stored series predates the current
+    /// classification rules. Runs in the background (through the same fetch
     /// budget and single-flight gate as every other build) — poll the status
-    /// endpoint below rather than waiting on this call.</summary>
+    /// endpoint below rather than waiting on this call. Marks the run pending
+    /// before returning, so the response already reports a run in flight
+    /// rather than whatever the previous run left (design.md decision
+    /// 5).</summary>
     [HttpPost("api/series/build-all")]
     public IActionResult TriggerBulkBuild()
     {
+        bulkBuildProgress.MarkPending();
         bulkBuildTrigger.Signal();
         return Accepted(ToDto(bulkBuildProgress.Snapshot));
     }

@@ -28,6 +28,13 @@ public class SeriesGraphBuilder(
     public const int VisitFetchBudget = 8;
     public const int RebuildFetchBudget = 20;
 
+    // Bump this to the ship date whenever ClassifyMainLineChain's rules
+    // change: SeriesService.NeedsBuild treats every series built before this
+    // timestamp as needing a rebuild, so a classification correction reaches
+    // already-stored series on their next read instead of requiring the user
+    // to find and rebuild each one by hand (design.md decision 3).
+    public static readonly DateTimeOffset ClassificationRevisedAt = new(2026, 8, 16, 0, 0, 0, TimeSpan.Zero);
+
     /// <summary>Builds and persists the series reachable from
     /// <paramref name="seedAnimeId"/>, spending at most <paramref name="fetchBudget"/>
     /// live MAL fetches on members with no cached row at all. Returns null
@@ -203,23 +210,40 @@ public class SeriesGraphBuilder(
         return (mainLineIds, mainLineOrdered[0].Id, orderByAnimeId);
     }
 
-    /// <summary>The largest sequel/prequel chain among the members (ties broken
-    /// by earliest-aired member), minus special/music entries and recaps.
-    /// Falls back to the unfiltered chain when that filter empties it out, so
-    /// a specials-only franchise still has a main line to render (design.md
-    /// decision 2 and the degenerate case in decision 4/task 2.7).
+    /// <summary>The sequel/prequel chain ranked highest by its count of
+    /// main-line-eligible members — ties broken by the chain's earliest-aired
+    /// eligible member, falling back to its earliest member of any kind when
+    /// it has none — reduced to just those eligible members. A member is
+    /// ineligible when its media type is `special`/`music`, it's a recap
+    /// (<see cref="FindRecapIds"/>), or it's side content of another member
+    /// (<see cref="FindSideContentIds"/>). The chain graph itself still
+    /// includes every member regardless of eligibility, so an ineligible
+    /// entry that bridges two seasons keeps them in one chain without ever
+    /// being main line itself (design.md decision 2). Falls back to the
+    /// unfiltered chain when reduction empties it out, so a specials-only or
+    /// side-content-only franchise still has a main line to render.
     ///
-    /// Chain candidates are restricted to ones containing at least one `tv`
-    /// member when any exist. A long-running single-entry show (one TV
-    /// series plus many movies/specials, e.g. One Piece) has no sequel/prequel
-    /// edges on the TV entry itself — nothing MAL would call a "season" of
-    /// it exists as a separate entry — so every node, including the TV entry,
-    /// starts out as its own singleton chain. Left unrestricted, a handful of
-    /// side-story movies/specials that happen to sequel-chain to *each other*
-    /// (unrelated to the flagship show) can out-size that singleton and hijack
-    /// the main line entirely. Requiring a `tv` member is a no-op for the
-    /// ordinary case (a real season chain is `tv` by construction) and falls
-    /// back to the unrestricted set when nothing in the component is `tv` at
+    /// Ranking by eligible count rather than raw chain size is what resolves
+    /// a franchise with no sequel/prequel edges at all: when every member
+    /// links only by parent_story/side_story — a show plus its promotional
+    /// shorts, say — every member is its own one-node chain, so raw size
+    /// ties them all at one and an earliest-aired tie-break would hand the
+    /// main line to whichever short happened to air first. Eligible-count
+    /// ranking instead scores the show's chain 1 and every promo chain 0, so
+    /// the show wins regardless of air date.
+    ///
+    /// Chain candidates are restricted to ones containing at least one
+    /// eligible `tv` member when any exist. A long-running single-entry show
+    /// (one TV series plus many movies/specials, e.g. One Piece) has no
+    /// sequel/prequel edges on the TV entry itself — nothing MAL would call a
+    /// "season" of it exists as a separate entry — so every node, including
+    /// the TV entry, starts out as its own singleton chain. Left
+    /// unrestricted, a handful of side-story movies/specials that happen to
+    /// sequel-chain to *each other* (unrelated to the flagship show) can
+    /// out-count that singleton and hijack the main line entirely. Requiring
+    /// an eligible `tv` member is a no-op for the ordinary case (a real
+    /// season chain is `tv` and eligible by construction) and falls back to
+    /// the unrestricted set when nothing in the component is eligible `tv` at
     /// all (a movie-only franchise).</summary>
     private static HashSet<int> ClassifyMainLineChain(List<AnimeMetadata> members, Dictionary<int, AnimeMetadata> memberById)
     {
@@ -238,21 +262,33 @@ public class SeriesGraphBuilder(
             }
         }
 
-        var recapIds = FindRecapIds(members, memberById);
+        var ineligibleIds = FindRecapIds(members, memberById);
+        ineligibleIds.UnionWith(FindSideContentIds(members, memberById));
+        foreach (var member in members)
+        {
+            if (member.MediaType is "special" or "music")
+                ineligibleIds.Add(member.Id);
+        }
+        bool IsEligible(int id) => !ineligibleIds.Contains(id);
 
         var chains = FindConnectedComponents(memberById.Keys, adjacency);
-        var tvChains = chains.Where(chain => chain.Any(id => memberById[id].MediaType == "tv")).ToList();
+        var tvChains = chains.Where(chain => chain.Any(id => IsEligible(id) && memberById[id].MediaType == "tv")).ToList();
         var candidateChains = tvChains.Count > 0 ? tvChains : chains;
-        var largestChain = candidateChains
-            .OrderByDescending(chain => chain.Count)
-            .ThenBy(chain => chain.Min(id => OrderKey(memberById[id])))
+        var winningChain = candidateChains
+            .OrderByDescending(chain => chain.Count(IsEligible))
+            .ThenBy(chain => ChainTieBreakKey(chain, memberById, IsEligible))
             .First();
 
-        var filtered = largestChain
-            .Where(id => memberById[id].MediaType is not ("special" or "music") && !recapIds.Contains(id))
-            .ToHashSet();
+        var reduced = winningChain.Where(IsEligible).ToHashSet();
+        return reduced.Count > 0 ? reduced : winningChain.ToHashSet();
+    }
 
-        return filtered.Count > 0 ? filtered : largestChain.ToHashSet();
+    private static (int HasNoAiredDate, int AiredDayNumber, int AnimeId) ChainTieBreakKey(
+        List<int> chain, Dictionary<int, AnimeMetadata> memberById, Func<int, bool> isEligible)
+    {
+        var eligibleIds = chain.Where(isEligible).ToList();
+        var candidateIds = eligibleIds.Count > 0 ? eligibleIds : chain;
+        return candidateIds.Min(id => OrderKey(memberById[id]));
     }
 
     /// <summary>Members MAL tags as a recap/condensed retelling of another
@@ -289,6 +325,37 @@ public class SeriesGraphBuilder(
         }
 
         return recapIds;
+    }
+
+    /// <summary>Members MAL tags as side content of another member — the
+    /// `side_story`/`parent_story` pair (`A --side_story--> B` means B is a
+    /// side story of A; `B --parent_story--> A` says the same from B's side).
+    /// Mirrors <see cref="FindRecapIds"/> one-for-one. Only edges between two
+    /// members count: a member whose parent story was never traversed into
+    /// this series is not demoted by a relation this build never saw.</summary>
+    private static HashSet<int> FindSideContentIds(List<AnimeMetadata> members, Dictionary<int, AnimeMetadata> memberById)
+    {
+        var sideContentIds = new HashSet<int>();
+        foreach (var member in members)
+        {
+            foreach (var relation in member.RelatedAnime)
+            {
+                if (!memberById.ContainsKey(relation.RelatedAnimeId))
+                    continue;
+
+                switch (relation.RelationType)
+                {
+                    case "parent_story":
+                        sideContentIds.Add(member.Id); // this member is side content of relation.RelatedAnimeId
+                        break;
+                    case "side_story":
+                        sideContentIds.Add(relation.RelatedAnimeId); // the related member is side content of this one
+                        break;
+                }
+            }
+        }
+
+        return sideContentIds;
     }
 
     private static List<List<int>> FindConnectedComponents(IEnumerable<int> nodeIds, Dictionary<int, HashSet<int>> adjacency)

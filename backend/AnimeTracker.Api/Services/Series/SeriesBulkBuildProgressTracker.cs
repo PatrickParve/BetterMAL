@@ -14,6 +14,12 @@ public class SeriesBulkBuildProgressTracker : ISeriesBulkBuildProgressTracker
         }
     }
 
+    public void MarkPending()
+    {
+        lock (_lock)
+            _snapshot = new SeriesBulkBuildStatusSnapshot(SeriesBulkBuildPhase.Running, 0, 0);
+    }
+
     public void Start(int total)
     {
         lock (_lock)
@@ -30,5 +36,11 @@ public class SeriesBulkBuildProgressTracker : ISeriesBulkBuildProgressTracker
     {
         lock (_lock)
             _snapshot = _snapshot with { Phase = SeriesBulkBuildPhase.Complete };
+    }
+
+    public void Fail()
+    {
+        lock (_lock)
+            _snapshot = _snapshot with { Phase = SeriesBulkBuildPhase.Failed };
     }
 }

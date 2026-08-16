@@ -140,6 +140,91 @@ public class SeriesBulkBuildBackgroundServiceTests
     }
 
     [Fact]
+    public async Task TargetsIncludeMembersOfOutOfDateSeries()
+    {
+        using var db = CreateDb();
+        var staleBuiltAt = SeriesGraphBuilder.ClassificationRevisedAt - TimeSpan.FromDays(1);
+        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 2, BuiltAt = staleBuiltAt });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 0 });
+        await db.SaveChangesAsync();
+
+        var seriesService = new FakeSeriesService();
+        var trigger = new SeriesBulkBuildTrigger();
+        var tracker = new SeriesBulkBuildProgressTracker();
+
+        await RunOnceAsync(db, [Entry(2)], seriesService, trigger, tracker);
+
+        // Anime 2 already has a SeriesMembers row, but its series predates
+        // ClassificationRevisedAt, so it's a target rather than skipped as
+        // already covered.
+        Assert.Equal([2], seriesService.CalledFor);
+        Assert.Equal(1, tracker.Snapshot.Total);
+        Assert.Equal(1, tracker.Snapshot.Built);
+    }
+
+    [Fact]
+    public async Task ASeriesRebuiltEarlierInTheRunShortCircuitsItsOtherMembers()
+    {
+        using var db = CreateDb();
+        var staleBuiltAt = SeriesGraphBuilder.ClassificationRevisedAt - TimeSpan.FromDays(1);
+        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 1, BuiltAt = staleBuiltAt });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 1 });
+        await db.SaveChangesAsync();
+
+        // Building anime 1's franchise re-stamps the whole series — including
+        // anime 2's membership — as freshly built.
+        var seriesService = new FakeSeriesService();
+        seriesService.OnCall(1, () =>
+        {
+            db.Series.Single(s => s.Id == 1).BuiltAt = DateTimeOffset.UtcNow;
+            db.SaveChanges();
+        });
+
+        var trigger = new SeriesBulkBuildTrigger();
+        var tracker = new SeriesBulkBuildProgressTracker();
+
+        await RunOnceAsync(db, [Entry(1), Entry(2)], seriesService, trigger, tracker);
+
+        // Anime 2's series was rebuilt (via anime 1's target) before the loop
+        // reached anime 2, so anime 2 must not trigger a second build.
+        Assert.Equal([1], seriesService.CalledFor);
+        Assert.Equal(2, tracker.Snapshot.Total);
+        Assert.Equal(2, tracker.Snapshot.Built);
+    }
+
+    [Fact]
+    public async Task ARunThatThrowsDuringTargetResolutionReportsFailed()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var trigger = new SeriesBulkBuildTrigger();
+        var tracker = new SeriesBulkBuildProgressTracker();
+        var service = new SeriesBulkBuildBackgroundService(
+            new FakeServiceScopeFactory(new FakeServiceProvider(db, new ThrowingUserAnimeEntryRepository(), new FakeSeriesService())),
+            trigger,
+            tracker,
+            NullLogger<SeriesBulkBuildBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            trigger.Signal();
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            while (tracker.Snapshot.Phase != SeriesBulkBuildPhase.Failed && !cts.IsCancellationRequested)
+                await Task.Delay(10, CancellationToken.None);
+
+            Assert.Equal(SeriesBulkBuildPhase.Failed, tracker.Snapshot.Phase); // fail loudly on a test timeout, not a hang
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task TrackerTransitionsThroughRunningBeforeComplete()
     {
         using var db = CreateDb();
@@ -206,6 +291,16 @@ public class SeriesBulkBuildBackgroundServiceTests
         public Task<UserAnimeEntry?> GetByAnimeIdAsync(int animeId, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<List<UserAnimeEntry>> GetAllAsync(CancellationToken ct = default) => Task.FromResult(entries);
+        public Task<(int PendingCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
+            throw new NotImplementedException();
+    }
+
+    private sealed class ThrowingUserAnimeEntryRepository : IUserAnimeEntryRepository
+    {
+        public Task<UserAnimeEntry?> GetByAnimeIdAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<List<UserAnimeEntry>> GetAllAsync(CancellationToken ct = default) =>
+            throw new InvalidOperationException("Target resolution failed.");
         public Task<(int PendingCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
             throw new NotImplementedException();
     }
