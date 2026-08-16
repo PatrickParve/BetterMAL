@@ -287,8 +287,79 @@ The system SHALL make the `watched` count in each my-list row's progress cell di
 - **WHEN** I save an in-place count edit on a row partway down the list
 - **THEN** the list is not reloaded or reordered underneath me and the row keeps its position
 
+### Requirement: Top anime ranking list selector
+The Top anime page SHALL offer a selector that chooses which of MyAnimeList's rankings the page shows, presented as a row of buttons — one per list — placed on its own row below the page's title, sharing that row with the ranking's pagination controls so the two are readable together without crowding the title. The buttons SHALL wrap onto further lines when the window is too narrow to hold them on one, and the pagination controls SHALL drop to their own line beneath the selector when there is no longer room for both on one line, rather than either overflowing or scrolling horizontally.
+
+The selectable lists SHALL be exactly: **All**, **TV**, **Movie**, **OVA**, **Special**, **Popularity**, and **Favourite**. The system SHALL NOT offer an ONA or a Music list, because MyAnimeList's API does not expose either as a ranking, and SHALL NOT introduce a second data provider to supply them.
+
+The button for the list currently shown SHALL be visibly highlighted as selected, distinctly from the unselected buttons, and SHALL expose that selected state to assistive technology rather than signalling it by colour alone. The remaining buttons SHALL stay interactive at all times, including while a newly selected list is still loading, so a mis-click can be corrected without waiting.
+
+A fresh visit to the Top anime page SHALL show the All list. Selecting a list SHALL add a step to the browser's navigation history, so going back returns to the list previously being viewed, and SHALL reset the ranking to its first page — a page number from one list does not carry over to another. Selecting the list already shown SHALL do nothing: no history step and no reload.
+
+Every list SHALL be presented with the same three-tier layout, pagination, and per-entry content as the All list, since each list is ranked 1–500 in its own right.
+
+#### Scenario: Opening Top anime shows the All list
+- **WHEN** I reach the Top anime page by its navbar link
+- **THEN** the All list is shown and the All button is highlighted as selected
+
+#### Scenario: Selecting a list switches the ranking
+- **WHEN** I select the Movie button
+- **THEN** the page shows MyAnimeList's top movies, ranked from 1, and the Movie button becomes the highlighted one while All is no longer highlighted
+
+#### Scenario: The selected list survives leaving and coming back
+- **WHEN** I select the Favourite list, open an anime from it, and then go back
+- **THEN** I return to the Favourite list with its button still highlighted, not to the All list
+
+#### Scenario: Going back steps to the previously selected list
+- **WHEN** I select Movie and then select OVA, and then go back
+- **THEN** I return to the Movie list
+
+#### Scenario: Switching lists returns to the first page
+- **WHEN** I am on page 4 of the All list and select the TV button
+- **THEN** the TV list is shown from its first page, with its showcase and top-ten tiers visible
+
+#### Scenario: Selecting the list already shown does nothing
+- **WHEN** the Movie list is shown and I select the Movie button again
+- **THEN** the page does not reload the list and going back still leads to whatever preceded the Movie list
+
+#### Scenario: No ONA or Music button is offered
+- **WHEN** I look at the ranking list selector
+- **THEN** there are exactly seven buttons — All, TV, Movie, OVA, Special, Popularity, Favourite — with no ONA or Music option
+
+#### Scenario: Selection is not signalled by colour alone
+- **WHEN** the page is read by assistive technology
+- **THEN** the selected list's button reports itself as pressed/selected, so the active list is discoverable without seeing the highlight
+
+### Requirement: Fast switching between ranking lists
+Switching between ranking lists SHALL NOT blank the page. A list already loaded during the current application session SHALL be shown immediately when re-selected, without a network request and without any loading state.
+
+When a list not yet loaded in this session is selected, the page SHALL keep the previously shown list rendered — visually muted and non-interactive, so it is unmistakably not the list the highlighted button names — until the new list arrives, rather than replacing it with a loading message or an empty page. Only the page's very first load, when there is no list on screen at all, SHALL show a plain loading state.
+
+#### Scenario: Returning to an already-loaded list is instant
+- **WHEN** I select Movie, then All, then Movie again
+- **THEN** the second Movie selection renders immediately with no loading state and no further request
+
+#### Scenario: Loading an unseen list keeps the current one visible
+- **WHEN** I select a list for the first time this session and its data has not arrived yet
+- **THEN** the list I was reading stays on screen, muted and not interactive, until the new list replaces it
+
+#### Scenario: The selector stays usable while a list loads
+- **WHEN** a newly selected list is still loading
+- **THEN** I can select a different list without waiting for the first one to finish
+
+#### Scenario: First arrival shows a loading state
+- **WHEN** I open the Top anime page for the first time in a session and no list has loaded yet
+- **THEN** a plain loading indicator is shown, because there is no previous list to keep on screen
+
+### Requirement: List membership edits apply across every loaded ranking list
+Adding or editing an anime from one ranking list SHALL update that anime wherever it appears in every other ranking list loaded in the current session, since the lists overlap. Returning to another list SHALL therefore never offer to add an anime that is already in my list.
+
+#### Scenario: Adding from one list updates another
+- **WHEN** I add an anime to my list from the Movie ranking, and that anime also appears in the All ranking I loaded earlier
+- **THEN** going back to the All ranking shows that anime with an "Edit" action, not "Add"
+
 ### Requirement: Top anime ranked list
-The system SHALL present a Top anime page as a ranked list covering up to rank 500, where every entry — whatever form it takes — shows its rank, picture, title, my score, and MAL score. Because this page ranks anime overall, an entry's anime may not be in my list; the flat-row tier (rank 11 and beyond) SHALL additionally carry a list-action button, conditional — "Add" when the anime is not yet in my list, and "Edit" when it is — the showcase and top-ten tiers (ranks 1–10) SHALL NOT carry one, keeping those tiers focused on the ranking and scores alone. The list SHALL be paginated at 50 entries per page, with page-number controls plus left/right arrows at the bottom, and left/right arrow controls at the top-right.
+The system SHALL present a Top anime page as a ranked list covering up to rank 500, where every entry — whatever form it takes — shows its rank, picture, title, my score, and MAL score. The page shows one selected ranking list at a time (see "Top anime ranking list selector"); everything below applies to whichever list is selected. Because this page ranks anime overall, an entry's anime may not be in my list; the flat-row tier (rank 11 and beyond) SHALL additionally carry a list-action button, conditional — "Add" when the anime is not yet in my list, and "Edit" when it is — the showcase and top-ten tiers (ranks 1–10) SHALL NOT carry one, keeping those tiers focused on the ranking and scores alone. The list SHALL be paginated at 50 entries per page, with page-number controls plus left/right arrows at the bottom, and left/right arrow controls at the top-right.
 
 The page-number controls SHALL show the first page, the last page, and the current page with at most one page on each side of it, collapsing any gap between those groups into an ellipsis. On page 6 of 10 this yields `1 … 5 6 7 … 10`.
 
@@ -308,7 +379,7 @@ Because a page holds 50 entries, the showcase and top-ten tiers SHALL appear onl
 
 #### Scenario: Rendering the top-anime ranking
 - **WHEN** the top-anime page loads
-- **THEN** it shows the first page of 50 entries, each with its rank, picture, title, my score, and MAL score, plus a list-action button for entries in the flat-row tier
+- **THEN** it shows the first page of 50 entries of the selected list, each with its rank, picture, title, my score, and MAL score, plus a list-action button for entries in the flat-row tier
 
 #### Scenario: Paginating the ranking
 - **WHEN** I use the page-number controls or the left/right arrows (at the bottom or top-right)
@@ -327,7 +398,7 @@ Because a page holds 50 entries, the showcase and top-ten tiers SHALL appear onl
 - **THEN** I return to page 3
 
 #### Scenario: Going back past the first page leaves Top anime
-- **WHEN** I am on page 1 of the ranking, having reached it without changing pages since arriving, and go back
+- **WHEN** I am on page 1 of the ranking, having reached it without changing pages or lists since arriving, and go back
 - **THEN** I leave the Top anime page for whatever page I was on immediately before it
 
 #### Scenario: Page numbers in the middle of the range
@@ -374,30 +445,46 @@ Because a page holds 50 entries, the showcase and top-ten tiers SHALL appear onl
 - **WHEN** I view page 2 or later of the top-anime ranking
 - **THEN** every entry on that page uses the flat row form, since ranks 1–10 only appear on page 1
 
-### Requirement: Daily refresh of the Top Anime ranking
-The system SHALL re-fetch the Top Anime ranking's lean listing fields the first time it is visited on a local calendar day after its last fetch, serving it from cache on same-day revisits. If the ranking has never been visited, it SHALL never be proactively fetched.
+#### Scenario: A filtered list is ranked in its own right
+- **WHEN** I view the Movie list
+- **THEN** its entries are numbered from rank 1, with the top three in the showcase tier, rather than carrying their positions in the overall ranking
 
-At most one ranking refresh SHALL be in flight at a time: a second request arriving while a refresh is running SHALL wait for it and then serve the refreshed cache, rather than starting a second ranking fetch. A fetch that fails SHALL NOT count as the day's fetch — the next visit retries.
+### Requirement: Daily refresh of the Top Anime ranking
+The system SHALL re-fetch a Top Anime ranking list's lean listing fields the first time that list is viewed on a local calendar day after its own last fetch, serving it from cache on same-day revisits. Each selectable list SHALL keep its own last-fetched time, so viewing one list never marks another as fetched for the day. If a list has never been viewed, it SHALL never be proactively fetched — opening the page SHALL NOT warm the lists the user has not selected.
+
+At most one refresh per list SHALL be in flight at a time: a second request for the same list arriving while its refresh is running SHALL wait for it and then serve the refreshed cache, rather than starting a second fetch of that list. Requests for two different lists SHALL NOT wait on each other. A fetch that fails SHALL NOT count as that list's fetch for the day — the next visit to that list retries — and SHALL NOT prevent the page from serving whatever is already cached for it.
 
 #### Scenario: New-day visit
-- **WHEN** I open the Top Anime page and it has not been fetched yet on the current local calendar day
-- **THEN** the system re-fetches the ranking live and updates the cache
+- **WHEN** I open a Top Anime ranking list that has not been fetched yet on the current local calendar day
+- **THEN** the system re-fetches that list live and updates its cache
 
 #### Scenario: Same-day revisit
-- **WHEN** I reopen the Top Anime page again on the same local day
+- **WHEN** I reopen the same ranking list again on the same local day
 - **THEN** it is served from the cache without a live re-fetch
 
+#### Scenario: Each list has its own daily clock
+- **WHEN** I have already viewed the All list today and then select the Movie list for the first time today
+- **THEN** the Movie list is fetched live, because the All list's fetch does not count as Movie's
+
 #### Scenario: Concurrent visits share one refresh
-- **WHEN** a second request for the ranking arrives while its refresh is already running
+- **WHEN** a second request for the same ranking list arrives while its refresh is already running
 - **THEN** no additional MAL fetch is started, and the second request is served from the refreshed cache once the first completes
 
+#### Scenario: Different lists refresh in parallel
+- **WHEN** requests for two different ranking lists arrive at the same time, neither fetched yet today
+- **THEN** neither waits on the other, because they are different subjects
+
 #### Scenario: A failed fetch does not consume the day
-- **WHEN** the ranking refresh fails and I open the Top Anime page again the same day
-- **THEN** the refresh is retried, because only a successful fetch marks the ranking as fetched for that day
+- **WHEN** a ranking list's refresh fails and I open that list again the same day
+- **THEN** the refresh is retried, because only a successful fetch marks that list as fetched for that day
+
+#### Scenario: A failed fetch still serves the cache
+- **WHEN** a ranking list's refresh fails and that list has cached rows from an earlier fetch
+- **THEN** the page renders those cached rows rather than an error or an empty list
 
 #### Scenario: Never visited stays unfetched
-- **WHEN** the Top Anime ranking has never been visited
-- **THEN** no background job fetches it
+- **WHEN** a Top Anime ranking list has never been viewed
+- **THEN** no background job fetches it, and viewing any other list does not fetch it either
 
 ### Requirement: Consistent list placement across my-list view modes
 The system SHALL place the my-list entry list at the same vertical offset below its status header in flat (ungrouped) view as in grouped view, for every status filter. Switching between grouped and flat view, or changing the sort, SHALL NOT shift the list up or down relative to the header it sits under. The header-to-list spacing SHALL be defined by a single rule shared by both view modes, rather than by per-mode values that can diverge.

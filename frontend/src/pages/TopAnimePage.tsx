@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { getTopAnime, updateEntry } from '../api/client.ts'
-import type { TopAnimeItemDto } from '../api/types.ts'
+import { TOP_ANIME_RANKING_TYPES, type TopAnimeItemDto, type TopAnimeRankingType } from '../api/types.ts'
 import { Pagination } from '../components/Pagination.tsx'
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
@@ -11,70 +11,130 @@ import './TopAnimePage.css'
 
 const PAGE_SIZE = 50
 
-// The full ranking (up to 500 rows) is identical regardless of which page is
-// being viewed — `page` only slices it client-side — so it's cached at module
-// scope and fetched at most once per app session, rather than through
-// usePageData's per-history-entry cache. That cache is keyed by location, so
-// it would treat every page's own URL (see `page` below) as a distinct
-// resource needing its own network fetch, flashing "Loading…" on every page
-// change even though the underlying data never varies.
-let cachedItems: TopAnimeItemDto[] | null = null
-let inFlightLoad: Promise<TopAnimeItemDto[]> | null = null
+const VALID_RANKING_TYPES = new Set<string>(TOP_ANIME_RANKING_TYPES.map((t) => t.value))
 
-function loadTopAnimeOnce(): Promise<TopAnimeItemDto[]> {
-  if (cachedItems) return Promise.resolve(cachedItems)
-  inFlightLoad ??= getTopAnime().then((result) => {
-    cachedItems = result
-    inFlightLoad = null
-    return result
-  })
-  return inFlightLoad
+function isRankingType(value: string | null): value is TopAnimeRankingType {
+  return value !== null && VALID_RANKING_TYPES.has(value)
 }
 
-// Top anime page: the global MAL ranking (not just my list). Only the
+// A given ranking list (up to 500 rows) is identical regardless of which page
+// is being viewed — `page` only slices it client-side — so each list is
+// cached at module scope and fetched at most once per app session, rather
+// than through usePageData's per-history-entry cache. That cache is keyed by
+// location, so it would treat every page's own URL (see `page` below), and
+// every list's own URL (see `type` below), as a distinct resource needing its
+// own network fetch, flashing "Loading…" on every page or list change even
+// though a given list's data never varies once fetched. Keyed by ranking type
+// so switching lists doesn't invalidate or block on another list's cache.
+const cachedItemsByType = new Map<TopAnimeRankingType, TopAnimeItemDto[]>()
+const inFlightLoadByType = new Map<TopAnimeRankingType, Promise<TopAnimeItemDto[]>>()
+
+// The most recently displayed list, tracked at module scope (not component
+// state) so that even across an unmount/remount — leaving Top Anime and
+// coming back to a list not yet cached — the page has something to show
+// muted while the new list loads, rather than blanking to "Loading…".
+let lastShownType: TopAnimeRankingType | null = null
+
+function loadTopAnimeOnce(type: TopAnimeRankingType): Promise<TopAnimeItemDto[]> {
+  const cached = cachedItemsByType.get(type)
+  if (cached) return Promise.resolve(cached)
+  let inFlight = inFlightLoadByType.get(type)
+  if (!inFlight) {
+    inFlight = getTopAnime(type).then((result) => {
+      cachedItemsByType.set(type, result)
+      inFlightLoadByType.delete(type)
+      return result
+    })
+    inFlightLoadByType.set(type, inFlight)
+  }
+  return inFlight
+}
+
+type Display = { type: TopAnimeRankingType; items: TopAnimeItemDto[] }
+
+function initialFallback(type: TopAnimeRankingType): Display | null {
+  const cached = cachedItemsByType.get(type)
+  if (cached) return { type, items: cached }
+  if (lastShownType) {
+    const outgoing = cachedItemsByType.get(lastShownType)
+    if (outgoing) return { type: lastShownType, items: outgoing }
+  }
+  return null
+}
+
+// Top anime page: MAL's rankings (not just my list) — one of seven
+// selectable lists (see the selector row below), All by default. Only the
 // flat-row tier (rank 11+) carries a list-action button, conditional — Add
 // when the anime isn't in my list yet (adds it as Plan to watch and flips in
 // place to Edit), Edit otherwise — which opens the same overlay used
-// everywhere else in the app. The ranking covers up to 500 rows, paginated
-// client-side at 50/page. `page` lives in the URL (`?page=N`) rather than as
-// plain component state, so each page change is a real history entry — the
-// browser's back/forward buttons, keyboard shortcuts, and trackpad swipe
-// gesture step through the ranking's own pages instead of leaving the page
-// entirely on the first back.
+// everywhere else in the app. Each list covers up to 500 rows, paginated
+// client-side at 50/page. `page` and `type` live in the URL (`?type=…&page=N`)
+// rather than as plain component state, so each page or list change is a real
+// history entry — the browser's back/forward buttons, keyboard shortcuts, and
+// trackpad swipe gesture step through the ranking's own pages and lists
+// instead of leaving the page entirely on the first back.
 export function TopAnimePage() {
-  const [rawItems, setRawItems] = useState<TopAnimeItemDto[] | null>(cachedItems)
-  const items = rawItems ?? []
-  const [loading, setLoading] = useState(cachedItems === null)
   const [pendingId, setPendingId] = useState<number | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const { openEditor } = useEntryEditor()
 
+  const typeParam = searchParams.get('type')
+  const selectedType: TopAnimeRankingType = isRankingType(typeParam) ? typeParam : 'all'
+
   const pageParam = Number(searchParams.get('page'))
   const page = Number.isInteger(pageParam) && pageParam > 0 ? pageParam : 1
 
+  // The cached-hit path is resolved synchronously from the module cache on
+  // every render (not via an effect), so switching to an already-loaded list
+  // renders it in the same paint — no one-frame flash of the muted state
+  // while an effect catches up. `fallback` only matters for the miss path: it
+  // holds whatever was last on screen so it can stay visible, muted, while an
+  // uncached list's fetch is in flight.
+  const [fallback, setFallback] = useState<Display | null>(() => initialFallback(selectedType))
+  const cachedForSelected = cachedItemsByType.get(selectedType)
+  const display: Display | null = cachedForSelected ? { type: selectedType, items: cachedForSelected } : fallback
+  const loading = display === null
+  const muted = display !== null && display.type !== selectedType
+  const items = display?.items ?? []
+
   useEffect(() => {
-    if (cachedItems) return
+    if (cachedForSelected) {
+      lastShownType = selectedType
+      return
+    }
+
+    // Not cached yet — leave whatever is currently on screen (the previous
+    // list, muted) in place rather than blanking to "Loading…", per D7.
     let cancelled = false
-    loadTopAnimeOnce().then((result) => {
-      if (!cancelled) {
-        setRawItems(result)
-        setLoading(false)
-      }
+    loadTopAnimeOnce(selectedType).then((result) => {
+      if (cancelled) return
+      lastShownType = selectedType
+      setFallback({ type: selectedType, items: result })
     })
+
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [selectedType, cachedForSelected])
 
-  // Keeps the module cache in sync with optimistic updates from Add/Edit, so
-  // a later page navigation or a full remount (leaving Top Anime and coming
-  // back) sees the change instead of reverting to the last network response.
-  function setItems(update: TopAnimeItemDto[] | null | ((prev: TopAnimeItemDto[] | null) => TopAnimeItemDto[] | null)) {
-    setRawItems((prev) => {
-      const next = typeof update === 'function' ? update(prev) : update
-      cachedItems = next
-      return next
-    })
+  // Keeps every cached list in sync with optimistic updates from Add/Edit —
+  // an anime added from one list must also flip to "Edit" in every other
+  // cached list it appears in (design.md D8) — so a later list switch, page
+  // navigation, or a full remount sees the change instead of reverting to the
+  // last network response.
+  function setEntry(animeId: number, entry: TopAnimeItemDto['entry']) {
+    const patch = (list: TopAnimeItemDto[]) =>
+      list.map((item) => (item.animeId === animeId ? { ...item, entry } : item))
+
+    for (const [type, list] of cachedItemsByType) {
+      cachedItemsByType.set(type, patch(list))
+    }
+
+    // Mutating the cache Map doesn't itself trigger a re-render; nudge
+    // `fallback` so the component re-renders and the (possibly muted)
+    // fallback list reflects the edit too, even when it isn't the type
+    // driving `display` this render.
+    setFallback((prev) => (prev ? { type: prev.type, items: patch(prev.items) } : prev))
   }
 
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
@@ -85,10 +145,6 @@ export function TopAnimePage() {
   const showcaseItems = pageItems.filter((item) => item.rank <= 3)
   const cardItems = pageItems.filter((item) => item.rank > 3 && item.rank <= 10)
   const restItems = pageItems.filter((item) => item.rank > 10)
-
-  function setEntry(animeId: number, entry: TopAnimeItemDto['entry']) {
-    setItems((prev) => prev && prev.map((item) => (item.animeId === animeId ? { ...item, entry } : item)))
-  }
 
   async function handleAdd(item: TopAnimeItemDto) {
     if (pendingId !== null) return
@@ -113,6 +169,21 @@ export function TopAnimePage() {
       const params = new URLSearchParams(prev)
       if (nextPage <= 1) params.delete('page')
       else params.set('page', String(nextPage))
+      return params
+    })
+  }
+
+  // Selecting the list already shown is a no-op (design.md D5): no history
+  // entry, no reload. Otherwise pushes a history entry — same mechanism as
+  // goToPage above — and resets to page 1, since a page number from one list
+  // has no relationship to the same page number of another.
+  function selectType(type: TopAnimeRankingType) {
+    if (type === selectedType) return
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      if (type === 'all') params.delete('type')
+      else params.set('type', type)
+      params.delete('page')
       return params
     })
   }
@@ -152,6 +223,26 @@ export function TopAnimePage() {
     <div className="top-anime-page">
       <div className="top-anime-page__header">
         <h1>Top anime</h1>
+      </div>
+
+      <div className="top-anime-page__controls">
+        <div className="top-anime-page__selector" role="group" aria-label="Ranking list">
+          {TOP_ANIME_RANKING_TYPES.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              className={
+                value === selectedType
+                  ? 'top-anime-page__selector-button top-anime-page__selector-button--active'
+                  : 'top-anime-page__selector-button'
+              }
+              aria-pressed={value === selectedType}
+              onClick={() => selectType(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         {items.length > 0 && (
           <Pagination currentPage={page} totalPages={totalPages} onPageChange={goToPage} />
         )}
@@ -162,7 +253,9 @@ export function TopAnimePage() {
       ) : items.length === 0 ? (
         <p className="top-anime-page__empty">No ranking data yet.</p>
       ) : (
-        <>
+        <div
+          className={muted ? 'top-anime-page__content top-anime-page__content--muted' : 'top-anime-page__content'}
+        >
           {showcaseItems.length > 0 && (
             <div className="top-anime-showcase">
               {showcaseItems.map((item) => (
@@ -257,7 +350,7 @@ export function TopAnimePage() {
               ))}
             </ol>
           )}
-        </>
+        </div>
       )}
 
       {items.length > 0 && (

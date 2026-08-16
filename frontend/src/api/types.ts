@@ -225,6 +225,21 @@ export type TopAnimeItemDto = {
   entry: UserAnimeEntryDto | null
 }
 
+// The Top anime page's ranking-list selector. Mirrors the backend's
+// TopAnimeRankingType allow-list — ona and music are absent because MAL API
+// v2 rejects those ranking_type values with 400 (design.md D1).
+export type TopAnimeRankingType = 'all' | 'tv' | 'movie' | 'ova' | 'special' | 'bypopularity' | 'favorite'
+
+export const TOP_ANIME_RANKING_TYPES: { value: TopAnimeRankingType; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'tv', label: 'TV' },
+  { value: 'movie', label: 'Movie' },
+  { value: 'ova', label: 'OVA' },
+  { value: 'special', label: 'Special' },
+  { value: 'bypopularity', label: 'Popularity' },
+  { value: 'favorite', label: 'Favourite' },
+]
+
 export type ActivityChangeType =
   | 'Added'
   | 'StatusChanged'

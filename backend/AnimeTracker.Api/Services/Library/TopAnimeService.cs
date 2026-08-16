@@ -19,11 +19,11 @@ public class TopAnimeService(
 {
     private const int RankingSize = 500;
 
-    public async Task<List<TopAnimeItemDto>> GetRankingAsync(CancellationToken ct = default)
+    public async Task<List<TopAnimeItemDto>> GetRankingAsync(string rankingType, CancellationToken ct = default)
     {
-        await EnsureFreshAsync(ct);
+        await EnsureFreshAsync(rankingType, ct);
 
-        var rows = await topAnimeRepository.GetRankingAsync(ct);
+        var rows = await topAnimeRepository.GetRankingAsync(rankingType, ct);
         return rows
             .Select(r => new TopAnimeItemDto(
                 r.Rank,
@@ -37,44 +37,45 @@ public class TopAnimeService(
             .ToList();
     }
 
-    // This method IS the visit path (nothing else calls it), so a ranking
+    // This method IS the visit path (nothing else calls it), so a list
     // that's never visited is never fetched. Once visited, it refreshes again
     // at most once per local calendar day. Single-flight via RefreshGate: a
-    // waiter re-checks GetLastFetchedAsync inside the lock, so it sees the
-    // first refresh's stamp and skips a second MAL fetch instead of racing it.
-    private async Task EnsureFreshAsync(CancellationToken ct)
+    // waiter re-checks IsFreshAsync inside the lock, so it sees the first
+    // refresh's stamp and skips a second MAL fetch instead of racing it. The
+    // gate key is per ranking type, so different lists refresh in parallel.
+    private async Task EnsureFreshAsync(string rankingType, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
         var todayLocalDate = broadcastConverter.GetLocalDate(now);
 
-        if (await IsFreshAsync(todayLocalDate, ct))
+        if (await IsFreshAsync(rankingType, todayLocalDate, ct))
             return;
 
-        using (await refreshGate.LockAsync("top-anime", ct))
+        using (await refreshGate.LockAsync($"top-anime:{rankingType}", ct))
         {
-            if (await IsFreshAsync(todayLocalDate, ct))
+            if (await IsFreshAsync(rankingType, todayLocalDate, ct))
                 return;
 
             try
             {
-                await FetchAndCacheAsync(now, ct);
+                await FetchAndCacheAsync(rankingType, now, ct);
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to live-fetch the Top Anime ranking; serving whatever is already cached.");
+                logger.LogWarning(ex, "Failed to live-fetch the {RankingType} Top Anime ranking; serving whatever is already cached.", rankingType);
             }
         }
     }
 
-    private async Task<bool> IsFreshAsync(DateOnly todayLocalDate, CancellationToken ct)
+    private async Task<bool> IsFreshAsync(string rankingType, DateOnly todayLocalDate, CancellationToken ct)
     {
-        var lastFetched = await topAnimeRepository.GetLastFetchedAsync(ct);
+        var lastFetched = await topAnimeRepository.GetLastFetchedAsync(rankingType, ct);
         return lastFetched is { } fetchedAt && broadcastConverter.GetLocalDate(fetchedAt) == todayLocalDate;
     }
 
-    private async Task FetchAndCacheAsync(DateTimeOffset now, CancellationToken ct)
+    private async Task FetchAndCacheAsync(string rankingType, DateTimeOffset now, CancellationToken ct)
     {
-        var response = await malClient.GetRankingAsync(limit: RankingSize, ct: ct);
+        var response = await malClient.GetRankingAsync(rankingType: rankingType, limit: RankingSize, ct: ct);
         var edges = response.Data;
         var animeIds = edges.Select(e => e.Node.Id).Distinct().ToList();
 
@@ -97,8 +98,11 @@ public class TopAnimeService(
         }
 
         // Update ranks in place rather than delete-then-recreate, so an anime
-        // that stays in the ranking keeps the same tracked row.
-        var existingRanking = await db.TopAnimeRankingEntries.ToDictionaryAsync(r => r.AnimeId, ct);
+        // that stays in the ranking keeps the same tracked row. Scoped to this
+        // ranking type's own rows, so refreshing one list never touches another.
+        var existingRanking = await db.TopAnimeRankingEntries
+            .Where(r => r.RankingType == rankingType)
+            .ToDictionaryAsync(r => r.AnimeId, ct);
         var seenIds = new HashSet<int>();
         var position = 0;
 
@@ -112,15 +116,15 @@ public class TopAnimeService(
             if (existingRanking.TryGetValue(animeId, out var existingEntry))
                 existingEntry.Rank = rank;
             else
-                db.TopAnimeRankingEntries.Add(new TopAnimeRankingEntry { AnimeId = animeId, Rank = rank });
+                db.TopAnimeRankingEntries.Add(new TopAnimeRankingEntry { RankingType = rankingType, AnimeId = animeId, Rank = rank });
         }
 
         var stale = existingRanking.Values.Where(e => !seenIds.Contains(e.AnimeId));
         db.TopAnimeRankingEntries.RemoveRange(stale);
 
-        var fetchLog = await db.TopAnimeFetchLogs.FirstOrDefaultAsync(ct);
+        var fetchLog = await db.TopAnimeFetchLogs.FirstOrDefaultAsync(f => f.RankingType == rankingType, ct);
         if (fetchLog is null)
-            db.TopAnimeFetchLogs.Add(new TopAnimeFetchLog { LastFetchedAt = now });
+            db.TopAnimeFetchLogs.Add(new TopAnimeFetchLog { RankingType = rankingType, LastFetchedAt = now });
         else
             fetchLog.LastFetchedAt = now;
 

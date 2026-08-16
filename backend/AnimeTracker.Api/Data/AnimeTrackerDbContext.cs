@@ -111,11 +111,16 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
 
         modelBuilder.Entity<TopAnimeRankingEntry>(entity =>
         {
-            entity.HasKey(e => e.AnimeId);
+            entity.HasKey(e => new { e.RankingType, e.AnimeId });
             entity.HasOne(e => e.Anime)
                 .WithMany()
                 .HasForeignKey(e => e.AnimeId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TopAnimeFetchLog>(entity =>
+        {
+            entity.HasKey(e => e.RankingType);
         });
 
         modelBuilder.Entity<EpisodeAiring>(entity =>

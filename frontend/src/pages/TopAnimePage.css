@@ -18,13 +18,6 @@
   --medal-bronze-border: rgba(140, 90, 43, 0.5);
 }
 
-.top-anime-page__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
 .top-anime-page__header h1 {
   margin: 0;
   font-size: 24px;
@@ -35,6 +28,71 @@
 .top-anime-page__footer {
   display: flex;
   justify-content: center;
+}
+
+/* Selector row and pagination share one line — the selector wraps on its
+   own if the window is too narrow to hold every button, and the whole row
+   drops pagination to a second line only if there's no room for it next to
+   the (already-wrapped) selector. */
+.top-anime-page__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* Ranking-list selector: one pressed-state button per list, sized off the
+   page's shared control-height token so the row lines up with the
+   pagination beside it (design.md D9). */
+.top-anime-page__selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.top-anime-page__selector-button {
+  height: var(--control-h);
+  padding: 0 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.top-anime-page__selector-button:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.top-anime-page__selector-button--active,
+.top-anime-page__selector-button--active:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Wraps the showcase/top-ten/flat-row tiers as one unit so the muted state
+   below can dim them together; flex+gap here reproduces the spacing those
+   tiers had when they were direct children of .top-anime-page itself. */
+.top-anime-page__content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Switching to a list not yet cached keeps the outgoing list rendered here,
+   dimmed and inert, rather than blanking the page (design.md D7) — the
+   selector row above stays interactive throughout since it sits outside
+   this container. */
+.top-anime-page__content--muted {
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
 }
 
 .top-anime-page__list {
@@ -359,23 +417,26 @@
   }
 }
 
-/* A bordered, tinted box like the showcase tier's cards — one shared accent
-   colour rather than a medal, since ranks 4-10 don't carry a medal identity
-   of their own. */
+/* A bordered box like the showcase tier's cards, but in the page's neutral
+   surface colour rather than the accent tint — ranks 4-10 don't carry a
+   medal identity of their own, and the accent tint is reserved for
+   hover/focus (and the selector's active state) so it isn't also this
+   tier's resting colour. */
 .top-anime-card {
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 8px;
   border-radius: 10px;
-  border: 1px solid var(--accent-border);
-  background: var(--accent-bg);
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .top-anime-card:hover,
 .top-anime-card:focus-within {
-  border-color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
   box-shadow: var(--shadow);
 }
 

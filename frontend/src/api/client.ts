@@ -22,6 +22,7 @@ import type {
   SyncStatusDto,
   TopAnimeItemDto,
   TopAnimeMediaType,
+  TopAnimeRankingType,
   TopAnimeSectionDto,
   TopSeriesSectionDto,
   UserAnimeEntryDto,
@@ -169,8 +170,9 @@ export function getMyList(): Promise<MyListItemDto[]> {
   return fetchJson<MyListItemDto[]>('/api/my-list')
 }
 
-export function getTopAnime(): Promise<TopAnimeItemDto[]> {
-  return fetchJson<TopAnimeItemDto[]>('/api/top-anime')
+export function getTopAnime(type: TopAnimeRankingType): Promise<TopAnimeItemDto[]> {
+  const query = type === 'all' ? '' : `?type=${encodeURIComponent(type)}`
+  return fetchJson<TopAnimeItemDto[]>(`/api/top-anime${query}`)
 }
 
 export function getProfile(): Promise<ProfileDto> {
