@@ -193,7 +193,7 @@ The series page SHALL show the root entry's picture, the series title, a status 
 
 The header SHALL be the page's hero rather than a thumbnail strip: the picture SHALL be rendered large enough to read as the page's subject, and the title, status pill, personal badge, year span, external links, score averages, and main-line progress SHALL all sit inside that one block, so the series' summary is read in one place instead of down a column of separate panels.
 
-The status pill SHALL read `Ongoing` when any member is currently airing, `Upcoming` when no member has finished airing and at least one has not yet aired, and `Finished` otherwise — with `Finished · sequel upcoming` when a finished series has a member that has not yet aired.
+The status pill SHALL read `Ongoing` when any member is currently airing **or** when a member has not yet aired, `Upcoming` when no member has finished airing and at least one has not yet aired, and `Finished` otherwise. `Finished` SHALL therefore be reserved for a series with nothing left to come: a series whose aired members have all finished but which has an announced, not-yet-aired member SHALL read `Ongoing`, not `Finished`. The pill SHALL have no `Finished · sequel upcoming` state.
 
 Beside the status pill the page SHALL show a personal badge describing where I stand in the main line, chosen by this precedence:
 
@@ -212,9 +212,13 @@ When a currently-airing main-line entry's broadcast episode count is unknown, th
 - **WHEN** I open a series whose latest season is currently airing
 - **THEN** the pill reads "Ongoing"
 
-#### Scenario: Finished series with an announced sequel
+#### Scenario: A series with an announced sequel is ongoing
 - **WHEN** every aired member of a series has finished but one member has not yet aired
-- **THEN** the pill reads "Finished · sequel upcoming"
+- **THEN** the pill reads "Ongoing"
+
+#### Scenario: Finished means nothing is left to come
+- **WHEN** every member of a series has finished airing and no member is unaired
+- **THEN** the pill reads "Finished"
 
 #### Scenario: Year span
 - **WHEN** a series' earliest entry aired in 2013 and its latest in 2023
@@ -272,12 +276,14 @@ The AniList link SHALL use the root's known AniList id when one is stored, and S
 - **THEN** the AniList link opens an AniList search for the root's title rather than a broken link
 
 ### Requirement: Series score averages
-The series page SHALL show, for each of MAL's score and mine, an average across main-line entries and an average across all entries, each with the count it was computed over (e.g. `8.42 · 5 of 6 scored`), rendered to two decimals:
+The series page SHALL show, for each of MAL's score and mine, an average across main-line entries and an average across all entries, rendered to two decimals (e.g. `8.42`):
 
 - the MAL average, computed as the unweighted mean of the entries that have a MAL score;
 - my average, computed as the unweighted mean of my scores on entries I have scored, where a score of 0 means unscored and is excluded.
 
 Averages SHALL NOT be weighted by episode count, so a movie counts the same as a season. When no entry in a group has a score, the page SHALL show "No score" rather than a zero.
+
+A score chip SHALL show its average and its label and nothing else. It SHALL NOT append the count of entries the average was computed over — the `N of M scored` suffix — to either the MAL chips or my chips, since the per-entry scores it summarises are already listed in full in the watch order below it and the suffix crowds the figure the chip exists to show. The count SHALL NOT reappear as a tooltip, a title attribute, or any other rendered form of the same figure.
 
 When a series has no extras, the two across-all-entries averages SHALL NOT be rendered at all, since they are computed over exactly the same member set as the main-line averages and would duplicate them.
 
@@ -294,7 +300,11 @@ A member of the series that is currently airing SHALL therefore suppress the rev
 
 #### Scenario: My averages exclude unscored entries
 - **WHEN** I have scored three of a series' five main-line entries
-- **THEN** my main-series average is the mean of those three scores and is labelled as covering 3 of 5
+- **THEN** my main-series average is the mean of those three scores, with the two unscored entries excluded from it
+
+#### Scenario: No scored-count suffix on any chip
+- **WHEN** I open a series page and look at the MAL and Mine score chips
+- **THEN** each shows only its label and its average, with no "N of M scored" count appended
 
 #### Scenario: Unscored series
 - **WHEN** I have scored none of a series' entries
@@ -318,6 +328,12 @@ A member of the series that is currently airing SHALL therefore suppress the rev
 
 ### Requirement: Series stats
 The series page SHALL show, for the main line: total episode count, total runtime, and my progress through it — episodes watched against total, entries completed against total, time watched, and time left to finish. Extras' episode count and runtime SHALL be reported separately rather than folded into the main-line totals.
+
+The entries-completed stat SHALL cover the extras as well as the main line, as two separately labelled figures within one stat: how many main-line entries I have completed out of the main-line total, and how many extras I have completed out of the extras total. The two SHALL NOT be summed into a single figure, so which half of the series is unfinished stays visible. When the series has no extras, the extras figure SHALL be omitted and the stat SHALL show the main-line figure alone rather than an "0 of 0".
+
+Time watched and time left SHALL be shown only while there is time left to watch. When time left computes to zero — I have watched at least as much of the main line as its runtime accounts for — neither stat SHALL be rendered, since "0min left" alongside a time watched that equals the runtime restates what the entries-completed and progress figures already say. Both SHALL be withheld together: the page SHALL NOT show time watched with time left hidden, or the reverse.
+
+This withholding SHALL NOT apply when the main-line runtime is itself unknown — a zero runtime total that the page already marks as unknown rather than as an exact figure. A zero time left derived from a runtime nobody knows reports missing data, not a series I have finished, so both stats SHALL still be shown in that case.
 
 Runtime SHALL be computed as episodes times the entry's average episode duration, falling back to the app's existing 24-minutes-per-episode assumption when a duration is unknown, and SHALL be formatted in days, hours and minutes (e.g. `4d 6h 30min`). When any counted entry's episode count is unknown, the page SHALL mark the total as a lower bound rather than presenting it as exact. An entry whose total episode count is unknown SHALL still contribute its known aired-so-far episode count toward that lower bound, rather than contributing nothing, whenever an aired count is known for it — so a still-airing entry with no announced total makes the lower bound tighter instead of forcing the whole stat to read as wholly unknown. Watched time SHALL count watched episodes only and SHALL NOT multiply by rewatch count.
 
@@ -354,6 +370,26 @@ The highest MAL score SHALL be shown in full rather than blurred when the entry 
 #### Scenario: My progress through the series
 - **WHEN** I have watched 38 of a series' 62 main-line episodes and nothing is airing
 - **THEN** the page shows a progress bar with my 38 watched episodes and the 62 total each named, how many entries I have completed, my time watched, and the time left to finish
+
+#### Scenario: Entries completed covers extras too
+- **WHEN** I open a series where I have completed 5 of 6 main-line entries and 2 of its 3 extras
+- **THEN** the entries-completed stat shows "5 of 6" for the main line and "2 of 3" for the extras as two labelled figures, rather than one combined "7 of 9"
+
+#### Scenario: A series with no extras shows one figure
+- **WHEN** I open a series whose every member is main line
+- **THEN** the entries-completed stat shows only the main-line figure, with no extras figure beside it
+
+#### Scenario: A finished series hides the time stats
+- **WHEN** I open a series whose main line I have watched in full, so no time is left
+- **THEN** neither "Time left" nor "Time watched" is shown
+
+#### Scenario: A part-watched series keeps both time stats
+- **WHEN** I open a series with main-line episodes I have not yet watched
+- **THEN** both "Time watched" and "Time left" are shown
+
+#### Scenario: An unknown runtime is not mistaken for a finished series
+- **WHEN** I open a series whose main-line runtime total is unknown, so it reports zero time left without my having watched it through
+- **THEN** both "Time watched" and "Time left" are still shown, because the zero reflects a runtime nobody knows rather than a series I have finished
 
 #### Scenario: Broadcast progress while a season is airing
 - **WHEN** a series' latest season is currently airing, 12 of its episodes have aired, and earlier seasons total 50 episodes

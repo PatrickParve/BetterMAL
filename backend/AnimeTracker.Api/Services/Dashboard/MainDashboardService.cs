@@ -22,8 +22,7 @@ public class MainDashboardService(
         var currentSeasonQuarter = SeasonCalendar.GetSeasonFor(today);
 
         var currentlyWatching = new List<CurrentlyWatchingItemDto>();
-        foreach (var e in entries.Where(e => e.Status == WatchStatus.Watching)
-                     .OrderBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase))
+        foreach (var e in OrderCurrentlyWatching(entries.Where(e => e.Status == WatchStatus.Watching)))
         {
             currentlyWatching.Add(new CurrentlyWatchingItemDto(
                 e.AnimeId,
@@ -79,6 +78,14 @@ public class MainDashboardService(
 
         return new MainDashboardDto(currentlyWatching, airingTodayDtos, currentSeason);
     }
+
+    // Internal so MainDashboardServiceOrderingTests can assert the rule
+    // against plain UserAnimeEntry objects without standing up the fakes
+    // GetDashboardAsync itself requires.
+    internal static IEnumerable<UserAnimeEntry> OrderCurrentlyWatching(IEnumerable<UserAnimeEntry> entries) =>
+        entries
+            .OrderByDescending(e => e.EpisodesWatched)
+            .ThenBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase);
 
     private static NextEpisodeEtaDto? ToEta(DateTimeOffset? nextInstant, DateTimeOffset now)
     {

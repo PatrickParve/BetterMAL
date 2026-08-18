@@ -282,7 +282,7 @@ public class SeriesBulkBuildBackgroundServiceTests
             new SeriesScoresDto(
                 new SeriesAverageDto(null, 0, 0), new SeriesAverageDto(null, 0, 0),
                 new SeriesAverageDto(null, 0, 0), new SeriesAverageDto(null, 0, 0)),
-            new SeriesStatsDto(0, 0, false, 0, 0, 0, 0, 0, 0, false, 0, 0, null, null, null, [], [], [], [], []),
+            new SeriesStatsDto(0, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, null, null, null, [], [], [], [], []),
             [], []);
     }
 

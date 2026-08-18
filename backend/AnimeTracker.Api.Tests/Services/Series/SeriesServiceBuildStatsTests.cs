@@ -6,20 +6,22 @@ namespace AnimeTracker.Api.Tests.Services.Series;
 public class SeriesServiceBuildStatsTests
 {
     private static AnimeMetadata Anime(
-        int id, int? totalEpisodes, int? averageEpisodeDurationSeconds = null, int? rewatchCount = null, double? myScore = null) =>
+        int id, int? totalEpisodes, int? averageEpisodeDurationSeconds = null, int? rewatchCount = null,
+        double? myScore = null, WatchStatus? status = null) =>
         new()
         {
             Id = id,
             Title = $"Anime {id}",
             TotalEpisodes = totalEpisodes,
             AverageEpisodeDurationSeconds = averageEpisodeDurationSeconds,
-            UserEntry = rewatchCount is null && myScore is null
+            UserEntry = rewatchCount is null && myScore is null && status is null
                 ? null
                 : new UserAnimeEntry
                 {
                     AnimeId = id,
                     RewatchCount = rewatchCount ?? 0,
                     MyScore = myScore is { } s ? (int)s : null,
+                    Status = status ?? WatchStatus.Watching,
                 },
         };
 
@@ -89,6 +91,41 @@ public class SeriesServiceBuildStatsTests
         var stats = SeriesService.BuildStats(members, [], [a, b], mainLineAiredEpisodes: 24, airedByAnimeId);
 
         Assert.Equal([1], stats.MostRewatchedAnimeIds);
+    }
+
+    [Fact]
+    public void ExtrasCompletedCountsOnlyCompletedExtrasSeparatelyFromMainLine()
+    {
+        var mainLine = Anime(1, totalEpisodes: 12, status: WatchStatus.Completed);
+        var completedExtra = Anime(2, totalEpisodes: 1, status: WatchStatus.Completed);
+        var watchingExtra = Anime(3, totalEpisodes: 1, status: WatchStatus.Watching);
+        var mainLineMembers = new List<SeriesMember> { Member(mainLine, isMainLine: true, order: 0) };
+        var extraMembers = new List<SeriesMember>
+        {
+            Member(completedExtra, isMainLine: false, order: 0),
+            Member(watchingExtra, isMainLine: false, order: 1),
+        };
+        var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 1, [3] = 1 };
+
+        var stats = SeriesService.BuildStats(
+            mainLineMembers, extraMembers, [mainLine, completedExtra, watchingExtra],
+            mainLineAiredEpisodes: 12, airedByAnimeId);
+
+        Assert.Equal(1, stats.EntriesCompleted);
+        Assert.Equal(1, stats.ExtrasCompleted);
+    }
+
+    [Fact]
+    public void ExtrasCompletedIsZeroForSeriesWithNoExtras()
+    {
+        var mainLine = Anime(1, totalEpisodes: 12, status: WatchStatus.Completed);
+        var mainLineMembers = new List<SeriesMember> { Member(mainLine, isMainLine: true, order: 0) };
+
+        var stats = SeriesService.BuildStats(
+            mainLineMembers, [], [mainLine], mainLineAiredEpisodes: 12, new Dictionary<int, int?> { [1] = 12 });
+
+        Assert.Equal(1, stats.EntriesCompleted);
+        Assert.Equal(0, stats.ExtrasCompleted);
     }
 
     [Fact]

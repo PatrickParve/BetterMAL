@@ -492,6 +492,7 @@ export type SeriesStatsDto = {
   myWatchedEpisodes: number
   myWatchedSeconds: number
   entriesCompleted: number
+  extrasCompleted: number
   mainLineCompletedByMe: boolean
   mainLineCount: number
   extrasCount: number
@@ -505,7 +506,7 @@ export type SeriesStatsDto = {
   genres: string[]
 }
 
-export type SeriesStatus = 'Ongoing' | 'Upcoming' | 'Finished' | 'Finished · sequel upcoming'
+export type SeriesStatus = 'Ongoing' | 'Upcoming' | 'Finished'
 
 export type SeriesDto = {
   seriesId: number

@@ -38,13 +38,6 @@
   color: var(--mine);
 }
 
-.score-chip__count {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--text);
-  opacity: 0.75;
-}
-
 /* Compact tile-card density (SeriesTimeline/SeriesExtraTile): no border, no
    label row, evenly fills its share of the row alongside a sibling chip. */
 .score-chip--compact {

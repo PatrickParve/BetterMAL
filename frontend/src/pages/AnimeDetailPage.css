@@ -1,20 +1,21 @@
 .anime-detail-page {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
+}
+
+.anime-detail-page__header h1 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: normal;
 }
 
 .anime-detail-page__top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
-}
-
-.anime-detail-page__top h1 {
-  margin: 0;
-  font-size: 28px;
-  letter-spacing: normal;
 }
 
 .anime-detail-page__links {
@@ -29,7 +30,6 @@
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
-  padding-top: 8px;
 }
 
 .anime-detail-page__related-link {

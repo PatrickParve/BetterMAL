@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { AnimeCard } from './AnimeCard.tsx'
 import { AiringProgressBar } from './AiringProgressBar.tsx'
 import type { CurrentSeasonItemDto } from '../api/types.ts'
 import { compareByMalScoreDesc, compareByTitleAlphabetical } from '../utils/anime.ts'
+import { useRestorableState } from '../hooks/useRestorableState.ts'
 import './CurrentSeasonSection.css'
 
 type SortKey = 'popularity' | 'malScore' | 'alphabetical'
@@ -44,7 +45,7 @@ type CurrentSeasonSectionProps = {
 // run) but still within the season it premiered in — sortable by popularity,
 // MAL score, or alphabetically, each with an airing progress bar.
 export function CurrentSeasonSection({ items }: CurrentSeasonSectionProps) {
-  const [sort, setSort] = useState<SortKey>('popularity')
+  const [sort, setSort] = useRestorableState<SortKey>('currentSeasonSort', 'popularity')
   const sortedItems = useMemo(() => sortItems(items, sort), [items, sort])
 
   return (

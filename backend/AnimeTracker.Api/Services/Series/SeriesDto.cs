@@ -56,7 +56,8 @@ public record SeriesScoresDto(
 /// nothing — so it can never exceed <c>MainLineEpisodeTotal</c>.
 /// <c>MainLineCompletedByMe</c> mirrors the frontend's
 /// <c>isGroupCompleted</c> convention over the main line (design.md decision
-/// 7). The highest-scored/most-rewatched/favourite/studios/genres figures
+/// 7). <c>ExtrasCompleted</c> counts extras marked Completed, the extras-side
+/// twin of <c>EntriesCompleted</c>. The highest-scored/most-rewatched/favourite/studios/genres figures
 /// span every member, main line and extras alike; the highest-scored and
 /// most-rewatched lists carry every tied entry rather than one arbitrary
 /// winner (design.md decision 8), and <c>MostRewatchedAnimeIds</c> is empty
@@ -71,6 +72,7 @@ public record SeriesStatsDto(
     int MyWatchedEpisodes,
     long MyWatchedSeconds,
     int EntriesCompleted,
+    int ExtrasCompleted,
     bool MainLineCompletedByMe,
     int MainLineCount,
     int ExtrasCount,
@@ -84,9 +86,9 @@ public record SeriesStatsDto(
     List<string> Genres);
 
 /// <summary>Full projection of a franchise for the series page. <c>Status</c>
-/// is one of "Ongoing", "Upcoming", "Finished", or "Finished · sequel
-/// upcoming" (design.md/task 3.4) — computed server-side since it depends on
-/// every member's airing status, not just the root's. <c>Title</c>,
+/// is one of "Ongoing", "Upcoming", or "Finished" (design.md/task 3.4) —
+/// computed server-side since it depends on every member's airing status, not
+/// just the root's. <c>Title</c>,
 /// <c>EnglishTitle</c> and <c>PictureUrl</c> come from the root entry
 /// (design.md decision 4). <c>RootAniListId</c> is the root's AniList id
 /// when a sync row exists for it, read the same way

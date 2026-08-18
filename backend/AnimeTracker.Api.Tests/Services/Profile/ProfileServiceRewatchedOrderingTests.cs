@@ -1,0 +1,101 @@
+using AnimeTracker.Api.Data;
+using AnimeTracker.Api.Data.Repositories;
+using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Profile;
+using AnimeTracker.Api.Services.Series;
+using Microsoft.EntityFrameworkCore;
+
+namespace AnimeTracker.Api.Tests.Services.Profile;
+
+// BuildRewatchedSection orders by rewatch count descending, then raw title
+// case-insensitively — MyScore is no longer a tie-break (design.md decision
+// 3/task 1.3). GetRewatchedSectionAsync doesn't touch SeriesRankingLookup
+// itself, but the constructor needs one, so these tests follow
+// ProfileServiceTopSeriesTests' construction with an empty in-memory db
+// standing in for it.
+public class ProfileServiceRewatchedOrderingTests
+{
+    private static AnimeTrackerDbContext CreateDb() =>
+        new(new DbContextOptionsBuilder<AnimeTrackerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options);
+
+    private static ProfileService CreateService(AnimeTrackerDbContext db, List<UserAnimeEntry> entries) =>
+        new(
+            new FakeUserAnimeEntryRepository(entries),
+            new FakeActivityLogRepository(),
+            new FakeTopAnimeSelectionRepository(),
+            new SeriesRankingLookup(db),
+            new FakeSeriesBuildTrigger());
+
+    private static UserAnimeEntry Entry(int animeId, string title, int rewatchCount, int? myScore) =>
+        new()
+        {
+            AnimeId = animeId,
+            Anime = new AnimeMetadata { Id = animeId, Title = title },
+            Status = WatchStatus.Completed,
+            RewatchCount = rewatchCount,
+            MyScore = myScore,
+        };
+
+    [Fact]
+    public async Task EqualRewatchCountsOrderAlphabeticallyRegardlessOfScore()
+    {
+        using var db = CreateDb();
+        List<UserAnimeEntry> entries =
+        [
+            Entry(1, "zebra", rewatchCount: 2, myScore: 9),
+            Entry(2, "apple", rewatchCount: 2, myScore: 3),
+        ];
+
+        var section = await CreateService(db, entries).GetRewatchedSectionAsync(TopAnimeMediaTypeScope.All);
+
+        Assert.Equal([2, 1], section.Items.Select(i => i.AnimeId));
+    }
+
+    [Fact]
+    public async Task RewatchCountStillOutranksTitle()
+    {
+        using var db = CreateDb();
+        List<UserAnimeEntry> entries =
+        [
+            Entry(1, "Alpha", rewatchCount: 1, myScore: null),
+            Entry(2, "Zulu", rewatchCount: 3, myScore: null),
+        ];
+
+        var section = await CreateService(db, entries).GetRewatchedSectionAsync(TopAnimeMediaTypeScope.All);
+
+        Assert.Equal([2, 1], section.Items.Select(i => i.AnimeId));
+    }
+
+    private sealed class FakeUserAnimeEntryRepository(List<UserAnimeEntry> entries) : IUserAnimeEntryRepository
+    {
+        public Task<UserAnimeEntry?> GetByAnimeIdAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<List<UserAnimeEntry>> GetAllAsync(CancellationToken ct = default) => Task.FromResult(entries);
+        public Task<(int PendingCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
+            throw new NotImplementedException();
+    }
+
+    private sealed class FakeActivityLogRepository : IActivityLogRepository
+    {
+        public Task<List<ActivityLog>> GetRecentAsync(int count, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<List<ActivityLog>> GetAllAsync(CancellationToken ct = default) => throw new NotImplementedException();
+    }
+
+    private sealed class FakeTopAnimeSelectionRepository : ITopAnimeSelectionRepository
+    {
+        public Task<List<int>> GetOrderedAnimeIdsAsync(CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task ReplaceOrderAsync(IReadOnlyList<int> orderedAnimeIds, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+    }
+
+    private sealed class FakeSeriesBuildTrigger : ISeriesBuildTrigger
+    {
+        public List<int> Enqueued { get; } = [];
+        public void Enqueue(int animeId) => Enqueued.Add(animeId);
+        public Task<int> WaitAsync(CancellationToken ct) => throw new NotImplementedException();
+    }
+}

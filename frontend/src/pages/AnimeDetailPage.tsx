@@ -16,6 +16,7 @@ import {
 } from "../context/CompletionPromptContext.tsx";
 import { usePageData } from "../hooks/usePageData.ts";
 import {
+  mediaTypeLabel,
   pickDisplayTitle,
   SERIES_TRAVERSAL_RELATIONS,
   STATUS_LABELS,
@@ -268,59 +269,59 @@ export function AnimeDetailPage() {
 
   return (
     <div className="anime-detail-page">
-      <div className="anime-detail-page__top">
-        <div>
+      <div className="anime-detail-page__header">
+        <div className="anime-detail-page__top">
           <h1>{pickDisplayTitle(detail.title, detail.englishTitle)}</h1>
-        </div>
 
-        {(hasSeriesRelation || prequel || sequel || parentStory || moreRelations.length > 0) && (
-          <div className="anime-detail-page__related">
-            {hasSeriesRelation && (
-              <Link
-                to={`/series/${detail.animeId}`}
-                className="anime-detail-page__related-link"
-              >
-                Series
-              </Link>
-            )}
-            {parentStory && (
-              <Link
-                to={`/anime/${parentStory.animeId}`}
-                className="anime-detail-page__related-link"
-                title={parentStory.title}
-              >
-                Main series
-              </Link>
-            )}
-            {moreRelations.length > 0 && (
-              <button
-                type="button"
-                className="anime-detail-page__related-link"
-                onClick={handleOpenRelatedOverlay}
-              >
-                More
-              </button>
-            )}
-            {prequel && (
-              <Link
-                to={`/anime/${prequel.animeId}`}
-                className="anime-detail-page__related-link"
-                title={prequel.title}
-              >
-                ← Prequel
-              </Link>
-            )}
-            {sequel && (
-              <Link
-                to={`/anime/${sequel.animeId}`}
-                className="anime-detail-page__related-link"
-                title={sequel.title}
-              >
-                Sequel →
-              </Link>
-            )}
-          </div>
-        )}
+          {(hasSeriesRelation || prequel || sequel || parentStory || moreRelations.length > 0) && (
+            <div className="anime-detail-page__related">
+              {hasSeriesRelation && (
+                <Link
+                  to={`/series/${detail.animeId}`}
+                  className="anime-detail-page__related-link"
+                >
+                  Series
+                </Link>
+              )}
+              {parentStory && (
+                <Link
+                  to={`/anime/${parentStory.animeId}`}
+                  className="anime-detail-page__related-link"
+                  title={parentStory.title}
+                >
+                  Main series
+                </Link>
+              )}
+              {moreRelations.length > 0 && (
+                <button
+                  type="button"
+                  className="anime-detail-page__related-link"
+                  onClick={handleOpenRelatedOverlay}
+                >
+                  More
+                </button>
+              )}
+              {prequel && (
+                <Link
+                  to={`/anime/${prequel.animeId}`}
+                  className="anime-detail-page__related-link"
+                  title={prequel.title}
+                >
+                  ← Prequel
+                </Link>
+              )}
+              {sequel && (
+                <Link
+                  to={`/anime/${sequel.animeId}`}
+                  className="anime-detail-page__related-link"
+                  title={sequel.title}
+                >
+                  Sequel →
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {showRelatedOverlay && (
@@ -440,9 +441,7 @@ export function AnimeDetailPage() {
             <dl className="anime-detail-page__info-grid">
               <div>
                 <dt>Type</dt>
-                <dd>
-                  {detail.mediaType ? detail.mediaType.toUpperCase() : NO_INFO}
-                </dd>
+                <dd>{detail.mediaType ? mediaTypeLabel(detail.mediaType) : NO_INFO}</dd>
               </div>
               <div>
                 <dt>Status</dt>

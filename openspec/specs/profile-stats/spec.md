@@ -432,7 +432,7 @@ The section SHALL contain every list entry whose rewatch count is greater than z
 
 The rewatch-count badge SHALL carry the same badge form as the top-anime strip's score badge — the same position, size, pill shape, and dark tint that keeps it legible over any poster, plus a matching border — but SHALL be rendered in white/silver rather than in either score colour role. It SHALL NOT use the "mine" purple or the "MAL" blue, so a rewatch count is never read as a score, while still reading as a deliberate badge rather than as plain text laid over the poster.
 
-The strip SHALL be ordered by rewatch count descending. Ties SHALL be broken deterministically: by my score descending (entries with no score last), then alphabetically by title. The strip SHALL NOT be capped at any size — every qualifying entry SHALL be reachable by scrolling the strip to its end.
+The strip SHALL be ordered by rewatch count descending. Ties SHALL be broken alphabetically by title, case-insensitively, and by nothing else — my score SHALL NOT participate in the ordering, so equally-rewatched entries read in one predictable sequence rather than one that shifts whenever a score changes. The strip SHALL NOT be capped at any size — every qualifying entry SHALL be reachable by scrolling the strip to its end.
 
 The section SHALL be read-only: it SHALL NOT offer any reordering control, and its order SHALL be derived entirely from rewatch counts rather than from the persisted top-anime ordering.
 
@@ -462,7 +462,11 @@ The section SHALL be read-only: it SHALL NOT offer any reordering control, and i
 
 #### Scenario: Breaking a tie
 - **WHEN** two anime have the same rewatch count
-- **THEN** the higher-scored one appears first, and if neither is scored higher they appear in alphabetical order by title
+- **THEN** they appear in alphabetical order by title, regardless of how I have scored them
+
+#### Scenario: A score change does not reorder the strip
+- **WHEN** I change my score on an anime in the "Most rewatched" strip without changing its rewatch count
+- **THEN** its position in the strip is unchanged
 
 #### Scenario: Uncapped list scrolls to the end
 - **WHEN** I have more rewatched anime than fit across the width of the box

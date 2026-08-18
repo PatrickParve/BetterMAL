@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import { pickDisplayTitle } from '../utils/anime.ts'
+import { mediaTypeLabel, pickDisplayTitle } from '../utils/anime.ts'
 import './AnimeCard.css'
 
 type AnimeCardProps = {
@@ -50,7 +50,7 @@ export function AnimeCard({ animeId, title, englishTitle, pictureUrl, to, childr
 export function AnimeCardMeta({ mediaType, totalEpisodes }: { mediaType: string | null; totalEpisodes: number | null }) {
   return (
     <span className="anime-card__meta">
-      {mediaType ? mediaType.toUpperCase() : 'Unknown'} · {totalEpisodes ?? '?'} ep
+      {mediaTypeLabel(mediaType)} · {totalEpisodes ?? '?'} ep
     </span>
   )
 }

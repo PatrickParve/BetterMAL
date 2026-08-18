@@ -4,7 +4,9 @@
 TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
 ## Requirements
 ### Requirement: Single anime detail layout
-The system SHALL show a single anime page with the title and a large picture on the left, and near the top-right of the title two separate side-by-side boxes: one showing rank and MAL score (MAL score respecting the hide/unhide toggle), and one showing my score and rewatch count. Below those it SHALL show an info box (type, status, source, duration, studio, aired-from/to, and genres) and, beneath it, a synopsis/background box. Any info field for which no data is available SHALL display "No info" rather than being blank.
+The system SHALL show a single anime page whose title sits in the page's own header block, per the `page-header-design` capability, above a body carrying a large picture on the left and, near the top-right, two separate side-by-side boxes: one showing rank and MAL score (MAL score respecting the hide/unhide toggle), and one showing my score and rewatch count. Below those it SHALL show an info box (type, status, source, duration, studio, aired-from/to, and genres) and, beneath it, a synopsis/background box. Any info field for which no data is available SHALL display "No info" rather than being blank.
+
+The title SHALL NOT sit flush against the top of the page's content area: the header block SHALL own the spacing above and below the title so it reads as this page's header rather than as a line of text the body was pushed down by. The related-entry links (Series, Main series, More, Prequel, Sequel) SHALL keep sharing the title's row, positioned as they are today, rather than moving into the body.
 
 The two score boxes SHALL be sized to the content they hold rather than stretched to fill the width of the main column: they SHALL NOT each take half the column's width, and their internal spacing SHALL be proportionate to the few short lines inside them rather than reusing the padding of a full-width panel such as the info or synopsis box. The pair SHALL read as a compact figure block beside the title, not as two large empty panels. They SHALL remain side by side at ordinary widths and SHALL keep stacking on narrow viewports, and the info and synopsis boxes below SHALL keep their existing full-width sizing.
 
@@ -18,7 +20,15 @@ The aired-episode count SHALL come from the anime's stored per-episode airing ro
 
 #### Scenario: Rendering the detail layout
 - **WHEN** I open an anime's detail page
-- **THEN** it shows the title with a large picture on the left, a "rank and MAL score" box and a separate "my score and rewatch count" box side by side, an info box (type, status, source, duration, studio, aired-from/to, genres), and a synopsis/background box
+- **THEN** it shows the title in the page's header block above a body with a large picture on the left, a "rank and MAL score" box and a separate "my score and rewatch count" box side by side, an info box (type, status, source, duration, studio, aired-from/to, genres), and a synopsis/background box
+
+#### Scenario: The title has room above it
+- **WHEN** I open an anime's detail page
+- **THEN** its title sits in a header block with spacing above and below it, rather than flush against the top of the page's content area
+
+#### Scenario: Related links stay beside the title
+- **WHEN** I open the detail page of an anime that has a prequel and a sequel
+- **THEN** the related-entry links are still on the title's row, to its right, rather than moved into the body
 
 #### Scenario: Scores are coloured numbers, not chips
 - **WHEN** I open an anime's detail page for an entry I have scored

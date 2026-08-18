@@ -267,13 +267,21 @@ public class SeriesService(
         if (!anyFinished && anyUpcoming)
             return "Upcoming";
 
-        return anyUpcoming ? "Finished · sequel upcoming" : "Finished";
+        return anyUpcoming ? "Ongoing" : "Finished";
     }
 
+    // The last year is the latest entry's *end* year (AiredTo), not the start
+    // year of whichever entry started airing most recently — a multi-cour or
+    // still-running entry's AiredFrom.Year understates how far the franchise
+    // actually runs. Falls back to AiredFrom when AiredTo isn't known yet
+    // (currently airing or not yet aired).
     private static (int? First, int? Last) YearSpan(List<AnimeMetadata> members)
     {
-        var years = members.Where(a => a.AiredFrom is not null).Select(a => a.AiredFrom!.Value.Year).ToList();
-        return years.Count > 0 ? (years.Min(), years.Max()) : (null, null);
+        var aired = members.Where(a => a.AiredFrom is not null).ToList();
+        if (aired.Count == 0) return (null, null);
+        var firstYear = aired.Min(a => a.AiredFrom!.Value.Year);
+        var lastYear = aired.Max(a => (a.AiredTo ?? a.AiredFrom!.Value).Year);
+        return (firstYear, lastYear);
     }
 
     // --- Score averages (3.2) ---
@@ -303,6 +311,7 @@ public class SeriesService(
         var myWatchedEpisodes = mainLineAnime.Sum(a => a.UserEntry?.EpisodesWatched ?? 0);
         var myWatchedSeconds = mainLineAnime.Sum(a => (long)(a.UserEntry?.EpisodesWatched ?? 0) * EpisodeSeconds(a));
         var entriesCompleted = mainLineAnime.Count(a => a.UserEntry?.Status == WatchStatus.Completed);
+        var extrasCompleted = extraAnime.Count(a => a.UserEntry?.Status == WatchStatus.Completed);
         var mainLineCompletedByMe = SeriesAverages.MainLineCompletedByMe(
             mainLineAnime.Select(a => (a.AiringStatus, a.UserEntry?.Status)));
 
@@ -349,6 +358,7 @@ public class SeriesService(
             myWatchedEpisodes,
             myWatchedSeconds,
             entriesCompleted,
+            extrasCompleted,
             mainLineCompletedByMe,
             mainLineMembers.Count,
             extraMembers.Count,

@@ -396,16 +396,15 @@ public class ProfileService(
         new(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.MyScore!.Value);
 
     // No tiers, no cut line, no cap: every entry with a rewatch count above
-    // zero, most-rewatched first. Ties break by score (unscored last), then
-    // title — the same tie-break vocabulary as TopAnimeOrdering, but over the
-    // raw Title rather than display title so the order doesn't shift with
-    // title-preference display logic.
+    // zero, most-rewatched first. Ties break by title alone — the same
+    // tie-break vocabulary as TopAnimeOrdering, but over the raw Title rather
+    // than display title so the order doesn't shift with title-preference
+    // display logic.
     private static RewatchedSectionDto BuildRewatchedSection(List<UserAnimeEntry> entries, string mediaType)
     {
         var items = entries
             .Where(e => e.RewatchCount > 0 && TopAnimeMediaTypeScope.Matches(mediaType, e.Anime.MediaType))
             .OrderByDescending(e => e.RewatchCount)
-            .ThenByDescending(e => e.MyScore ?? -1)
             .ThenBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase)
             .Select(ToRewatchedEntry)
             .ToList();

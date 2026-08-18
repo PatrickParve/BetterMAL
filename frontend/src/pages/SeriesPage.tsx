@@ -30,7 +30,6 @@ const SERIES_STATUS_CLASS: Record<SeriesStatus, string> = {
   Ongoing: 'ongoing',
   Upcoming: 'upcoming',
   Finished: 'finished',
-  'Finished · sequel upcoming': 'finished',
 }
 
 // e.g. 1548 minutes -> "1d 1h 48min" — once a day is present the hours
@@ -76,7 +75,7 @@ function formatYearSpan(firstYear: number | null, lastYear: number | null): stri
 
 function formatAverage(average: SeriesAverageDto): string {
   if (average.value === null) return 'No score'
-  return `${average.value.toFixed(2)} · ${average.scoredCount} of ${average.totalCount} scored`
+  return average.value.toFixed(2)
 }
 
 // Mirrors SeriesService.MalAverage/MyAverage server-side exactly, so an
@@ -257,12 +256,6 @@ function MalScoreChip({ label, average, completed }: { label: string; average: S
   return (
     <ScoreChip role="mal" label={label}>
       <ScoreValue value={average.value} placeholder="No score" completed={completed} />
-      {average.value !== null && (
-        <span className="score-chip__count">
-          {' '}
-          · {average.scoredCount} of {average.totalCount} scored
-        </span>
-      )}
     </ScoreChip>
   )
 }
@@ -454,6 +447,14 @@ export function SeriesPage() {
   // pages, all showing the real count.
   const mainLineAiredEpisodes = series.mainLine.reduce((sum, e) => sum + (e.airedEpisodes ?? 0), 0)
 
+  // "Time watched"/"Time left" hide together once there's nothing left to
+  // watch (design.md decision 7) — except when the runtime total itself is
+  // unknown, in which case a zero time left reports missing data rather than
+  // a finished series, so both stats stay visible.
+  const timeLeftSeconds = Math.max(0, stats.mainLineRuntimeSeconds - stats.myWatchedSeconds)
+  const runtimeUnknown = stats.mainLineRuntimeSeconds === 0 && stats.hasUnknownEpisodeCounts
+  const showTimeStats = timeLeftSeconds > 0 || runtimeUnknown
+
   const highestMalEntries = stats.highestMalScoreAnimeIds
     .map((id) => findEntry(series, id))
     .filter((e): e is SeriesEntryDto => e !== undefined)
@@ -535,19 +536,19 @@ export function SeriesPage() {
 
           <div className="series-page__score-chips">
             <MalScoreChip
-              label="MAL · main series"
+              label="MAL · Main series"
               average={scores.malMain}
               completed={malGroupRevealed(series.mainLine, series)}
             />
             {series.extras.length > 0 && (
               <MalScoreChip
-                label="MAL · everything"
+                label="MAL · Everything"
                 average={scores.malAll}
                 completed={malGroupRevealed([...series.mainLine, ...series.extras], series)}
               />
             )}
-            <MineScoreChip label="Mine · main series" average={scores.mineMain} />
-            {series.extras.length > 0 && <MineScoreChip label="Mine · everything" average={scores.mineAll} />}
+            <MineScoreChip label="Mine · Main series" average={scores.mineMain} />
+            {series.extras.length > 0 && <MineScoreChip label="Mine · Everything" average={scores.mineAll} />}
           </div>
 
           <div className="series-page__progress">
@@ -610,18 +611,31 @@ export function SeriesPage() {
           )}
           <div>
             <dt>Entries completed</dt>
-            <dd>
-              {stats.entriesCompleted} of {stats.mainLineCount}
+            <dd className="series-page__entries-completed">
+              <span className="series-page__entries-completed-row">
+                <span className="series-page__entries-completed-label">Main Series</span>
+                {stats.entriesCompleted} of {stats.mainLineCount}
+              </span>
+              {stats.extrasCount > 0 && (
+                <span className="series-page__entries-completed-row">
+                  <span className="series-page__entries-completed-label">Extras</span>
+                  {stats.extrasCompleted} of {stats.extrasCount}
+                </span>
+              )}
             </dd>
           </div>
-          <div>
-            <dt>Time watched</dt>
-            <dd>{formatRuntime(stats.myWatchedSeconds)}</dd>
-          </div>
-          <div>
-            <dt>Time left</dt>
-            <dd>{formatRuntime(Math.max(0, stats.mainLineRuntimeSeconds - stats.myWatchedSeconds))}</dd>
-          </div>
+          {showTimeStats && (
+            <>
+              <div>
+                <dt>Time watched</dt>
+                <dd>{formatRuntime(stats.myWatchedSeconds)}</dd>
+              </div>
+              <div>
+                <dt>Time left</dt>
+                <dd>{formatRuntime(timeLeftSeconds)}</dd>
+              </div>
+            </>
+          )}
           {highestMalEntries.length > 0 && (
             <div>
               <dt>Highest MAL score</dt>

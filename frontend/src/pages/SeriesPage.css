@@ -294,6 +294,24 @@
   color: var(--accent);
 }
 
+.series-page__entries-completed {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.series-page__entries-completed-row {
+  display: flex;
+  gap: 6px;
+}
+
+.series-page__entries-completed-label {
+  min-width: 56px;
+  color: var(--text);
+  opacity: 0.6;
+  font-size: 12px;
+}
+
 .series-page__tie-list {
   list-style: none;
   margin: 0;
