@@ -11,6 +11,9 @@ import type {
   PendingReconciliationDiffDto,
   ProfileDto,
   ReconciliationResultDto,
+  RecapAvailabilityDto,
+  RecapDto,
+  RecapQuery,
   ResyncStatusDto,
   RewatchedSectionDto,
   SearchPageDto,
@@ -173,6 +176,29 @@ export function getSeasonBounds(): Promise<SeasonBoundsDto> {
 
 export function getMyList(): Promise<MyListItemDto[]> {
   return fetchJson<MyListItemDto[]>('/api/my-list')
+}
+
+// startYear doubles as "the year" for yearly/season modes; endYear is
+// ignored for those. `filter` is sent only when the mode uses it — a season
+// recap always selects on what aired regardless of what's passed.
+export function getRecap(query: RecapQuery): Promise<RecapDto> {
+  const params = new URLSearchParams({ mode: query.mode })
+  if (query.mode === 'multiYear') {
+    params.set('from', String(query.startYear))
+    params.set('to', String(query.endYear))
+  } else {
+    params.set('year', String(query.startYear))
+  }
+  if (query.mode === 'season') {
+    if (query.season) params.set('season', query.season)
+  } else if (query.filter) {
+    params.set('filter', query.filter)
+  }
+  return fetchJson<RecapDto>(`/api/recap?${params.toString()}`)
+}
+
+export function getRecapAvailability(): Promise<RecapAvailabilityDto> {
+  return fetchJson<RecapAvailabilityDto>('/api/recap/availability')
 }
 
 export function getTopAnime(type: TopAnimeRankingType): Promise<TopAnimeItemDto[]> {

@@ -1,8 +1,10 @@
 import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { getMyList, updateEntry } from '../api/client.ts'
-import type { IncrementTarget, MyListItemDto, UserAnimeEntryDto, WatchStatus } from '../api/types.ts'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { getMyList, getRecap, updateEntry } from '../api/client.ts'
+import { RECAP_SEASONS, type IncrementTarget, type MyListItemDto, type RecapDto, type RecapMode, type RecapSeasonName, type RecapTimeFilter, type UserAnimeEntryDto, type WatchStatus } from '../api/types.ts'
 import { FilterMultiSelect, type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
 import { MyListRow } from '../components/MyListRow.tsx'
+import { RecapPickerOverlay } from '../components/RecapPickerOverlay.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useEpisodeIncrement, useSetEpisodesWatched } from '../context/CompletionPromptContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
@@ -14,6 +16,7 @@ import {
   MEDIA_TYPE_ORDER,
   mediaTypeLabel,
   pickDisplayTitle,
+  seasonLabel,
   STATUS_CLASS,
   STATUS_LABELS,
 } from '../utils/anime.ts'
@@ -108,6 +111,90 @@ export function MyListPage() {
     'finished_airing',
   )
 
+  // Recap scope (design.md decision 9/10, tasks.md 7.3-7.5): the only use of
+  // useSearchParams on this page — every control above keeps its
+  // useRestorableState behaviour and knows nothing about this. A scope
+  // arrives entirely from the URL (a recap's "see all" link), never from a
+  // control on this page.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  const recapModeParam = searchParams.get('recapMode')
+  const hasRecapScope = recapModeParam === 'multiYear' || recapModeParam === 'yearly' || recapModeParam === 'season'
+  const recapMode = (hasRecapScope ? recapModeParam : 'yearly') as RecapMode
+  const recapFromParam = Number(searchParams.get('recapFrom'))
+  const recapToParam = Number(searchParams.get('recapTo'))
+  const recapYearParam = Number(searchParams.get('recapYear'))
+  const recapSeasonParam = searchParams.get('recapSeason')
+  const recapSeason: RecapSeasonName = (RECAP_SEASONS as readonly string[]).includes(recapSeasonParam ?? '')
+    ? (recapSeasonParam as RecapSeasonName)
+    : RECAP_SEASONS[0]
+  const recapFilter: RecapTimeFilter = searchParams.get('recapFilter') === 'aired' ? 'aired' : 'watched'
+  const recapType = searchParams.get('recapType') ?? 'all'
+
+  const nowYear = new Date().getFullYear()
+  const recapStartYear =
+    recapMode === 'multiYear'
+      ? Number.isInteger(recapFromParam) && recapFromParam > 0
+        ? recapFromParam
+        : nowYear
+      : Number.isInteger(recapYearParam) && recapYearParam > 0
+        ? recapYearParam
+        : nowYear
+  const recapEndYear =
+    recapMode === 'multiYear' ? (Number.isInteger(recapToParam) && recapToParam > 0 ? recapToParam : recapStartYear) : recapStartYear
+
+  const recapScopeKey = hasRecapScope
+    ? recapMode === 'multiYear'
+      ? `recap:multiYear:${recapStartYear}-${recapEndYear}:${recapFilter}`
+      : recapMode === 'yearly'
+        ? `recap:yearly:${recapStartYear}:${recapFilter}`
+        : `recap:season:${recapStartYear}:${recapSeason}`
+    : 'no-recap-scope'
+
+  const { data: recapScopeData, loading: recapScopeLoading } = usePageData<RecapDto | null>(recapScopeKey, () =>
+    hasRecapScope
+      ? getRecap({ mode: recapMode, startYear: recapStartYear, endYear: recapEndYear, season: recapSeason, filter: recapFilter })
+      : Promise.resolve(null),
+  )
+
+  // The scope's own inclusion rule lives once, on the server (D9) — this
+  // page only intersects ids and, same as the recap page, narrows by media
+  // type locally.
+  const scopedAnimeIds = useMemo(() => {
+    if (!hasRecapScope || !recapScopeData) return null
+    const narrowed =
+      recapType === 'all'
+        ? recapScopeData.items
+        : recapScopeData.items.filter((item) => (item.mediaType ?? 'unknown') === recapType)
+    return new Set(narrowed.map((item) => item.animeId))
+  }, [hasRecapScope, recapScopeData, recapType])
+
+  function dismissRecapScope() {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      for (const key of ['recapMode', 'recapFrom', 'recapTo', 'recapYear', 'recapSeason', 'recapFilter', 'recapType']) {
+        params.delete(key)
+      }
+      return params
+    })
+  }
+
+  function recapScopeLabel(): string {
+    const periodLabel =
+      recapMode === 'multiYear'
+        ? recapStartYear === recapEndYear
+          ? String(recapStartYear)
+          : `${recapStartYear}–${recapEndYear}`
+        : recapMode === 'yearly'
+          ? String(recapStartYear)
+          : `${seasonLabel(recapSeason)} ${recapStartYear}`
+    const filterLabel = recapMode === 'season' ? 'What aired' : recapFilter === 'aired' ? 'What aired' : 'What I watched'
+    const typeLabel = recapType === 'all' ? 'All types' : mediaTypeLabel(recapType)
+    return `${periodLabel} · ${filterLabel} · ${typeLabel}`
+  }
+
   const [pendingIncrementId, setPendingIncrementId] = useState<number | null>(null)
   const [pendingScoreId, setPendingScoreId] = useState<number | null>(null)
   // Concurrency guards read synchronously inside the handlers below — a ref
@@ -184,14 +271,27 @@ export function MyListPage() {
     [setItems],
   )
 
+  // A recap scope narrows the candidate rows *before* every other control
+  // below runs (D10) — an inactive scope is a no-op pass-through, so
+  // nothing here changes when there's nothing to narrow. While a scope is
+  // active but its own fetch hasn't resolved yet, the candidate set is
+  // empty rather than the full list, so nothing flashes unscoped first.
+  const scopedItems = useMemo(() => {
+    if (!hasRecapScope) return items
+    if (!scopedAnimeIds) return []
+    return items.filter((item) => scopedAnimeIds.has(item.animeId))
+  }, [items, hasRecapScope, scopedAnimeIds])
+
   // Type/airing filter option lists: only the values actually present in the
-  // list, so a control never offers a choice that returns nothing (D6).
+  // list, so a control never offers a choice that returns nothing (D6) —
+  // scoped, same as everything else below, so an option the scope holds
+  // none of isn't offered either.
   const filterOptions = useMemo(() => {
     const presentTypes = new Set<string>()
     let hasUnknownType = false
     const presentAiring = new Set<string>()
     let hasUnknownAiring = false
-    for (const item of items) {
+    for (const item of scopedItems) {
       if (item.mediaType) presentTypes.add(item.mediaType)
       else hasUnknownType = true
       if (item.airingStatus) presentAiring.add(item.airingStatus)
@@ -209,14 +309,15 @@ export function MyListPage() {
     if (hasUnknownAiring) airingOptions.push({ value: 'unknown', label: 'Unknown' })
 
     return { typeOptions, airingOptions }
-  }, [items])
+  }, [scopedItems])
 
   // One derivation: filter (status -> text -> type -> airing -> score), sort
   // with the composed comparator, then either group by status or leave flat
   // (D3). Runs off the debounced query so a keystroke doesn't re-derive over
   // the whole list.
   const derived = useMemo<Derivation>(() => {
-    const statusScoped = statusFilter === 'All' ? items : items.filter((item) => item.entry.status === statusFilter)
+    const statusScoped =
+      statusFilter === 'All' ? scopedItems : scopedItems.filter((item) => item.entry.status === statusFilter)
     const needle = debouncedQuery.trim().toLowerCase()
 
     const matched = statusScoped.filter((item) => {
@@ -245,7 +346,7 @@ export function MyListPage() {
     }
 
     return { mode: 'flat', total: statusScoped.length, shown: matched.length, items: [...matched].sort(comparator) }
-  }, [items, statusFilter, debouncedQuery, typeFilter, airingFilter, scoreFilter, sort, sortDirection, sortThen, airingStatusFirst, groupByStatus])
+  }, [scopedItems, statusFilter, debouncedQuery, typeFilter, airingFilter, scoreFilter, sort, sortDirection, sortThen, airingStatusFirst, groupByStatus])
 
   const isNarrowed = derived.shown !== derived.total
   const isOffDefault =
@@ -399,7 +500,7 @@ export function MyListPage() {
   }
 
   function renderBody() {
-    if (loading) return <p className="my-list-page__loading">Loading…</p>
+    if (loading || (hasRecapScope && recapScopeLoading)) return <p className="my-list-page__loading">Loading…</p>
 
     if (derived.total === 0) return <p className="my-list-page__empty">Nothing here yet.</p>
 
@@ -465,7 +566,19 @@ export function MyListPage() {
             </button>
           )
         })}
+        <button type="button" className="my-list-page__recap-button" onClick={() => setPickerOpen(true)}>
+          Recap a period
+        </button>
       </div>
+
+      {hasRecapScope && (
+        <div className="my-list-page__recap-scope">
+          <span>Recap scope: {recapScopeLabel()}</span>
+          <button type="button" className="my-list-page__recap-scope-dismiss" onClick={dismissRecapScope} aria-label="Dismiss recap scope">
+            &times;
+          </button>
+        </div>
+      )}
 
       {renderFilterBar()}
       {isNarrowed && (
@@ -475,6 +588,16 @@ export function MyListPage() {
       )}
 
       {renderBody()}
+
+      {pickerOpen && (
+        <RecapPickerOverlay
+          onClose={() => setPickerOpen(false)}
+          onConfirm={(search) => {
+            setPickerOpen(false)
+            navigate(`/recap?${search}`)
+          }}
+        />
+      )}
     </div>
   )
 }

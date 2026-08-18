@@ -1,0 +1,395 @@
+.recap-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.recap-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.recap-page__header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+
+.recap-page__mode-tabs,
+.recap-page__filter-toggle,
+.recap-page__basis-toggle {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.recap-page__tab {
+  height: var(--control-h);
+  padding: 0 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.recap-page__tab:hover:not(:disabled) {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.recap-page__tab--active,
+.recap-page__tab--active:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.recap-page__tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.recap-page__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.recap-page__period-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recap-page__period-controls select,
+.recap-page__type-select {
+  font: inherit;
+  font-size: 14px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.recap-page__period-sep {
+  color: var(--text);
+  opacity: 0.6;
+}
+
+.recap-page__period-label {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.recap-page__loading,
+.recap-page__empty-note {
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.recap-page__empty {
+  padding: 32px 0;
+  text-align: center;
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.recap-page__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.recap-page__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--code-bg);
+}
+
+.recap-page__stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.recap-page__stat-label {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.recap-page__section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recap-page__section h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.recap-page__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.recap-page__top-ten-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Hot takes */
+
+.recap-hot-take-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recap-hot-take {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.recap-hot-take__link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-decoration: none;
+  color: var(--text-h);
+}
+
+.recap-hot-take__picture {
+  width: 40px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--code-bg);
+  flex: 0 0 auto;
+}
+
+.recap-hot-take__picture--placeholder {
+  border: 1px solid var(--border);
+}
+
+.recap-hot-take__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recap-hot-take__scores {
+  display: flex;
+  gap: 10px;
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.recap-hot-take__direction {
+  flex: 0 0 auto;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.recap-hot-take__direction--mal {
+  color: var(--mal);
+  background: var(--mal-bg);
+  border: 1px solid var(--mal-border);
+}
+
+.recap-hot-take__direction--mine {
+  color: var(--mine);
+  background: var(--mine-bg);
+  border: 1px solid var(--mine-border);
+}
+
+/* Top 10 */
+
+.recap-top-ten-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recap-top-ten-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.recap-top-ten-row__rank {
+  flex: 0 0 auto;
+  width: 28px;
+  font-weight: 600;
+  color: var(--text);
+  opacity: 0.7;
+}
+
+.recap-top-ten-row__link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-decoration: none;
+  color: var(--text-h);
+}
+
+.recap-top-ten-row__picture {
+  width: 36px;
+  height: 50px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--code-bg);
+  flex: 0 0 auto;
+}
+
+.recap-top-ten-row__picture--placeholder {
+  border: 1px solid var(--border);
+}
+
+.recap-top-ten-row__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recap-top-ten-row__score {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.recap-page__see-all {
+  align-self: flex-start;
+  font-size: 14px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.recap-page__see-all:hover {
+  text-decoration: underline;
+}
+
+/* Season/year rankings */
+
+.recap-ranking-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recap-ranking-row__link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--text-h);
+}
+
+.recap-ranking-row__link:hover {
+  border-color: var(--accent-border);
+}
+
+.recap-ranking-row__rank {
+  flex: 0 0 auto;
+  width: 28px;
+  font-weight: 600;
+  color: var(--text);
+  opacity: 0.7;
+}
+
+.recap-ranking-row__label {
+  flex: 1 1 auto;
+  font-weight: 500;
+}
+
+.recap-ranking-row__meta {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.8;
+}
+
+.recap-ranking-row__posters {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.recap-ranking-row__poster {
+  width: 28px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--code-bg);
+}
+
+.recap-ranking-row__poster--placeholder {
+  border: 1px solid var(--border);
+}
+
+.recap-page__see-all-years {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.recap-page__see-all-years:hover {
+  text-decoration: underline;
+}

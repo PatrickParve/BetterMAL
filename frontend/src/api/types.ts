@@ -568,3 +568,118 @@ export type AnimeDetailDto = {
   entry: UserAnimeEntryDto | null
   inSeries: boolean
 }
+
+// Mirrors backend Services/Recap/RecapPeriod.cs / RecapEntrySelector.cs.
+export type RecapMode = 'multiYear' | 'yearly' | 'season'
+export type RecapTimeFilter = 'watched' | 'aired'
+
+export const RECAP_SEASONS = ['winter', 'spring', 'summer', 'fall'] as const
+export type RecapSeasonName = (typeof RECAP_SEASONS)[number]
+
+// getRecap's request shape — mirrors RecapDto's own period fields (startYear
+// doubling as "the year" for yearly/season) so a response can be echoed
+// straight back into the next request. `season`/`filter` are read only for
+// the modes that use them.
+export type RecapQuery = {
+  mode: RecapMode
+  startYear: number
+  endYear: number
+  season?: RecapSeasonName | null
+  filter?: RecapTimeFilter
+}
+
+export type RecapHotTakeDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  myScore: number
+  malScore: number
+  // > 0: MAL liked it more than I did. < 0: the reverse.
+  divergence: number
+  malRevealed: boolean
+}
+
+export type RecapStatsDto = {
+  meanScore: number | null
+  animeCounted: number
+  completed: number
+  episodesWatched: number
+  moviesWatched: number
+  timeSpentSeconds: number
+  hotTakes: RecapHotTakeDto[]
+}
+
+// One row of the recap's full included set — the client does the top-10
+// slice, the basis switch, and the media-type narrowing locally (design.md
+// decision 1 of add-list-recaps).
+export type RecapRowDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  mediaType: string | null
+  myScore: number | null
+  malScore: number | null
+  malRevealed: boolean
+}
+
+export type RecapRankingPosterDto = {
+  animeId: number
+  title: string
+  pictureUrl: string | null
+}
+
+// topPosters is empty for every row but the leader (rank 1).
+export type RecapSeasonRankingDto = {
+  year: number
+  season: string
+  scoredCount: number
+  weightedScore: number
+  topPosters: RecapRankingPosterDto[]
+}
+
+export type RecapYearRankingDto = {
+  year: number
+  scoredCount: number
+  weightedScore: number
+  topPosters: RecapRankingPosterDto[]
+}
+
+// filter echoes what the server actually used — always 'aired' for a season
+// recap. watchedCount/airedCount are this period's counts under *both*
+// filters, letting the recap page render/disable the toggle without a
+// second call (design.md decision 2).
+export type RecapDto = {
+  mode: RecapMode
+  startYear: number
+  endYear: number
+  season: string | null
+  filter: RecapTimeFilter
+  watchedCount: number
+  airedCount: number
+  stats: RecapStatsDto
+  items: RecapRowDto[]
+  seasonRanking: RecapSeasonRankingDto[]
+  yearRanking: RecapYearRankingDto[]
+}
+
+export type RecapYearAvailabilityDto = {
+  year: number
+  watchedCount: number
+  airedCount: number
+}
+
+export type RecapSeasonAvailabilityDto = {
+  year: number
+  season: string
+  count: number
+}
+
+// Whole-list summary backing the recap picker (design.md decision 2) — the
+// picker sums Years across a candidate range itself rather than asking the
+// server to.
+export type RecapAvailabilityDto = {
+  years: RecapYearAvailabilityDto[]
+  seasons: RecapSeasonAvailabilityDto[]
+}

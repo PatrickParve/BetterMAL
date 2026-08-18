@@ -12,6 +12,7 @@ import { SeasonPage } from './pages/SeasonPage.tsx'
 import { TopAnimePage } from './pages/TopAnimePage.tsx'
 import { AiringPage } from './pages/AiringPage.tsx'
 import { MyListPage } from './pages/MyListPage.tsx'
+import { RecapPage } from './pages/RecapPage.tsx'
 import { ProfilePage } from './pages/ProfilePage.tsx'
 import { SettingsPage } from './pages/SettingsPage.tsx'
 import { AnimeDetailPage } from './pages/AnimeDetailPage.tsx'
@@ -38,6 +39,7 @@ export function AppShell() {
                   <Route path="/top" element={<TopAnimePage />} />
                   <Route path="/airing" element={<AiringPage />} />
                   <Route path="/my-list" element={<MyListPage />} />
+                  <Route path="/recap" element={<RecapPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/anime/:id" element={<AnimeDetailPage />} />

@@ -87,6 +87,30 @@ export function mediaTypeLabel(raw: string | null | undefined): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }
 
+// Capitalizes a season name for display — e.g. "fall" -> "Fall". Shared by
+// RecapPage (period label, ranking rows) and MyListPage (the scope
+// indicator), both of which name a recap's season the same way.
+export function seasonLabel(season: string): string {
+  return season.charAt(0).toUpperCase() + season.slice(1)
+}
+
+// e.g. 1548 minutes -> "1d 1h 48min" — once a day is present the hours
+// segment always shows, even at 0h, matching the series page design spec's
+// own example ("4d 6h 30min"). Shared by SeriesPage (main-line/extras/
+// watched runtime) and RecapPage (time spent) — both derive seconds the
+// same way (EpisodesWatched x per-episode duration).
+export function formatRuntime(totalSeconds: number): string {
+  const totalMinutes = Math.round(totalSeconds / 60)
+  const days = Math.floor(totalMinutes / (24 * 60))
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
+  const minutes = totalMinutes % 60
+  const parts: string[] = []
+  if (days > 0) parts.push(`${days}d`)
+  if (days > 0 || hours > 0) parts.push(`${hours}h`)
+  parts.push(`${minutes}min`)
+  return parts.join(' ')
+}
+
 // "Never" is settings-page phrasing for a field that's always present
 // elsewhere, so callers that don't want it pass a null value instead.
 export function formatTimestamp(value: string | null): string {

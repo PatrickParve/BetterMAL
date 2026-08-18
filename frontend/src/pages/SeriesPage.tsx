@@ -17,7 +17,7 @@ import { SeriesExtraTile } from '../components/SeriesExtraTile.tsx'
 import { SeriesTimeline } from '../components/SeriesTimeline.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
-import { mediaTypeLabel, pickDisplayTitle } from '../utils/anime.ts'
+import { formatRuntime, mediaTypeLabel, pickDisplayTitle } from '../utils/anime.ts'
 import './SeriesPage.css'
 
 const NO_INFO = '—'
@@ -30,21 +30,6 @@ const SERIES_STATUS_CLASS: Record<SeriesStatus, string> = {
   Ongoing: 'ongoing',
   Upcoming: 'upcoming',
   Finished: 'finished',
-}
-
-// e.g. 1548 minutes -> "1d 1h 48min" — once a day is present the hours
-// segment always shows, even at 0h, matching the design spec's own example
-// ("4d 6h 30min").
-function formatRuntime(totalSeconds: number): string {
-  const totalMinutes = Math.round(totalSeconds / 60)
-  const days = Math.floor(totalMinutes / (24 * 60))
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
-  const minutes = totalMinutes % 60
-  const parts: string[] = []
-  if (days > 0) parts.push(`${days}d`)
-  if (days > 0 || hours > 0) parts.push(`${hours}h`)
-  parts.push(`${minutes}min`)
-  return parts.join(' ')
 }
 
 // A 0 total alongside hasUnknown means every main-line entry's episode count

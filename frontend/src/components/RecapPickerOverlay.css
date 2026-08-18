@@ -1,0 +1,131 @@
+.recap-picker-overlay-modal {
+  max-width: 460px;
+}
+
+.recap-picker-overlay {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.recap-picker-overlay__title {
+  margin: 0;
+}
+
+.recap-picker-overlay__mode-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.recap-picker-overlay__tab {
+  height: var(--control-h);
+  padding: 0 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.recap-picker-overlay__tab:hover:not(:disabled) {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.recap-picker-overlay__tab--active,
+.recap-picker-overlay__tab--active:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.recap-picker-overlay__tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.recap-picker-overlay__settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recap-picker-overlay__row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.recap-picker-overlay__row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.8;
+}
+
+.recap-picker-overlay__row select {
+  font: inherit;
+  font-size: 14px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.recap-picker-overlay__filter-label {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.8;
+}
+
+.recap-picker-overlay__filter-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.recap-picker-overlay__empty-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.8;
+}
+
+.recap-picker-overlay__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.recap-picker-overlay__cancel,
+.recap-picker-overlay__confirm {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.recap-picker-overlay__confirm {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.recap-picker-overlay__confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: var(--border);
+  background: var(--bg);
+  color: var(--text);
+}

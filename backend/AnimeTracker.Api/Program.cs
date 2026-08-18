@@ -12,6 +12,7 @@ using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Auth;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Profile;
+using AnimeTracker.Api.Services.Recap;
 using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Season;
@@ -149,6 +150,10 @@ builder.Services.AddScoped<ITopAnimeService, TopAnimeService>();
 
 // --- Profile stats ---
 builder.Services.AddScoped<IProfileService, ProfileService>();
+
+// --- Recap ---
+builder.Services.AddScoped<IRecapService, RecapService>();
+builder.Services.AddScoped<IRecapAvailabilityService, RecapAvailabilityService>();
 
 // --- Single anime detail page ---
 builder.Services.AddScoped<IAnimeDetailService, AnimeDetailService>();

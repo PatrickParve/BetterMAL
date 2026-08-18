@@ -47,11 +47,6 @@ public class ProfileService(
     // community like and a 7.5-or-below average is not a community dislike.
     private const double OpinionDivergenceMalLikeFloorAndDislikeCeiling = 7.5;
 
-    // A mean and standard deviation computed over fewer pairs than this don't
-    // describe a spread worth normalizing against — the rule needs a
-    // population, not a handful of points.
-    private const int OpinionDivergenceMinimumRatedPairs = 10;
-
     // No per-anime episode duration is cached (MAL's field isn't fetched
     // anywhere), so "Days" approximates using MAL's own fallback assumption
     // for unknown durations rather than tracking real runtimes. Internal
@@ -432,24 +427,16 @@ public class ProfileService(
     private static (List<OpinionDivergenceItemDto> TheyLikedItIDidnt, List<OpinionDivergenceItemDto> ILikedItTheyDidnt)
         BuildOpinionDivergence(List<UserAnimeEntry> entries)
     {
-        var rated = entries.Where(e => e.MyScore is not null && e.Anime.MalScore is not null).ToList();
-        if (rated.Count < OpinionDivergenceMinimumRatedPairs)
+        if (ScoreDivergence.TryCompute(entries) is not { } context)
             return ([], []);
 
-        var myMean = rated.Average(e => e.MyScore!.Value);
-        var malMean = rated.Average(e => e.Anime.MalScore!.Value);
-        var mySd = PopulationStandardDeviation(rated.Select(e => (double)e.MyScore!.Value), myMean);
-        var malSd = PopulationStandardDeviation(rated.Select(e => e.Anime.MalScore!.Value), malMean);
-        if (mySd == 0 || malSd == 0)
-            return ([], []);
+        var rated = entries.Where(e => e.MyScore is not null && e.Anime.MalScore is not null).ToList();
 
         // divergence > 0 means MAL sits further above its mean than I sit
         // above mine — a "they liked it more than I did" direction; < 0 is
         // the reverse (design.md decision 3).
         var scored = rated
-            .Select(e => (
-                Entry: e,
-                Divergence: (e.Anime.MalScore!.Value - malMean) / malSd - (e.MyScore!.Value - myMean) / mySd))
+            .Select(e => (Entry: e, Divergence: context.DivergenceOf(e)))
             .ToList();
 
         var theyLikedItIDidnt = scored
@@ -471,16 +458,6 @@ public class ProfileService(
             .ToList();
 
         return (theyLikedItIDidnt, iLikedItTheyDidnt);
-    }
-
-    // Population SD, not sample SD (design.md decision 3): the rated pairs
-    // are the whole population being ranked, not a sample standing in for a
-    // larger one.
-    private static double PopulationStandardDeviation(IEnumerable<double> values, double mean)
-    {
-        var list = values as IReadOnlyCollection<double> ?? values.ToList();
-        var variance = list.Sum(v => (v - mean) * (v - mean)) / list.Count;
-        return Math.Sqrt(variance);
     }
 
     private static OpinionDivergenceItemDto ToDivergenceItem(UserAnimeEntry e) =>

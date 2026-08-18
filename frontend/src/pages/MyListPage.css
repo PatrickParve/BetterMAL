@@ -368,3 +368,54 @@
   margin-top: 8px;
   opacity: 1;
 }
+
+/* Set apart from the status tabs by margin-left: auto within the same flex
+   row (.my-list-page__tabs), rather than a border/divider — a navigation
+   entry point, not another tab (design.md "Recap a period control"). */
+.my-list-page__recap-button {
+  margin-left: auto;
+  font: inherit;
+  font-size: 14px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px dashed var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.my-list-page__recap-button:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+  border-style: solid;
+}
+
+.my-list-page__recap-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-size: 13px;
+}
+
+.my-list-page__recap-scope-dismiss {
+  margin-left: auto;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.my-list-page__recap-scope-dismiss:hover {
+  color: var(--text-h);
+}
