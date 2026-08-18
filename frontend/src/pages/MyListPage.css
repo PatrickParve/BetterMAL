@@ -369,27 +369,12 @@
   opacity: 1;
 }
 
-/* Set apart from the status tabs by margin-left: auto within the same flex
-   row (.my-list-page__tabs), rather than a border/divider — a navigation
-   entry point, not another tab (design.md "Recap a period control"). */
+/* Shares .my-list-page__tab's chrome (design.md decision 4) so it reads as
+   part of the same control row rather than a separate feature; set apart
+   from the status tabs only by margin-left: auto within that same flex row
+   (.my-list-page__tabs), not by a different shape. */
 .my-list-page__recap-button {
   margin-left: auto;
-  font: inherit;
-  font-size: 14px;
-  height: var(--control-h);
-  box-sizing: border-box;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: 1px dashed var(--border);
-  background: var(--bg);
-  color: var(--text);
-  cursor: pointer;
-}
-
-.my-list-page__recap-button:hover {
-  color: var(--text-h);
-  border-color: var(--accent-border);
-  border-style: solid;
 }
 
 .my-list-page__recap-scope {
@@ -402,6 +387,16 @@
   background: var(--accent-bg);
   color: var(--text-h);
   font-size: 13px;
+}
+
+.my-list-page__recap-scope-link {
+  color: var(--text-h);
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.my-list-page__recap-scope-link:hover {
+  color: var(--accent);
 }
 
 .my-list-page__recap-scope-dismiss {

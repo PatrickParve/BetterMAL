@@ -20,11 +20,15 @@ public record RecapHotTakeDto(
     bool MalRevealed);
 
 /// <summary>The recap's stat block (design.md "Recap stats" requirement),
-/// computed over the period+filter's included set alone.</summary>
+/// computed over the period+filter's included set alone. <c>Dropped</c>
+/// counts included entries with status Dropped, so the gap between
+/// <c>AnimeCounted</c> and <c>Completed</c> is accounted for rather than
+/// left unexplained (design.md decision 10).</summary>
 public record RecapStatsDto(
     double? MeanScore,
     int AnimeCounted,
     int Completed,
+    int Dropped,
     int EpisodesWatched,
     int MoviesWatched,
     long TimeSpentSeconds,
@@ -54,6 +58,22 @@ public record RecapYearRankingDto(
     double WeightedScore,
     List<RecapRankingPosterDto> TopPosters);
 
+/// <summary>One ranked season or year, largest time watched first (design.md
+/// decision 7). One DTO serves both levels: <c>Season</c> is null at the
+/// year level, non-null at the season level — the two differ only in
+/// grouping key. <c>TimeSpentSeconds</c> is computed on the same basis as
+/// <see cref="RecapStatsDto.TimeSpentSeconds"/>, so a group's rows always sum
+/// to the stat block's total. Unlike the score rankings, a group need not
+/// hold any scored anime to be ranked here — only watched ones.
+/// <c>TopPosters</c> is empty for every row but the leader, and picked by
+/// episodes watched rather than score.</summary>
+public record RecapTimeRankingDto(
+    int Year,
+    string? Season,
+    long TimeSpentSeconds,
+    int EpisodesWatched,
+    List<RecapRankingPosterDto> TopPosters);
+
 /// <summary>One row of the recap's full included set (design.md decision 1:
 /// the server returns the whole set, not just a top 10 — the client does the
 /// top-10 slice, the basis switch, and the media-type narrowing locally).
@@ -79,9 +99,12 @@ public record RecapRowDto(
 /// under *both* filters (design.md decision 2), so the recap page can
 /// render the filter toggle's disabled/enabled state, and fall back off an
 /// option that turned out empty, without a second call to learn the other
-/// option's count. <c>SeasonRanking</c>/<c>YearRanking</c> are empty
-/// whenever design.md decision "Bayesian ranking of seasons and years"'s
-/// gate excludes them for this mode/filter combination.</summary>
+/// option's count. <c>SeasonRanking</c>/<c>YearRanking</c>/
+/// <c>SeasonTimeRanking</c>/<c>YearTimeRanking</c> are empty wherever design.md
+/// decision "Bayesian ranking of seasons and years"'s gate excludes them for
+/// this mode/filter combination — the time rankings share that same gate
+/// (design.md decision 8) even though they don't share the score rankings'
+/// scored-anime requirement.</summary>
 public record RecapDto(
     string Mode,
     int StartYear,
@@ -93,7 +116,9 @@ public record RecapDto(
     RecapStatsDto Stats,
     List<RecapRowDto> Items,
     List<RecapSeasonRankingDto> SeasonRanking,
-    List<RecapYearRankingDto> YearRanking);
+    List<RecapYearRankingDto> YearRanking,
+    List<RecapTimeRankingDto> SeasonTimeRanking,
+    List<RecapTimeRankingDto> YearTimeRanking);
 
 /// <summary>One calendar year's entry counts under both time filters, for
 /// the whole list — not scoped to any particular recap period. The recap

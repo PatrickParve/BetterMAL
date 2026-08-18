@@ -109,9 +109,27 @@
   opacity: 0.85;
 }
 
+/* Lead section (design.md decision 5): the stat block sits left of the top
+   anime on a display wide enough for both, collapsing to one column with
+   the (DOM-first) stats above the top anime below the breakpoint. */
+.recap-page__lead {
+  display: grid;
+  grid-template-columns: minmax(14rem, 20rem) 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .recap-page__lead {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Sized for the lead grid's narrow column rather than the page's full
+   width — a 1-2 column stack instead of the old 6-tile horizontal strip. */
 .recap-page__stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -379,7 +397,7 @@
   border: 1px solid var(--border);
 }
 
-.recap-page__see-all-years {
+.recap-page__see-all-ranks {
   align-self: flex-start;
   font: inherit;
   font-size: 14px;
@@ -390,6 +408,26 @@
   cursor: pointer;
 }
 
-.recap-page__see-all-years:hover {
+.recap-page__see-all-ranks:hover {
   text-decoration: underline;
+}
+
+/* Season and year rankings sit side by side when both are present (design.md
+   "Year ranking" requirement); the time-watched rankings reuse the same
+   layout as their own full-width block below the score pair (design.md
+   decision 7 risks), stacking season-first below the breakpoint. */
+.recap-page__ranking-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.recap-page__ranking-pair:has(> :only-child) {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 1024px) {
+  .recap-page__ranking-pair {
+    grid-template-columns: 1fr;
+  }
 }

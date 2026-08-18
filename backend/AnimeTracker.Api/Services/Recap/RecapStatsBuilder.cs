@@ -6,7 +6,7 @@ namespace AnimeTracker.Api.Services.Recap;
 /// <summary>The recap's stat block, including hot takes (tasks.md 3.1-3.3).</summary>
 public static class RecapStatsBuilder
 {
-    private const int HotTakeCount = 3;
+    private const int HotTakeCount = 5;
     private const string MovieMediaType = "movie";
 
     public static RecapStatsDto Build(List<UserAnimeEntry> included, List<UserAnimeEntry> wholeList)
@@ -22,20 +22,18 @@ public static class RecapStatsBuilder
         // D7: runtime uses each anime's cached duration, falling back to the
         // app's one standing assumption — movies included, unlike the
         // episode count above.
-        var timeSpentSeconds = included.Sum(e => (long)e.EpisodesWatched * EpisodeSeconds(e.Anime));
+        var timeSpentSeconds = included.Sum(e => (long)e.EpisodesWatched * RecapTimeMath.EpisodeSeconds(e.Anime));
 
         return new RecapStatsDto(
             MeanScore: scored.Count > 0 ? Math.Round(scored.Average(e => e.MyScore!.Value), 2) : null,
             AnimeCounted: included.Count,
             Completed: included.Count(e => e.Status == WatchStatus.Completed),
+            Dropped: included.Count(e => e.Status == WatchStatus.Dropped),
             EpisodesWatched: nonMovies.Sum(e => e.EpisodesWatched),
             MoviesWatched: moviesWatched,
             TimeSpentSeconds: timeSpentSeconds,
             HotTakes: BuildHotTakes(included, wholeList));
     }
-
-    private static int EpisodeSeconds(AnimeMetadata anime) =>
-        anime.AverageEpisodeDurationSeconds ?? ProfileService.AssumedMinutesPerEpisode * 60;
 
     // D4: no label gates, no SD threshold — just the period's most divergent
     // picks, however divergent that turns out to be. Ties (equal absolute

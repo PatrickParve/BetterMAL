@@ -99,6 +99,21 @@ public class RecapStatsBuilderTests
             .ToList();
 
     [Fact]
+    public void DroppedCountsOnlyDroppedEntries()
+    {
+        var completed = Entry(1, "tv", 12, status: WatchStatus.Completed);
+        var dropped1 = Entry(2, "tv", 4, status: WatchStatus.Dropped);
+        var dropped2 = Entry(3, "tv", 2, status: WatchStatus.Dropped);
+        var watching = Entry(4, "tv", 6, status: WatchStatus.Watching);
+
+        var stats = RecapStatsBuilder.Build(
+            [completed, dropped1, dropped2, watching], [completed, dropped1, dropped2, watching]);
+
+        Assert.Equal(1, stats.Completed);
+        Assert.Equal(2, stats.Dropped);
+    }
+
+    [Fact]
     public void HotTakesDegradeToTwoWhenOnlyTwoEligible()
     {
         var wholeList = WholeListWithSpread();
@@ -132,14 +147,25 @@ public class RecapStatsBuilderTests
     }
 
     [Fact]
-    public void HotTakesCapAtThreeOrderedByAbsoluteDivergence()
+    public void HotTakesCapAtFiveOrderedByAbsoluteDivergence()
     {
         var wholeList = WholeListWithSpread();
 
         var stats = RecapStatsBuilder.Build(wholeList, wholeList);
 
-        Assert.True(stats.HotTakes.Count <= 3);
+        Assert.Equal(5, stats.HotTakes.Count);
         var divergences = stats.HotTakes.Select(h => Math.Abs(h.Divergence)).ToList();
         Assert.Equal(divergences.OrderByDescending(d => d), divergences);
+    }
+
+    [Fact]
+    public void HotTakesDegradeToFourWhenOnlyFourEligible()
+    {
+        var wholeList = WholeListWithSpread();
+        var included = wholeList.Take(4).ToList();
+
+        var stats = RecapStatsBuilder.Build(included, wholeList);
+
+        Assert.Equal(4, stats.HotTakes.Count);
     }
 }

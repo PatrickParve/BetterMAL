@@ -1,14 +1,14 @@
-.year-ranking-overlay {
+.ranking-overlay {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-.year-ranking-overlay__title {
+.ranking-overlay__title {
   margin: 0;
 }
 
-.year-ranking-overlay__list {
+.ranking-overlay__list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -19,7 +19,7 @@
   overflow-y: auto;
 }
 
-.year-ranking-overlay__link {
+.ranking-overlay__link {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -30,11 +30,11 @@
   color: var(--text-h);
 }
 
-.year-ranking-overlay__link:hover {
+.ranking-overlay__link:hover {
   border-color: var(--accent-border);
 }
 
-.year-ranking-overlay__rank {
+.ranking-overlay__rank {
   flex: 0 0 auto;
   width: 28px;
   font-weight: 600;
@@ -42,26 +42,26 @@
   opacity: 0.7;
 }
 
-.year-ranking-overlay__label {
+.ranking-overlay__label {
   flex: 1 1 auto;
   font-weight: 500;
 }
 
-.year-ranking-overlay__meta {
+.ranking-overlay__meta {
   flex: 0 0 auto;
   font-size: 13px;
   color: var(--text);
   opacity: 0.8;
 }
 
-.year-ranking-overlay__posters {
+.ranking-overlay__posters {
   display: flex;
   gap: 4px;
   flex: 0 0 auto;
 }
 
-.year-ranking-overlay__posters img,
-.year-ranking-overlay__poster-placeholder {
+.ranking-overlay__posters img,
+.ranking-overlay__poster-placeholder {
   width: 28px;
   height: 40px;
   object-fit: cover;
@@ -69,16 +69,16 @@
   background: var(--code-bg);
 }
 
-.year-ranking-overlay__poster-placeholder {
+.ranking-overlay__poster-placeholder {
   border: 1px solid var(--border);
 }
 
-.year-ranking-overlay__buttons {
+.ranking-overlay__buttons {
   display: flex;
   justify-content: flex-end;
 }
 
-.year-ranking-overlay__buttons button {
+.ranking-overlay__buttons button {
   font: inherit;
   padding: 8px 16px;
   border-radius: 6px;

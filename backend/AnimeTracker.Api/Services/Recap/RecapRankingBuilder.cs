@@ -78,4 +78,59 @@ public static class RecapRankingBuilder
             .Take(PosterCount)
             .Select(e => new RecapRankingPosterDto(e.AnimeId, e.Anime.Title, e.Anime.PictureUrl))
             .ToList();
+
+    // D7/D8: unlike the score rankings, no scored-anime requirement — a group
+    // is ranked whenever it has any time watched at all, and ties break by
+    // episodes watched then chronologically for a stable order.
+    public static List<RecapTimeRankingDto> BuildSeasonTimeRanking(List<UserAnimeEntry> airedIncluded, RecapPeriod period)
+    {
+        var byPoint = airedIncluded.ToLookup(e => SeasonCalendar.GetSeasonFor(e.Anime.AiredFrom!.Value));
+
+        var ranked = period.SeasonPoints
+            .Select(point => (point.Year, point.Season, Group: byPoint[point].ToList()))
+            .Select(c => (c.Year, c.Season, c.Group, Time: GroupTimeSeconds(c.Group), Episodes: c.Group.Sum(e => e.EpisodesWatched)))
+            .Where(c => c.Time > 0)
+            .OrderByDescending(c => c.Time)
+            .ThenByDescending(c => c.Episodes)
+            .ThenBy(c => SeasonCalendar.GetSeasonPointIndex(c.Year, c.Season))
+            .ToList();
+
+        return ranked
+            .Select((c, index) => new RecapTimeRankingDto(
+                c.Year, c.Season, c.Time, c.Episodes,
+                index == 0 ? TopPostersByTime(c.Group) : []))
+            .ToList();
+    }
+
+    public static List<RecapTimeRankingDto> BuildYearTimeRanking(List<UserAnimeEntry> airedIncluded, RecapPeriod period)
+    {
+        var byYear = airedIncluded.ToLookup(e => e.Anime.AiredFrom!.Value.Year);
+
+        var ranked = period.Years
+            .Select(year => (Year: year, Group: byYear[year].ToList()))
+            .Select(c => (c.Year, c.Group, Time: GroupTimeSeconds(c.Group), Episodes: c.Group.Sum(e => e.EpisodesWatched)))
+            .Where(c => c.Time > 0)
+            .OrderByDescending(c => c.Time)
+            .ThenByDescending(c => c.Episodes)
+            .ThenBy(c => c.Year)
+            .ToList();
+
+        return ranked
+            .Select((c, index) => new RecapTimeRankingDto(
+                c.Year, null, c.Time, c.Episodes,
+                index == 0 ? TopPostersByTime(c.Group) : []))
+            .ToList();
+    }
+
+    private static long GroupTimeSeconds(List<UserAnimeEntry> group) =>
+        group.Sum(e => (long)e.EpisodesWatched * RecapTimeMath.EpisodeSeconds(e.Anime));
+
+    private static List<RecapRankingPosterDto> TopPostersByTime(List<UserAnimeEntry> group) =>
+        group
+            .Where(e => e.EpisodesWatched > 0)
+            .OrderByDescending(e => e.EpisodesWatched)
+            .ThenBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase)
+            .Take(PosterCount)
+            .Select(e => new RecapRankingPosterDto(e.AnimeId, e.Anime.Title, e.Anime.PictureUrl))
+            .ToList();
 }

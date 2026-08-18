@@ -8,8 +8,14 @@ import './RecapPickerOverlay.css'
 type RecapPickerOverlayProps = {
   onClose: () => void
   // Called with the query string for `/recap?...` once a confirmable
-  // selection is submitted — the caller navigates.
+  // selection is submitted — the caller decides what to do with it
+  // (navigate, or apply as a scope elsewhere).
   onConfirm: (search: string) => void
+  // Both default to today's period-picker copy; My list overrides them to
+  // read as an apply-to-list action rather than a navigation (design.md
+  // decision 2).
+  title?: string
+  confirmLabel?: string
 }
 
 const MODE_OPTIONS: { value: RecapMode; label: string }[] = [
@@ -38,9 +44,16 @@ function sumCounts(years: RecapYearAvailabilityDto[], startYear: number, endYear
 // period" control. Loads /api/recap/availability once on open and gates the
 // time filter locally from it (design.md decision 2) — the same
 // unavailable-option rule the recap page itself applies. Confirming never
-// calls /api/recap directly; it hands the caller a query string for
-// `/recap?...` to navigate to.
-export function RecapPickerOverlay({ onClose, onConfirm }: RecapPickerOverlayProps) {
+// calls /api/recap directly; it hands the caller a query string in the
+// picker's own mode/from/to/year/season/filter vocabulary and leaves the
+// caller to decide what that means — navigate to `/recap?...`, or (My
+// list's caller, design.md decision 2) translate it into a list scope.
+export function RecapPickerOverlay({
+  onClose,
+  onConfirm,
+  title = 'Recap a period',
+  confirmLabel = 'Show recap',
+}: RecapPickerOverlayProps) {
   const currentYear = useMemo(() => new Date().getFullYear(), [])
   const [availability, setAvailability] = useState<RecapAvailabilityDto | null>(null)
 
@@ -117,7 +130,7 @@ export function RecapPickerOverlay({ onClose, onConfirm }: RecapPickerOverlayPro
     <Modal onClose={onClose} labelledBy="recap-picker-overlay-title" className="recap-picker-overlay-modal">
       <div className="recap-picker-overlay">
         <h2 id="recap-picker-overlay-title" className="recap-picker-overlay__title">
-          Recap a period
+          {title}
         </h2>
 
         <div className="recap-picker-overlay__mode-tabs" role="tablist" aria-label="Recap type">
@@ -237,7 +250,7 @@ export function RecapPickerOverlay({ onClose, onConfirm }: RecapPickerOverlayPro
             Cancel
           </button>
           <button type="button" className="recap-picker-overlay__confirm" disabled={confirmDisabled} onClick={handleConfirm}>
-            Show recap
+            {confirmLabel}
           </button>
         </div>
       </div>

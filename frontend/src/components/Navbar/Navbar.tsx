@@ -17,6 +17,11 @@ function linkClassName({ isActive }: { isActive: boolean }) {
 
 export function Navbar() {
   const { hidden, toggle } = useScoreVisibility()
+  // Built at render, not hoisted into NAV_LINKS, so a long-lived tab open
+  // across midnight still targets the current year (design.md decision 1).
+  // NavLink's active match compares pathname only, so this is marked active
+  // on /recap whatever period is actually showing.
+  const recapLink = `/recap?mode=yearly&year=${new Date().getFullYear()}&filter=aired`
 
   return (
     <header className="navbar">
@@ -26,6 +31,9 @@ export function Navbar() {
             {link.label}
           </NavLink>
         ))}
+        <NavLink to={recapLink} className={linkClassName}>
+          Recap
+        </NavLink>
       </nav>
 
       <div className="navbar__search">

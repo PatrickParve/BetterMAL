@@ -26,30 +26,44 @@ public class RecapService(IUserAnimeEntryRepository entryRepository) : IRecapSer
             .OrderBy(r => r.Title, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var (seasonRanking, yearRanking) = BuildRankings(included, period, effectiveFilter, wholeList);
+        var (seasonRanking, yearRanking, seasonTimeRanking, yearTimeRanking) =
+            BuildRankings(included, period, effectiveFilter, wholeList);
 
         return new RecapDto(
             period.Mode, period.StartYear, period.EndYear, period.Season, effectiveFilter,
-            watchedCount, airedCount, stats, items, seasonRanking, yearRanking);
+            watchedCount, airedCount, stats, items, seasonRanking, yearRanking,
+            seasonTimeRanking, yearTimeRanking);
     }
 
     // design.md decision "Bayesian ranking of seasons and years" + tasks.md
     // 4.4: season ranking on multi-year/yearly under "aired" only; year
     // ranking on multi-year under "aired" only; neither on a season recap
-    // (folded into effectiveFilter's own gate below) or under "watched".
-    private static (List<RecapSeasonRankingDto> Season, List<RecapYearRankingDto> Year) BuildRankings(
+    // (folded into effectiveFilter's own gate below) or under "watched". The
+    // time rankings (design.md decision 8) share this same eligibility gate
+    // but not the score rankings' global-mean requirement, since they don't
+    // need a scored anime anywhere to be meaningful — so that guard is
+    // scoped to the score rankings alone.
+    private static (
+        List<RecapSeasonRankingDto> Season, List<RecapYearRankingDto> Year,
+        List<RecapTimeRankingDto> SeasonTime, List<RecapTimeRankingDto> YearTime) BuildRankings(
         List<UserAnimeEntry> included, RecapPeriod period, string effectiveFilter, List<UserAnimeEntry> wholeList)
     {
         var rankingEligible = effectiveFilter == RecapTimeFilter.Aired && period.Mode != RecapMode.Season;
-        if (!rankingEligible || ScoredMean(wholeList) is not { } globalMean)
-            return ([], []);
+        if (!rankingEligible)
+            return ([], [], [], []);
 
-        var seasonRanking = RecapRankingBuilder.BuildSeasonRanking(included, period, globalMean);
-        var yearRanking = period.Mode == RecapMode.MultiYear
-            ? RecapRankingBuilder.BuildYearRanking(included, period, globalMean)
+        var globalMean = ScoredMean(wholeList);
+        var seasonRanking = globalMean is { } sm ? RecapRankingBuilder.BuildSeasonRanking(included, period, sm) : [];
+        var yearRanking = period.Mode == RecapMode.MultiYear && globalMean is { } ym
+            ? RecapRankingBuilder.BuildYearRanking(included, period, ym)
             : [];
 
-        return (seasonRanking, yearRanking);
+        var seasonTimeRanking = RecapRankingBuilder.BuildSeasonTimeRanking(included, period);
+        var yearTimeRanking = period.Mode == RecapMode.MultiYear
+            ? RecapRankingBuilder.BuildYearTimeRanking(included, period)
+            : [];
+
+        return (seasonRanking, yearRanking, seasonTimeRanking, yearTimeRanking);
     }
 
     // C in the Bayesian formula: my mean score across every scored entry in

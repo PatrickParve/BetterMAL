@@ -604,6 +604,7 @@ export type RecapStatsDto = {
   meanScore: number | null
   animeCounted: number
   completed: number
+  dropped: number
   episodesWatched: number
   moviesWatched: number
   timeSpentSeconds: number
@@ -646,6 +647,17 @@ export type RecapYearRankingDto = {
   topPosters: RecapRankingPosterDto[]
 }
 
+// One ranked season or year, largest time watched first — `season` is null
+// at the year level (design.md decision 7). Unlike the score rankings, a
+// group need not hold any scored anime to appear here, only watched ones.
+export type RecapTimeRankingDto = {
+  year: number
+  season: string | null
+  timeSpentSeconds: number
+  episodesWatched: number
+  topPosters: RecapRankingPosterDto[]
+}
+
 // filter echoes what the server actually used — always 'aired' for a season
 // recap. watchedCount/airedCount are this period's counts under *both*
 // filters, letting the recap page render/disable the toggle without a
@@ -662,6 +674,8 @@ export type RecapDto = {
   items: RecapRowDto[]
   seasonRanking: RecapSeasonRankingDto[]
   yearRanking: RecapYearRankingDto[]
+  seasonTimeRanking: RecapTimeRankingDto[]
+  yearTimeRanking: RecapTimeRankingDto[]
 }
 
 export type RecapYearAvailabilityDto = {

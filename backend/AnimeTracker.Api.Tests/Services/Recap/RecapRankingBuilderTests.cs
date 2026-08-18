@@ -19,6 +19,23 @@ public class RecapRankingBuilderTests
             Status = WatchStatus.Completed,
         };
 
+    private static UserAnimeEntry WatchedEntry(
+        int animeId, DateOnly airedFrom, int episodesWatched, int durationSeconds, int? myScore = null) =>
+        new()
+        {
+            AnimeId = animeId,
+            Anime = new AnimeMetadata
+            {
+                Id = animeId,
+                Title = $"Anime {animeId:D3}",
+                AiredFrom = airedFrom,
+                AverageEpisodeDurationSeconds = durationSeconds,
+            },
+            EpisodesWatched = episodesWatched,
+            MyScore = myScore,
+            Status = WatchStatus.Completed,
+        };
+
     [Fact]
     public void AWellCoveredThinSeasonComparison_EightAnimeAveragingHigherOutranksOneAnimeScoringTen()
     {
@@ -116,5 +133,85 @@ public class RecapRankingBuilderTests
         Assert.NotEmpty(ranking[0].TopPosters);
         Assert.True(ranking[0].TopPosters.Count <= 3);
         Assert.Empty(ranking[1].TopPosters);
+    }
+
+    // BuildSeasonTimeRanking / BuildYearTimeRanking (tasks.md 2.3-2.8,
+    // design.md decisions 7-8).
+    [Fact]
+    public void SeasonsAreOrderedByTimeWatchedNotByScore()
+    {
+        var lessTimeHigherScore = WatchedEntry(1, new DateOnly(2022, 1, 15), episodesWatched: 2, durationSeconds: 1200, myScore: 10);
+        var moreTimeLowerScore = WatchedEntry(2, new DateOnly(2022, 4, 15), episodesWatched: 20, durationSeconds: 1200, myScore: 5);
+        var included = new List<UserAnimeEntry> { lessTimeHigherScore, moreTimeLowerScore };
+
+        var ranking = RecapRankingBuilder.BuildSeasonTimeRanking(included, RecapPeriod.Yearly(2022));
+
+        Assert.Equal(2, ranking.Count);
+        Assert.Equal("spring", ranking[0].Season);
+        Assert.Equal("winter", ranking[1].Season);
+    }
+
+    [Fact]
+    public void AGroupWithUnscoredAnimeIsStillRankedByTime()
+    {
+        var unscored = WatchedEntry(1, new DateOnly(2021, 7, 15), episodesWatched: 12, durationSeconds: 1500, myScore: null);
+
+        var ranking = RecapRankingBuilder.BuildSeasonTimeRanking([unscored], RecapPeriod.Yearly(2021));
+
+        var summer = Assert.Single(ranking);
+        Assert.Equal("summer", summer.Season);
+        Assert.Equal(12, summer.EpisodesWatched);
+    }
+
+    [Fact]
+    public void AGroupWithZeroEpisodesWatchedIsOmitted()
+    {
+        var nothingWatched = WatchedEntry(1, new DateOnly(2022, 1, 15), episodesWatched: 0, durationSeconds: 1200, myScore: 8);
+
+        var ranking = RecapRankingBuilder.BuildSeasonTimeRanking([nothingWatched], RecapPeriod.Yearly(2022));
+
+        Assert.Empty(ranking);
+    }
+
+    [Fact]
+    public void OnlyTheLeadingTimeRowCarriesPostersChosenByEpisodesWatched()
+    {
+        var leaderPick = WatchedEntry(1, new DateOnly(2022, 4, 15), episodesWatched: 24, durationSeconds: 1200, myScore: 3);
+        var leaderOther = WatchedEntry(2, new DateOnly(2022, 4, 15), episodesWatched: 2, durationSeconds: 1200, myScore: 10);
+        var runnerUp = WatchedEntry(3, new DateOnly(2022, 1, 15), episodesWatched: 5, durationSeconds: 1200, myScore: 9);
+        var included = new List<UserAnimeEntry> { leaderPick, leaderOther, runnerUp };
+
+        var ranking = RecapRankingBuilder.BuildSeasonTimeRanking(included, RecapPeriod.Yearly(2022));
+
+        Assert.Equal(2, ranking.Count);
+        Assert.Equal("spring", ranking[0].Season);
+        Assert.NotEmpty(ranking[0].TopPosters);
+        Assert.Equal(leaderPick.AnimeId, ranking[0].TopPosters[0].AnimeId);
+        Assert.Empty(ranking[1].TopPosters);
+    }
+
+    [Fact]
+    public void PerGroupTimeSumsToTheStatBlocksTimeSpent()
+    {
+        var winter = WatchedEntry(1, new DateOnly(2022, 1, 15), episodesWatched: 12, durationSeconds: 1400);
+        var spring = WatchedEntry(2, new DateOnly(2022, 4, 15), episodesWatched: 6, durationSeconds: 1500);
+        var included = new List<UserAnimeEntry> { winter, spring };
+
+        var ranking = RecapRankingBuilder.BuildSeasonTimeRanking(included, RecapPeriod.Yearly(2022));
+        var stats = RecapStatsBuilder.Build(included, included);
+
+        Assert.Equal(stats.TimeSpentSeconds, ranking.Sum(r => r.TimeSpentSeconds));
+    }
+
+    [Fact]
+    public void YearTimeRankingLeavesSeasonNull()
+    {
+        var entry = WatchedEntry(1, new DateOnly(2022, 4, 15), episodesWatched: 12, durationSeconds: 1400);
+
+        var ranking = RecapRankingBuilder.BuildYearTimeRanking([entry], RecapPeriod.MultiYear(2020, 2023));
+
+        var year = Assert.Single(ranking);
+        Assert.Equal(2022, year.Year);
+        Assert.Null(year.Season);
     }
 }

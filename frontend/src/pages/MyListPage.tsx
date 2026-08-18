@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { getMyList, getRecap, updateEntry } from '../api/client.ts'
 import { RECAP_SEASONS, type IncrementTarget, type MyListItemDto, type RecapDto, type RecapMode, type RecapSeasonName, type RecapTimeFilter, type UserAnimeEntryDto, type WatchStatus } from '../api/types.ts'
 import { FilterMultiSelect, type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
@@ -117,7 +117,6 @@ export function MyListPage() {
   // arrives entirely from the URL (a recap's "see all" link), never from a
   // control on this page.
   const [searchParams, setSearchParams] = useSearchParams()
-  const navigate = useNavigate()
   const [pickerOpen, setPickerOpen] = useState(false)
 
   const recapModeParam = searchParams.get('recapMode')
@@ -171,6 +170,46 @@ export function MyListPage() {
     return new Set(narrowed.map((item) => item.animeId))
   }, [hasRecapScope, recapScopeData, recapType])
 
+  // Translates the picker's own mode/from/to/year/season/filter vocabulary
+  // into the `recap`-prefixed scope vocabulary this page reads (design.md
+  // decision 2) — the overlay's onConfirm contract stays a plain query
+  // string; only this caller decides it means "apply as a scope" rather
+  // than "navigate".
+  function applyPickerScope(search: string) {
+    const picked = new URLSearchParams(search)
+    const mode = picked.get('mode')
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      params.delete('recapFrom')
+      params.delete('recapTo')
+      params.delete('recapYear')
+      params.delete('recapSeason')
+      params.delete('recapFilter')
+      params.delete('recapType')
+
+      if (mode) params.set('recapMode', mode)
+      if (mode === 'multiYear') {
+        const from = picked.get('from')
+        const to = picked.get('to')
+        if (from) params.set('recapFrom', from)
+        if (to) params.set('recapTo', to)
+        const filter = picked.get('filter')
+        if (filter) params.set('recapFilter', filter)
+      } else if (mode === 'yearly') {
+        const year = picked.get('year')
+        if (year) params.set('recapYear', year)
+        const filter = picked.get('filter')
+        if (filter) params.set('recapFilter', filter)
+      } else if (mode === 'season') {
+        const year = picked.get('year')
+        const season = picked.get('season')
+        if (year) params.set('recapYear', year)
+        if (season) params.set('recapSeason', season)
+      }
+      return params
+    })
+  }
+
   function dismissRecapScope() {
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev)
@@ -179,6 +218,25 @@ export function MyListPage() {
       }
       return params
     })
+  }
+
+  // The inverse of RecapPage's myListScopeSearch (design.md decision 3):
+  // builds the recap page's own param vocabulary (mode/from/to/year/season/
+  // filter/type) from this page's `recap`-prefixed scope, so the scope
+  // chip's link lands back on the same period, filter, and media type.
+  function recapSearchFromScope(): string {
+    const params = new URLSearchParams()
+    params.set('mode', recapMode)
+    if (recapMode === 'multiYear') {
+      params.set('from', String(recapStartYear))
+      params.set('to', String(recapEndYear))
+    } else {
+      params.set('year', String(recapStartYear))
+    }
+    if (recapMode === 'season') params.set('season', recapSeason)
+    else params.set('filter', recapFilter)
+    if (recapType !== 'all') params.set('type', recapType)
+    return params.toString()
   }
 
   function recapScopeLabel(): string {
@@ -566,7 +624,11 @@ export function MyListPage() {
             </button>
           )
         })}
-        <button type="button" className="my-list-page__recap-button" onClick={() => setPickerOpen(true)}>
+        <button
+          type="button"
+          className="my-list-page__tab my-list-page__recap-button"
+          onClick={() => setPickerOpen(true)}
+        >
           Recap a period
         </button>
       </div>
@@ -574,6 +636,9 @@ export function MyListPage() {
       {hasRecapScope && (
         <div className="my-list-page__recap-scope">
           <span>Recap scope: {recapScopeLabel()}</span>
+          <Link to={`/recap?${recapSearchFromScope()}`} className="my-list-page__recap-scope-link">
+            View recap
+          </Link>
           <button type="button" className="my-list-page__recap-scope-dismiss" onClick={dismissRecapScope} aria-label="Dismiss recap scope">
             &times;
           </button>
@@ -591,10 +656,12 @@ export function MyListPage() {
 
       {pickerOpen && (
         <RecapPickerOverlay
+          title="Recap a period"
+          confirmLabel="Apply to list"
           onClose={() => setPickerOpen(false)}
           onConfirm={(search) => {
             setPickerOpen(false)
-            navigate(`/recap?${search}`)
+            applyPickerScope(search)
           }}
         />
       )}
