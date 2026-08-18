@@ -68,10 +68,18 @@
   cursor: pointer;
 }
 
-.season-page__nav button:hover {
+.season-page__nav button:hover:not(:disabled) {
   color: var(--text-h);
   background: var(--accent-bg);
   border-color: var(--accent-border);
+}
+
+/* :not(:disabled) on the hover rule above already stops the accent
+   highlight from applying on hover — this rule is what actually greys the
+   button out, at rest and while hovered alike. */
+.season-page__nav button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 /* Relative anchor for the absolutely-positioned "Updating…" indicator, so

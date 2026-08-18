@@ -45,20 +45,50 @@ public class MalClient(HttpClient http) : IMalClient
             $"anime?q={Uri.EscapeDataString(query)}&limit={limit}&fields={DefaultAnimeFields}&nsfw=true",
             MalAuthMode.ClientId, ct);
 
-    public Task<MalPagedResponse<MalAnimeListEdge>> GetSeasonAsync(int year, string season, int limit = 100, int offset = 0, string? sort = null, CancellationToken ct = default)
-    {
+    public Task<MalPagedResponse<MalAnimeListEdge>> GetSeasonAsync(int year, string season, int limit = 100, int offset = 0, string? sort = null, CancellationToken ct = default) =>
         // nsfw=true — without it MAL silently omits R+/Rx-rated entries from the
         // season listing, same as the user animelist fetch below.
+        GetAsync<MalPagedResponse<MalAnimeListEdge>>(BuildSeasonUrl(year, season, limit, offset, sort), MalAuthMode.ClientId, ct);
+
+    /// <summary>Pages through the full season listing (the season browser
+    /// caches an entire season at once, not one page at a time). Only the
+    /// first page is 404-tolerant: MAL 404s the whole season when it has no
+    /// listing yet, and returning null here is what lets
+    /// SeasonBrowseService record that as an answer rather than a failure. A
+    /// 404 on a later page would mean the listing vanished mid-page-through —
+    /// a real error — so every page after the first goes through the
+    /// ordinary (non-tolerant) GetSeasonAsync.</summary>
+    public async Task<List<MalAnimeListEdge>?> GetFullSeasonAsync(int year, string season, string? sort = null, CancellationToken ct = default)
+    {
+        var firstPage = await GetAsyncOrNotFound<MalPagedResponse<MalAnimeListEdge>>(
+            BuildSeasonUrl(year, season, FullListPageSize, 0, sort), ct);
+        if (firstPage is null)
+            return null; // MAL has no listing for this season (404) — an answer, not a fetch failure
+
+        var all = new List<MalAnimeListEdge>(firstPage.Data);
+        var next = firstPage.Paging?.Next;
+        var lastPageCount = firstPage.Data.Count;
+        var offset = FullListPageSize;
+
+        while (next is not null && lastPageCount > 0)
+        {
+            var page = await GetSeasonAsync(year, season, FullListPageSize, offset, sort, ct);
+            all.AddRange(page.Data);
+            next = page.Paging?.Next;
+            lastPageCount = page.Data.Count;
+            offset += FullListPageSize;
+        }
+
+        return all;
+    }
+
+    private static string BuildSeasonUrl(int year, string season, int limit, int offset, string? sort)
+    {
         var url = $"anime/season/{year}/{Uri.EscapeDataString(season)}?limit={limit}&offset={offset}&fields={DefaultAnimeFields}&nsfw=true";
         if (!string.IsNullOrEmpty(sort))
             url += $"&sort={Uri.EscapeDataString(sort)}";
-        return GetAsync<MalPagedResponse<MalAnimeListEdge>>(url, MalAuthMode.ClientId, ct);
+        return url;
     }
-
-    /// <summary>Pages through the full season listing (the season browser
-    /// caches an entire season at once, not one page at a time).</summary>
-    public Task<List<MalAnimeListEdge>> GetFullSeasonAsync(int year, string season, string? sort = null, CancellationToken ct = default) =>
-        GetAllPagesAsync(offset => GetSeasonAsync(year, season, FullListPageSize, offset, sort, ct));
 
     public Task<MalPagedResponse<MalAnimeListEdge>> GetRankingAsync(string rankingType = "all", int limit = 100, CancellationToken ct = default) =>
         GetAsync<MalPagedResponse<MalAnimeListEdge>>(
@@ -116,6 +146,24 @@ public class MalClient(HttpClient http) : IMalClient
         request.Options.Set(MalRequestOptions.AuthModeKey, authMode);
 
         using var response = await http.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct)
+            ?? throw new InvalidOperationException($"MAL returned an empty response for {url}.");
+    }
+
+    /// <summary>Same as <see cref="GetAsync{T}"/> (always client-id auth) but a
+    /// 404 returns null instead of throwing — the same "already absent on
+    /// MAL" tolerance <see cref="DeleteMyListStatusAsync"/> gives a missing
+    /// list entry.</summary>
+    private async Task<T?> GetAsyncOrNotFound<T>(string url, CancellationToken ct) where T : class
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Options.Set(MalRequestOptions.AuthModeKey, MalAuthMode.ClientId);
+
+        using var response = await http.SendAsync(request, ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return null;
+
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct)
             ?? throw new InvalidOperationException($"MAL returned an empty response for {url}.");

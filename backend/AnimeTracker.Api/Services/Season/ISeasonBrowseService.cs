@@ -14,4 +14,8 @@ public interface ISeasonBrowseService
     /// successfully today, subject to a per-season single-flight guard.
     /// Failures are swallowed and logged; the cached listing is left as-is.</summary>
     Task<SeasonRefreshResultDto> RefreshAsync(int year, string season, CancellationToken ct = default);
+
+    /// <summary>The furthest season navigable from the current one — see
+    /// SeasonHorizon.Resolve. Repository-only read, never calls MAL.</summary>
+    Task<SeasonBoundsDto> GetBoundsAsync(CancellationToken ct = default);
 }

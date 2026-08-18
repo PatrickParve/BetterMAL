@@ -455,7 +455,9 @@ An ordering that fails to save SHALL leave the page showing the order that is ac
 ### Requirement: Main series and More sections
 The main line's presentation SHALL be governed by the Series timeline ribbon requirement, not by this one; this requirement governs only the More section, where extras SHALL be presented as poster tiles grouped by media type, so the extras read as a different kind of thing from the chronological main line.
 
-Each tile SHALL carry the information a main-line card carries — picture, title, year, episode count, MAL score, my score, and my list status, with the media type carried by its group heading — SHALL link to that anime's detail page, SHALL offer the same edit control, and SHALL show its entry's rewatch count when it is greater than zero. As on a main-line card, a tile's title SHALL reserve the same vertical space regardless of line count, so tiles in the same row stay aligned.
+Each tile SHALL carry the information a main-line card carries — picture, title, media type, year, episode count, MAL score, my score, and my list status — SHALL link to that anime's detail page, SHALL offer the same edit control, and SHALL show its entry's rewatch count when it is greater than zero. As on a main-line card, a tile's title SHALL reserve the same vertical space regardless of line count, so tiles in the same row stay aligned.
+
+Each of a tile's secondary text lines — the media type/year/episode count line, and the aired-progress line when it is shown — SHALL occupy exactly one line whatever its content, truncating with an ellipsis rather than wrapping, so no tile is made taller than its row neighbours by the length of its own text.
 
 Each More group SHALL show its entry count in its heading. When a series has more than twelve extras every group SHALL start collapsed, and otherwise every group SHALL start expanded.
 
@@ -470,6 +472,10 @@ An edit saved from a tile SHALL update it in place without reloading the page.
 #### Scenario: Extras grouped in More
 - **WHEN** a series has two specials, one OVA, and a music video
 - **THEN** the More section shows them as poster tiles under a collapsible group per media type, each heading carrying its count
+
+#### Scenario: A long meta line stays on one line
+- **WHEN** a tile's media type, year, and episode count are too wide for the tile at the narrowest column width the grid produces
+- **THEN** the line truncates with an ellipsis on one line, and the tile's score chips and footer stay aligned with the other tiles in its row
 
 #### Scenario: A large More section starts collapsed
 - **WHEN** I open a series with twenty extras

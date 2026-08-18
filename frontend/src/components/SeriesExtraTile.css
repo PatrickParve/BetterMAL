@@ -75,11 +75,19 @@
   overflow: hidden;
 }
 
+/* nowrap + ellipsis rather than wrapping — same treatment as
+   .series-timeline__card-meta-line — so a long combination (e.g. "TV
+   special · 2023 · 5 ep" at the grid's narrowest column width) truncates on
+   one line instead of wrapping to a second one and pushing this tile's
+   chips/footer out of alignment with its row neighbours. */
 .series-extra-tile__meta,
 .series-extra-tile__aired {
   font-size: 12px;
   color: var(--text);
   opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .series-extra-tile__chips {

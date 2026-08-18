@@ -22,6 +22,23 @@ public interface ISeasonRepository
     /// it has never been fetched.</summary>
     Task<DateTimeOffset?> GetLastFetchedAsync(int year, string season, CancellationToken ct = default);
 
+    /// <summary>Whether this season has any cached listing row at all,
+    /// unfiltered by type/hentai/in-my-list — <see cref="GetPageAsync"/>'s
+    /// TotalCount can't serve this because it's computed after those filters,
+    /// so a type filter would make a genuinely-listed season look unlisted.</summary>
+    Task<bool> HasListingAsync(int year, string season, CancellationToken ct = default);
+
     Task<(List<SeasonAnimeItem> Items, int TotalCount)> GetPageAsync(
         int year, string season, SeasonSortKey sort, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default);
+
+    /// <summary>The horizon resolver's inputs in one round trip, no MAL call:
+    /// for each requested (year, season) point, its fetch timestamp and
+    /// whether it has any cached listing; plus the latest (year, season) that
+    /// has any SeasonAnimeListing row at all (null if nothing is cached
+    /// yet).</summary>
+    Task<SeasonHorizonInputs> GetHorizonInputsAsync(IReadOnlyCollection<(int Year, string Season)> points, CancellationToken ct = default);
 }
+
+public record SeasonHorizonPoint(int Year, string Season, DateTimeOffset? LastFetchedAt, bool HasListings);
+
+public record SeasonHorizonInputs(List<SeasonHorizonPoint> Points, (int Year, string Season)? LatestCachedSeason);

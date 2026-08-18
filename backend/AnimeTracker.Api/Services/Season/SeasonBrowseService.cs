@@ -25,8 +25,9 @@ public class SeasonBrowseService(
             .ToList();
 
         var lastFetchedAt = await seasonRepository.GetLastFetchedAsync(year, season, ct);
+        var hasListing = await seasonRepository.HasListingAsync(year, season, ct);
 
-        return new SeasonPageDto(year, season, dtoItems, offset, limit, totalCount, lastFetchedAt);
+        return new SeasonPageDto(year, season, dtoItems, offset, limit, totalCount, lastFetchedAt, hasListing);
     }
 
     // Fetches at most once per local calendar day, for any season — past,
@@ -42,24 +43,65 @@ public class SeasonBrowseService(
             var lastFetched = await seasonRepository.GetLastFetchedAsync(year, season, ct);
 
             if (lastFetched is { } fetchedAt && broadcastConverter.GetLocalDate(fetchedAt) == todayLocalDate)
-                return new SeasonRefreshResultDto(false);
+                return new SeasonRefreshResultDto(SeasonRefreshOutcome.Skipped);
 
             try
             {
-                await FetchAndCacheAsync(year, season, now, ct);
-                return new SeasonRefreshResultDto(true);
+                var outcome = await FetchAndCacheAsync(year, season, now, ct);
+                return new SeasonRefreshResultDto(outcome);
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to refresh season {Year}/{Season}; serving whatever is already cached.", year, season);
-                return new SeasonRefreshResultDto(false);
+                return new SeasonRefreshResultDto(SeasonRefreshOutcome.Failed);
             }
         }
     }
 
-    private async Task FetchAndCacheAsync(int year, string season, DateTimeOffset now, CancellationToken ct)
+    public async Task<SeasonBoundsDto> GetBoundsAsync(CancellationToken ct = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var todayLocalDate = broadcastConverter.GetLocalDate(now);
+        var current = SeasonCalendar.GetSeasonFor(todayLocalDate);
+
+        // The candidate points the resolver can possibly need: the current
+        // season plus MAL's default forward window. A season beyond that
+        // window only ever raises the ceiling (via LatestCachedSeason, which
+        // already carries its own "has a listing" fact) — it can never be the
+        // reason the ceiling retreats, so it doesn't need its own point here.
+        var candidatePoints = Enumerable.Range(0, SeasonHorizon.FutureSeasonWindow + 1)
+            .Select(i => SeasonCalendar.Shift(current.Year, current.Season, i))
+            .ToList();
+
+        var inputs = await seasonRepository.GetHorizonInputsAsync(candidatePoints, ct);
+
+        bool NotListedToday((int Year, string Season) point)
+        {
+            var match = inputs.Points.FirstOrDefault(p => p.Year == point.Year && p.Season == point.Season);
+            return match is not null
+                && match.LastFetchedAt is { } fetchedAt
+                && broadcastConverter.GetLocalDate(fetchedAt) == todayLocalDate
+                && !match.HasListings;
+        }
+
+        var ceiling = SeasonHorizon.Resolve(current, inputs.LatestCachedSeason, NotListedToday);
+        return new SeasonBoundsDto(ceiling.Year, ceiling.Season);
+    }
+
+    private async Task<SeasonRefreshOutcome> FetchAndCacheAsync(int year, string season, DateTimeOffset now, CancellationToken ct)
     {
         var edges = await malClient.GetFullSeasonAsync(year, season, ct: ct);
+        if (edges is null)
+        {
+            // MAL has no listing for this season (404) — not a failure. Still
+            // stamp the fetch log: that's what puts an unopened season under
+            // the once-per-day rule (so the next visit costs no MAL request)
+            // and what gives the client a non-null LastFetchedAt, which is
+            // what lets the page leave its never-cached loading state.
+            await StampFetchLogAsync(year, season, now, ct);
+            return SeasonRefreshOutcome.NotListed;
+        }
+
         var animeIds = edges.Select(e => e.Node.Id).Distinct().ToList();
         var startSeasonById = edges
             .GroupBy(e => e.Node.Id)
@@ -114,6 +156,12 @@ public class SeasonBrowseService(
             db.SeasonAnimeListings.Add(new SeasonAnimeListing { Year = year, Season = season, AnimeId = animeId });
         }
 
+        await StampFetchLogAsync(year, season, now, ct);
+        return SeasonRefreshOutcome.Fetched;
+    }
+
+    private async Task StampFetchLogAsync(int year, string season, DateTimeOffset now, CancellationToken ct)
+    {
         var fetchLog = await db.SeasonFetchLogs.FirstOrDefaultAsync(f => f.Year == year && f.Season == season, ct);
         if (fetchLog is null)
             db.SeasonFetchLogs.Add(new SeasonFetchLog { Year = year, Season = season, LastFetchedAt = now });

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { getSeasonPage, refreshSeason } from '../api/client.ts'
+import { getSeasonBounds, getSeasonPage, refreshSeason } from '../api/client.ts'
 import type { AnimeBrowseItemDto } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
 import { FilterMultiSelect, type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
@@ -15,6 +15,7 @@ interface SeasonReadState {
   items: AnimeBrowseItemDto[]
   totalCount: number
   lastFetchedAt: string | null
+  hasListing: boolean
 }
 
 const SEASON_ORDER = ['winter', 'spring', 'summer', 'fall'] as const
@@ -36,20 +37,34 @@ const PAGE_SIZE = 24
 const REFRESH_DEBOUNCE_MS = 400
 
 // Earliest year selectable in the quick-jump dropdown — anime predate this,
-// but a bounded range keeps the <select> from growing unbounded.
+// but a bounded range keeps the <select> from growing unbounded. The
+// previous-season arrow is floored at the same point (winter of this year)
+// so it can never step past what the dropdown itself offers.
 const EARLIEST_YEAR = 1989
+
+// The client-computed default ceiling, used until GET /api/season/bounds
+// resolves (task 7.1) — mirrors the backend's SeasonHorizon.FutureSeasonWindow,
+// MAL's published forward window as probed 2026-08-18 (design.md Context):
+// current season +2 returned 200, +3 returned 404.
+const FUTURE_SEASON_WINDOW = 2
 
 function currentSeasonTarget(): { year: number; season: SeasonName } {
   const now = new Date()
   return { year: now.getFullYear(), season: SEASON_ORDER[Math.floor(now.getMonth() / 3)] }
 }
 
-function shiftSeason(year: number, season: SeasonName, direction: 1 | -1): { year: number; season: SeasonName } {
-  const index = SEASON_ORDER.indexOf(season)
-  const shifted = index + direction
-  const nextIndex = (shifted + 4) % 4
-  const yearDelta = shifted < 0 ? -1 : shifted > 3 ? 1 : 0
-  return { year: year + yearDelta, season: SEASON_ORDER[nextIndex] }
+function shiftSeason(year: number, season: SeasonName, delta: number): { year: number; season: SeasonName } {
+  const total = year * 4 + SEASON_ORDER.indexOf(season) + delta
+  const nextYear = Math.floor(total / 4)
+  const nextIndex = ((total % 4) + 4) % 4
+  return { year: nextYear, season: SEASON_ORDER[nextIndex] }
+}
+
+// A single monotonically increasing integer for a (year, season) point, so
+// the ceiling can be compared against the viewed season with plain integer
+// arithmetic — mirrors the backend's SeasonCalendar.GetSeasonPointIndex.
+function seasonPointIndex(year: number, season: SeasonName): number {
+  return year * 4 + SEASON_ORDER.indexOf(season)
 }
 
 function seasonLabel(season: SeasonName): string {
@@ -110,17 +125,51 @@ export function SeasonPage() {
       types: typeFilter,
       offset: 0,
       limit: PAGE_SIZE,
-    }).then((page) => ({ items: page.items, totalCount: page.totalCount, lastFetchedAt: page.lastFetchedAt })),
+    }).then((page) => ({
+      items: page.items,
+      totalCount: page.totalCount,
+      lastFetchedAt: page.lastFetchedAt,
+      hasListing: page.hasListing,
+    })),
   )
   const items = seasonData?.items ?? []
   const totalCount = seasonData?.totalCount ?? 0
   const lastFetchedAt = seasonData?.lastFetchedAt ?? null
+  const hasListing = seasonData?.hasListing ?? false
 
   const [loadingMore, setLoadingMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  // The refresh outcome for the season currently being viewed, reset the
+  // moment the season changes (below) so one season's outcome can never
+  // decide another season's terminal-state render (task 8.1). Null until a
+  // refresh attempt for this season has settled.
+  const [refreshOutcome, setRefreshOutcome] = useState<'fetched' | 'notListed' | 'skipped' | 'failed' | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const { start, current, isLatest } = useLatestRequest()
   const isLoading = loading || loadingMore
+
+  // The navigable ceiling — the furthest season selectable. Seeded with the
+  // same current+2 default the server falls back to (task 7.1), so nothing
+  // is disabled while GET /api/season/bounds is in flight and the common
+  // case (server agrees with the default) shows no transition; replaced once
+  // that request resolves, ignored on failure.
+  const [ceiling, setCeiling] = useState(() => shiftSeason(fallback.year, fallback.season, FUTURE_SEASON_WINDOW))
+
+  useEffect(() => {
+    let cancelled = false
+    getSeasonBounds()
+      .then((bounds) => {
+        if (cancelled || !isSeasonName(bounds.latestSeason)) return
+        setCeiling({ year: bounds.latestYear, season: bounds.latestSeason })
+      })
+      .catch(() => {
+        // Keep the client-computed default ceiling — an honest fallback
+        // rather than blocking navigation on this request.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Read by the debounced refresh effect and the infinite-scroll effect so
   // they re-read with whatever sort, filter, and loaded-page-count are
@@ -141,16 +190,47 @@ export function SeasonPage() {
   })
   const itemsLengthRef = useRef(items.length)
   itemsLengthRef.current = items.length
+  const lastFetchedAtRef = useRef(lastFetchedAt)
+  lastFetchedAtRef.current = lastFetchedAt
   const reloadRef = useRef(reload)
   reloadRef.current = reload
 
   const hasMore = items.length < totalCount
-  const neverCached = lastFetchedAt === null && items.length === 0
   const firstUnwatchedIndex = sort === 'myScore' ? items.findIndex((item) => item.myScore === null) : -1
+
+  // The page's terminal states, in the order design.md decision 5 specifies
+  // (task 8.3): the grid takes priority whenever there's anything to show;
+  // otherwise a cached-but-empty season reports why (no listing vs. filtered
+  // out); otherwise the season has never been cached, so it's either still
+  // loading or its first fetch has settled and produced nothing.
+  const terminalState: 'grid' | 'filtersEmpty' | 'notListed' | 'loading' | 'loadFailed' =
+    items.length > 0
+      ? 'grid'
+      : lastFetchedAt !== null && hasListing
+        ? 'filtersEmpty'
+        : lastFetchedAt !== null
+          ? 'notListed'
+          : refreshOutcome === null
+            ? 'loading'
+            : 'loadFailed'
+
+  // At or past the ceiling, keeping the viewed year in the list so a
+  // URL-addressed season past the horizon still shows its own year rather
+  // than a <select> with a value it doesn't offer (task 7.3).
   const yearOptions = useMemo(() => {
-    const latest = Math.max(year, fallback.year) + 1
+    const latest = Math.max(ceiling.year, year)
     return Array.from({ length: latest - EARLIEST_YEAR + 1 }, (_, i) => latest - i)
-  }, [year, fallback.year])
+  }, [year, ceiling.year])
+
+  // Within the ceiling's own year, cut the season list to the ceiling's
+  // season — but always keep the currently-selected season so a
+  // URL-addressed season past the horizon still has a valid <select> value
+  // (task 7.3).
+  const seasonOptions = useMemo(() => {
+    if (year !== ceiling.year) return SEASON_ORDER
+    const ceilingIndex = SEASON_ORDER.indexOf(ceiling.season)
+    return SEASON_ORDER.filter((option) => SEASON_ORDER.indexOf(option) <= ceilingIndex || option === season)
+  }, [year, season, ceiling.year, ceiling.season])
 
   // Type filter options: every media type seen across this season's loaded
   // pages, mirroring MyListPage's presentTypes/hasUnknownType (D6) but
@@ -236,6 +316,13 @@ export function SeasonPage() {
     reloadRef.current()
   }, [sort, inMyList, hideHentai, typeParam])
 
+  // The outcome from a stale season must never decide this season's render
+  // (task 8.1) — reset the instant the season changes, ahead of the debounced
+  // refresh effect below settling for whichever season is landed on.
+  useEffect(() => {
+    setRefreshOutcome(null)
+  }, [seasonKey])
+
   // Visit-triggered background refresh: keyed on season alone (via the
   // debounced key below) so sort/filter changes never cause a MAL fetch.
   // Debounced so arrow-stepping through seasons only refreshes the one
@@ -258,7 +345,21 @@ export function SeasonPage() {
 
     refreshSeason(targetYear, targetSeason)
       .then((result) => {
-        if (cancelled || !result.refreshed) return undefined
+        if (cancelled) return undefined
+        setRefreshOutcome(result.outcome)
+
+        // Re-read on fetched/notListed (new data, or the fact settled).
+        // On skipped (already fetched today by someone else) only when this
+        // tab has nothing cached itself — the cross-tab race where another
+        // tab's fetch landed between this tab's own cache read and its
+        // refresh call. Never on failed: the cached page, if any, is left
+        // exactly as it is (design.md decision 5).
+        const shouldReread =
+          result.outcome === 'fetched' ||
+          result.outcome === 'notListed' ||
+          (result.outcome === 'skipped' && lastFetchedAtRef.current === null)
+        if (!shouldReread) return undefined
+
         return getSeasonPage(targetYear, targetSeason, {
           sort: sortRef.current,
           includeMyList: inMyListRef.current,
@@ -268,12 +369,18 @@ export function SeasonPage() {
           limit: Math.max(itemsLengthRef.current, PAGE_SIZE),
         }).then((page) => {
           if (cancelled || !isLatest(requestId)) return
-          setSeasonData({ items: page.items, totalCount: page.totalCount, lastFetchedAt: page.lastFetchedAt })
+          setSeasonData({
+            items: page.items,
+            totalCount: page.totalCount,
+            lastFetchedAt: page.lastFetchedAt,
+            hasListing: page.hasListing,
+          })
         })
       })
       .catch(() => {
         // A failed refresh leaves the cached page exactly as it is — no
         // error is surfaced, the indicator just clears below.
+        if (!cancelled) setRefreshOutcome('failed')
       })
       .finally(() => {
         if (!cancelled) setRefreshing(false)
@@ -332,7 +439,12 @@ export function SeasonPage() {
 
         <div className="season-page__center">
           <div className="season-page__nav">
-            <button type="button" onClick={() => setTarget(shiftSeason(year, season, -1))} aria-label="Previous season">
+            <button
+              type="button"
+              onClick={() => setTarget(shiftSeason(year, season, -1))}
+              aria-label="Previous season"
+              disabled={seasonPointIndex(year, season) <= seasonPointIndex(EARLIEST_YEAR, 'winter')}
+            >
               &lsaquo;
             </button>
             <span className="season-page__label-wrap">
@@ -341,7 +453,12 @@ export function SeasonPage() {
               </span>
               {refreshing && <span className="season-page__updating">Updating…</span>}
             </span>
-            <button type="button" onClick={() => setTarget(shiftSeason(year, season, 1))} aria-label="Next season">
+            <button
+              type="button"
+              onClick={() => setTarget(shiftSeason(year, season, 1))}
+              aria-label="Next season"
+              disabled={seasonPointIndex(year, season) >= seasonPointIndex(ceiling.year, ceiling.season)}
+            >
               &rsaquo;
             </button>
           </div>
@@ -352,7 +469,7 @@ export function SeasonPage() {
               onChange={(event) => setTarget({ year, season: event.target.value as SeasonName })}
               aria-label="Jump to season"
             >
-              {SEASON_ORDER.map((option) => (
+              {seasonOptions.map((option) => (
                 <option key={option} value={option}>
                   {seasonLabel(option)}
                 </option>
@@ -361,7 +478,18 @@ export function SeasonPage() {
             <select
               className="season-page__sort"
               value={year}
-              onChange={(event) => setTarget({ year: Number(event.target.value), season })}
+              onChange={(event) => {
+                const nextYear = Number(event.target.value)
+                // Selecting the ceiling year while a later season is
+                // selected clamps the season back to the ceiling's, since
+                // this dropdown only changes the year half of the target
+                // (design.md decision 4 / task 7.4).
+                const nextSeason =
+                  nextYear === ceiling.year && SEASON_ORDER.indexOf(season) > SEASON_ORDER.indexOf(ceiling.season)
+                    ? ceiling.season
+                    : season
+                setTarget({ year: nextYear, season: nextSeason })
+              }}
               aria-label="Jump to year"
             >
               {yearOptions.map((option) => (
@@ -396,9 +524,7 @@ export function SeasonPage() {
         </div>
       </div>
 
-      {items.length === 0 && !isLoading && !neverCached ? (
-        <p className="season-page__empty">No anime found for this season.</p>
-      ) : items.length > 0 ? (
+      {terminalState === 'grid' && (
         <div className="season-page__grid">
           {items.map((item, index) => (
             <Fragment key={item.animeId}>
@@ -415,10 +541,17 @@ export function SeasonPage() {
             </Fragment>
           ))}
         </div>
-      ) : null}
+      )}
+      {terminalState === 'filtersEmpty' && <p className="season-page__empty">No anime match the current filters.</p>}
+      {terminalState === 'notListed' && (
+        <p className="season-page__empty">MyAnimeList hasn't listed this season yet.</p>
+      )}
+      {terminalState === 'loadFailed' && (
+        <p className="season-page__empty">This season couldn't be loaded — it'll be retried next time you open it.</p>
+      )}
 
       <div ref={sentinelRef} className="season-page__sentinel" />
-      {(isLoading || neverCached) && <p className="season-page__loading">Loading…</p>}
+      {(terminalState === 'loading' || loadingMore) && <p className="season-page__loading">Loading…</p>}
     </div>
   )
 }

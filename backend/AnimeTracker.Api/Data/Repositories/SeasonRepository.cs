@@ -14,6 +14,51 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
             .Select(f => (DateTimeOffset?)f.LastFetchedAt)
             .FirstOrDefaultAsync(ct);
 
+    // Unfiltered on purpose — GetPageAsync's TotalCount is computed after the
+    // type/hentai/in-my-list filters, so a type filter could make a season
+    // that genuinely has a MAL listing look unlisted.
+    public Task<bool> HasListingAsync(int year, string season, CancellationToken ct = default) =>
+        db.SeasonAnimeListings.AsNoTracking().AnyAsync(l => l.Year == year && l.Season == season, ct);
+
+    public async Task<SeasonHorizonInputs> GetHorizonInputsAsync(IReadOnlyCollection<(int Year, string Season)> points, CancellationToken ct = default)
+    {
+        var years = points.Select(p => p.Year).ToHashSet();
+        var seasons = points.Select(p => p.Season).ToHashSet();
+
+        var fetchedAtByPoint = (await db.SeasonFetchLogs.AsNoTracking()
+                .Where(f => years.Contains(f.Year) && seasons.Contains(f.Season))
+                .Select(f => new { f.Year, f.Season, f.LastFetchedAt })
+                .ToListAsync(ct))
+            .Where(f => points.Contains((f.Year, f.Season)))
+            .ToDictionary(f => (f.Year, f.Season), f => (DateTimeOffset?)f.LastFetchedAt);
+
+        // Distinct (year, season) pairs ever cached — bounded by the number of
+        // season-quarters this deployment has ever fetched, not by anime
+        // count, so pulling them into memory to find both the per-point flags
+        // and the overall latest (via SeasonCalendar's ordering, which SQL
+        // can't express without duplicating its season order) is cheap.
+        var listingSeasons = (await db.SeasonAnimeListings.AsNoTracking()
+                .Select(l => new { l.Year, l.Season })
+                .Distinct()
+                .ToListAsync(ct))
+            .Select(x => (x.Year, x.Season))
+            .ToList();
+        var listingSeasonSet = listingSeasons.ToHashSet();
+
+        var resultPoints = points
+            .Select(p => new SeasonHorizonPoint(
+                p.Year, p.Season,
+                fetchedAtByPoint.GetValueOrDefault((p.Year, p.Season)),
+                listingSeasonSet.Contains((p.Year, p.Season))))
+            .ToList();
+
+        var latest = listingSeasons.Count == 0
+            ? ((int Year, string Season)?)null
+            : listingSeasons.MaxBy(p => SeasonCalendar.GetSeasonPointIndex(p.Year, p.Season));
+
+        return new SeasonHorizonInputs(resultPoints, latest);
+    }
+
     public async Task<(List<SeasonAnimeItem> Items, int TotalCount)> GetPageAsync(
         int year, string season, SeasonSortKey sort, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default)
     {

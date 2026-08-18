@@ -34,7 +34,10 @@ public class SeasonController(ISeasonBrowseService seasonBrowseService) : Contro
     /// <summary>Triggers a background refresh of this season from MAL,
     /// subject to the once-per-local-day rule and per-season single-flight.
     /// Called whenever the client visits a season — never by a schedule or a
-    /// user-facing refresh control.</summary>
+    /// user-facing refresh control. Reports which of four outcomes the
+    /// refresh had (fetched anime / MAL has no listing for the season / it
+    /// was already fetched today / the fetch failed) so the client can tell
+    /// those apart rather than reading a single "did anything change" flag.</summary>
     [HttpPost("api/season/{year:int}/{season}/refresh")]
     public async Task<IActionResult> Refresh(int year, string season, CancellationToken ct = default)
     {
@@ -43,5 +46,16 @@ public class SeasonController(ISeasonBrowseService seasonBrowseService) : Contro
 
         var result = await seasonBrowseService.RefreshAsync(year, season, ct);
         return Ok(result);
+    }
+
+    /// <summary>The furthest season currently navigable. Doesn't collide with
+    /// the page route above — its {year:int} route constraint keeps the
+    /// literal segment "bounds" out of that template. Repository-only read,
+    /// never calls MAL.</summary>
+    [HttpGet("api/season/bounds")]
+    public async Task<IActionResult> GetBounds(CancellationToken ct = default)
+    {
+        var bounds = await seasonBrowseService.GetBoundsAsync(ct);
+        return Ok(bounds);
     }
 }

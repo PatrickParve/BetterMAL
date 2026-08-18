@@ -14,6 +14,7 @@ import type {
   ResyncStatusDto,
   RewatchedSectionDto,
   SearchPageDto,
+  SeasonBoundsDto,
   SeasonPageDto,
   SeasonRefreshResultDto,
   SeriesBulkBuildStatusDto,
@@ -164,6 +165,10 @@ export function getSeasonPage(
 
 export function refreshSeason(year: number, season: string): Promise<SeasonRefreshResultDto> {
   return fetchJson<SeasonRefreshResultDto>(`/api/season/${year}/${season}/refresh`, { method: 'POST' })
+}
+
+export function getSeasonBounds(): Promise<SeasonBoundsDto> {
+  return fetchJson<SeasonBoundsDto>('/api/season/bounds')
 }
 
 export function getMyList(): Promise<MyListItemDto[]> {

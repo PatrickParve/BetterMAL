@@ -174,10 +174,16 @@ export type SeasonPageDto = {
   limit: number
   totalCount: number
   lastFetchedAt: string | null
+  hasListing: boolean
 }
 
 export type SeasonRefreshResultDto = {
-  refreshed: boolean
+  outcome: 'fetched' | 'notListed' | 'skipped' | 'failed'
+}
+
+export type SeasonBoundsDto = {
+  latestYear: number
+  latestSeason: string
 }
 
 // The results page's series row — separate shape from SeriesSearchResult
