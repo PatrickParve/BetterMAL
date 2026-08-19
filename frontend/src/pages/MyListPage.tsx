@@ -24,7 +24,13 @@ import type { AiringStatus, SortDirection, SortKey } from '../utils/anime.ts'
 import './MyListPage.css'
 
 type StatusFilter = 'All' | WatchStatus
-type ScoreFilter = 'any' | 'rated' | 'unrated'
+// Widened (design.md decision 5) to carry a specific score value alongside
+// the three original options — stored as the plain number string ("8"), not
+// the `score-8` form the recap handoff's `focus` token uses; see parseFocus.
+type ScoreFilter = 'any' | 'rated' | 'unrated' | `${number}`
+
+// 10 down to 1, between Rated and Unrated in the select (tasks.md 4.1).
+const SCORE_FILTER_VALUES = Array.from({ length: 10 }, (_, i) => 10 - i)
 
 const GROUP_ORDER: WatchStatus[] = ['Watching', 'OnHold', 'PlanToWatch', 'Completed', 'Dropped']
 
@@ -55,6 +61,37 @@ const AIRING_STATUS_FIRST_OPTIONS: { value: AiringStatus; label: string }[] = [
   { value: 'finished_airing', label: AIRING_STATUS_LABELS.finished_airing },
   { value: 'not_yet_aired', label: AIRING_STATUS_LABELS.not_yet_aired },
 ]
+
+// The recap handoff's `focus` token (design.md decision 1/3), translated
+// into this page's own control values — a *seed* for useRestorableState's
+// `initial`, read once per fresh visit rather than an arrival effect (design.md
+// decision 2). An unknown or absent token maps to "no narrowing": every
+// control stays at its ordinary default. `movies` needs the Started flag
+// because the stat it mirrors is status-agnostic (tasks.md 5.1).
+type FocusSeed = {
+  status: StatusFilter
+  typeFilter: string[]
+  scoreFilter: ScoreFilter
+  startedFilter: boolean
+}
+
+function parseFocus(token: string | null): FocusSeed {
+  const none: FocusSeed = { status: 'All', typeFilter: [], scoreFilter: 'any', startedFilter: false }
+  switch (token) {
+    case 'completed':
+      return { ...none, status: 'Completed' }
+    case 'dropped':
+      return { ...none, status: 'Dropped' }
+    case 'watching':
+      return { ...none, status: 'Watching' }
+    case 'movies':
+      return { ...none, typeFilter: ['movie'], startedFilter: true }
+    default: {
+      const scoreMatch = token?.match(/^score-([1-9]|10)$/)
+      return scoreMatch ? { ...none, scoreFilter: scoreMatch[1] as ScoreFilter } : none
+    }
+  }
+}
 
 // Patches one entry into the list by animeId, leaving every other item's
 // reference untouched — the memoised row relies on that to skip re-rendering.
@@ -97,11 +134,22 @@ export function MyListPage() {
   const { data, loading, setData: setItems, reload } = usePageData<MyListItemDto[]>('my-list', getMyList)
   const items = data ?? []
 
-  const [statusFilter, setStatusFilter] = useRestorableState<StatusFilter>('statusFilter', 'All')
+  // Recap scope and focus (design.md decision 1/2/9/10, tasks.md 5.1-5.2,
+  // 7.3-7.5): the only use of useSearchParams on this page. A scope and an
+  // optional focus token both arrive entirely from the URL (a recap's "see
+  // all"/stat/distribution-row link), never from a control on this page —
+  // the focus is parsed once here and only feeds the controls' `initial`
+  // below, so it seeds a fresh visit without an effect and is never re-read.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const focusSeed = parseFocus(searchParams.get('focus'))
+
+  const [statusFilter, setStatusFilter] = useRestorableState<StatusFilter>('statusFilter', focusSeed.status)
   const [query, setQuery] = useRestorableState('query', '')
-  const [typeFilter, setTypeFilter] = useRestorableState<string[]>('typeFilter', [])
+  const [typeFilter, setTypeFilter] = useRestorableState<string[]>('typeFilter', focusSeed.typeFilter)
   const [airingFilter, setAiringFilter] = useRestorableState<string[]>('airingFilter', [])
-  const [scoreFilter, setScoreFilter] = useRestorableState<ScoreFilter>('scoreFilter', 'any')
+  const [scoreFilter, setScoreFilter] = useRestorableState<ScoreFilter>('scoreFilter', focusSeed.scoreFilter)
+  const [startedFilter, setStartedFilter] = useRestorableState('startedFilter', focusSeed.startedFilter)
   const [sort, setSort] = useRestorableState<SortKey>('sort', 'alphabetical')
   const [sortDirection, setSortDirection] = useRestorableState<SortDirection>('sortDirection', 'natural')
   const [sortThen, setSortThen] = useRestorableState<SortKey | null>('sortThen', null)
@@ -110,14 +158,6 @@ export function MyListPage() {
     'airingStatusFirst',
     'finished_airing',
   )
-
-  // Recap scope (design.md decision 9/10, tasks.md 7.3-7.5): the only use of
-  // useSearchParams on this page — every control above keeps its
-  // useRestorableState behaviour and knows nothing about this. A scope
-  // arrives entirely from the URL (a recap's "see all" link), never from a
-  // control on this page.
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [pickerOpen, setPickerOpen] = useState(false)
 
   const recapModeParam = searchParams.get('recapMode')
   const hasRecapScope = recapModeParam === 'multiYear' || recapModeParam === 'yearly' || recapModeParam === 'season'
@@ -213,7 +253,16 @@ export function MyListPage() {
   function dismissRecapScope() {
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev)
-      for (const key of ['recapMode', 'recapFrom', 'recapTo', 'recapYear', 'recapSeason', 'recapFilter', 'recapType']) {
+      for (const key of [
+        'recapMode',
+        'recapFrom',
+        'recapTo',
+        'recapYear',
+        'recapSeason',
+        'recapFilter',
+        'recapType',
+        'focus',
+      ]) {
         params.delete(key)
       }
       return params
@@ -388,6 +437,9 @@ export function MyListPage() {
       if (airingFilter.length > 0 && !airingFilter.includes(item.airingStatus ?? 'unknown')) return false
       if (scoreFilter === 'rated' && item.entry.myScore == null) return false
       if (scoreFilter === 'unrated' && item.entry.myScore != null) return false
+      if (scoreFilter !== 'any' && scoreFilter !== 'rated' && scoreFilter !== 'unrated' && item.entry.myScore !== Number(scoreFilter))
+        return false
+      if (startedFilter && item.entry.episodesWatched <= 0) return false
       return true
     })
 
@@ -404,7 +456,20 @@ export function MyListPage() {
     }
 
     return { mode: 'flat', total: statusScoped.length, shown: matched.length, items: [...matched].sort(comparator) }
-  }, [scopedItems, statusFilter, debouncedQuery, typeFilter, airingFilter, scoreFilter, sort, sortDirection, sortThen, airingStatusFirst, groupByStatus])
+  }, [
+    scopedItems,
+    statusFilter,
+    debouncedQuery,
+    typeFilter,
+    airingFilter,
+    scoreFilter,
+    startedFilter,
+    sort,
+    sortDirection,
+    sortThen,
+    airingStatusFirst,
+    groupByStatus,
+  ])
 
   const isNarrowed = derived.shown !== derived.total
   const isOffDefault =
@@ -412,6 +477,7 @@ export function MyListPage() {
     typeFilter.length > 0 ||
     airingFilter.length > 0 ||
     scoreFilter !== 'any' ||
+    startedFilter ||
     sort !== 'alphabetical' ||
     sortDirection !== 'natural' ||
     sortThen !== null ||
@@ -422,6 +488,7 @@ export function MyListPage() {
     setTypeFilter([])
     setAiringFilter([])
     setScoreFilter('any')
+    setStartedFilter(false)
     setSort('alphabetical')
     setSortDirection('natural')
     setSortThen(null)
@@ -488,8 +555,21 @@ export function MyListPage() {
           >
             <option value="any">Score: Any</option>
             <option value="rated">Score: Rated</option>
+            {SCORE_FILTER_VALUES.map((value) => (
+              <option key={value} value={value}>
+                Score: {value}
+              </option>
+            ))}
             <option value="unrated">Score: Unrated</option>
           </select>
+          <button
+            type="button"
+            className={`my-list-page__tab${startedFilter ? ' my-list-page__tab--active' : ''}`}
+            aria-pressed={startedFilter}
+            onClick={() => setStartedFilter((prev) => !prev)}
+          >
+            Started
+          </button>
         </div>
         <div className="my-list-page__order-cluster">
           <select

@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import type { RecapSeasonRankingDto, RecapYearRankingDto } from '../api/types.ts'
 import { seasonLabel } from '../utils/anime.ts'
@@ -71,17 +72,20 @@ type RankingSectionProps = {
   noun: string
   rows: RankingOverlayRow[]
   onSeeAll: (overlay: { title: string; rows: RankingOverlayRow[] }) => void
+  style?: CSSProperties
 }
 
 // One rendering for every ranking a page shows — capped at
 // VISIBLE_RANK_COUNT with a "See all" control that opens the shared
 // RankingOverlay for the rest (design.md decision 8, tasks.md 8.2-8.3). The
 // caller owns the single-slot overlay state (RecapPage and ProfilePage each
-// show at most one overlay at a time) and passes it in via onSeeAll.
-export function RankingSection({ title, noun, rows, onSeeAll }: RankingSectionProps) {
+// show at most one overlay at a time) and passes it in via onSeeAll. `style`
+// is RecapPage's grid-placement hook (design.md decision 8) for a multi-year
+// recap's row-aligned rankings grid — unused (and harmless) elsewhere.
+export function RankingSection({ title, noun, rows, onSeeAll, style }: RankingSectionProps) {
   const visible = rows.slice(0, VISIBLE_RANK_COUNT)
   return (
-    <section className="recap-page__section">
+    <section className="recap-page__section" style={style}>
       <h2>{title}</h2>
       {renderRankingRows(visible)}
       {rows.length > VISIBLE_RANK_COUNT && (

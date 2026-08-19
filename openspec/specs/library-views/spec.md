@@ -98,7 +98,7 @@ The system SHALL present every my-list filter and sort control in a single bar d
 
 The bar SHALL be laid out as two clusters: the filters that narrow which entries are shown, and the controls that order them.
 
-The bar SHALL offer a "Clear filters" action that restores the page's default view — no text query, no type restriction, no airing restriction, no score restriction, alphabetical primary sort in its natural direction, no tiebreaker, grouped by status. The action SHALL be shown only while at least one of those is not at its default, and SHALL NOT change the selected status tab, which is a separate control.
+The bar SHALL offer a "Clear filters" action that restores the page's default view — no text query, no type restriction, no airing restriction, no score restriction, the Started filter off, alphabetical primary sort in its natural direction, no tiebreaker, grouped by status. The action SHALL be shown only while at least one of those is not at its default, and SHALL NOT change the selected status tab, which is a separate control.
 
 #### Scenario: One bar for the whole page
 - **WHEN** the my-list page renders with several status groups on screen
@@ -110,11 +110,15 @@ The bar SHALL offer a "Clear filters" action that restores the page's default vi
 
 #### Scenario: Clearing filters
 - **WHEN** I have narrowed or reordered the list and use "Clear filters"
-- **THEN** the text query, type, airing-status and score filters are cleared, the sort returns to alphabetical with no tiebreaker, grouping by status is on, and the selected status tab is left as it was
+- **THEN** the text query, type, airing-status, score and Started filters are cleared, the sort returns to alphabetical with no tiebreaker, grouping by status is on, and the selected status tab is left as it was
 
 #### Scenario: Clear action hidden at defaults
 - **WHEN** every filter and sort control is at its default value
 - **THEN** no "Clear filters" action is shown
+
+#### Scenario: The Started filter counts as off-default
+- **WHEN** the Started filter is the only control I have changed
+- **THEN** the "Clear filters" action is shown, and using it turns the filter off
 
 ### Requirement: Find in list
 The system SHALL provide a text field in the my-list filter bar that narrows the list to entries whose title contains the typed text, matched case-insensitively against both the English title and the original title, so an entry is found under either name. The match SHALL be a substring match, not a prefix-only match. An empty field SHALL impose no restriction. The typed text SHALL combine with every other filter rather than replacing them.
@@ -174,7 +178,9 @@ The system SHALL provide a multi-select airing-status filter in the my-list filt
 - **THEN** entries of every airing status are shown
 
 ### Requirement: My list score filter
-The system SHALL provide a score filter in the my-list filter bar with the options Any, Rated, and Unrated. Rated SHALL show only entries carrying a score of 1–10; Unrated SHALL show only entries with no score; Any SHALL impose no restriction.
+The system SHALL provide a score filter in the my-list filter bar with the options Any, Rated, Unrated, and one option per score value from 10 down to 1. Rated SHALL show only entries carrying a score of 1–10; Unrated SHALL show only entries with no score; a score-value option SHALL show only entries carrying exactly that score; Any SHALL impose no restriction.
+
+The score-value options SHALL be presented alongside Rated and Unrated in the same control, each naming the score it selects, so choosing "the anime I scored 8" is one selection rather than a filter plus a sort.
 
 #### Scenario: Finding unrated entries
 - **WHEN** I select Unrated
@@ -183,6 +189,29 @@ The system SHALL provide a score filter in the my-list filter bar with the optio
 #### Scenario: Finding rated entries
 - **WHEN** I select Rated
 - **THEN** only entries carrying a score of mine are shown
+
+#### Scenario: Finding one score
+- **WHEN** I select the score 8
+- **THEN** only entries I scored exactly 8 are shown, and entries scored 7 or 9 are not
+
+#### Scenario: A score with no entries
+- **WHEN** I select a score I have given to nothing in the current view
+- **THEN** the list reports that nothing matches, rather than falling back to every rated entry
+
+### Requirement: My list started filter
+The system SHALL provide a **Started** filter in the my-list filter bar that narrows the list to entries I have watched at least one episode of, whatever their status. Off — its default — it SHALL impose no restriction. It SHALL combine with every other filter rather than replacing them, and SHALL be presented as a two-state control in the filter bar's narrowing cluster, in the same style as the bar's other toggles.
+
+#### Scenario: Narrowing to what I have started
+- **WHEN** I turn the Started filter on
+- **THEN** only entries with at least one episode watched are shown, whichever status they hold
+
+#### Scenario: Off by default
+- **WHEN** the my-list page renders without the filter being set
+- **THEN** entries with no episodes watched are shown alongside the rest
+
+#### Scenario: Combining with the type filter
+- **WHEN** I turn the Started filter on and select Movie in the type filter
+- **THEN** only films I have watched are shown
 
 ### Requirement: My list two-level sorting
 The system SHALL order my list by a primary sort key with an optional tiebreaker key, both chosen in the filter bar, so orderings such as "my score, then MAL score" or "episodes watched, then MAL score" are expressible directly.
@@ -535,6 +564,10 @@ The scope SHALL be carried in the page URL so it survives a reload and back-navi
 
 While a recap scope is active the page's own status tabs, filter bar, and sorting SHALL continue to work, narrowing and ordering within the scoped set rather than escaping it. The page's "showing N of M" count SHALL report against the scoped set.
 
+The page SHALL additionally accept, alongside a scope, a narrowing that names one of the recap's stats or one of its score-distribution rows. Such a narrowing SHALL be applied by setting the page's **own** controls — the status tab, the type filter, the score filter, and the Started filter — to the values that express it, rather than as a second, hidden scope, so it is visible on arrival and can be adjusted or cleared with the page's ordinary controls. Controls the narrowing does not concern SHALL be left at their defaults, and the resulting set SHALL match the number that was followed.
+
+A narrowing SHALL be applied once, on arrival. Changing any of those controls afterwards SHALL take effect and SHALL NOT be reverted, and dismissing the scope SHALL clear the narrowing along with it. Returning to the page with the browser's back or forward buttons SHALL restore the controls as they were left, not as they arrived.
+
 #### Scenario: Arriving from a recap
 - **WHEN** I open my list from a fall 2019 recap narrowed to TV
 - **THEN** the list shows exactly the TV anime that recap included, across every watch status they hold
@@ -558,3 +591,19 @@ While a recap scope is active the page's own status tabs, filter bar, and sortin
 #### Scenario: The scope survives a reload
 - **WHEN** I reload the page, or return to it with the browser's back button
 - **THEN** the same recap scope is still applied
+
+#### Scenario: Arriving from a recap stat
+- **WHEN** I open my list by following a 2020 recap's **Movies watched** stat
+- **THEN** the page arrives scoped to 2020 with its type filter set to Movie and its Started filter on, and shows exactly the films of that period I have watched
+
+#### Scenario: Arriving from a distribution row
+- **WHEN** I open my list by following a recap distribution's score-8 row
+- **THEN** the page arrives scoped to that period with its score filter set to 8, and its status tab left on All
+
+#### Scenario: The arrival narrowing is adjustable
+- **WHEN** I arrive from a recap stat and then change the control it set
+- **THEN** the change takes effect and is not reverted, and "Clear filters" restores the page's defaults within the scope
+
+#### Scenario: Dismissing clears the narrowing too
+- **WHEN** I arrive from a recap stat and dismiss the scope indicator
+- **THEN** the full list returns with the arrival narrowing gone, not reapplied

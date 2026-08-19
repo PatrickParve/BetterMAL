@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { getRecap } from '../api/client.ts'
 import {
@@ -93,7 +93,12 @@ function yearOptions(low: number, high: number): number[] {
 // The my-list handoff (design.md decision 9): recap params carried under a
 // `recap`-prefixed vocabulary so they can never collide with MyListPage's
 // own filter/sort search params. MyListPage reads these same literal names
-// back out (tasks.md 7.3).
+// back out (tasks.md 7.3). `focus` (design.md decision 1) is a single opaque
+// token that seeds my list's own controls to the narrowing a stat tile or
+// distribution row describes, on top of the plain scope: `completed`,
+// `dropped`, `watching`, `movies`, or `score-1`…`score-10`. Omitted, the
+// scope alone is the unfocused "in this period" set — the existing "See all
+// N in my list" link never passes one, so it stays byte-identical.
 function myListScopeSearch(
   mode: RecapMode,
   startYear: number,
@@ -101,6 +106,7 @@ function myListScopeSearch(
   season: RecapSeasonName,
   filter: RecapTimeFilter,
   typeFilter: string,
+  focus?: string,
 ): string {
   const params = new URLSearchParams()
   params.set('recapMode', mode)
@@ -113,6 +119,7 @@ function myListScopeSearch(
   if (mode === 'season') params.set('recapSeason', season)
   else params.set('recapFilter', filter)
   if (typeFilter !== 'all') params.set('recapType', typeFilter)
+  if (focus) params.set('focus', focus)
   return params.toString()
 }
 
@@ -371,28 +378,57 @@ export function RecapPage() {
 
   // Tile order/labels per design.md decision 5: the period total leads,
   // named for what it counts rather than read as "Anime"; Completed and
-  // Dropped sit together so the gap between the two is explained.
+  // Dropped sit together so the gap between the two is explained. Only the
+  // tiles that describe a set of anime (rather than an aggregate) carry a
+  // `to` — those render as links (spec "Drilling into a recap stat"), the
+  // rest stay inert `<div>`s with the same box so the grid never reflows.
+  // Currently watching is counted on air date under both time filters
+  // (design.md decision 4), so its link forces the aired-attributed scope
+  // even when the recap itself is showing "What I watched".
+  //
+  // A followable tile whose own count is 0 has nowhere to lead — following
+  // it would only land on an empty list — so it keeps the accent highlight
+  // (still reads as "this kind of tile"), but renders as a plain, unlinked
+  // `<div>` rather than a `<Link>` (design.md decision 7).
   function renderStats(stats: RecapStatsDto) {
-    const tiles: { label: string; value: string }[] = [
-      { label: 'In this period', value: String(stats.animeCounted) },
+    const scopeLink = (focus?: string, filterOverride?: RecapTimeFilter) =>
+      `/my-list?${myListScopeSearch(mode, startYear, endYear, season, filterOverride ?? filter, typeFilter, focus)}`
+
+    const tiles: { label: string; value: string; to?: string; count?: number }[] = [
+      { label: 'In this period', value: String(stats.animeCounted), to: scopeLink(), count: stats.animeCounted },
       { label: 'Mean score', value: stats.meanScore !== null ? stats.meanScore.toFixed(2) : '—' },
-      { label: 'Completed', value: String(stats.completed) },
-      { label: 'Dropped', value: String(stats.dropped) },
+      { label: 'Completed', value: String(stats.completed), to: scopeLink('completed'), count: stats.completed },
+      { label: 'Dropped', value: String(stats.dropped), to: scopeLink('dropped'), count: stats.dropped },
       { label: 'Episodes watched', value: String(stats.episodesWatched) },
-      { label: 'Movies watched', value: String(stats.moviesWatched) },
+      { label: 'Movies watched', value: String(stats.moviesWatched), to: scopeLink('movies'), count: stats.moviesWatched },
       { label: 'Time spent', value: formatRuntime(stats.timeSpentSeconds) },
-      { label: 'Currently watching', value: String(stats.currentlyWatching) },
+      {
+        label: 'Currently watching',
+        value: String(stats.currentlyWatching),
+        to: scopeLink('watching', 'aired'),
+        count: stats.currentlyWatching,
+      },
     ]
     return (
       <section className="recap-page__section">
         <h2>Stats</h2>
         <div className="recap-page__stats">
-          {tiles.map((tile) => (
-            <div key={tile.label} className="recap-page__stat">
-              <span className="recap-page__stat-value">{tile.value}</span>
-              <span className="recap-page__stat-label">{tile.label}</span>
-            </div>
-          ))}
+          {tiles.map((tile) =>
+            tile.to && (tile.count ?? 0) > 0 ? (
+              <Link key={tile.label} to={tile.to} className="recap-page__stat recap-page__stat--link">
+                <span className="recap-page__stat-value">{tile.value}</span>
+                <span className="recap-page__stat-label">{tile.label}</span>
+              </Link>
+            ) : (
+              <div
+                key={tile.label}
+                className={tile.to ? 'recap-page__stat recap-page__stat--link' : 'recap-page__stat'}
+              >
+                <span className="recap-page__stat-value">{tile.value}</span>
+                <span className="recap-page__stat-label">{tile.label}</span>
+              </div>
+            ),
+          )}
         </div>
       </section>
     )
@@ -405,7 +441,13 @@ export function RecapPage() {
     return (
       <section className="recap-page__section">
         <h2>Rating distribution</h2>
-        <ScoreDistribution buckets={buckets} compact />
+        <ScoreDistribution
+          buckets={buckets}
+          compact
+          hrefForScore={(score) =>
+            `/my-list?${myListScopeSearch(mode, startYear, endYear, season, filter, typeFilter, `score-${score}`)}`
+          }
+        />
       </section>
     )
   }
@@ -564,7 +606,7 @@ export function RecapPage() {
     )
   }
 
-  function renderSeasonRankingSection(recap: RecapDto) {
+  function renderSeasonRankingSection(recap: RecapDto, style?: CSSProperties) {
     if (recap.seasonRanking.length === 0) return null
     return (
       <RankingSection
@@ -572,11 +614,12 @@ export function RecapPage() {
         noun="seasons"
         rows={recap.seasonRanking.map(describeSeasonRanking)}
         onSeeAll={setOverlay}
+        style={style}
       />
     )
   }
 
-  function renderSeasonTimeRankingSection(recap: RecapDto) {
+  function renderSeasonTimeRankingSection(recap: RecapDto, style?: CSSProperties) {
     if (recap.seasonTimeRanking.length === 0) return null
     return (
       <RankingSection
@@ -584,11 +627,12 @@ export function RecapPage() {
         noun="seasons"
         rows={recap.seasonTimeRanking.map(describeTimeRanking)}
         onSeeAll={setOverlay}
+        style={style}
       />
     )
   }
 
-  function renderYearRankingSection(recap: RecapDto) {
+  function renderYearRankingSection(recap: RecapDto, style?: CSSProperties) {
     if (recap.yearRanking.length === 0) return null
     return (
       <RankingSection
@@ -596,11 +640,12 @@ export function RecapPage() {
         noun="years"
         rows={recap.yearRanking.map(describeYearRanking)}
         onSeeAll={setOverlay}
+        style={style}
       />
     )
   }
 
-  function renderYearTimeRankingSection(recap: RecapDto) {
+  function renderYearTimeRankingSection(recap: RecapDto, style?: CSSProperties) {
     if (recap.yearTimeRanking.length === 0) return null
     return (
       <RankingSection
@@ -608,6 +653,7 @@ export function RecapPage() {
         noun="years"
         rows={recap.yearTimeRanking.map(describeTimeRanking)}
         onSeeAll={setOverlay}
+        style={style}
       />
     )
   }
@@ -617,39 +663,41 @@ export function RecapPage() {
   // than stacking its two season-level rankings full-width in a single
   // column, they sit side by side — the score ranking and the time-watched
   // ranking directly comparing a period's seasons. A multi-year recap keeps
-  // the season-column/year-column grouping. Either way the grid collapses to
-  // one column when only one side has anything to show (RecapPage.css
-  // :has(> :only-child)).
+  // the season-column/year-column grouping, but as a flat row-aligned grid
+  // (design.md decision 8) rather than two independently-stacking flex
+  // columns: each present section is placed directly with its own
+  // grid-column/grid-row, so the season-level and year-level time-watched
+  // rankings always start on the same line regardless of whether the score
+  // ranking above either carries a "See all". Either way the grid collapses
+  // to one column when only one side has anything to show.
   function renderRankings(recap: RecapDto) {
     if (mode === 'yearly') {
       const seasonScore = renderSeasonRankingSection(recap)
       const seasonTime = renderSeasonTimeRankingSection(recap)
       if (!seasonScore && !seasonTime) return null
+      const single = !seasonScore || !seasonTime
       return (
-        <div className="recap-page__rankings">
+        <div className={single ? 'recap-page__rankings recap-page__rankings--single' : 'recap-page__rankings'}>
           {seasonScore}
           {seasonTime}
         </div>
       )
     }
 
-    const seasonColumn = (recap.seasonRanking.length > 0 || recap.seasonTimeRanking.length > 0) && (
-      <div className="recap-page__ranking-column">
-        {renderSeasonRankingSection(recap)}
-        {renderSeasonTimeRankingSection(recap)}
-      </div>
-    )
-    const yearColumn = (recap.yearRanking.length > 0 || recap.yearTimeRanking.length > 0) && (
-      <div className="recap-page__ranking-column">
-        {renderYearRankingSection(recap)}
-        {renderYearTimeRankingSection(recap)}
-      </div>
-    )
-    if (!seasonColumn && !yearColumn) return null
+    const hasSeasonColumn = recap.seasonRanking.length > 0 || recap.seasonTimeRanking.length > 0
+    const hasYearColumn = recap.yearRanking.length > 0 || recap.yearTimeRanking.length > 0
+    if (!hasSeasonColumn && !hasYearColumn) return null
+
+    const seasonColumnIndex = hasSeasonColumn ? 1 : null
+    const yearColumnIndex = hasYearColumn ? (hasSeasonColumn ? 2 : 1) : null
+    const single = hasSeasonColumn !== hasYearColumn
+
     return (
-      <div className="recap-page__rankings">
-        {seasonColumn}
-        {yearColumn}
+      <div className={single ? 'recap-page__rankings recap-page__rankings--single' : 'recap-page__rankings'}>
+        {seasonColumnIndex && renderSeasonRankingSection(recap, { gridColumn: seasonColumnIndex, gridRow: 1 })}
+        {seasonColumnIndex && renderSeasonTimeRankingSection(recap, { gridColumn: seasonColumnIndex, gridRow: 2 })}
+        {yearColumnIndex && renderYearRankingSection(recap, { gridColumn: yearColumnIndex, gridRow: 1 })}
+        {yearColumnIndex && renderYearTimeRankingSection(recap, { gridColumn: yearColumnIndex, gridRow: 2 })}
       </div>
     )
   }

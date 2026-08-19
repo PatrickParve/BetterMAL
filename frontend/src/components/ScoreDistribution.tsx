@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import type { ScoreDistributionBucketDto } from '../api/types.ts'
 import './ScoreDistribution.css'
 
@@ -16,6 +17,7 @@ type ScoreDistributionProps = {
   buckets: ScoreDistributionBucketDto[]
   meanScore?: number | null
   compact?: boolean
+  hrefForScore?: (score: number) => string
 }
 
 // Shared by the profile page (its whole-list distribution, with a mean line)
@@ -23,7 +25,14 @@ type ScoreDistributionProps = {
 // decision 5) so the two can never draw the block differently. Buckets come
 // in ascending score order (matching ProfileService.BuildScoreDistribution's
 // shape); rendered highest first.
-export function ScoreDistribution({ buckets, meanScore, compact }: ScoreDistributionProps) {
+//
+// `hrefForScore` (design.md decision 6) makes each row a link into my list
+// scoped to that score, used only by the recap page — left unset, the
+// profile page's block renders exactly as it did before this existed. A
+// bucket with nothing in it has no anime to lead to, so it keeps the same
+// accent highlight as the rows around it but renders as an unlinked `<div>`
+// rather than a `<Link>`.
+export function ScoreDistribution({ buckets, meanScore, compact, hrefForScore }: ScoreDistributionProps) {
   const totalRated = buckets.reduce((sum, b) => sum + b.count, 0)
   const maxBucketCount = Math.max(0, ...buckets.map((b) => b.count))
 
@@ -32,8 +41,8 @@ export function ScoreDistribution({ buckets, meanScore, compact }: ScoreDistribu
       <div className={compact ? 'score-distribution score-distribution--compact' : 'score-distribution'}>
         {[...buckets].reverse().map((bucket) => {
           const share = formatShare(bucket.count, totalRated)
-          return (
-            <div key={bucket.score} className="score-distribution__row">
+          const cells = (
+            <>
               <span className="score-distribution__label">{bucket.score}</span>
               <div className="score-distribution__bar-track">
                 <div
@@ -43,6 +52,22 @@ export function ScoreDistribution({ buckets, meanScore, compact }: ScoreDistribu
               </div>
               <span className="score-distribution__count">{bucket.count}</span>
               <span className="score-distribution__share">{share ?? ''}</span>
+            </>
+          )
+          return hrefForScore && bucket.count > 0 ? (
+            <Link
+              key={bucket.score}
+              to={hrefForScore(bucket.score)}
+              className="score-distribution__row score-distribution__row--link"
+            >
+              {cells}
+            </Link>
+          ) : (
+            <div
+              key={bucket.score}
+              className={hrefForScore ? 'score-distribution__row score-distribution__row--link' : 'score-distribution__row'}
+            >
+              {cells}
             </div>
           )
         })}

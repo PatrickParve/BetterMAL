@@ -11,8 +11,12 @@
 
 /* The input's own outline is suppressed here because the wrapper draws the
    focus indicator instead — an inset ring, so it renders inside the field's
-   border box and can never reach the magnifier beside it. */
-.search-bar:focus-within {
+   border box and can never reach the magnifier beside it. Hover shares the
+   same rule (rather than a heavier one of its own) so a focused-and-hovered
+   field doesn't compound into two rings, and so it matches every other
+   control in the app, which highlights on hover as well as focus. */
+.search-bar:focus-within,
+.search-bar:hover {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent);
 }

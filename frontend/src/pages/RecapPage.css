@@ -181,13 +181,38 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--code-bg);
+  text-decoration: none;
+  color: inherit;
   transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
+/* Quieter, background-only feedback for the tiles that lead nowhere (Mean
+   score, Episodes watched, Time spent) — identifies the hovered tile without
+   promising a click. The accent treatment below is reserved for the
+   followable tiles. */
 .recap-page__stat:hover {
+  background: var(--border);
+}
+
+/* --link is shared by two renderings (renderStats): an actual <Link> for a
+   tile with something to show, and a plain <div> for a followable tile
+   whose count is 0 — it still reads as "this kind of tile" on hover, but
+   has nowhere to lead, so only the anchor gets the pointer cursor and an
+   explicit focus ring. */
+.recap-page__stat--link:hover,
+.recap-page__stat--link:focus-visible {
   background: var(--accent-bg);
   border-color: var(--accent-border);
   box-shadow: var(--shadow);
+}
+
+a.recap-page__stat--link {
+  cursor: pointer;
+}
+
+a.recap-page__stat--link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .recap-page__stat-value {
@@ -276,10 +301,32 @@
 
 .recap-hot-take__scores {
   display: flex;
+  /* Without this, the two score spans default to align-items: stretch —
+     .score--mal's content (ScoreValue) is its own inline-flex that
+     self-centers, but .score--mine is plain text with nothing to center it,
+     so it sat at the top of its stretched box instead of matching. */
+  align-items: center;
   gap: 10px;
   flex: 0 0 auto;
   font-size: 14px;
   font-weight: 600;
+}
+
+/* Fixed ch-based widths (design.md decision 9) so a score lines up with the
+   scores above and below it regardless of another row's title length —
+   .score--mine/.score--mal already set tabular-nums globally. My score is a
+   plain 1-10 integer; MAL's renders to two decimals (and the hidden-score
+   reveal icon), hence the wider column. */
+.recap-hot-take__scores .score--mine {
+  display: inline-block;
+  width: 2ch;
+  text-align: right;
+}
+
+.recap-hot-take__scores .score--mal {
+  display: inline-block;
+  width: 5ch;
+  text-align: right;
 }
 
 .recap-hot-take__direction {
@@ -288,6 +335,8 @@
   padding: 4px 10px;
   border-radius: 999px;
   white-space: nowrap;
+  min-width: 16ch;
+  text-align: center;
 }
 
 .recap-hot-take__direction--mal {
@@ -387,17 +436,23 @@
    components/RankingSection.css — RankingSection.tsx owns that markup now). */
 
 /* Rankings grouped into a season column and a year column (design.md
-   decision 4): the season ranking and seasons-by-time-watched share the
-   leading column, the year ranking and years-by-time-watched the other.
-   Collapses to one column when only one side has anything to show, and below
-   the breakpoint stacks season-first (DOM order — no `order` property). */
+   decision 4/8): the season ranking and seasons-by-time-watched share the
+   leading column, the year ranking and years-by-time-watched the other. Each
+   ranking section is placed directly (RecapPage.tsx's renderRankings, via
+   RankingSection's `style` prop) rather than wrapped in a per-column flex
+   container, so a row's height is the tallest item placed in it — the two
+   time-watched rankings always start on row 2's line together, whether or
+   not the score ranking above either carries a "See all". Collapses to one
+   column (--single, applied whenever only one side has anything to show) and
+   below the breakpoint stacks season-first (DOM order — no `order`
+   property). */
 .recap-page__rankings {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 20px;
 }
 
-.recap-page__rankings:has(> :only-child) {
+.recap-page__rankings--single {
   grid-template-columns: 1fr;
 }
 
@@ -405,10 +460,4 @@
   .recap-page__rankings {
     grid-template-columns: 1fr;
   }
-}
-
-.recap-page__ranking-column {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
 }

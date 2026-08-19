@@ -10,6 +10,39 @@
   gap: 8px;
 }
 
+/* Followable-shaped rows (design.md decision 6) — the profile page never
+   sets hrefForScore, so its rows keep today's exact box. The resting state
+   already carries the padding and a transparent border that hover needs, so
+   hover adds a colour rather than a box and no bar-track width shifts
+   between the two states. Shared by two renderings: an actual <Link> for a
+   bucket with anime in it, and a plain <div> for an empty bucket — it still
+   reads as "this kind of row" on hover, but has nowhere to lead, so only the
+   anchor gets the pointer cursor and an explicit focus ring. */
+.score-distribution__row--link {
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.score-distribution__row--link:hover,
+.score-distribution__row--link:focus-visible {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow);
+}
+
+a.score-distribution__row--link {
+  cursor: pointer;
+}
+
+a.score-distribution__row--link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .score-distribution__label {
   /* 16px was too narrow for the two-digit "10" row without `nowrap`, so its
      "0" wrapped onto its own line instead of sitting beside the "1" and
