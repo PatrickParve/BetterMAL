@@ -159,6 +159,12 @@
   }
 }
 
+.recap-page__lead-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
 /* Sized for the lead grid's narrow column rather than the page's full
    width — a 1-2 column stack instead of the old 6-tile horizontal strip. */
 .recap-page__stats {

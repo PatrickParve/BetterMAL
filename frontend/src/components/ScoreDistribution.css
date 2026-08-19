@@ -1,0 +1,87 @@
+.score-distribution {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.score-distribution__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.score-distribution__label {
+  /* 16px was too narrow for the two-digit "10" row without `nowrap`, so its
+     "0" wrapped onto its own line instead of sitting beside the "1" and
+     lining up with the single-digit rows below it. */
+  width: 2ch;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+.score-distribution__bar-track {
+  flex: 1 1 auto;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  overflow: hidden;
+}
+
+.score-distribution__bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+/* Fixed (not content-sized) so every row's bar-track resolves to the same
+   width — a content-sized column would let a wider value steal space from
+   its own track, throwing off which bar is actually longest relative to the
+   others. ch scales with the fluid page font instead of clipping/wrapping at
+   one fixed pixel size. Count and share are separate fixed-width columns so
+   counts line up with counts and shares with shares, independently of each
+   other's digit count. */
+.score-distribution__count {
+  width: 4ch;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-distribution__share {
+  width: 4ch;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-distribution__mean {
+  margin: 0;
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+/* Used only by the recap page (design.md decision 5), whose distribution
+   sits in a narrower column than the profile page's. */
+.score-distribution--compact {
+  gap: 4px;
+}
+
+.score-distribution--compact .score-distribution__row {
+  gap: 6px;
+  font-size: 13px;
+}
+
+.score-distribution--compact .score-distribution__bar-track {
+  height: 8px;
+}
+
+.score-distribution--compact .score-distribution__count,
+.score-distribution--compact .score-distribution__share {
+  width: 3.5ch;
+}

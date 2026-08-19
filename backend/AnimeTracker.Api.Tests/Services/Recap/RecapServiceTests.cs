@@ -49,6 +49,20 @@ public class RecapServiceTests
         Assert.False(row.MalRevealed);
     }
 
+    [Fact]
+    public async Task MultiYearCurrentlyWatchingSpansEveryYearOfTheRange()
+    {
+        var early = Entry(1, WatchStatus.Watching, new DateOnly(2020, 3, 1), 7.5);
+        early.Anime.AiredFrom = new DateOnly(2020, 3, 1);
+        var late = Entry(2, WatchStatus.Watching, new DateOnly(2024, 9, 1), 8.0);
+        late.Anime.AiredFrom = new DateOnly(2024, 9, 1);
+        var service = new RecapService(new FakeUserAnimeEntryRepository([early, late]));
+
+        var dto = await service.GetRecapAsync(RecapPeriod.MultiYear(2020, 2024), RecapTimeFilter.Aired, CancellationToken.None);
+
+        Assert.Equal(2, dto.Stats.CurrentlyWatching);
+    }
+
     private sealed class FakeUserAnimeEntryRepository(List<UserAnimeEntry> entries) : IUserAnimeEntryRepository
     {
         public Task<UserAnimeEntry?> GetByAnimeIdAsync(int animeId, CancellationToken ct = default) =>

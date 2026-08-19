@@ -14,7 +14,7 @@ public class RecapControllerTests
     private static RecapDto EmptyRecap(RecapPeriod period, string filter) =>
         new(period.Mode, period.StartYear, period.EndYear, period.Season, filter,
             WatchedCount: 0, AiredCount: 0,
-            Stats: new RecapStatsDto(null, 0, 0, 0, 0, 0, 0, []),
+            Stats: new RecapStatsDto(null, 0, 0, 0, 0, 0, 0, 0, []),
             Items: [], SeasonRanking: [], YearRanking: [], SeasonTimeRanking: [], YearTimeRanking: []);
 
     [Fact]

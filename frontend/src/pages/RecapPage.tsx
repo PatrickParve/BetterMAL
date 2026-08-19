@@ -11,9 +11,11 @@ import {
   type RecapStatsDto,
   type RecapTimeFilter,
   type RecapTimeRankingDto,
+  type ScoreDistributionBucketDto,
 } from '../api/types.ts'
 import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
 import { describeSeasonRanking, describeYearRanking, RankingSection } from '../components/RankingSection.tsx'
+import { ScoreDistribution } from '../components/ScoreDistribution.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import {
@@ -52,6 +54,19 @@ function describeTimeRanking(row: RecapTimeRankingDto): RankingOverlayRow {
       : `/recap?mode=yearly&year=${row.year}&filter=aired`,
     posters: row.topPosters,
   }
+}
+
+// Ten zero-filled buckets for scores 1-10, matching
+// ProfileService.BuildScoreDistribution's shape (design.md decision 3) —
+// computed over every included entry of the period, not the top 10's
+// media-type-narrowed set (design.md decision 4).
+function scoreBucketsOf(items: RecapRowDto[]): ScoreDistributionBucketDto[] {
+  const counts = new Map<number, number>()
+  for (const item of items) {
+    if (item.myScore == null) continue
+    counts.set(item.myScore, (counts.get(item.myScore) ?? 0) + 1)
+  }
+  return Array.from({ length: 10 }, (_, i) => i + 1).map((score) => ({ score, count: counts.get(score) ?? 0 }))
 }
 
 function isRecapMode(value: string | null): value is RecapMode {
@@ -149,6 +164,8 @@ export function RecapPage() {
   const { data: recap, loading } = usePageData<RecapDto>(recapKey, () =>
     getRecap({ mode, startYear, endYear, season, filter }),
   )
+
+  const scoreBuckets = useMemo(() => (recap ? scoreBucketsOf(recap.items) : []), [recap])
 
   function updateParams(updates: Record<string, string | null>) {
     setSearchParams((prev) => {
@@ -358,12 +375,13 @@ export function RecapPage() {
   function renderStats(stats: RecapStatsDto) {
     const tiles: { label: string; value: string }[] = [
       { label: 'In this period', value: String(stats.animeCounted) },
+      { label: 'Mean score', value: stats.meanScore !== null ? stats.meanScore.toFixed(2) : '—' },
       { label: 'Completed', value: String(stats.completed) },
       { label: 'Dropped', value: String(stats.dropped) },
-      { label: 'Mean score', value: stats.meanScore !== null ? stats.meanScore.toFixed(2) : '—' },
       { label: 'Episodes watched', value: String(stats.episodesWatched) },
       { label: 'Movies watched', value: String(stats.moviesWatched) },
       { label: 'Time spent', value: formatRuntime(stats.timeSpentSeconds) },
+      { label: 'Currently watching', value: String(stats.currentlyWatching) },
     ]
     return (
       <section className="recap-page__section">
@@ -376,6 +394,18 @@ export function RecapPage() {
             </div>
           ))}
         </div>
+      </section>
+    )
+  }
+
+  // No meanScore prop (design.md decision 4): the stat block directly above
+  // already reports the period's mean, so the recap's block carries no mean
+  // line of its own.
+  function renderDistribution(buckets: ScoreDistributionBucketDto[]) {
+    return (
+      <section className="recap-page__section">
+        <h2>Rating distribution</h2>
+        <ScoreDistribution buckets={buckets} compact />
       </section>
     )
   }
@@ -648,12 +678,17 @@ export function RecapPage() {
       {recap && recap.items.length > 0 && (
         <>
           {/* Lead section (design.md decision 5): the top anime leads, with
-              the stat block beside it — top anime first in DOM order so a
-              narrow display (where the grid collapses to one column) stacks
-              the top anime above the stats. */}
+              the stat block and the distribution below it beside the top
+              anime — top anime first in DOM order so a narrow display (where
+              the grid collapses to one column) stacks the top anime above
+              them. The lead grid keeps exactly two children: the top anime
+              and this single right-hand column. */}
           <div className="recap-page__lead">
             {renderTopTen(recap)}
-            {renderStats(recap.stats)}
+            <div className="recap-page__lead-aside">
+              {renderStats(recap.stats)}
+              {renderDistribution(scoreBuckets)}
+            </div>
           </div>
 
           {renderRankings(recap)}

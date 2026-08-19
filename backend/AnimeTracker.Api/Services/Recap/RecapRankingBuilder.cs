@@ -40,11 +40,16 @@ public static class RecapRankingBuilder
                 point.Season,
                 Scored: byPoint[point].Where(e => e.MyScore is not null).ToList()))
             .Where(c => c.Scored.Count > 0)
-            .Select(c => (c.Year, c.Season, c.Scored, Weighted: WeightedAverage(c.Scored, globalMean, SeasonTrustThreshold)))
-            .OrderByDescending(c => c.Weighted)
-            .ThenByDescending(c => c.Scored.Count)
-            .ThenBy(c => SeasonCalendar.GetSeasonPointIndex(c.Year, c.Season))
+            .Select(c => (
+                c.Year, c.Season, c.Scored,
+                Weighted: WeightedAverage(c.Scored, globalMean, SeasonTrustThreshold),
+                Histogram: BuildHistogram(c.Scored),
+                Recency: SeasonCalendar.GetSeasonPointIndex(c.Year, c.Season)))
             .ToList();
+
+        ranked.Sort((a, b) => CompareGroups(
+            a.Weighted, a.Scored.Count, a.Histogram, a.Recency,
+            b.Weighted, b.Scored.Count, b.Histogram, b.Recency));
 
         return ranked
             .Select(c => new RecapSeasonRankingDto(
@@ -60,16 +65,71 @@ public static class RecapRankingBuilder
         var ranked = period.Years
             .Select(year => (Year: year, Scored: byYear[year].Where(e => e.MyScore is not null).ToList()))
             .Where(c => c.Scored.Count > 0)
-            .Select(c => (c.Year, c.Scored, Weighted: WeightedAverage(c.Scored, globalMean, YearTrustThreshold)))
-            .OrderByDescending(c => c.Weighted)
-            .ThenByDescending(c => c.Scored.Count)
-            .ThenBy(c => c.Year)
+            .Select(c => (
+                c.Year, c.Scored,
+                Weighted: WeightedAverage(c.Scored, globalMean, YearTrustThreshold),
+                Histogram: BuildHistogram(c.Scored),
+                Recency: c.Year))
             .ToList();
+
+        ranked.Sort((a, b) => CompareGroups(
+            a.Weighted, a.Scored.Count, a.Histogram, a.Recency,
+            b.Weighted, b.Scored.Count, b.Histogram, b.Recency));
 
         return ranked
             .Select(c => new RecapYearRankingDto(
                 c.Year, c.Scored.Count, Math.Round(c.Weighted, 2), TopPosters(c.Scored)))
             .ToList();
+    }
+
+    // A group's histogram of my scores, indexed 1-10 (index 0 unused) — the
+    // score-by-score tie-break step shared by both rankings below (design.md
+    // decision 6, step 3).
+    private static int[] BuildHistogram(List<UserAnimeEntry> scored)
+    {
+        var histogram = new int[11];
+        foreach (var entry in scored)
+        {
+            histogram[entry.MyScore!.Value]++;
+        }
+        return histogram;
+    }
+
+    // Ranks two groups (a season or a year) in the order design.md decision 6
+    // sets out: full-precision weighted score, scored count, a score-by-score
+    // histogram comparison from 10 down to 1, then recency — each compared
+    // only once everything before it has tied. Negative means "a" ranks
+    // ahead of "b". Weighted scores are compared with exact equality and no
+    // epsilon: R and C are each an exact integer sum divided by a count, and
+    // W applies the same arithmetic in the same order to both groups, so
+    // equal inputs are bit-identical with no accumulation-order drift to
+    // guard against. An epsilon would let a tie-break step overrule a real
+    // difference in score, which step 1 exists to rule out.
+    private static int CompareGroups(
+        double weightedA, int scoredCountA, int[] histogramA, int recencyA,
+        double weightedB, int scoredCountB, int[] histogramB, int recencyB)
+    {
+        if (weightedA != weightedB)
+        {
+            return weightedA > weightedB ? -1 : 1;
+        }
+
+        if (scoredCountA != scoredCountB)
+        {
+            return scoredCountA > scoredCountB ? -1 : 1;
+        }
+
+        for (var score = 10; score >= 1; score--)
+        {
+            if (histogramA[score] != histogramB[score])
+            {
+                return histogramA[score] > histogramB[score] ? -1 : 1;
+            }
+        }
+
+        // Newest first (design.md decision 6, step 4) — reverses the
+        // oldest-first fallback this replaced.
+        return recencyA > recencyB ? -1 : recencyA < recencyB ? 1 : 0;
     }
 
     // W = (v / (v + m)) * R + (m / (v + m)) * C
@@ -90,7 +150,11 @@ public static class RecapRankingBuilder
 
     // D7/D8: unlike the score rankings, no scored-anime requirement — a group
     // is ranked whenever it has any time watched at all, and ties break by
-    // episodes watched then chronologically for a stable order.
+    // episodes watched then chronologically for a stable order. The score
+    // rankings' extended tie-break above (histogram, then newest-first)
+    // deliberately does not apply here: this ranks on seconds watched, where
+    // an exact tie already requires an exact tie on episodes watched too, so
+    // a fifth rule would buy nothing (design.md decision 6).
     //
     // No row carries posters (polish-recap-page follow-up): once this ranking
     // sits beside the season score ranking rather than stacked full-width

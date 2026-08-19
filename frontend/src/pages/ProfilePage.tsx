@@ -16,6 +16,7 @@ import { EditHistoryOverlay } from '../components/EditHistoryOverlay.tsx'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
 import { describeSeasonRanking, describeYearRanking, RankingSection } from '../components/RankingSection.tsx'
+import { ScoreDistribution } from '../components/ScoreDistribution.tsx'
 import { TopAnimeSelectionOverlay } from '../components/TopAnimeSelectionOverlay.tsx'
 import { TruncatedTitle } from '../components/TruncatedTitle.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
@@ -124,17 +125,6 @@ function formatStatValue(key: keyof ProfileDto['stats'], value: number | null): 
   if (key === 'days') return value.toFixed(1)
   if (key === 'meanScore') return value.toFixed(2)
   return String(value)
-}
-
-// `<1%` covers a bucket that has anime in it but rounds down to nothing —
-// showing a flat 0% there would read as "no anime has this score", which is
-// false. No share at all renders when nothing is rated, since a percentage
-// of zero is a meaningless comparison.
-function formatShare(count: number, totalRated: number): string | null {
-  if (totalRated === 0) return null
-  const rounded = Math.round((count / totalRated) * 100)
-  if (count > 0 && rounded === 0) return '<1%'
-  return `${rounded}%`
 }
 
 // Drag-to-scroll plus scroll-offset restoration for a horizontal poster
@@ -366,9 +356,6 @@ export function ProfilePage() {
     return <p className="profile-page__empty">Couldn't load profile data.</p>
   }
 
-  const totalRated = profile.scoreDistribution.buckets.reduce((sum, b) => sum + b.count, 0)
-  const maxBucketCount = Math.max(0, ...profile.scoreDistribution.buckets.map((b) => b.count))
-
   return (
     <div className="profile-page">
       <div className="profile-page__header">
@@ -391,29 +378,10 @@ export function ProfilePage() {
 
         <section className="profile-box">
           <h2>Rating distribution</h2>
-          <div className="score-distribution">
-            {[...profile.scoreDistribution.buckets].reverse().map((bucket) => {
-              const share = formatShare(bucket.count, totalRated)
-              return (
-                <div key={bucket.score} className="score-distribution__row">
-                  <span className="score-distribution__label">{bucket.score}</span>
-                  <div className="score-distribution__bar-track">
-                    <div
-                      className="score-distribution__bar"
-                      style={{ width: `${maxBucketCount > 0 ? (bucket.count / maxBucketCount) * 100 : 0}%` }}
-                    />
-                  </div>
-                  <span className="score-distribution__count">
-                    {bucket.count}
-                    {share ? ` (${share})` : ''}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-          <p className="score-distribution__mean">
-            Mean score: {profile.scoreDistribution.meanScore?.toFixed(2) ?? '—'}
-          </p>
+          <ScoreDistribution
+            buckets={profile.scoreDistribution.buckets}
+            meanScore={profile.scoreDistribution.meanScore}
+          />
         </section>
 
         <section className="profile-box">

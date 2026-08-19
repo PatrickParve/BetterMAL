@@ -62,6 +62,41 @@ public class ProfileServiceFavouriteSeasonsAndYearsTests
         Assert.Equal(recapFall2019.WeightedScore, fall2019.WeightedScore);
     }
 
+    // Extended tie-break (tasks.md 6.8, design.md decision 6): two years tie
+    // exactly on weighted score and scored count but differ at the highest
+    // score, so the profile's favourites should order them exactly as a
+    // recap covering both years would — the spec's "Equal scores resolved by
+    // coverage then by score" scenario.
+    [Fact]
+    public async Task EqualScoresResolvedByCoverageThenByScore_AgreesWithARecapCoveringBothYears()
+    {
+        using var db = CreateDb();
+        List<UserAnimeEntry> entries =
+        [
+            Entry(1, new DateOnly(2020, 3, 1), 10),
+            Entry(2, new DateOnly(2020, 4, 1), 10),
+            Entry(3, new DateOnly(2020, 6, 1), 6),
+            Entry(4, new DateOnly(2020, 8, 1), 6),
+            Entry(5, new DateOnly(2020, 10, 1), 3),
+            Entry(6, new DateOnly(2023, 3, 1), 10),
+            Entry(7, new DateOnly(2023, 4, 1), 7),
+            Entry(8, new DateOnly(2023, 6, 1), 7),
+            Entry(9, new DateOnly(2023, 8, 1), 7),
+            Entry(10, new DateOnly(2023, 10, 1), 4),
+        ];
+
+        var profile = await CreateService(db, entries).GetProfileAsync();
+
+        var globalMean = RecapRankingBuilder.ScoredMean(entries)!.Value;
+        var recapRanking = RecapRankingBuilder.BuildYearRanking(entries, RecapPeriod.MultiYear(2020, 2023), globalMean);
+
+        Assert.Equal(2, profile.FavouriteYears.Count);
+        Assert.Equal(recapRanking.Select(y => y.Year), profile.FavouriteYears.Select(y => y.Year));
+        Assert.Equal(recapRanking.Select(y => y.WeightedScore), profile.FavouriteYears.Select(y => y.WeightedScore));
+        Assert.Equal(2020, profile.FavouriteYears[0].Year); // two 10s outranks one 10 at equal score and coverage
+        Assert.Equal(2023, profile.FavouriteYears[1].Year);
+    }
+
     [Fact]
     public async Task GroupsWithNoScoredAnimeAreOmitted()
     {

@@ -16,11 +16,14 @@ public class RecapService(IUserAnimeEntryRepository entryRepository) : IRecapSer
         var included = RecapEntrySelector.Select(wholeList, period, effectiveFilter);
 
         // Both filters' counts for *this* period (design.md decision 2), not
-        // just the one actually selected on.
+        // just the one actually selected on. The aired-attributed list is
+        // also what RecapStatsBuilder counts CurrentlyWatching from
+        // (decision 2), so it's kept rather than reduced straight to a count.
         var watchedCount = RecapEntrySelector.Select(wholeList, period, RecapTimeFilter.Watched).Count;
-        var airedCount = RecapEntrySelector.Select(wholeList, period, RecapTimeFilter.Aired).Count;
+        var airedIncluded = RecapEntrySelector.Select(wholeList, period, RecapTimeFilter.Aired);
+        var airedCount = airedIncluded.Count;
 
-        var stats = RecapStatsBuilder.Build(included, wholeList);
+        var stats = RecapStatsBuilder.Build(included, wholeList, airedIncluded);
         var items = included
             .Select(ToRow)
             .OrderBy(r => r.Title, StringComparer.OrdinalIgnoreCase)

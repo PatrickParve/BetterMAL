@@ -9,7 +9,7 @@ public static class RecapStatsBuilder
     private const int HotTakeCount = 5;
     private const string MovieMediaType = "movie";
 
-    public static RecapStatsDto Build(List<UserAnimeEntry> included, List<UserAnimeEntry> wholeList)
+    public static RecapStatsDto Build(List<UserAnimeEntry> included, List<UserAnimeEntry> wholeList, List<UserAnimeEntry> airedIncluded)
     {
         var scored = included.Where(e => e.MyScore is not null).ToList();
         var nonMovies = included.Where(e => e.Anime.MediaType != MovieMediaType).ToList();
@@ -24,11 +24,19 @@ public static class RecapStatsBuilder
         // episode count above.
         var timeSpentSeconds = included.Sum(e => (long)e.EpisodesWatched * RecapTimeMath.EpisodeSeconds(e.Anime));
 
+        // D2 (decision 2): counted on the anime's air-start date, from
+        // airedIncluded, never from `included`. An in-progress entry has no
+        // CompletedAt, so under the "watched" filter it never appears in
+        // `included` at all — a filter-scoped count would always read zero
+        // for a period whose anime I am demonstrably still watching.
+        var currentlyWatching = airedIncluded.Count(e => e.Status == WatchStatus.Watching);
+
         return new RecapStatsDto(
             MeanScore: scored.Count > 0 ? Math.Round(scored.Average(e => e.MyScore!.Value), 2) : null,
             AnimeCounted: included.Count,
             Completed: included.Count(e => e.Status == WatchStatus.Completed),
             Dropped: included.Count(e => e.Status == WatchStatus.Dropped),
+            CurrentlyWatching: currentlyWatching,
             EpisodesWatched: nonMovies.Sum(e => e.EpisodesWatched),
             MoviesWatched: moviesWatched,
             TimeSpentSeconds: timeSpentSeconds,

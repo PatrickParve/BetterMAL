@@ -23,12 +23,17 @@ public record RecapHotTakeDto(
 /// computed over the period+filter's included set alone. <c>Dropped</c>
 /// counts included entries with status Dropped, so the gap between
 /// <c>AnimeCounted</c> and <c>Completed</c> is accounted for rather than
-/// left unexplained (design.md decision 10).</summary>
+/// left unexplained (design.md decision 10). <c>CurrentlyWatching</c> is the
+/// one exception to "computed over the included set" — see decision 2: it is
+/// always counted on the anime's air-start date, even under the "watched"
+/// filter, since an in-progress entry has no completion date to attribute
+/// it by.</summary>
 public record RecapStatsDto(
     double? MeanScore,
     int AnimeCounted,
     int Completed,
     int Dropped,
+    int CurrentlyWatching,
     int EpisodesWatched,
     int MoviesWatched,
     long TimeSpentSeconds,

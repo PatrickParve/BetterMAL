@@ -618,6 +618,7 @@ export type RecapStatsDto = {
   animeCounted: number
   completed: number
   dropped: number
+  currentlyWatching: number
   episodesWatched: number
   moviesWatched: number
   timeSpentSeconds: number

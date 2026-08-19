@@ -135,64 +135,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.score-distribution {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.score-distribution__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.score-distribution__label {
-  /* 16px was too narrow for the two-digit "10" row without `nowrap`, so its
-     "0" wrapped onto its own line instead of sitting beside the "1" and
-     lining up with the single-digit rows below it. */
-  width: 2ch;
-  flex: 0 0 auto;
-  white-space: nowrap;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-h);
-  font-weight: 500;
-}
-
-.score-distribution__bar-track {
-  flex: 1 1 auto;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--code-bg);
-  overflow: hidden;
-}
-
-.score-distribution__bar {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 999px;
-}
-
-.score-distribution__count {
-  /* Fixed (not content-sized) so every row's bar-track resolves to the same
-     width — a content-sized count column would let a wider "N (NN%)" string
-     steal space from its own track, throwing off which bar is actually
-     longest relative to the others. ch scales with the fluid page font
-     instead of clipping/wrapping at one fixed pixel size. */
-  width: 9ch;
-  flex: 0 0 auto;
-  white-space: nowrap;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.score-distribution__mean {
-  margin: 0;
-  color: var(--text-h);
-  font-weight: 500;
-}
-
 .activity-feed,
 .divergence-list {
   list-style: none;

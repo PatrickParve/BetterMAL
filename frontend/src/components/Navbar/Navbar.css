@@ -57,22 +57,123 @@
   background: var(--accent-bg);
 }
 
-.navbar__toggle {
-  font: inherit;
-  font-size: 14px;
-  padding: 8px 12px;
-  border-radius: 6px;
+/* The score-visibility switch (design.md decision 7). A fixed-width pill so
+   toggling it never reflows the navbar: the "Scores" label never changes,
+   and only the knob's position plus the eye icon inside it carry the state.
+   --checked means scores are shown (knob right, eye open); its absence
+   means scores are hidden (knob left, eye closed). */
+.navbar__score-switch {
+  position: relative;
+  display: inline-block;
+  width: 100px;
+  height: var(--control-h);
+  padding: 0;
+  border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--bg);
-  color: var(--text);
   cursor: pointer;
-  white-space: nowrap;
+  font: inherit;
 }
 
-.navbar__toggle:hover {
-  color: var(--text-h);
+.navbar__score-switch:hover {
   background: var(--accent-bg);
   border-color: var(--accent-border);
+}
+
+.navbar__score-switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.navbar__score-switch--checked {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+/* The label fills the leftover space after the knob (track width minus the
+   knob's own width) and is centered within it — so it sits centered between
+   the knob and the outer edge, touching neither. */
+.navbar__score-switch-track {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: calc(100% - 34px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.navbar__score-switch--checked .navbar__score-switch-track {
+  right: auto;
+  left: 0;
+}
+
+/* Sized to fill the pill's own rounded end cap exactly (diameter ==
+   track height == twice the border-radius), so the knob hugs the track's
+   edge flush rather than floating inset from it. box-sizing: border-box
+   keeps the knob's own 1px border inside that 34px, instead of padding it
+   out past the cap. */
+.navbar__score-switch-knob {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  color: var(--text-h);
+  transform: translateX(0);
+  transition: transform 0.2s ease;
+}
+
+.navbar__score-switch--checked .navbar__score-switch-knob {
+  transform: translateX(66px);
+}
+
+/* Slash drawn (offset 0) and pupil hidden (scale 0) by default — the switch's
+   unchecked, scores-hidden state — retracting and reappearing once checked.
+   The gap segment is deliberately longer than the path (2 vs the path's
+   normalized length of 1, via pathLength="1" in Navbar.tsx) so full retraction
+   at offset 1 lands solidly inside the gap rather than exactly on the dash/gap
+   boundary, where rounding could leave a sliver of the round linecap visible. */
+.navbar__score-switch-eye-slash {
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 0.2s ease;
+}
+
+.navbar__score-switch--checked .navbar__score-switch-eye-slash {
+  stroke-dashoffset: 1;
+}
+
+.navbar__score-switch-eye-pupil {
+  transform-origin: 12px 12px;
+  transform: scale(0);
+  transition: transform 0.2s ease;
+}
+
+.navbar__score-switch--checked .navbar__score-switch-eye-pupil {
+  transform: scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navbar__score-switch-knob,
+  .navbar__score-switch-eye-slash,
+  .navbar__score-switch-eye-pupil {
+    transition: none;
+  }
 }
 
 .navbar__settings {
