@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Recap;
 using AnimeTracker.Api.Services.Series;
 
 namespace AnimeTracker.Api.Services.Profile;
@@ -61,15 +62,19 @@ public class ProfileService(
         var orderedAnimeIds = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
 
         var (theyLikedItIDidnt, iLikedItTheyDidnt) = BuildOpinionDivergence(entries);
+        var (favouriteSeasons, favouriteYears) = BuildFavouriteSeasonsAndYears(entries);
 
         return new ProfileDto(
             BuildStats(entries),
+            BuildEpisodeProgress(entries),
             BuildActivityFeed(recentActivityWindow),
             BuildTopAnimeSection(entries, orderedAnimeIds, TopAnimeMediaTypeScope.All),
             BuildRewatchedSection(entries, TopAnimeMediaTypeScope.All),
             BuildScoreDistribution(entries),
             theyLikedItIDidnt,
-            iLikedItTheyDidnt);
+            iLikedItTheyDidnt,
+            favouriteSeasons,
+            favouriteYears);
     }
 
     public async Task<List<ActivityFeedItemDto>> GetActivityHistoryAsync(CancellationToken ct = default)
@@ -342,6 +347,46 @@ public class ProfileService(
             Episodes: totalEpisodes);
     }
 
+    // profile-stats "All-list episode progress": an entry with no published
+    // TotalEpisodes has nothing to progress toward, so it's excluded from
+    // every figure but TotalEntries. Watched is clamped to the anime's total
+    // so a stored over-count (or a rewatch, which doesn't multiply the
+    // contribution) can never push the bar past 100%.
+    private static EpisodeProgressDto BuildEpisodeProgress(List<UserAnimeEntry> entries)
+    {
+        var counted = entries.Where(e => e.Anime.TotalEpisodes is not null).ToList();
+
+        return new EpisodeProgressDto(
+            EpisodesWatched: counted.Sum(e => Math.Min(e.EpisodesWatched, e.Anime.TotalEpisodes!.Value)),
+            EpisodesTotal: counted.Sum(e => e.Anime.TotalEpisodes!.Value),
+            EntriesCounted: counted.Count,
+            TotalEntries: entries.Count);
+    }
+
+    // profile-stats "Favourite seasons and years" (design.md decision 6): a
+    // synthetic whole-list period spanning every air year I have, fed into
+    // the same RecapRankingBuilder a recap uses, with the same whole-list
+    // mean — so a season's/year's weighted score here is byte-identical to
+    // the score a recap covering it reports.
+    private static (List<RecapSeasonRankingDto> Seasons, List<RecapYearRankingDto> Years) BuildFavouriteSeasonsAndYears(
+        List<UserAnimeEntry> entries)
+    {
+        var airDated = entries.Where(e => e.Anime.AiredFrom is not null).ToList();
+        if (airDated.Count == 0)
+            return ([], []);
+
+        var globalMean = RecapRankingBuilder.ScoredMean(entries);
+        if (globalMean is not { } mean)
+            return ([], []);
+
+        var years = airDated.Select(e => e.Anime.AiredFrom!.Value.Year);
+        var period = RecapPeriod.MultiYear(years.Min(), years.Max());
+
+        return (
+            RecapRankingBuilder.BuildSeasonRanking(airDated, period, mean),
+            RecapRankingBuilder.BuildYearRanking(airDated, period, mean));
+    }
+
     // All score-10 anime are shown uncapped; if that's fewer than 10, fill the
     // remainder with the next-highest score tiers, in descending order, each
     // ordered by the user's persisted preference (falling back to
@@ -461,5 +506,5 @@ public class ProfileService(
     }
 
     private static OpinionDivergenceItemDto ToDivergenceItem(UserAnimeEntry e) =>
-        new(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.MyScore!.Value, e.Anime.MalScore!.Value, e.Status == WatchStatus.Completed);
+        new(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.MyScore!.Value, e.Anime.MalScore!.Value, e.Status.IsScoreRevealable());
 }

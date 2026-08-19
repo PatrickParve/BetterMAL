@@ -52,7 +52,7 @@ public static class RecapStatsBuilder
             .Select(x => new RecapHotTakeDto(
                 x.Entry.AnimeId, x.Entry.Anime.Title, x.Entry.Anime.EnglishTitle, x.Entry.Anime.PictureUrl,
                 x.Entry.MyScore!.Value, x.Entry.Anime.MalScore!.Value, x.Divergence,
-                x.Entry.Status == WatchStatus.Completed))
+                x.Entry.Status.IsScoreRevealable()))
             .ToList();
     }
 }

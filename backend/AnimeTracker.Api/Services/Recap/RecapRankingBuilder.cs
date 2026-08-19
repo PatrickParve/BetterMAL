@@ -18,6 +18,17 @@ public static class RecapRankingBuilder
 
     private const int PosterCount = 3;
 
+    // C in the Bayesian formula: the caller's mean score across every scored
+    // entry in its whole list, not any particular period — null only when
+    // nothing at all has been scored, in which case no group could have v > 0
+    // either, so the rankings are trivially empty. Shared by RecapService and
+    // ProfileService (design.md decision 6) so both rank on the identical C.
+    public static double? ScoredMean(List<UserAnimeEntry> wholeList)
+    {
+        var scores = wholeList.Where(e => e.MyScore is not null).Select(e => e.MyScore!.Value).ToList();
+        return scores.Count > 0 ? scores.Average() : null;
+    }
+
     public static List<RecapSeasonRankingDto> BuildSeasonRanking(
         List<UserAnimeEntry> airedIncluded, RecapPeriod period, double globalMean)
     {

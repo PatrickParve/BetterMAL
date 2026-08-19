@@ -312,7 +312,7 @@ public class SeriesService(
         var myWatchedSeconds = mainLineAnime.Sum(a => (long)(a.UserEntry?.EpisodesWatched ?? 0) * EpisodeSeconds(a));
         var entriesCompleted = mainLineAnime.Count(a => a.UserEntry?.Status == WatchStatus.Completed);
         var extrasCompleted = extraAnime.Count(a => a.UserEntry?.Status == WatchStatus.Completed);
-        var mainLineCompletedByMe = SeriesAverages.MainLineCompletedByMe(
+        var mainLineSettledByMe = SeriesAverages.MainLineSettledByMe(
             mainLineAnime.Select(a => (a.AiringStatus, a.UserEntry?.Status)));
 
         var (gapDays, gapFromId, gapToId) = LongestGap(mainLineAnime);
@@ -359,7 +359,7 @@ public class SeriesService(
             myWatchedSeconds,
             entriesCompleted,
             extrasCompleted,
-            mainLineCompletedByMe,
+            mainLineSettledByMe,
             mainLineMembers.Count,
             extraMembers.Count,
             gapDays,

@@ -17,10 +17,23 @@
   justify-content: flex-end;
 }
 
-.navbar__search {
-  flex: 2;
+/* Flexible basis so the field shares the group with the score toggle,
+   Profile, and Settings without being squeezed to button width; its own
+   max-width (search-bar.css) caps how far it grows. */
+.navbar__links--right .search-bar {
+  flex: 1 1 200px;
+  min-width: 160px;
+}
+
+/* The score toggle, Profile, and Settings as one unbroken unit — flex-wrap
+   on the right group (below) is meant to give only the search field its own
+   row; without this wrapper the three controls could individually wrap away
+   from each other once the group narrows. */
+.navbar__controls {
   display: flex;
-  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
 }
 
 .navbar__link {
@@ -83,8 +96,12 @@
   .navbar {
     flex-wrap: wrap;
   }
-  .navbar__search {
-    order: 3;
-    flex-basis: 100%;
+  .navbar__links--right {
+    flex-wrap: wrap;
+  }
+  .navbar__links--right .search-bar {
+    order: 1;
+    flex: 1 1 100%;
+    max-width: none;
   }
 }

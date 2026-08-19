@@ -155,19 +155,6 @@
   opacity: 0.75;
 }
 
-.recap-page__section {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.recap-page__section h2 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--text-h);
-}
-
 .recap-page__section-header {
   display: flex;
   align-items: center;
@@ -333,84 +320,8 @@
   text-decoration: underline;
 }
 
-/* Season/year rankings */
-
-.recap-ranking-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.recap-ranking-row__link {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  text-decoration: none;
-  color: var(--text-h);
-}
-
-.recap-ranking-row__link:hover {
-  border-color: var(--accent-border);
-}
-
-.recap-ranking-row__rank {
-  flex: 0 0 auto;
-  width: 28px;
-  font-weight: 600;
-  color: var(--text);
-  opacity: 0.7;
-}
-
-.recap-ranking-row__label {
-  flex: 1 1 auto;
-  font-weight: 500;
-}
-
-.recap-ranking-row__meta {
-  flex: 0 0 auto;
-  font-size: 13px;
-  color: var(--text);
-  opacity: 0.8;
-}
-
-.recap-ranking-row__posters {
-  display: flex;
-  gap: 4px;
-  flex: 0 0 auto;
-}
-
-.recap-ranking-row__poster {
-  width: 28px;
-  height: 40px;
-  object-fit: cover;
-  border-radius: 4px;
-  background: var(--code-bg);
-}
-
-.recap-ranking-row__poster--placeholder {
-  border: 1px solid var(--border);
-}
-
-.recap-page__see-all-ranks {
-  align-self: flex-start;
-  font: inherit;
-  font-size: 14px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--accent);
-  cursor: pointer;
-}
-
-.recap-page__see-all-ranks:hover {
-  text-decoration: underline;
-}
+/* Season/year rankings (the row list, poster, and "See all" styles live in
+   components/RankingSection.css — RankingSection.tsx owns that markup now). */
 
 /* Season and year rankings sit side by side when both are present (design.md
    "Year ranking" requirement); the time-watched rankings reuse the same

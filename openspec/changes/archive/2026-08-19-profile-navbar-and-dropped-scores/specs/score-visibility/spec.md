@@ -1,36 +1,4 @@
-# score-visibility Specification
-
-## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
-## Requirements
-### Requirement: Global MAL-score hide toggle
-The system SHALL provide a global toggle that, when hidden, replaces every MAL score everywhere with a placeholder that does not leak the underlying value. The placeholder SHALL consist of the score's reveal control alone — no stand-in digits, dots, or other characters representing the value. The toggle's on/off state SHALL persist across page reloads and new tabs (client-side, e.g. `localStorage`), so a user who hides scores does not see them reappear on refresh.
-
-#### Scenario: Hiding all scores
-- **WHEN** I turn the hide toggle on
-- **THEN** every MAL score across the app is replaced by its reveal control alone and the actual value is not exposed in the rendered output
-
-#### Scenario: No stand-in characters for the value
-- **WHEN** the hide toggle is on and I look at any hidden MAL score
-- **THEN** nothing stands in for the digits beside the reveal control — no dots, no masked characters, no placeholder text
-
-#### Scenario: Hidden state survives a reload
-- **WHEN** I turn the hide toggle on and then reload the page or open the app in a new tab
-- **THEN** scores are still hidden without my having to toggle again
-
-### Requirement: Per-score in-place reveal
-The system SHALL give each hidden score its own small unhide control that reveals just that one score in place. While the score is hidden, that control is the entirety of what the score renders.
-
-#### Scenario: Revealing a single score
-- **WHEN** I use a hidden score's unhide control
-- **THEN** only that one score is revealed in place while the others remain hidden
-
-### Requirement: Reveal is not persisted
-The system SHALL re-hide any individually revealed score when navigating away, keeping the unhidden state non-persistent.
-
-#### Scenario: Navigating away re-hides
-- **WHEN** I reveal a score and then navigate away and back
-- **THEN** that score is hidden again
+## MODIFIED Requirements
 
 ### Requirement: Always-show-completed-scores setting
 The system SHALL provide a setting on the Settings page, "Always show MAL scores for completed and dropped shows", that when enabled reveals the MAL score of any anime the user has marked **Completed** or **Dropped** in full — no placeholder and no per-score reveal control — even while the global hide-scores toggle is on. Completed and Dropped SHALL be treated identically by this setting: both are statuses in which the user has settled their relationship with the anime, so a community average can no longer bias or spoil a viewing that is still ahead of them.
@@ -91,4 +59,3 @@ This rule SHALL hold in both score densities — inside a score chip and as a ba
 #### Scenario: The control is centred in a chip
 - **WHEN** the hide toggle is on and I look at a compact MAL score chip, such as a profile top-series tile's chip pair
 - **THEN** the reveal control sits centred within the chip, in the position the value would have occupied
-

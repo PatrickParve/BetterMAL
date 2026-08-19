@@ -25,12 +25,16 @@ public static class SeriesAverages
         return new SeriesAverageDto(scored.Count > 0 ? scored.Average() : null, scored.Count, all.Count);
     }
 
-    // Every finished-airing member is Completed in my list, and at least one
-    // such member exists — entries not yet aired or still airing don't count
-    // against it, since they can't be completed yet (design.md decision 7).
-    public static bool MainLineCompletedByMe(IEnumerable<(string? AiringStatus, WatchStatus? EntryStatus)> mainLine)
+    // Every finished-airing member is Completed or Dropped in my list, and at
+    // least one such member exists — entries not yet aired or still airing
+    // don't count against it, since they haven't settled yet (design.md
+    // decision 7 of redesign-series-page; widened to Dropped by
+    // profile-navbar-and-dropped-scores design.md decision 3). A member not
+    // in my list at all (EntryStatus null) still fails: the rule asks what I
+    // decided about an entry, and an absent entry carries no decision.
+    public static bool MainLineSettledByMe(IEnumerable<(string? AiringStatus, WatchStatus? EntryStatus)> mainLine)
     {
         var finishedAiring = mainLine.Where(m => m.AiringStatus == "finished_airing").ToList();
-        return finishedAiring.Count > 0 && finishedAiring.All(m => m.EntryStatus == WatchStatus.Completed);
+        return finishedAiring.Count > 0 && finishedAiring.All(m => m.EntryStatus.IsScoreRevealable());
     }
 }

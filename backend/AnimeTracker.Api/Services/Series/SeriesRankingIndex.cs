@@ -61,12 +61,13 @@ public sealed class SeriesRankingIndex
             var malAverage = SeriesAverages.Mal(mainLine.Select(m => m.MalScore));
             var mineAverage = SeriesAverages.Mine(mainLine.Select(m => m.MyScore));
 
-            // Main-series reveal rule (design.md decision 5): completed by me
-            // and nothing in the main line is currently airing.
+            // Main-series reveal rule (design.md decision 5): settled by me
+            // (completed or dropped) and nothing in the main line is
+            // currently airing.
             var mainLineAiring = mainLine.Any(m => m.AiringStatus == "currently_airing");
-            var mainLineCompletedByMe = SeriesAverages.MainLineCompletedByMe(
+            var mainLineSettledByMe = SeriesAverages.MainLineSettledByMe(
                 mainLine.Select(m => (m.AiringStatus, m.EntryStatus)));
-            var malRevealed = mainLineCompletedByMe && !mainLineAiring;
+            var malRevealed = mainLineSettledByMe && !mainLineAiring;
 
             results.Add(new SeriesRankingResult(
                 group.Key, root.RootAnimeId, root.Title, root.EnglishTitle, root.PictureUrl,

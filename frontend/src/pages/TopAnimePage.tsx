@@ -6,7 +6,7 @@ import { Pagination } from '../components/Pagination.tsx'
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
-import { pickDisplayTitle } from '../utils/anime.ts'
+import { isScoreRevealableStatus, pickDisplayTitle } from '../utils/anime.ts'
 import './TopAnimePage.css'
 
 const PAGE_SIZE = 50
@@ -288,7 +288,7 @@ export function TopAnimePage() {
                         {item.entry?.myScore ?? '—'}
                       </ScoreChip>
                       <ScoreChip role="mal" label="MAL">
-                        <ScoreValue value={item.malScore} completed={item.entry?.status === 'Completed'} />
+                        <ScoreValue value={item.malScore} completed={isScoreRevealableStatus(item.entry?.status)} />
                       </ScoreChip>
                     </div>
                   </div>
@@ -318,7 +318,7 @@ export function TopAnimePage() {
                   <span className="top-anime-card__scores">
                     <span className="score--mine">{item.entry?.myScore ?? '—'}</span>
                     <span className="score--mal">
-                      <ScoreValue value={item.malScore} completed={item.entry?.status === 'Completed'} />
+                      <ScoreValue value={item.malScore} completed={isScoreRevealableStatus(item.entry?.status)} />
                     </span>
                   </span>
                 </li>
@@ -343,7 +343,7 @@ export function TopAnimePage() {
                   </Link>
                   <span className="top-anime-row__my-score score--mine">{item.entry?.myScore ?? '—'}</span>
                   <span className="top-anime-row__mal-score score--mal">
-                    <ScoreValue value={item.malScore} completed={item.entry?.status === 'Completed'} />
+                    <ScoreValue value={item.malScore} completed={isScoreRevealableStatus(item.entry?.status)} />
                   </span>
                   {renderActionButton(item, 'top-anime-row__action')}
                 </li>

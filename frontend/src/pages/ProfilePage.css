@@ -39,11 +39,30 @@
   gap: 20px;
 }
 
+/* Favourite seasons / Favourite years (profile-stats "Favourite seasons and
+   years"): same two-column pattern as the divergence row and the recap
+   page's own ranking-pair grid, under its own class name (design.md decision
+   8) — Favourite seasons is first in DOM order so it leads when the
+   breakpoint below collapses this to one column. */
+.profile-page__favourites-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
 @media (max-width: 1024px) {
   .profile-page__top-row,
-  .profile-page__divergence-row {
+  .profile-page__divergence-row,
+  .profile-page__favourites-row {
     grid-template-columns: 1fr;
   }
+}
+
+.profile-page__episode-progress-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.75;
 }
 
 .profile-box {

@@ -13,6 +13,9 @@ import type {
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { EditHistoryOverlay } from '../components/EditHistoryOverlay.tsx'
+import { ProgressBar } from '../components/ProgressBar.tsx'
+import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
+import { describeSeasonRanking, describeYearRanking, RankingSection } from '../components/RankingSection.tsx'
 import { TopAnimeSelectionOverlay } from '../components/TopAnimeSelectionOverlay.tsx'
 import { TruncatedTitle } from '../components/TruncatedTitle.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
@@ -347,6 +350,10 @@ export function ProfilePage() {
 
   const [showHistory, setShowHistory] = useState(false)
   const [showTopAnimeSelect, setShowTopAnimeSelect] = useState(false)
+  // Only one ranking overlay can be open at a time, so a single slot serves
+  // both Favourite seasons and Favourite years (same pattern as RecapPage's
+  // ranking pairs).
+  const [rankingOverlay, setRankingOverlay] = useState<{ title: string; rows: RankingOverlayRow[] } | null>(null)
   const topAnimeStripScroll = useStripScroll(`top-anime:${mediaType}`)
   const rewatchedStripScroll = useStripScroll(`rewatched:${rewatchedMediaType}`)
   const topSeriesStripScroll = useStripScroll('top-series')
@@ -447,6 +454,25 @@ export function ProfilePage() {
           )}
         </section>
       </div>
+
+      <section className="profile-box">
+        <h2>Episode progress</h2>
+        {profile.episodeProgress.episodesTotal === 0 ? (
+          <p className="profile-page__section-empty">
+            No anime in your list has a published episode count yet.
+          </p>
+        ) : (
+          <>
+            <ProgressBar
+              watched={profile.episodeProgress.episodesWatched}
+              total={profile.episodeProgress.episodesTotal}
+            />
+            <p className="profile-page__episode-progress-note">
+              {profile.episodeProgress.entriesCounted} of {profile.episodeProgress.totalEntries} entries counted
+            </p>
+          </>
+        )}
+      </section>
 
       <section className="profile-box">
         <div className="profile-box__header-row">
@@ -672,6 +698,34 @@ export function ProfilePage() {
         )}
       </section>
 
+      {profile.favouriteSeasons.length === 0 && profile.favouriteYears.length === 0 ? (
+        <section className="profile-box">
+          <h2>Favourites</h2>
+          <p className="profile-page__section-empty">
+            Score anime with a known air date to see your favourite seasons and years.
+          </p>
+        </section>
+      ) : (
+        <div className="profile-page__favourites-row">
+          <section className="profile-box">
+            <RankingSection
+              title="Favourite seasons"
+              noun="seasons"
+              rows={profile.favouriteSeasons.map(describeSeasonRanking)}
+              onSeeAll={setRankingOverlay}
+            />
+          </section>
+          <section className="profile-box">
+            <RankingSection
+              title="Favourite years"
+              noun="years"
+              rows={profile.favouriteYears.map(describeYearRanking)}
+              onSeeAll={setRankingOverlay}
+            />
+          </section>
+        </div>
+      )}
+
       <div className="profile-page__divergence-row">
         <section className="profile-box">
           <h2>They liked it, I didn't</h2>
@@ -683,6 +737,13 @@ export function ProfilePage() {
         </section>
       </div>
 
+      {rankingOverlay && (
+        <RankingOverlay
+          title={rankingOverlay.title}
+          rows={rankingOverlay.rows}
+          onClose={() => setRankingOverlay(null)}
+        />
+      )}
       {showHistory && <EditHistoryOverlay onClose={() => setShowHistory(false)} />}
       {showTopAnimeSelect && topAnime && (
         <TopAnimeSelectionOverlay

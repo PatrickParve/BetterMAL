@@ -344,14 +344,27 @@ export type OpinionDivergenceItemDto = {
   isCompleted: boolean
 }
 
+// All-list episode progress (profile-stats "All-list episode progress").
+// Entries whose anime has no published totalEpisodes are excluded from
+// episodesWatched/episodesTotal/entriesCounted; only totalEntries counts them.
+export type EpisodeProgressDto = {
+  episodesWatched: number
+  episodesTotal: number
+  entriesCounted: number
+  totalEntries: number
+}
+
 export type ProfileDto = {
   stats: AnimeStatsDto
+  episodeProgress: EpisodeProgressDto
   recentActivity: ActivityFeedItemDto[]
   topAnime: TopAnimeSectionDto
   rewatched: RewatchedSectionDto
   scoreDistribution: ScoreDistributionDto
   theyLikedItIDidnt: OpinionDivergenceItemDto[]
   iLikedItTheyDidnt: OpinionDivergenceItemDto[]
+  favouriteSeasons: RecapSeasonRankingDto[]
+  favouriteYears: RecapYearRankingDto[]
 }
 
 // One franchise ranked by Top series: display fields from its root anime,

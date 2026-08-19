@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Recap;
 using AnimeTracker.Api.Services.Series;
 
 namespace AnimeTracker.Api.Services.Profile;
@@ -94,10 +95,22 @@ public record TopSeriesItemDto(
 /// 4).</summary>
 public record TopSeriesSectionDto(List<TopSeriesItemDto> Items);
 
+/// <summary>All-list episode progress (profile-stats "All-list episode
+/// progress"). Entries whose anime has no published <c>TotalEpisodes</c> are
+/// excluded from <c>EpisodesWatched</c>, <c>EpisodesTotal</c>, and
+/// <c>EntriesCounted</c> — only <c>TotalEntries</c> counts them, so the
+/// exclusion stays visible rather than silent.</summary>
+public record EpisodeProgressDto(int EpisodesWatched, int EpisodesTotal, int EntriesCounted, int TotalEntries);
+
 public record ScoreDistributionBucketDto(int Score, int Count);
 
 public record ScoreDistributionDto(List<ScoreDistributionBucketDto> Buckets, double? MeanScore);
 
+/// <summary><c>IsCompleted</c> is the server-computed "may this MAL score be
+/// shown under 'always show completed scores'" flag — true for Completed
+/// and Dropped entries alike (score-visibility), despite the field's name,
+/// which is kept as-is since it's the wire contract for ScoreValue's
+/// <c>completed</c> prop.</summary>
 public record OpinionDivergenceItemDto(
     int AnimeId,
     string Title,
@@ -108,12 +121,19 @@ public record OpinionDivergenceItemDto(
     bool IsCompleted);
 
 /// <summary>Rewatched is the "Most rewatched" section for the "all" scope —
-/// ordered by rewatch count, with no tiers — for the page's initial render.</summary>
+/// ordered by rewatch count, with no tiers — for the page's initial render.
+/// FavouriteSeasons/FavouriteYears rank my whole list on the same Bayesian
+/// basis as a recap's season/year rankings (profile-stats "Favourite seasons
+/// and years", design.md decision 6) — sent in full, not truncated to five,
+/// since the "See all" overlay needs the tail.</summary>
 public record ProfileDto(
     AnimeStatsDto Stats,
+    EpisodeProgressDto EpisodeProgress,
     List<ActivityFeedItemDto> RecentActivity,
     TopAnimeSectionDto TopAnime,
     RewatchedSectionDto Rewatched,
     ScoreDistributionDto ScoreDistribution,
     List<OpinionDivergenceItemDto> TheyLikedItIDidnt,
-    List<OpinionDivergenceItemDto> ILikedItTheyDidnt);
+    List<OpinionDivergenceItemDto> ILikedItTheyDidnt,
+    List<RecapSeasonRankingDto> FavouriteSeasons,
+    List<RecapYearRankingDto> FavouriteYears);

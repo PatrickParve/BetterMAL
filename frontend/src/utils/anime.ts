@@ -20,6 +20,15 @@ export const SERIES_TRAVERSAL_RELATIONS = new Set([
   'alternative_version',
 ])
 
+// score-visibility: "always show MAL scores for completed and dropped
+// shows" reveals a score when the entry is Completed or Dropped — both are
+// statuses in which the user has settled their relationship with the anime,
+// so a community average can no longer bias or spoil a viewing still ahead
+// of them.
+export function isScoreRevealableStatus(status: WatchStatus | null | undefined): boolean {
+  return status === 'Completed' || status === 'Dropped'
+}
+
 export const STATUS_LABELS: Record<WatchStatus, string> = {
   Watching: 'Watching',
   OnHold: 'On hold',

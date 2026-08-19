@@ -159,6 +159,22 @@ public class RecapStatsBuilderTests
     }
 
     [Fact]
+    public void HotTakesMarkDroppedEntriesRevealedButNotWatchingEntries()
+    {
+        var wholeList = WholeListWithSpread();
+        var dropped = wholeList[0];
+        dropped.Status = WatchStatus.Dropped;
+        var watching = wholeList[1];
+        watching.Status = WatchStatus.Watching;
+        var included = new List<UserAnimeEntry> { dropped, watching };
+
+        var stats = RecapStatsBuilder.Build(included, wholeList);
+
+        Assert.True(stats.HotTakes.Single(h => h.AnimeId == dropped.AnimeId).MalRevealed);
+        Assert.False(stats.HotTakes.Single(h => h.AnimeId == watching.AnimeId).MalRevealed);
+    }
+
+    [Fact]
     public void HotTakesDegradeToFourWhenOnlyFourEligible()
     {
         var wholeList = WholeListWithSpread();

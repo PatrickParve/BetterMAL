@@ -9,6 +9,20 @@ public enum WatchStatus
     PlanToWatch,
 }
 
+// score-visibility: "always show MAL scores for completed and dropped
+// shows" reveals a score when the entry is Completed or Dropped — both are
+// statuses in which the user has settled their relationship with the anime,
+// so a community average can no longer bias or spoil a viewing still ahead
+// of them. A null status (entry not in my list at all) is neither.
+public static class WatchStatusExtensions
+{
+    public static bool IsScoreRevealable(this WatchStatus status) =>
+        status is WatchStatus.Completed or WatchStatus.Dropped;
+
+    public static bool IsScoreRevealable(this WatchStatus? status) =>
+        status is WatchStatus.Completed or WatchStatus.Dropped;
+}
+
 /// <summary>My relationship to an anime. Keyed by AnimeId (shared PK/FK with
 /// AnimeMetadata) since there is at most one entry per anime for a single user.</summary>
 public class UserAnimeEntry

@@ -3,9 +3,12 @@ import { SearchBar } from '../SearchBar.tsx'
 import { useScoreVisibility } from '../../context/ScoreVisibilityContext.tsx'
 import './Navbar.css'
 
-const NAV_LINKS: { to: string; label: string; end?: boolean }[] = [
+const NAV_LINKS_BEFORE_RECAP: { to: string; label: string; end?: boolean }[] = [
   { to: '/', label: 'Home', end: true },
   { to: '/my-list', label: 'My List' },
+]
+
+const NAV_LINKS_AFTER_RECAP: { to: string; label: string; end?: boolean }[] = [
   { to: '/top', label: 'Top' },
   { to: '/season', label: 'Season' },
   { to: '/airing', label: 'Airing' },
@@ -26,7 +29,7 @@ export function Navbar() {
   return (
     <header className="navbar">
       <nav className="navbar__links navbar__links--left" aria-label="Primary">
-        {NAV_LINKS.map((link) => (
+        {NAV_LINKS_BEFORE_RECAP.map((link) => (
           <NavLink key={link.to} to={link.to} end={link.end} className={linkClassName}>
             {link.label}
           </NavLink>
@@ -34,22 +37,28 @@ export function Navbar() {
         <NavLink to={recapLink} className={linkClassName}>
           Recap
         </NavLink>
+        {NAV_LINKS_AFTER_RECAP.map((link) => (
+          <NavLink key={link.to} to={link.to} end={link.end} className={linkClassName}>
+            {link.label}
+          </NavLink>
+        ))}
       </nav>
 
-      <div className="navbar__search">
-        <SearchBar />
-      </div>
-
       <div className="navbar__links navbar__links--right">
-        <button type="button" className="navbar__toggle" onClick={toggle} aria-pressed={hidden}>
-          {hidden ? 'Show scores' : 'Hide scores'}
-        </button>
-        <NavLink to="/settings" className="navbar__settings" aria-label="Settings">
-          <GearIcon />
-        </NavLink>
-        <NavLink to="/profile" className={linkClassName}>
-          Profile
-        </NavLink>
+        <SearchBar />
+        {/* Grouped so these three wrap as one unit at narrow widths — only
+            the search field gets its own row (Navbar.css). */}
+        <div className="navbar__controls">
+          <button type="button" className="navbar__toggle" onClick={toggle} aria-pressed={hidden}>
+            {hidden ? 'Show scores' : 'Hide scores'}
+          </button>
+          <NavLink to="/profile" className={linkClassName}>
+            Profile
+          </NavLink>
+          <NavLink to="/settings" className="navbar__settings" aria-label="Settings">
+            <GearIcon />
+          </NavLink>
+        </div>
       </div>
     </header>
   )

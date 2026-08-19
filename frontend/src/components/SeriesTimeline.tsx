@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { SeriesEntryDto } from '../api/types.ts'
-import { mediaTypeLabel, pickDisplayTitle, STATUS_LABELS } from '../utils/anime.ts'
+import { isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_LABELS } from '../utils/anime.ts'
 import { ScoreChip } from './ScoreChip.tsx'
 import { ScoreValue } from './ScoreValue.tsx'
 import { watchedFigureLabel } from './SeriesEntryRow.tsx'
@@ -76,7 +76,7 @@ function TimelineCard({ entry, onEdit }: { entry: SeriesEntryDto; onEdit: (entry
   const airedPct = total && entry.airedEpisodes !== null ? Math.min(100, (entry.airedEpisodes / total) * 100) : 0
   const airRange = undated ? null : formatAirRange(entry)
   const watched = watchedFigureLabel(entry)
-  const completed = entry.entry?.status === 'Completed'
+  const completed = isScoreRevealableStatus(entry.entry?.status)
 
   return (
     <div

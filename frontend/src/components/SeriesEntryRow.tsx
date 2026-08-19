@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { SeriesEntryDto } from '../api/types.ts'
-import { mediaTypeLabel, pickDisplayTitle, STATUS_CLASS, STATUS_LABELS } from '../utils/anime.ts'
+import { isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_CLASS, STATUS_LABELS } from '../utils/anime.ts'
 import { ScoreValue } from './ScoreValue.tsx'
 import './SeriesEntryRow.css'
 
@@ -62,7 +62,7 @@ export function SeriesEntryRow({ entry, rank, onEdit }: SeriesEntryRowProps) {
         </span>
       </Link>
       <span className="series-entry-row__mal-score score--mal">
-        <ScoreValue value={entry.malScore} completed={entry.entry?.status === 'Completed'} />
+        <ScoreValue value={entry.malScore} completed={isScoreRevealableStatus(entry.entry?.status)} />
       </span>
       <span className="series-entry-row__my-score score--mine">{entry.entry?.myScore ?? '—'}</span>
       <span className="series-entry-row__status">

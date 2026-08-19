@@ -52,7 +52,7 @@ public class RecapService(IUserAnimeEntryRepository entryRepository) : IRecapSer
         if (!rankingEligible)
             return ([], [], [], []);
 
-        var globalMean = ScoredMean(wholeList);
+        var globalMean = RecapRankingBuilder.ScoredMean(wholeList);
         var seasonRanking = globalMean is { } sm ? RecapRankingBuilder.BuildSeasonRanking(included, period, sm) : [];
         var yearRanking = period.Mode == RecapMode.MultiYear && globalMean is { } ym
             ? RecapRankingBuilder.BuildYearRanking(included, period, ym)
@@ -66,17 +66,7 @@ public class RecapService(IUserAnimeEntryRepository entryRepository) : IRecapSer
         return (seasonRanking, yearRanking, seasonTimeRanking, yearTimeRanking);
     }
 
-    // C in the Bayesian formula: my mean score across every scored entry in
-    // my whole list, not the recap period (design.md decision 3) — null
-    // only when I've scored nothing at all, in which case no group could
-    // have v > 0 either, so the rankings are trivially empty.
-    private static double? ScoredMean(List<UserAnimeEntry> wholeList)
-    {
-        var scores = wholeList.Where(e => e.MyScore is not null).Select(e => e.MyScore!.Value).ToList();
-        return scores.Count > 0 ? scores.Average() : null;
-    }
-
     private static RecapRowDto ToRow(UserAnimeEntry e) =>
         new(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.Anime.MediaType,
-            e.MyScore, e.Anime.MalScore, e.Status == WatchStatus.Completed);
+            e.MyScore, e.Anime.MalScore, e.Status.IsScoreRevealable());
 }

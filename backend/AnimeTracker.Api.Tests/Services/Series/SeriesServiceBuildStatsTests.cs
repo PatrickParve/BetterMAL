@@ -128,6 +128,52 @@ public class SeriesServiceBuildStatsTests
         Assert.Equal(0, stats.ExtrasCompleted);
     }
 
+    // score-visibility widens SeriesAverages.MainLineSettledByMe to treat
+    // Dropped as settled, and BuildStats' MainLineCompletedByMe DTO field
+    // follows that widening — but EntriesCompleted/ExtrasCompleted, which
+    // back the header's Completed/Caught up badge, stay completed-only
+    // (design.md Non-Goals). A rename touches code near the badge, so this
+    // pins both behaviours in one place (design risk 2).
+    [Fact]
+    public void MainLineCompletedByMeWidensToDroppedAfterTheRename()
+    {
+        var completed = Anime(1, totalEpisodes: 12, status: WatchStatus.Completed);
+        completed.AiringStatus = "finished_airing";
+        var dropped = Anime(2, totalEpisodes: 12, status: WatchStatus.Dropped);
+        dropped.AiringStatus = "finished_airing";
+        var mainLineMembers = new List<SeriesMember>
+        {
+            Member(completed, isMainLine: true, order: 0),
+            Member(dropped, isMainLine: true, order: 1),
+        };
+        var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 12 };
+
+        var stats = SeriesService.BuildStats(
+            mainLineMembers, [], [completed, dropped], mainLineAiredEpisodes: 24, airedByAnimeId);
+
+        Assert.True(stats.MainLineCompletedByMe);
+    }
+
+    [Fact]
+    public void EntriesCompletedStaysCompletedOnlyAfterTheRename()
+    {
+        var completed = Anime(1, totalEpisodes: 12, status: WatchStatus.Completed);
+        completed.AiringStatus = "finished_airing";
+        var dropped = Anime(2, totalEpisodes: 12, status: WatchStatus.Dropped);
+        dropped.AiringStatus = "finished_airing";
+        var mainLineMembers = new List<SeriesMember>
+        {
+            Member(completed, isMainLine: true, order: 0),
+            Member(dropped, isMainLine: true, order: 1),
+        };
+        var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 12 };
+
+        var stats = SeriesService.BuildStats(
+            mainLineMembers, [], [completed, dropped], mainLineAiredEpisodes: 24, airedByAnimeId);
+
+        Assert.Equal(1, stats.EntriesCompleted);
+    }
+
     [Fact]
     public void TiedRewatchCountsListBothInWatchOrder()
     {

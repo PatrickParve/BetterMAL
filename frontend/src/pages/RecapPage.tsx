@@ -8,13 +8,12 @@ import {
   type RecapMode,
   type RecapRowDto,
   type RecapSeasonName,
-  type RecapSeasonRankingDto,
   type RecapStatsDto,
   type RecapTimeFilter,
   type RecapTimeRankingDto,
-  type RecapYearRankingDto,
 } from '../api/types.ts'
 import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
+import { describeSeasonRanking, describeYearRanking, RankingSection } from '../components/RankingSection.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { formatRuntime, MEDIA_TYPE_ORDER, mediaTypeLabel, pickDisplayTitle, seasonLabel } from '../utils/anime.ts'
@@ -32,33 +31,6 @@ const MODE_OPTIONS: { value: RecapMode; label: string }[] = [
 // there's no MAL-catalog-style ceiling to mirror like SeasonPage's.
 const EARLIEST_YEAR = 1960
 const TOP_TEN_SIZE = 10
-// Applies uniformly to every ranking now — season, year, and both
-// time-watched rankings all cap at five with a "See all" overlay
-// (design.md decision 6, tasks.md 7.3).
-const VISIBLE_RANK_COUNT = 5
-
-// One mapping per ranking DTO, shared by its inline five-row list and its
-// overlay (design.md decision 6, tasks.md 7.2) — the two representations of
-// a ranking read from the same describe() call, so they cannot drift.
-function describeSeasonRanking(row: RecapSeasonRankingDto): RankingOverlayRow {
-  return {
-    key: `${row.year}-${row.season}`,
-    label: `${seasonLabel(row.season)} ${row.year}`,
-    meta: `${row.scoredCount} scored · ${row.weightedScore.toFixed(2)}`,
-    to: `/recap?mode=season&year=${row.year}&season=${row.season}`,
-    posters: row.topPosters,
-  }
-}
-
-function describeYearRanking(row: RecapYearRankingDto): RankingOverlayRow {
-  return {
-    key: String(row.year),
-    label: String(row.year),
-    meta: `${row.scoredCount} scored · ${row.weightedScore.toFixed(2)}`,
-    to: `/recap?mode=yearly&year=${row.year}&filter=aired`,
-    posters: row.topPosters,
-  }
-}
 
 function describeTimeRanking(row: RecapTimeRankingDto): RankingOverlayRow {
   const label = row.season ? `${seasonLabel(row.season)} ${row.year}` : String(row.year)
@@ -493,56 +465,6 @@ export function RecapPage() {
     )
   }
 
-  function renderPosters(posters: { animeId: number; title: string; pictureUrl: string | null }[]) {
-    if (posters.length === 0) return null
-    return (
-      <span className="recap-ranking-row__posters">
-        {posters.map((p) =>
-          p.pictureUrl ? (
-            <img key={p.animeId} src={p.pictureUrl} alt="" title={p.title} className="recap-ranking-row__poster" />
-          ) : (
-            <span key={p.animeId} className="recap-ranking-row__poster recap-ranking-row__poster--placeholder" title={p.title} />
-          ),
-        )}
-      </span>
-    )
-  }
-
-  function renderRankingRows(rows: RankingOverlayRow[]) {
-    return (
-      <ol className="recap-ranking-list">
-        {rows.map((row, index) => (
-          <li key={row.key} className="recap-ranking-row">
-            <Link to={row.to} className="recap-ranking-row__link">
-              <span className="recap-ranking-row__rank">#{index + 1}</span>
-              <span className="recap-ranking-row__label">{row.label}</span>
-              <span className="recap-ranking-row__meta">{row.meta}</span>
-              {renderPosters(row.posters)}
-            </Link>
-          </li>
-        ))}
-      </ol>
-    )
-  }
-
-  // One rendering for every ranking — season, year, and both time-watched
-  // levels — each capped at five with its own "See all" overlay (tasks.md
-  // 7.3-7.5), driven by the rows a describe() function already produced.
-  function renderRankingSection(title: string, noun: string, rows: RankingOverlayRow[]) {
-    const visible = rows.slice(0, VISIBLE_RANK_COUNT)
-    return (
-      <section className="recap-page__section">
-        <h2>{title}</h2>
-        {renderRankingRows(visible)}
-        {rows.length > VISIBLE_RANK_COUNT && (
-          <button type="button" className="recap-page__see-all-ranks" onClick={() => setOverlay({ title, rows })}>
-            See all {rows.length} {noun}
-          </button>
-        )}
-      </section>
-    )
-  }
-
   return (
     <div className="recap-page">
       <div className="recap-page__header">
@@ -578,23 +500,43 @@ export function RecapPage() {
 
           {(recap.seasonRanking.length > 0 || recap.yearRanking.length > 0) && (
             <div className="recap-page__ranking-pair">
-              {recap.seasonRanking.length > 0 &&
-                renderRankingSection('Season ranking', 'seasons', recap.seasonRanking.map(describeSeasonRanking))}
-              {recap.yearRanking.length > 0 &&
-                renderRankingSection('Year ranking', 'years', recap.yearRanking.map(describeYearRanking))}
+              {recap.seasonRanking.length > 0 && (
+                <RankingSection
+                  title="Season ranking"
+                  noun="seasons"
+                  rows={recap.seasonRanking.map(describeSeasonRanking)}
+                  onSeeAll={setOverlay}
+                />
+              )}
+              {recap.yearRanking.length > 0 && (
+                <RankingSection
+                  title="Year ranking"
+                  noun="years"
+                  rows={recap.yearRanking.map(describeYearRanking)}
+                  onSeeAll={setOverlay}
+                />
+              )}
             </div>
           )}
 
           {(recap.seasonTimeRanking.length > 0 || recap.yearTimeRanking.length > 0) && (
             <div className="recap-page__ranking-pair">
-              {recap.seasonTimeRanking.length > 0 &&
-                renderRankingSection(
-                  'Seasons by time watched',
-                  'seasons',
-                  recap.seasonTimeRanking.map(describeTimeRanking),
-                )}
-              {recap.yearTimeRanking.length > 0 &&
-                renderRankingSection('Years by time watched', 'years', recap.yearTimeRanking.map(describeTimeRanking))}
+              {recap.seasonTimeRanking.length > 0 && (
+                <RankingSection
+                  title="Seasons by time watched"
+                  noun="seasons"
+                  rows={recap.seasonTimeRanking.map(describeTimeRanking)}
+                  onSeeAll={setOverlay}
+                />
+              )}
+              {recap.yearTimeRanking.length > 0 && (
+                <RankingSection
+                  title="Years by time watched"
+                  noun="years"
+                  rows={recap.yearTimeRanking.map(describeTimeRanking)}
+                  onSeeAll={setOverlay}
+                />
+              )}
             </div>
           )}
 

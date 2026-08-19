@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { SeriesEntryDto } from '../api/types.ts'
-import { mediaTypeLabel, pickDisplayTitle, STATUS_CLASS, STATUS_LABELS } from '../utils/anime.ts'
+import { isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_CLASS, STATUS_LABELS } from '../utils/anime.ts'
 import { ScoreChip } from './ScoreChip.tsx'
 import { ScoreValue } from './ScoreValue.tsx'
 import { airedFigureLabel, watchedFigureLabel } from './SeriesEntryRow.tsx'
@@ -44,7 +44,7 @@ export function SeriesExtraTile({ entry, onEdit }: SeriesExtraTileProps) {
       </Link>
       <div className="series-extra-tile__chips">
         <ScoreChip role="mal" size="compact">
-          <ScoreValue value={entry.malScore} completed={entry.entry?.status === 'Completed'} />
+          <ScoreValue value={entry.malScore} completed={isScoreRevealableStatus(entry.entry?.status)} />
         </ScoreChip>
         <ScoreChip role="mine" size="compact">{entry.entry?.myScore ?? '—'}</ScoreChip>
       </div>

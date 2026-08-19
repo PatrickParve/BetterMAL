@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { Link } from 'react-router-dom'
 import type { MyListItemDto } from '../api/types.ts'
-import { airingStatusShortLabel, mediaTypeLabel, pickDisplayTitle, STATUS_CLASS } from '../utils/anime.ts'
+import { airingStatusShortLabel, isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_CLASS } from '../utils/anime.ts'
 import { ProgressBar } from './ProgressBar.tsx'
 import { ScoreValue } from './ScoreValue.tsx'
 
@@ -87,7 +87,7 @@ export const MyListRow = memo(function MyListRow({
         </select>
       </span>
       <span className="my-list-row__mal-score score--mal">
-        <ScoreValue value={item.malScore} completed={item.entry.status === 'Completed'} />
+        <ScoreValue value={item.malScore} completed={isScoreRevealableStatus(item.entry.status)} />
       </span>
       <button type="button" className="my-list-row__edit" onClick={() => onEdit(item)}>
         Edit

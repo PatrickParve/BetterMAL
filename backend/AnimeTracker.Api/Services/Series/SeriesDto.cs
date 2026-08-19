@@ -56,7 +56,11 @@ public record SeriesScoresDto(
 /// nothing — so it can never exceed <c>MainLineEpisodeTotal</c>.
 /// <c>MainLineCompletedByMe</c> mirrors the frontend's
 /// <c>isGroupCompleted</c> convention over the main line (design.md decision
-/// 7). <c>ExtrasCompleted</c> counts extras marked Completed, the extras-side
+/// 7) — despite the field's name, it's true when every finished-airing
+/// main-line member is Completed *or* Dropped
+/// (profile-navbar-and-dropped-scores design.md decision 3); the name is
+/// kept as the wire contract for the frontend's
+/// <c>series.stats.mainLineCompletedByMe</c>. <c>ExtrasCompleted</c> counts extras marked Completed, the extras-side
 /// twin of <c>EntriesCompleted</c>. The highest-scored/most-rewatched/favourite/studios/genres figures
 /// span every member, main line and extras alike; the highest-scored and
 /// most-rewatched lists carry every tied entry rather than one arbitrary

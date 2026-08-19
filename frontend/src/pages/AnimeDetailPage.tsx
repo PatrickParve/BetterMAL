@@ -16,6 +16,7 @@ import {
 } from "../context/CompletionPromptContext.tsx";
 import { usePageData } from "../hooks/usePageData.ts";
 import {
+  isScoreRevealableStatus,
   mediaTypeLabel,
   pickDisplayTitle,
   SERIES_TRAVERSAL_RELATIONS,
@@ -413,7 +414,7 @@ export function AnimeDetailPage() {
               <p>
                 MAL score:{" "}
                 <span className="score--mal">
-                  <ScoreValue value={detail.malScore} completed={detail.entry?.status === 'Completed'} />
+                  <ScoreValue value={detail.malScore} completed={isScoreRevealableStatus(detail.entry?.status)} />
                 </span>
               </p>
               <p>Rank: {detail.rank ? `#${detail.rank}` : "—"}</p>

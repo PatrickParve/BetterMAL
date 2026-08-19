@@ -224,7 +224,7 @@ export function SettingsPage() {
       <section className="settings-box">
         <h2>Score display</h2>
         <p className="settings-box__hint">
-          Reveal MAL scores for shows you've completed even while the global "hide scores" toggle is on.
+          Reveal MAL scores for shows you've completed or dropped even while the global "hide scores" toggle is on.
         </p>
         <label className="settings-toggle">
           <input
@@ -232,7 +232,7 @@ export function SettingsPage() {
             checked={alwaysShowCompletedScores}
             onChange={toggleAlwaysShowCompletedScores}
           />
-          Always show MAL scores for completed shows
+          Always show MAL scores for completed and dropped shows
         </label>
       </section>
 

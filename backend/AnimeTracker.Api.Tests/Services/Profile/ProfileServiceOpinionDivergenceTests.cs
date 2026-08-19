@@ -28,12 +28,13 @@ public class ProfileServiceOpinionDivergenceTests
             new SeriesRankingLookup(db),
             new FakeSeriesBuildTrigger());
 
-    private static UserAnimeEntry Rated(int animeId, string title, int myScore, double malScore) =>
+    private static UserAnimeEntry Rated(
+        int animeId, string title, int myScore, double malScore, WatchStatus status = WatchStatus.Completed) =>
         new()
         {
             AnimeId = animeId,
             Anime = new AnimeMetadata { Id = animeId, Title = title, MalScore = malScore },
-            Status = WatchStatus.Completed,
+            Status = status,
             MyScore = myScore,
         };
 
@@ -118,6 +119,20 @@ public class ProfileServiceOpinionDivergenceTests
         var section = await CreateService(db, entries).GetProfileAsync();
 
         Assert.Equal(["apple", "zebra"], section.TheyLikedItIDidnt.Select(i => i.Title));
+    }
+
+    [Fact]
+    public async Task DroppedEntryInEitherListCarriesTheRevealFlag()
+    {
+        using var db = CreateDb();
+        var entries = MixedPopulation();
+        entries[0] = Rated(1, "Slam Dunk", 3, 9.0, WatchStatus.Dropped); // TheyLikedItIDidnt member
+        entries[4] = Rated(5, "Kanojo5", 9, 6.3, WatchStatus.Dropped); // ILikedItTheyDidnt member
+
+        var section = await CreateService(db, entries).GetProfileAsync();
+
+        Assert.True(section.TheyLikedItIDidnt.Single(i => i.AnimeId == 1).IsCompleted);
+        Assert.True(section.ILikedItTheyDidnt.Single(i => i.AnimeId == 5).IsCompleted);
     }
 
     [Fact]

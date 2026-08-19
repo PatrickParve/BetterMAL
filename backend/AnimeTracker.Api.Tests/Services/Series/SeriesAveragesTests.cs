@@ -91,20 +91,45 @@ public class SeriesAveragesTests
 
     [Theory]
     [InlineData("finished_airing", WatchStatus.Completed, true)]
+    [InlineData("finished_airing", WatchStatus.Dropped, true)]
     [InlineData("finished_airing", WatchStatus.Watching, false)]
+    [InlineData("finished_airing", WatchStatus.OnHold, false)]
+    [InlineData("finished_airing", WatchStatus.PlanToWatch, false)]
+    [InlineData("finished_airing", null, false)]
     [InlineData("currently_airing", null, false)]
-    public void MainLineCompletedByMe_RequiresEveryFinishedAiringMemberCompleted(
+    public void MainLineSettledByMe_RequiresEveryFinishedAiringMemberSettled(
         string airingStatus, WatchStatus? entryStatus, bool expected)
     {
-        var result = SeriesAverages.MainLineCompletedByMe([(airingStatus, entryStatus)]);
+        var result = SeriesAverages.MainLineSettledByMe([(airingStatus, entryStatus)]);
 
         Assert.Equal(expected, result);
     }
 
     [Fact]
-    public void MainLineCompletedByMe_FalseWhenNoMemberHasFinishedAiring()
+    public void MainLineSettledByMe_FalseWhenNoMemberHasFinishedAiring()
     {
-        var result = SeriesAverages.MainLineCompletedByMe([("currently_airing", WatchStatus.Watching), ("not_yet_aired", null)]);
+        var result = SeriesAverages.MainLineSettledByMe([("currently_airing", WatchStatus.Watching), ("not_yet_aired", null)]);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void MainLineSettledByMe_TrueWhenFinishedAiringMembersAreAMixOfCompletedAndDropped()
+    {
+        var result = SeriesAverages.MainLineSettledByMe(
+            [("finished_airing", WatchStatus.Completed), ("finished_airing", WatchStatus.Dropped)]);
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void MainLineSettledByMe_FalseWhenAFinishedAiringMemberIsAbsentFromMyList()
+    {
+        // EntryStatus null means the entry isn't in my list at all — distinct
+        // from "not completed": the rule asks what I decided, and an absent
+        // entry carries no decision (design.md decision 3).
+        var result = SeriesAverages.MainLineSettledByMe(
+            [("finished_airing", WatchStatus.Completed), ("finished_airing", null)]);
 
         Assert.False(result);
     }

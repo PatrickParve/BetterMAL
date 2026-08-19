@@ -17,7 +17,7 @@ import { SeriesExtraTile } from '../components/SeriesExtraTile.tsx'
 import { SeriesTimeline } from '../components/SeriesTimeline.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
-import { formatRuntime, mediaTypeLabel, pickDisplayTitle } from '../utils/anime.ts'
+import { formatRuntime, isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle } from '../utils/anime.ts'
 import './SeriesPage.css'
 
 const NO_INFO = '—'
@@ -159,11 +159,15 @@ function extrasGroupKey(group: { mediaType: string | null }, index: number): str
 
 // Mirrors ScoreValue's own per-row `completed` convention (only reveals when
 // the user has also turned on "always show completed scores"): a group
-// average counts as completed when every member that's actually out —
-// finished airing — is marked Completed in my list. Entries not yet aired or
-// still airing don't count against it, since they can't be completed yet.
+// average counts as settled when it has at least one finished-airing member
+// and every finished-airing member is marked Completed or Dropped in my
+// list — Dropped counts identically to Completed (score-visibility).
+// Entries not yet aired or still airing don't count against it, since they
+// can't be settled yet; a finished-airing entry that's not in my list at
+// all still fails, since `entry` is undefined there.
 function isGroupCompleted(entries: SeriesEntryDto[]): boolean {
-  return entries.filter((e) => e.airingStatus === 'finished_airing').every((e) => e.entry?.status === 'Completed')
+  const finishedAiring = entries.filter((e) => e.airingStatus === 'finished_airing')
+  return finishedAiring.length > 0 && finishedAiring.every((e) => isScoreRevealableStatus(e.entry?.status))
 }
 
 // A collapsed More group hides the noise of untouched extras, but never
@@ -196,6 +200,12 @@ function malGroupRevealed(group: SeriesEntryDto[], series: SeriesDto): boolean {
 // The highest-MAL-score box reveals in full when the entry holding it is one
 // I've both completed and scored, since I already know that score (design.md
 // decision 8) — distinct from isGroupCompleted, which only checks status.
+// Deliberately stays completed-only even though score-visibility now treats
+// Dropped as settled everywhere else: this box withholds the entry's
+// *title and link*, not merely a number, guarding against learning which
+// entry is the series' best — a spoiler about entries still ahead of me,
+// not a score I've already settled (profile-navbar-and-dropped-scores
+// design.md Non-Goals).
 function isCompletedAndScored(entry: SeriesEntryDto): boolean {
   return entry.entry?.status === 'Completed' && (entry.entry?.myScore ?? 0) > 0
 }
