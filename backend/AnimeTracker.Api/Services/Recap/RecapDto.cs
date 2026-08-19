@@ -35,14 +35,16 @@ public record RecapStatsDto(
     List<RecapHotTakeDto> HotTakes);
 
 /// <summary>One of a ranking's top-three posters (design.md "Top three
-/// posters for the leading season and year") — attached only to the leading
-/// row (tasks.md 4.3).</summary>
+/// posters for every ranked season and year") — attached to every row of the
+/// season and year rankings alike (polish-recap-page design.md decision
+/// 3).</summary>
 public record RecapRankingPosterDto(int AnimeId, string Title, string? PictureUrl);
 
 /// <summary>One ranked season, best first. <c>WeightedScore</c> is the
 /// Bayesian average (design.md decision "Bayesian ranking of seasons and
 /// years"), rounded for display; <c>ScoredCount</c> is <c>v</c> in that
-/// formula. <c>TopPosters</c> is empty for every row but the leader.</summary>
+/// formula. <c>TopPosters</c> carries every row, not only the leader's
+/// (polish-recap-page design.md decision 3).</summary>
 public record RecapSeasonRankingDto(
     int Year,
     string Season,
@@ -65,8 +67,10 @@ public record RecapYearRankingDto(
 /// <see cref="RecapStatsDto.TimeSpentSeconds"/>, so a group's rows always sum
 /// to the stat block's total. Unlike the score rankings, a group need not
 /// hold any scored anime to be ranked here — only watched ones.
-/// <c>TopPosters</c> is empty for every row but the leader, and picked by
-/// episodes watched rather than score.</summary>
+/// <c>TopPosters</c> is empty for every row at the season level; at the year
+/// level it carries the leader's posters (three highest-scored anime, picked
+/// by episodes watched rather than score) and is empty below rank
+/// one.</summary>
 public record RecapTimeRankingDto(
     int Year,
     string? Season,

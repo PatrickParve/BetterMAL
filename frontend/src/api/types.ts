@@ -644,7 +644,7 @@ export type RecapRankingPosterDto = {
   pictureUrl: string | null
 }
 
-// topPosters is empty for every row but the leader (rank 1).
+// topPosters carries every row, not only the leader's.
 export type RecapSeasonRankingDto = {
   year: number
   season: string
@@ -663,6 +663,8 @@ export type RecapYearRankingDto = {
 // One ranked season or year, largest time watched first — `season` is null
 // at the year level (design.md decision 7). Unlike the score rankings, a
 // group need not hold any scored anime to appear here, only watched ones.
+// topPosters is always empty at the season level; at the year level it
+// carries the leader's posters and is empty below rank one.
 export type RecapTimeRankingDto = {
   year: number
   season: string | null

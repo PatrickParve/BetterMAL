@@ -35,8 +35,11 @@ public static class RecapStatsBuilder
             HotTakes: BuildHotTakes(included, wholeList));
     }
 
-    // D4: no label gates, no SD threshold — just the period's most divergent
-    // picks, however divergent that turns out to be. Ties (equal absolute
+    // D4 (polish-recap-page design.md decision 2): a hot take must clear the
+    // same divergence-and-label gate the profile page's opinion-divergence
+    // lists apply (ScoreDivergence.IsOpinionDivergent), not just be the
+    // period's most divergent pick — so the recap and the profile page can
+    // never disagree about what counts as a hot take. Ties (equal absolute
     // divergence) break by title for a stable order.
     private static List<RecapHotTakeDto> BuildHotTakes(List<UserAnimeEntry> included, List<UserAnimeEntry> wholeList)
     {
@@ -46,6 +49,7 @@ public static class RecapStatsBuilder
         return included
             .Where(e => e.MyScore is not null && e.Anime.MalScore is not null)
             .Select(e => (Entry: e, Divergence: context.DivergenceOf(e)))
+            .Where(x => ScoreDivergence.IsOpinionDivergent(x.Entry, x.Divergence))
             .OrderByDescending(x => Math.Abs(x.Divergence))
             .ThenBy(x => x.Entry.Anime.Title, StringComparer.OrdinalIgnoreCase)
             .Take(HotTakeCount)

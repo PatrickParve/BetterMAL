@@ -8,7 +8,7 @@ import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
 import { useLatestRequest } from '../hooks/useLatestRequest.ts'
 import { usePageData } from '../hooks/usePageData.ts'
-import { MEDIA_TYPE_ORDER, mediaTypeLabel } from '../utils/anime.ts'
+import { MEDIA_TYPE_ORDER, mediaTypeLabel, seasonPointIndex, shiftSeason } from '../utils/anime.ts'
 import './SeasonPage.css'
 
 interface SeasonReadState {
@@ -51,20 +51,6 @@ const FUTURE_SEASON_WINDOW = 2
 function currentSeasonTarget(): { year: number; season: SeasonName } {
   const now = new Date()
   return { year: now.getFullYear(), season: SEASON_ORDER[Math.floor(now.getMonth() / 3)] }
-}
-
-function shiftSeason(year: number, season: SeasonName, delta: number): { year: number; season: SeasonName } {
-  const total = year * 4 + SEASON_ORDER.indexOf(season) + delta
-  const nextYear = Math.floor(total / 4)
-  const nextIndex = ((total % 4) + 4) % 4
-  return { year: nextYear, season: SEASON_ORDER[nextIndex] }
-}
-
-// A single monotonically increasing integer for a (year, season) point, so
-// the ceiling can be compared against the viewed season with plain integer
-// arithmetic — mirrors the backend's SeasonCalendar.GetSeasonPointIndex.
-function seasonPointIndex(year: number, season: SeasonName): number {
-  return year * 4 + SEASON_ORDER.indexOf(season)
 }
 
 function seasonLabel(season: SeasonName): string {
@@ -216,10 +202,14 @@ export function SeasonPage() {
 
   // At or past the ceiling, keeping the viewed year in the list so a
   // URL-addressed season past the horizon still shows its own year rather
-  // than a <select> with a value it doesn't offer (task 7.3).
+  // than a <select> with a value it doesn't offer (task 7.3). Floored the
+  // same way below EARLIEST_YEAR (polish-recap-page tasks.md 4.2) — a recap
+  // can link to a season page for a year the season browser wouldn't
+  // otherwise offer.
   const yearOptions = useMemo(() => {
+    const earliest = Math.min(EARLIEST_YEAR, year)
     const latest = Math.max(ceiling.year, year)
-    return Array.from({ length: latest - EARLIEST_YEAR + 1 }, (_, i) => latest - i)
+    return Array.from({ length: latest - earliest + 1 }, (_, i) => latest - i)
   }, [year, ceiling.year])
 
   // Within the ceiling's own year, cut the season list to the ceiling's

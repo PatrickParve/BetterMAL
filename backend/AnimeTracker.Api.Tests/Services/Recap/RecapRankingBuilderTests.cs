@@ -120,7 +120,7 @@ public class RecapRankingBuilderTests
     }
 
     [Fact]
-    public void OnlyTheLeaderCarriesPosters()
+    public void EveryRankedRowCarriesPosters()
     {
         var winner = Enumerable.Range(1, 5).Select(id => Entry(id, new DateOnly(2022, 4, 15), myScore: 10)).ToList();
         var runnerUp = Enumerable.Range(6, 5).Select(id => Entry(id, new DateOnly(2022, 1, 15), myScore: 3)).ToList();
@@ -132,7 +132,9 @@ public class RecapRankingBuilderTests
         Assert.Equal("spring", ranking[0].Season);
         Assert.NotEmpty(ranking[0].TopPosters);
         Assert.True(ranking[0].TopPosters.Count <= 3);
-        Assert.Empty(ranking[1].TopPosters);
+        Assert.Equal("winter", ranking[1].Season);
+        Assert.NotEmpty(ranking[1].TopPosters);
+        Assert.True(ranking[1].TopPosters.Count <= 3);
     }
 
     // BuildSeasonTimeRanking / BuildYearTimeRanking (tasks.md 2.3-2.8,
@@ -174,7 +176,7 @@ public class RecapRankingBuilderTests
     }
 
     [Fact]
-    public void OnlyTheLeadingTimeRowCarriesPostersChosenByEpisodesWatched()
+    public void NoSeasonTimeRankingRowCarriesPosters()
     {
         var leaderPick = WatchedEntry(1, new DateOnly(2022, 4, 15), episodesWatched: 24, durationSeconds: 1200, myScore: 3);
         var leaderOther = WatchedEntry(2, new DateOnly(2022, 4, 15), episodesWatched: 2, durationSeconds: 1200, myScore: 10);
@@ -185,6 +187,22 @@ public class RecapRankingBuilderTests
 
         Assert.Equal(2, ranking.Count);
         Assert.Equal("spring", ranking[0].Season);
+        Assert.Empty(ranking[0].TopPosters);
+        Assert.Empty(ranking[1].TopPosters);
+    }
+
+    [Fact]
+    public void OnlyTheLeadingYearTimeRowCarriesPostersChosenByEpisodesWatched()
+    {
+        var leaderPick = WatchedEntry(1, new DateOnly(2022, 4, 15), episodesWatched: 24, durationSeconds: 1200, myScore: 3);
+        var leaderOther = WatchedEntry(2, new DateOnly(2022, 4, 15), episodesWatched: 2, durationSeconds: 1200, myScore: 10);
+        var runnerUp = WatchedEntry(3, new DateOnly(2021, 1, 15), episodesWatched: 5, durationSeconds: 1200, myScore: 9);
+        var included = new List<UserAnimeEntry> { leaderPick, leaderOther, runnerUp };
+
+        var ranking = RecapRankingBuilder.BuildYearTimeRanking(included, RecapPeriod.MultiYear(2021, 2022));
+
+        Assert.Equal(2, ranking.Count);
+        Assert.Equal(2022, ranking[0].Year);
         Assert.NotEmpty(ranking[0].TopPosters);
         Assert.Equal(leaderPick.AnimeId, ranking[0].TopPosters[0].AnimeId);
         Assert.Empty(ranking[1].TopPosters);

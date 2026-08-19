@@ -16,7 +16,15 @@ import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOve
 import { describeSeasonRanking, describeYearRanking, RankingSection } from '../components/RankingSection.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
-import { formatRuntime, MEDIA_TYPE_ORDER, mediaTypeLabel, pickDisplayTitle, seasonLabel } from '../utils/anime.ts'
+import {
+  formatRuntime,
+  MEDIA_TYPE_ORDER,
+  mediaTypeLabel,
+  pickDisplayTitle,
+  seasonLabel,
+  seasonPointIndex,
+  shiftSeason,
+} from '../utils/anime.ts'
 import './RecapPage.css'
 
 type RankingBasis = 'mine' | 'mal'
@@ -202,8 +210,17 @@ export function RecapPage() {
     )
   }
 
+  // Period stepper arrows (design.md decision 7): bounded by the recap's own
+  // widened year range — the same [min(EARLIEST_YEAR, selected),
+  // max(currentYear, selected)] range yearOptions() computes — so an arrow
+  // disables exactly when the select it sits beside has nothing further to
+  // offer. Season and yearly modes only; a multi-year range has no single
+  // step.
   function renderPeriodControls() {
     const years = yearOptions(Math.min(EARLIEST_YEAR, startYear, endYear), Math.max(currentYear, startYear, endYear))
+    const lowYear = Math.min(EARLIEST_YEAR, startYear)
+    const highYear = Math.max(currentYear, startYear)
+
     return (
       <div className="recap-page__period-controls">
         {mode === 'multiYear' && (
@@ -226,16 +243,45 @@ export function RecapPage() {
           </>
         )}
         {mode === 'yearly' && (
-          <select value={startYear} onChange={(e) => updateParams({ year: e.target.value })} aria-label="Year">
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
+          <div className="recap-page__period-nav">
+            <button
+              type="button"
+              onClick={() => updateParams({ year: String(startYear - 1) })}
+              aria-label="Previous year"
+              disabled={startYear <= lowYear}
+            >
+              &lsaquo;
+            </button>
+            <select value={startYear} onChange={(e) => updateParams({ year: e.target.value })} aria-label="Year">
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => updateParams({ year: String(startYear + 1) })}
+              aria-label="Next year"
+              disabled={startYear >= highYear}
+            >
+              &rsaquo;
+            </button>
+          </div>
         )}
         {mode === 'season' && (
-          <>
+          <div className="recap-page__period-nav">
+            <button
+              type="button"
+              onClick={() => {
+                const next = shiftSeason(startYear, season, -1)
+                updateParams({ year: String(next.year), season: next.season })
+              }}
+              aria-label="Previous season"
+              disabled={seasonPointIndex(startYear, season) <= seasonPointIndex(lowYear, 'winter')}
+            >
+              &lsaquo;
+            </button>
             <select value={season} onChange={(e) => updateParams({ season: e.target.value })} aria-label="Season">
               {RECAP_SEASONS.map((s) => (
                 <option key={s} value={s}>
@@ -250,9 +296,29 @@ export function RecapPage() {
                 </option>
               ))}
             </select>
-          </>
+            <button
+              type="button"
+              onClick={() => {
+                const next = shiftSeason(startYear, season, 1)
+                updateParams({ year: String(next.year), season: next.season })
+              }}
+              aria-label="Next season"
+              disabled={seasonPointIndex(startYear, season) >= seasonPointIndex(highYear, 'fall')}
+            >
+              &rsaquo;
+            </button>
+          </div>
         )}
       </div>
+    )
+  }
+
+  function renderSeasonPageLink() {
+    if (mode !== 'season') return null
+    return (
+      <Link to={`/season?year=${startYear}&season=${season}`} className="recap-page__season-link">
+        Browse {seasonLabel(season)} {startYear} on the season page
+      </Link>
     )
   }
 
@@ -300,14 +366,17 @@ export function RecapPage() {
       { label: 'Time spent', value: formatRuntime(stats.timeSpentSeconds) },
     ]
     return (
-      <div className="recap-page__stats">
-        {tiles.map((tile) => (
-          <div key={tile.label} className="recap-page__stat">
-            <span className="recap-page__stat-value">{tile.value}</span>
-            <span className="recap-page__stat-label">{tile.label}</span>
-          </div>
-        ))}
-      </div>
+      <section className="recap-page__section">
+        <h2>Stats</h2>
+        <div className="recap-page__stats">
+          {tiles.map((tile) => (
+            <div key={tile.label} className="recap-page__stat">
+              <span className="recap-page__stat-value">{tile.value}</span>
+              <span className="recap-page__stat-label">{tile.label}</span>
+            </div>
+          ))}
+        </div>
+      </section>
     )
   }
 
@@ -465,16 +534,107 @@ export function RecapPage() {
     )
   }
 
+  function renderSeasonRankingSection(recap: RecapDto) {
+    if (recap.seasonRanking.length === 0) return null
+    return (
+      <RankingSection
+        title="Season ranking"
+        noun="seasons"
+        rows={recap.seasonRanking.map(describeSeasonRanking)}
+        onSeeAll={setOverlay}
+      />
+    )
+  }
+
+  function renderSeasonTimeRankingSection(recap: RecapDto) {
+    if (recap.seasonTimeRanking.length === 0) return null
+    return (
+      <RankingSection
+        title="Seasons by time watched"
+        noun="seasons"
+        rows={recap.seasonTimeRanking.map(describeTimeRanking)}
+        onSeeAll={setOverlay}
+      />
+    )
+  }
+
+  function renderYearRankingSection(recap: RecapDto) {
+    if (recap.yearRanking.length === 0) return null
+    return (
+      <RankingSection
+        title="Year ranking"
+        noun="years"
+        rows={recap.yearRanking.map(describeYearRanking)}
+        onSeeAll={setOverlay}
+      />
+    )
+  }
+
+  function renderYearTimeRankingSection(recap: RecapDto) {
+    if (recap.yearTimeRanking.length === 0) return null
+    return (
+      <RankingSection
+        title="Years by time watched"
+        noun="years"
+        rows={recap.yearTimeRanking.map(describeTimeRanking)}
+        onSeeAll={setOverlay}
+      />
+    )
+  }
+
+  // Rankings grouped into two columns (design.md decision 4), with one
+  // exception: a yearly recap has no year-level rankings at all, so rather
+  // than stacking its two season-level rankings full-width in a single
+  // column, they sit side by side — the score ranking and the time-watched
+  // ranking directly comparing a period's seasons. A multi-year recap keeps
+  // the season-column/year-column grouping. Either way the grid collapses to
+  // one column when only one side has anything to show (RecapPage.css
+  // :has(> :only-child)).
+  function renderRankings(recap: RecapDto) {
+    if (mode === 'yearly') {
+      const seasonScore = renderSeasonRankingSection(recap)
+      const seasonTime = renderSeasonTimeRankingSection(recap)
+      if (!seasonScore && !seasonTime) return null
+      return (
+        <div className="recap-page__rankings">
+          {seasonScore}
+          {seasonTime}
+        </div>
+      )
+    }
+
+    const seasonColumn = (recap.seasonRanking.length > 0 || recap.seasonTimeRanking.length > 0) && (
+      <div className="recap-page__ranking-column">
+        {renderSeasonRankingSection(recap)}
+        {renderSeasonTimeRankingSection(recap)}
+      </div>
+    )
+    const yearColumn = (recap.yearRanking.length > 0 || recap.yearTimeRanking.length > 0) && (
+      <div className="recap-page__ranking-column">
+        {renderYearRankingSection(recap)}
+        {renderYearTimeRankingSection(recap)}
+      </div>
+    )
+    if (!seasonColumn && !yearColumn) return null
+    return (
+      <div className="recap-page__rankings">
+        {seasonColumn}
+        {yearColumn}
+      </div>
+    )
+  }
+
   return (
     <div className="recap-page">
       <div className="recap-page__header">
-        <h1>Recap</h1>
+        <h1>{periodLabel} recap</h1>
         {renderModeTabs()}
       </div>
 
       <div className="recap-page__controls">
         {renderPeriodControls()}
         {renderFilterToggle()}
+        {renderSeasonPageLink()}
       </div>
 
       {loading && !recap && <p className="recap-page__loading">Loading&hellip;</p>}
@@ -487,58 +647,16 @@ export function RecapPage() {
 
       {recap && recap.items.length > 0 && (
         <>
-          <h2 className="recap-page__period-label">{periodLabel}</h2>
-
-          {/* Lead section (design.md decision 5, tasks.md 6.1-6.2): the top
-              anime leads, with the stat block beside it — stats first in DOM
-              order so a narrow display (where the grid collapses to one
-              column) stacks stats above the top anime. */}
+          {/* Lead section (design.md decision 5): the top anime leads, with
+              the stat block beside it — top anime first in DOM order so a
+              narrow display (where the grid collapses to one column) stacks
+              the top anime above the stats. */}
           <div className="recap-page__lead">
-            {renderStats(recap.stats)}
             {renderTopTen(recap)}
+            {renderStats(recap.stats)}
           </div>
 
-          {(recap.seasonRanking.length > 0 || recap.yearRanking.length > 0) && (
-            <div className="recap-page__ranking-pair">
-              {recap.seasonRanking.length > 0 && (
-                <RankingSection
-                  title="Season ranking"
-                  noun="seasons"
-                  rows={recap.seasonRanking.map(describeSeasonRanking)}
-                  onSeeAll={setOverlay}
-                />
-              )}
-              {recap.yearRanking.length > 0 && (
-                <RankingSection
-                  title="Year ranking"
-                  noun="years"
-                  rows={recap.yearRanking.map(describeYearRanking)}
-                  onSeeAll={setOverlay}
-                />
-              )}
-            </div>
-          )}
-
-          {(recap.seasonTimeRanking.length > 0 || recap.yearTimeRanking.length > 0) && (
-            <div className="recap-page__ranking-pair">
-              {recap.seasonTimeRanking.length > 0 && (
-                <RankingSection
-                  title="Seasons by time watched"
-                  noun="seasons"
-                  rows={recap.seasonTimeRanking.map(describeTimeRanking)}
-                  onSeeAll={setOverlay}
-                />
-              )}
-              {recap.yearTimeRanking.length > 0 && (
-                <RankingSection
-                  title="Years by time watched"
-                  noun="years"
-                  rows={recap.yearTimeRanking.map(describeTimeRanking)}
-                  onSeeAll={setOverlay}
-                />
-              )}
-            </div>
-          )}
+          {renderRankings(recap)}
 
           {renderHotTakes(recap.stats.hotTakes)}
         </>

@@ -47,9 +47,8 @@ public static class RecapRankingBuilder
             .ToList();
 
         return ranked
-            .Select((c, index) => new RecapSeasonRankingDto(
-                c.Year, c.Season, c.Scored.Count, Math.Round(c.Weighted, 2),
-                index == 0 ? TopPosters(c.Scored) : []))
+            .Select(c => new RecapSeasonRankingDto(
+                c.Year, c.Season, c.Scored.Count, Math.Round(c.Weighted, 2), TopPosters(c.Scored)))
             .ToList();
     }
 
@@ -68,9 +67,8 @@ public static class RecapRankingBuilder
             .ToList();
 
         return ranked
-            .Select((c, index) => new RecapYearRankingDto(
-                c.Year, c.Scored.Count, Math.Round(c.Weighted, 2),
-                index == 0 ? TopPosters(c.Scored) : []))
+            .Select(c => new RecapYearRankingDto(
+                c.Year, c.Scored.Count, Math.Round(c.Weighted, 2), TopPosters(c.Scored)))
             .ToList();
     }
 
@@ -93,6 +91,12 @@ public static class RecapRankingBuilder
     // D7/D8: unlike the score rankings, no scored-anime requirement — a group
     // is ranked whenever it has any time watched at all, and ties break by
     // episodes watched then chronologically for a stable order.
+    //
+    // No row carries posters (polish-recap-page follow-up): once this ranking
+    // sits beside the season score ranking rather than stacked full-width
+    // below it, even the leader's three posters made the row cramped next to
+    // its narrower column-mate. The year-level BuildYearTimeRanking below is
+    // unaffected and keeps its leader-only posters.
     public static List<RecapTimeRankingDto> BuildSeasonTimeRanking(List<UserAnimeEntry> airedIncluded, RecapPeriod period)
     {
         var byPoint = airedIncluded.ToLookup(e => SeasonCalendar.GetSeasonFor(e.Anime.AiredFrom!.Value));
@@ -107,9 +111,7 @@ public static class RecapRankingBuilder
             .ToList();
 
         return ranked
-            .Select((c, index) => new RecapTimeRankingDto(
-                c.Year, c.Season, c.Time, c.Episodes,
-                index == 0 ? TopPostersByTime(c.Group) : []))
+            .Select(c => new RecapTimeRankingDto(c.Year, c.Season, c.Time, c.Episodes, []))
             .ToList();
     }
 

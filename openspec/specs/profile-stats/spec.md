@@ -929,7 +929,7 @@ Each anime SHALL be attributed to the season and the year its air date falls in 
 
 Both rankings SHALL rank on the same Bayesian weighted average the recap page's season and year rankings use, with the same trust thresholds — 5 for a season, 20 for a year — and the same global mean `C`, my mean score across every scored entry in my list. A season's or year's weighted score on the profile page SHALL therefore equal the score a recap covering that same season or year reports for it, so the two surfaces can never disagree. Ties SHALL be broken by the number of scored anime, then chronologically, so the order is stable across reloads.
 
-Each ranked row SHALL show its rank, its name (season and year, or the year), how many of my anime it was computed over, and the weighted score it was ranked on. The top-ranked season and the top-ranked year SHALL each additionally show the posters of my three highest-scored anime from it — fewer when fewer qualify — and ranks below first SHALL show no posters. Following a row SHALL open the recap for that season or year.
+Each ranked row SHALL show its rank, its name (season and year, or the year), how many of my anime it was computed over, and the weighted score it was ranked on. **Every** ranked row SHALL additionally show the posters of my three highest-scored anime from that season or year — fewer when fewer qualify — rather than only the top-ranked row, so each row is illustrated, both inline and in the overlay. Following a row SHALL open the recap for that season or year.
 
 At most five rows SHALL be shown in each ranking. When more than five qualify, that ranking SHALL offer a control that opens an overlay listing every qualifying season or year in rank order — the same overlay treatment the recap page's rankings use.
 
@@ -969,13 +969,17 @@ When neither ranking has a single qualifying group — nothing I scored carries 
 - **WHEN** only four seasons qualify
 - **THEN** all four are shown and no overlay control is offered
 
-#### Scenario: Only the leader is illustrated
+#### Scenario: Every row is illustrated
 - **WHEN** a ranking shows five rows
-- **THEN** only the first shows the posters of my three highest-scored anime from it
+- **THEN** each of the five shows the posters of my three highest-scored anime from that season or year
+
+#### Scenario: The overlay is illustrated too
+- **WHEN** I open the overlay listing every qualifying season or year
+- **THEN** each of its rows shows posters under the same rule as the inline rows
 
 #### Scenario: Fewer than three posters available
-- **WHEN** the top-ranked season holds only two scored anime
-- **THEN** two posters are shown
+- **WHEN** a ranked season holds only two scored anime
+- **THEN** that row shows two posters
 
 #### Scenario: Opening a ranked row
 - **WHEN** I follow a row of either ranking

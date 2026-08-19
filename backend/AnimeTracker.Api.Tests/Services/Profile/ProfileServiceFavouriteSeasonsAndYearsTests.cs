@@ -90,7 +90,7 @@ public class ProfileServiceFavouriteSeasonsAndYearsTests
     }
 
     [Fact]
-    public async Task OnlyRankOneCarriesPosters()
+    public async Task EveryRankedRowCarriesPosters()
     {
         using var db = CreateDb();
         List<UserAnimeEntry> entries =
@@ -104,7 +104,7 @@ public class ProfileServiceFavouriteSeasonsAndYearsTests
 
         Assert.Equal(2, profile.FavouriteYears.Count);
         Assert.NotEmpty(profile.FavouriteYears[0].TopPosters);
-        Assert.Empty(profile.FavouriteYears[1].TopPosters);
+        Assert.NotEmpty(profile.FavouriteYears[1].TopPosters);
     }
 
     [Fact]

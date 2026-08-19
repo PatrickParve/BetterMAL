@@ -1,4 +1,4 @@
-import type { WatchStatus } from '../api/types.ts'
+import { RECAP_SEASONS, type RecapSeasonName, type WatchStatus } from '../api/types.ts'
 
 // Prefer the English title wherever an anime title is displayed, falling
 // back to the default (usually romaji/native) title when MAL has none.
@@ -101,6 +101,29 @@ export function mediaTypeLabel(raw: string | null | undefined): string {
 // indicator), both of which name a recap's season the same way.
 export function seasonLabel(season: string): string {
   return season.charAt(0).toUpperCase() + season.slice(1)
+}
+
+// Steps a (year, season) point by `delta` seasons, crossing year boundaries
+// as needed — e.g. delta=1 from fall rolls into winter of the next year.
+// Moved out of SeasonPage.tsx (polish-recap-page design.md decision 7) so
+// RecapPage's period stepper can share the same "what is the season after
+// fall" arithmetic rather than reimplementing it.
+export function shiftSeason(
+  year: number,
+  season: RecapSeasonName,
+  delta: number,
+): { year: number; season: RecapSeasonName } {
+  const total = year * 4 + RECAP_SEASONS.indexOf(season) + delta
+  const nextYear = Math.floor(total / 4)
+  const nextIndex = ((total % 4) + 4) % 4
+  return { year: nextYear, season: RECAP_SEASONS[nextIndex] }
+}
+
+// A single monotonically increasing integer for a (year, season) point, so a
+// ceiling/floor can be compared against a viewed season with plain integer
+// arithmetic — mirrors the backend's SeasonCalendar.GetSeasonPointIndex.
+export function seasonPointIndex(year: number, season: RecapSeasonName): number {
+  return year * 4 + RECAP_SEASONS.indexOf(season)
 }
 
 // e.g. 1548 minutes -> "1d 1h 48min" — once a day is present the hours

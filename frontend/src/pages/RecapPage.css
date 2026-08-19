@@ -89,11 +89,45 @@
   opacity: 0.6;
 }
 
-.recap-page__period-label {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
+/* Period stepper arrows (design.md decision 7) — same round, icon-only
+   pattern as .season-page__nav button. */
+.recap-page__period-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recap-page__period-nav button {
+  font: inherit;
+  font-size: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.recap-page__period-nav button:hover:not(:disabled) {
   color: var(--text-h);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.recap-page__period-nav button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.recap-page__season-link {
+  font-size: 14px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.recap-page__season-link:hover {
+  text-decoration: underline;
 }
 
 .recap-page__loading,
@@ -109,12 +143,12 @@
   opacity: 0.85;
 }
 
-/* Lead section (design.md decision 5): the stat block sits left of the top
+/* Lead section (design.md decision 5): the stat block sits right of the top
    anime on a display wide enough for both, collapsing to one column with
-   the (DOM-first) stats above the top anime below the breakpoint. */
+   the (DOM-first) top anime above the stats below the breakpoint. */
 .recap-page__lead {
   display: grid;
-  grid-template-columns: minmax(14rem, 20rem) 1fr;
+  grid-template-columns: 1fr minmax(14rem, 20rem);
   gap: 20px;
   align-items: start;
 }
@@ -141,6 +175,13 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--code-bg);
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.recap-page__stat:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow);
 }
 
 .recap-page__stat-value {
@@ -188,6 +229,14 @@
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.recap-hot-take:hover,
+.recap-hot-take:focus-within {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow);
 }
 
 .recap-hot-take__link {
@@ -265,6 +314,14 @@
   padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.recap-top-ten-row:hover,
+.recap-top-ten-row:focus-within {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow);
 }
 
 .recap-top-ten-row__rank {
@@ -323,22 +380,29 @@
 /* Season/year rankings (the row list, poster, and "See all" styles live in
    components/RankingSection.css — RankingSection.tsx owns that markup now). */
 
-/* Season and year rankings sit side by side when both are present (design.md
-   "Year ranking" requirement); the time-watched rankings reuse the same
-   layout as their own full-width block below the score pair (design.md
-   decision 7 risks), stacking season-first below the breakpoint. */
-.recap-page__ranking-pair {
+/* Rankings grouped into a season column and a year column (design.md
+   decision 4): the season ranking and seasons-by-time-watched share the
+   leading column, the year ranking and years-by-time-watched the other.
+   Collapses to one column when only one side has anything to show, and below
+   the breakpoint stacks season-first (DOM order — no `order` property). */
+.recap-page__rankings {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 20px;
 }
 
-.recap-page__ranking-pair:has(> :only-child) {
+.recap-page__rankings:has(> :only-child) {
   grid-template-columns: 1fr;
 }
 
 @media (max-width: 1024px) {
-  .recap-page__ranking-pair {
+  .recap-page__rankings {
     grid-template-columns: 1fr;
   }
+}
+
+.recap-page__ranking-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
