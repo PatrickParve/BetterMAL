@@ -6,11 +6,17 @@ TBD - created by archiving change add-series-page. Update Purpose after archive.
 ## Requirements
 
 ### Requirement: Series composition from the relation graph
-The system SHALL derive a series as the connected component of the stored related-anime graph, traversing only story relations: `sequel`, `prequel`, `side_story`, `parent_story`, `summary`, `full_story`, `spin_off`, and `alternative_version`. Every other relation MAL reports — including `alternative_setting`, `character`, `other`, and any unrecognized relation string — SHALL be stored as it already is but SHALL NOT be traversed, so shows that merely share a universe or a cast never merge into one series.
+The system SHALL derive a series as the connected component of the stored related-anime graph, traversing only story relations: `sequel`, `prequel`, `side_story`, `parent_story`, `summary`, `full_story`, `spin_off`, and `alternative_version`. Every other relation MAL reports — including `alternative_setting`, `character`, and any unrecognized relation string — SHALL be stored as it already is but SHALL NOT be traversed, so shows that merely share a universe or a cast never merge into one series.
+
+The `other` relation SHALL be traversed in exactly one case: when precisely one of its two ends is an anime whose media type is `music`. MAL links a franchise's opening/ending/image songs to the show they belong to with `other` and nothing else, so a franchise's music entries are otherwise unreachable — they either vanish from the series entirely or form their own music-only series. A music end SHALL be recognised only from an already-cached media type: an `other` relation whose far end has no cached metadata row SHALL NOT be traversed and SHALL NOT spend fetch budget, since the system cannot tell a song from a commercial without fetching, and `other` also links commercials, promos, and crossovers.
+
+`other` relations where neither end is a music entry, and where both ends are music entries, SHALL NOT be traversed. Because the rule is stated over the relation's two ends rather than over the direction it is stored in, a series built from the song and a series built from the show SHALL produce the same component.
 
 Traversal SHALL be undirected: from a member the system SHALL follow both that anime's own relation rows and relation rows pointing at it, so a member whose own relations have never been fetched still connects the component.
 
 An anime SHALL belong to at most one series.
+
+Every series stored under the previous traversal rules SHALL be rebuilt once, on its next read, so a franchise's music entries join it without the user having to request a rebuild.
 
 #### Scenario: Sequels and prequels form one series
 - **WHEN** a series is built from an anime whose relations chain through two sequels and one prequel
@@ -23,6 +29,26 @@ An anime SHALL belong to at most one series.
 #### Scenario: Reverse edges keep the component connected
 - **WHEN** anime A stores a `sequel` relation to anime B, and B has never been full-fetched and stores no relations of its own
 - **THEN** B is still a member of A's series
+
+#### Scenario: A franchise's song joins the franchise
+- **WHEN** a TV series stores an `other` relation to a `music` entry — its opening theme's music video — and that entry has a cached metadata row
+- **THEN** the music entry is a member of that series
+
+#### Scenario: The song's own series is the show's series
+- **WHEN** a series is built starting from that music entry instead of from the show
+- **THEN** the same component is produced, with the show and its seasons as members, rather than a music-only series
+
+#### Scenario: A music-only series is absorbed
+- **WHEN** a music entry and its cover version are stored as their own two-member series, and the franchise the song belongs to is rebuilt under these rules
+- **THEN** both are members of the franchise's series and the music-only series no longer exists
+
+#### Scenario: Non-music `other` relations still do not merge series
+- **WHEN** a show stores an `other` relation to a commercial, a promotional video, or a crossover short
+- **THEN** that anime is not pulled into the show's series
+
+#### Scenario: An uncached `other` end costs nothing
+- **WHEN** a member stores an `other` relation to an anime with no cached metadata row
+- **THEN** the relation is not traversed, no MAL fetch is spent on it, and the build is not marked partial on its account
 
 ### Requirement: Main line and extras
 Within a series the system SHALL identify a main line: the connected chain over `sequel`/`prequel` relations among the members holding the most main-line-eligible members — ties broken in favour of the chain containing the earliest-aired eligible member — reduced to just its eligible members. Every other member of the series SHALL be an extra.
@@ -359,7 +385,7 @@ The page SHALL additionally show which entry or entries are tied for the most re
 
 Where several entries tie for the highest MAL score, for my highest score, or for the most rewatches, the page SHALL list every tied entry rather than picking one. Tied highest-MAL entries and tied most-rewatched entries SHALL be listed in watch order. Tied favourites SHALL be listed in my saved favourite order, with entries I have not ordered following in watch order.
 
-The highest MAL score SHALL be shown in full rather than blurred when the entry holding it is one I have both completed and scored, since I already know that score. Until then, the page SHALL withhold that entry's title and link entirely — not only its score — so an unwatched entry is never named by this stat; this withholding applies regardless of the hide-scores toggle's own state, since it protects against spoiling which entry is best rather than against exposing a score value.
+The highest MAL score SHALL be shown in full rather than blurred when the entry holding it is one I have marked **Completed** or **Dropped** in my list. Both statuses settle my relationship with that entry — dropping a show is as much a decision about it as finishing one — so neither leaves a viewing ahead of me that naming the series' best entry could spoil. My having scored that entry SHALL NOT be required: a dropped entry frequently carries no score of mine, and withholding the stat until one exists would hide it indefinitely. Until the entry reaches one of those two statuses, the page SHALL withhold that entry's title and link entirely — not only its score — so an entry I have not settled is never named by this stat; this withholding applies regardless of the hide-scores toggle's own state, since it protects against spoiling which entry is best rather than against exposing a score value.
 
 #### Scenario: Runtime of the main series
 - **WHEN** I open a series whose main line totals 62 episodes averaging 24 minutes
@@ -414,11 +440,15 @@ The highest MAL score SHALL be shown in full rather than blurred when the entry 
 - **THEN** both are listed under the highest MAL score, in watch order
 
 #### Scenario: Highest MAL score of a completed entry is not blurred
-- **WHEN** the hide-scores toggle is on and the highest-MAL-scored entry is one I have completed and scored
-- **THEN** its MAL score is shown in full
+- **WHEN** the hide-scores toggle is on and the highest-MAL-scored entry is one I have completed
+- **THEN** its title, link, and MAL score are shown in full
 
-#### Scenario: An unwatched entry's title is withheld from Highest MAL score
-- **WHEN** the entry holding the series' highest MAL score is not one I have both completed and scored
+#### Scenario: Highest MAL score of a dropped entry is shown
+- **WHEN** the highest-MAL-scored entry of a series is one I have marked Dropped, and I never gave it a score of my own
+- **THEN** the stat names that entry, links to it, and shows its MAL score, exactly as it would for a completed entry
+
+#### Scenario: An unsettled entry's title is withheld from Highest MAL score
+- **WHEN** the entry holding the series' highest MAL score is one I am Watching, have On-hold, Plan to watch, or do not have in my list at all
 - **THEN** the page shows no title or link for that entry in the Highest MAL score stat, regardless of whether the hide-scores toggle is on or off
 
 #### Scenario: Tied favourites list every entry
@@ -467,15 +497,19 @@ The main line's presentation SHALL be governed by the Series timeline ribbon req
 
 Each tile SHALL carry the information a main-line card carries — picture, title, media type, year, episode count, MAL score, my score, and my list status — SHALL link to that anime's detail page, SHALL offer the same edit control, and SHALL show its entry's rewatch count when it is greater than zero. As on a main-line card, a tile's title SHALL reserve the same vertical space regardless of line count, so tiles in the same row stay aligned.
 
-Each of a tile's secondary text lines — the media type/year/episode count line, and the aired-progress line when it is shown — SHALL occupy exactly one line whatever its content, truncating with an ellipsis rather than wrapping, so no tile is made taller than its row neighbours by the length of its own text.
+Each of a tile's secondary text lines — the media type/year/episode count line, and the aired-progress line when it is shown — SHALL occupy exactly one line whatever its content, truncating with an ellipsis rather than wrapping, so no tile is made taller than its row neighbours by the length of its own text. The grid SHALL size its columns so that a tile whose picture is portrait is wide enough to show that meta line in full for the ordinary worst case — a two-word media type such as `TV special`, a four-digit year, and a two-digit episode count — so an extra's episode count is not the part that gets truncated away. Ellipsis truncation remains the backstop for longer content, not the normal outcome.
 
-Each More group SHALL show its entry count in its heading. When a series has more than twelve extras every group SHALL start collapsed, and otherwise every group SHALL start expanded.
+Each More group SHALL show its entry count in its heading.
 
-Each More group SHALL be collapsible, and the section SHALL offer one control that expands or collapses every group at once — unless every extra in the series is already marked Completed in my list, in which case no group offers a collapse/expand control, every group SHALL always render fully expanded, and the one-control affordance SHALL NOT be offered at all, since there is nothing left worth hiding.
+The More section SHALL offer two controls: an "in my list" filter and an expand/collapse-all control. Which extras are visible SHALL be governed by those controls alone — the section SHALL NOT force any extra to stay visible on the user's behalf, whatever its status or progress, and SHALL NOT vary its initial state with how many extras the series has.
 
-That one control, when offered, SHALL read "Expand all"/"Collapse all" when the series has more than one More group, and SHALL read "Expand"/"Collapse" without the word "all" when it has exactly one group, since "all" is meaningless applied to a single category.
+The "in my list" filter SHALL be on when a series page is opened: every group renders expanded, showing only the extras that are in my list — whatever their status: Watching, Completed, On hold, Plan to watch, or Dropped alike — and hiding every extra that is not in my list. It SHALL be a two-state control that reports which state it is in. Turning it on SHALL restore that filtered view; turning it off SHALL show every extra.
 
-A collapsed group SHALL NOT render its tiles, so a franchise with many extras cannot make the page arbitrarily long.
+The expand/collapse-all control SHALL read "Expand" while anything is hidden — whether by the filter, by a collapsed group, or by both — and activating it SHALL show every extra of every group, turning the filter off. Once every extra is shown it SHALL read "Collapse", and activating it SHALL collapse every group so that no tile is rendered at all, including the extras in my list. It SHALL read "Expand all"/"Collapse all" when the series has more than one More group, and "Expand"/"Collapse" without the word "all" when it has exactly one group, since "all" is meaningless applied to a single category.
+
+Both controls SHALL always be offered while the series has extras, whatever my statuses across them.
+
+Each More group SHALL additionally be collapsible on its own, and a collapsed group SHALL NOT render its tiles, so a franchise with many extras cannot make the page arbitrarily long. A group showing fewer tiles than its entry count SHALL offer a control naming how many are hidden, which reveals that group's remaining tiles without changing what any other group shows.
 
 An edit saved from a tile SHALL update it in place without reloading the page.
 
@@ -483,36 +517,64 @@ An edit saved from a tile SHALL update it in place without reloading the page.
 - **WHEN** a series has two specials, one OVA, and a music video
 - **THEN** the More section shows them as poster tiles under a collapsible group per media type, each heading carrying its count
 
+#### Scenario: A tile's episode count is not truncated away
+- **WHEN** a portrait-pictured extra is a `TV special` that aired in 2003 and has 99 episodes
+- **THEN** its tile shows `TV special · 2003 · 99 ep` in full at the grid's narrowest column width
+
 #### Scenario: A long meta line stays on one line
-- **WHEN** a tile's media type, year, and episode count are too wide for the tile at the narrowest column width the grid produces
+- **WHEN** a tile's media type, year, and episode count are longer still than that worst case
 - **THEN** the line truncates with an ellipsis on one line, and the tile's score chips and footer stay aligned with the other tiles in its row
 
-#### Scenario: A large More section starts collapsed
-- **WHEN** I open a series with twenty extras
-- **THEN** every More group starts collapsed, no tiles are rendered, and one control expands them all
+#### Scenario: Opening a series shows only my own extras
+- **WHEN** I open a series with twenty extras, four of which are in my list — one Watching, one Completed, one Dropped, one Plan to watch
+- **THEN** every group is expanded showing only those four tiles, the sixteen extras not in my list are hidden, and the all-groups control reads "Expand all"
 
-#### Scenario: A small More section starts open
-- **WHEN** I open a series with four extras
-- **THEN** their groups start expanded
+#### Scenario: Expanding shows everything
+- **WHEN** I activate the all-groups control from that state
+- **THEN** all twenty extras are shown, the "in my list" filter reads as off, and the control now reads "Collapse all"
+
+#### Scenario: Collapsing hides my own extras too
+- **WHEN** every extra is shown and I activate the "Collapse all" control
+- **THEN** no tiles are rendered in any group, including the extras in my list, and the control reads "Expand all" again
+
+#### Scenario: Filtering back to my list
+- **WHEN** every extra is shown and I turn the "in my list" filter on
+- **THEN** each group shows only its extras that are in my list, and the all-groups control reads "Expand all"
+
+#### Scenario: A group with nothing of mine in it
+- **WHEN** the filter is on and a group holds no extras that are in my list
+- **THEN** that group shows its heading and entry count with no tiles, and offers a control naming how many are hidden
+
+#### Scenario: Revealing one group's hidden extras
+- **WHEN** I activate that group's hidden-count control
+- **THEN** that group shows all of its tiles while every other group keeps showing only my own extras
+
+#### Scenario: Controls are offered whatever my statuses
+- **WHEN** every extra in a series is marked Completed in my list
+- **THEN** the "in my list" filter and the all-groups control are both still offered, and collapsing hides those completed extras
+
+#### Scenario: A large More section is not treated differently
+- **WHEN** I open a series with twenty extras and one with four extras
+- **THEN** both open with their groups expanded and filtered to the extras in my list, rather than one of them starting collapsed
 
 #### Scenario: Editing from a tile
 - **WHEN** I use a tile's edit control and save a new score
 - **THEN** the same entry editor used elsewhere in the app opens, and the tile and the series stats reflect the new score without a page reload
 
+#### Scenario: An extra added to my list from its tile stays visible
+- **WHEN** the filter is on, I add an extra to my list from a revealed tile, and the section re-renders
+- **THEN** that extra is now one of the tiles the filter keeps
+
 #### Scenario: A series with no extras
 - **WHEN** every member of a series is main line
 - **THEN** the More section is not shown
 
-#### Scenario: Collapse control suppressed once everything is watched
-- **WHEN** every extra in a series is marked Completed in my list
-- **THEN** every More group renders fully expanded with no per-group toggle and no all-groups control
-
 #### Scenario: Singular wording for one extras category
-- **WHEN** a series has extras in only one media-type group and at least one is not Completed
+- **WHEN** a series has extras in only one media-type group
 - **THEN** the all-groups control reads "Expand" or "Collapse" without the word "all"
 
 #### Scenario: Plural wording for more than one extras category
-- **WHEN** a series has extras across two or more media-type groups and at least one extra is not Completed
+- **WHEN** a series has extras across two or more media-type groups
 - **THEN** the all-groups control reads "Expand all" or "Collapse all"
 
 #### Scenario: A rewatched extra shows its count

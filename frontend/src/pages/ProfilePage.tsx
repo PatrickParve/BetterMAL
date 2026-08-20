@@ -363,6 +363,25 @@ export function ProfilePage() {
         <p className="profile-page__subtitle">Your stats, ratings, and favorites, all in one place.</p>
       </div>
 
+      <section className="profile-box">
+        <h2>Episode progress</h2>
+        {profile.episodeProgress.episodesTotal === 0 ? (
+          <p className="profile-page__section-empty">
+            No anime in your list has a published episode count yet.
+          </p>
+        ) : (
+          <>
+            <ProgressBar
+              watched={profile.episodeProgress.episodesWatched}
+              total={profile.episodeProgress.episodesTotal}
+            />
+            <p className="profile-page__episode-progress-note">
+              {profile.episodeProgress.entriesCounted} of {profile.episodeProgress.totalEntries} entries counted
+            </p>
+          </>
+        )}
+      </section>
+
       <div className="profile-page__top-row">
         <section className="profile-box">
           <h2>Anime stats</h2>
@@ -422,25 +441,6 @@ export function ProfilePage() {
           )}
         </section>
       </div>
-
-      <section className="profile-box">
-        <h2>Episode progress</h2>
-        {profile.episodeProgress.episodesTotal === 0 ? (
-          <p className="profile-page__section-empty">
-            No anime in your list has a published episode count yet.
-          </p>
-        ) : (
-          <>
-            <ProgressBar
-              watched={profile.episodeProgress.episodesWatched}
-              total={profile.episodeProgress.episodesTotal}
-            />
-            <p className="profile-page__episode-progress-note">
-              {profile.episodeProgress.entriesCounted} of {profile.episodeProgress.totalEntries} entries counted
-            </p>
-          </>
-        )}
-      </section>
 
       <section className="profile-box">
         <div className="profile-box__header-row">
@@ -677,17 +677,17 @@ export function ProfilePage() {
         <div className="profile-page__favourites-row">
           <section className="profile-box">
             <RankingSection
-              title="Favourite seasons"
-              noun="seasons"
-              rows={profile.favouriteSeasons.map(describeSeasonRanking)}
+              title="Favourite years"
+              noun="years"
+              rows={profile.favouriteYears.map(describeYearRanking)}
               onSeeAll={setRankingOverlay}
             />
           </section>
           <section className="profile-box">
             <RankingSection
-              title="Favourite years"
-              noun="years"
-              rows={profile.favouriteYears.map(describeYearRanking)}
+              title="Favourite seasons"
+              noun="seasons"
+              rows={profile.favouriteSeasons.map(describeSeasonRanking)}
               onSeeAll={setRankingOverlay}
             />
           </section>

@@ -175,6 +175,113 @@ public class SeriesGraphBuilderTests
         Assert.True(members.Single(m => m.AnimeId == special2.Id).IsMainLine);
     }
 
+    // Music-aware `other` traversal (design.md decision 1/tasks 1.1-1.3): an
+    // `other` edge is traversed exactly when one end is a cached `music`
+    // entry, regardless of which end the seed build starts from, and never
+    // spends fetch budget probing an uncached neighbour to find out.
+    [Fact]
+    public async Task ShowOtherLinkedToMusicEntryAdmitsItAsAnExtra()
+    {
+        using var db = CreateDb();
+        var show = Anime(1, "tv", new DateOnly(2022, 4, 6));
+        var song = Anime(2, "music", new DateOnly(2022, 4, 6));
+
+        Relate(show, song, "other");
+
+        db.AnimeMetadata.AddRange(show, song);
+        await db.SaveChangesAsync();
+
+        var members = await BuildAndReadMembersAsync(db, show.Id);
+
+        Assert.True(members.Single(m => m.AnimeId == show.Id).IsMainLine);
+        Assert.False(members.Single(m => m.AnimeId == song.Id).IsMainLine);
+    }
+
+    [Fact]
+    public async Task BuildingFromTheMusicEntryProducesTheSameSeriesAsBuildingFromTheShow()
+    {
+        using var db = CreateDb();
+        var show = Anime(1, "tv", new DateOnly(2022, 4, 6));
+        var song = Anime(2, "music", new DateOnly(2022, 4, 6));
+
+        Relate(show, song, "other");
+
+        db.AnimeMetadata.AddRange(show, song);
+        await db.SaveChangesAsync();
+
+        var membersFromSong = await BuildAndReadMembersAsync(db, song.Id);
+
+        Assert.Equal(
+            new[] { show.Id, song.Id }.OrderBy(x => x),
+            membersFromSong.Select(m => m.AnimeId).OrderBy(x => x));
+        Assert.True(membersFromSong.Single(m => m.AnimeId == show.Id).IsMainLine);
+        Assert.False(membersFromSong.Single(m => m.AnimeId == song.Id).IsMainLine);
+    }
+
+    [Fact]
+    public async Task OtherLinkToNonMusicEntryIsNotTraversed()
+    {
+        using var db = CreateDb();
+        var show = Anime(1, "tv", new DateOnly(2022, 4, 6));
+        var season2 = Anime(2, "tv", new DateOnly(2023, 4, 6));
+        var commercial = Anime(3, "cm", new DateOnly(2022, 4, 6));
+
+        Relate(show, season2, "sequel");
+        Relate(show, commercial, "other"); // a CM, not a song — must not join
+
+        db.AnimeMetadata.AddRange(show, season2, commercial);
+        await db.SaveChangesAsync();
+
+        var members = await BuildAndReadMembersAsync(db, show.Id);
+
+        Assert.Equal(2, members.Count);
+        Assert.DoesNotContain(members, m => m.AnimeId == commercial.Id);
+    }
+
+    [Fact]
+    public async Task MusicToMusicOtherLinkIsNotTraversed()
+    {
+        using var db = CreateDb();
+        var show = Anime(1, "tv", new DateOnly(2022, 4, 6));
+        var song = Anime(2, "music", new DateOnly(2022, 4, 6));
+        var cover = Anime(3, "music", new DateOnly(2022, 5, 1));
+
+        Relate(show, song, "other");
+        Relate(song, cover, "other"); // both ends music — must not join
+
+        db.AnimeMetadata.AddRange(show, song, cover);
+        await db.SaveChangesAsync();
+
+        var members = await BuildAndReadMembersAsync(db, show.Id);
+
+        Assert.Equal(2, members.Count);
+        Assert.DoesNotContain(members, m => m.AnimeId == cover.Id);
+    }
+
+    [Fact]
+    public async Task OtherNeighbourWithNoCachedRowIsSkippedWithoutFetchOrPartial()
+    {
+        using var db = CreateDb();
+        var show = Anime(1, "tv", new DateOnly(2022, 4, 6));
+        var season2 = Anime(2, "tv", new DateOnly(2023, 4, 6));
+
+        Relate(show, season2, "sequel");
+        // No AnimeMetadata row exists for id 99 at all, and
+        // FakeMetadataRefreshService throws if a fetch is attempted — this
+        // build must not try.
+        Relate(show, new AnimeMetadata { Id = 99, Title = "Uncached" }, "other");
+
+        db.AnimeMetadata.AddRange(show, season2);
+        await db.SaveChangesAsync();
+
+        var series = await CreateBuilder(db).BuildAsync(show.Id, fetchBudget: 0, expandLeanMembers: false);
+        var members = await db.SeriesMembers.Where(m => m.SeriesId == series!.Id).ToListAsync();
+
+        Assert.Equal(2, members.Count);
+        Assert.DoesNotContain(members, m => m.AnimeId == 99);
+        Assert.False(series!.IsPartial);
+    }
+
     private sealed class FakeMetadataRefreshService : IMetadataRefreshService
     {
         public Task<int> RefreshStaleBatchAsync(int batchSize, CancellationToken ct = default) =>

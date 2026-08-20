@@ -433,7 +433,15 @@
   margin: 0;
 }
 
-.series-page__toggle-all {
+.series-page__more-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.series-page__toggle-all,
+.series-page__toggle-mine {
   font: inherit;
   font-size: 13px;
   padding: 6px 12px;
@@ -443,10 +451,18 @@
   color: var(--text);
   cursor: pointer;
   flex: 0 0 auto;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
 }
 
-.series-page__toggle-all:hover {
+.series-page__toggle-all:hover,
+.series-page__toggle-mine:hover {
   color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.series-page__toggle-mine--active {
+  color: var(--text-h);
+  background: var(--accent-bg);
   border-color: var(--accent-border);
 }
 
@@ -469,17 +485,6 @@
   opacity: 1;
 }
 
-/* Replaces the toggle button once every extra is already Completed — same
-   text position/weight, just not interactive since there's nothing to hide. */
-.series-page__extras-group-label {
-  display: inline-flex;
-  align-items: center;
-  font-size: 13px;
-  color: var(--text);
-  opacity: 0.85;
-  padding: 4px 0;
-}
-
 .series-page__extras-group-caret {
   font-size: 10px;
   width: 1em;
@@ -487,14 +492,19 @@
 }
 
 /* --extras-gap is read by SeriesExtraTile.css's landscape-tile sizer, so the
-   grid's actual gap and that calc can never drift apart. */
+   grid's actual gap and that calc can never drift apart. The 172px track
+   floor is the measured worst case a tile's meta line needs to fit without
+   truncating: "TV special · 2003 · 99 ep" is 142.2px at the tile's 12px
+   font, plus ~4.3px of the app's 0.18px letter-spacing across 24 characters,
+   plus the tile's 20px of horizontal padding ≈ 167px, with a little slack
+   left for a wider system font. */
 .series-page__extras-grid {
   --extras-gap: 12px;
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
   gap: var(--extras-gap);
 }
 

@@ -23,9 +23,6 @@ import './SeriesPage.css'
 
 const NO_INFO = '—'
 const MAX_REBUILD_ROUNDS = 12
-// Above this many extras, every More group starts collapsed (design.md
-// decision 5) — roughly one screen of tiles at typical widths.
-const EXTRAS_COLLAPSE_THRESHOLD = 12
 
 const SERIES_STATUS_CLASS: Record<SeriesStatus, string> = {
   Ongoing: 'ongoing',
@@ -171,13 +168,6 @@ function isGroupCompleted(entries: SeriesEntryDto[]): boolean {
   return finishedAiring.length > 0 && finishedAiring.every((e) => isScoreRevealableStatus(e.entry?.status))
 }
 
-// A collapsed More group hides the noise of untouched extras, but never
-// something I've actually made progress on or finished — that's exactly the
-// information a collapsed view would otherwise bury.
-function hasWatchProgress(entry: SeriesEntryDto): boolean {
-  return entry.entry != null && (entry.entry.status === 'Completed' || entry.entry.episodesWatched > 0)
-}
-
 // Reveal precedence for a MAL average (design.md decision 9): finishing the
 // whole main line reveals both averages unconditionally; short of that, a
 // group reveals only when it's fully completed *and* nothing in the entire
@@ -196,19 +186,6 @@ function malGroupRevealed(group: SeriesEntryDto[], series: SeriesDto): boolean {
   if (series.stats.mainLineCompletedByMe && !mainLineAiring) return true
   const anySeriesAiring = [...series.mainLine, ...series.extras].some((e) => e.airingStatus === 'currently_airing')
   return isGroupCompleted(group) && !anySeriesAiring
-}
-
-// The highest-MAL-score box reveals in full when the entry holding it is one
-// I've both completed and scored, since I already know that score (design.md
-// decision 8) — distinct from isGroupCompleted, which only checks status.
-// Deliberately stays completed-only even though score-visibility now treats
-// Dropped as settled everywhere else: this box withholds the entry's
-// *title and link*, not merely a number, guarding against learning which
-// entry is the series' best — a spoiler about entries still ahead of me,
-// not a score I've already settled (profile-navbar-and-dropped-scores
-// design.md Non-Goals).
-function isCompletedAndScored(entry: SeriesEntryDto): boolean {
-  return entry.entry?.status === 'Completed' && (entry.entry?.myScore ?? 0) > 0
 }
 
 type CompletionBadge = { label: string; className: string }
@@ -316,14 +293,15 @@ export function SeriesPage() {
   const { openEditor } = useEntryEditor()
   const [pictureRef, isLandscapePicture] = useLandscapePicture(data?.found ? data.series.pictureUrl : null)
 
-  // More-section collapse state, keyed by extras group. Initialised once
-  // per mount from series.extras.length > 12 (design.md decision 5) via the
-  // same render-phase-state-update pattern usePageData itself uses for a key
-  // change, so there's no flash of the wrong initial state; it deliberately
-  // does not re-run on a later patch (an edit never changes which groups
-  // exist), and resets on navigation like every other transient view state.
+  // More-section view state (design.md decision 3): `mineOnly` is the "in my
+  // list" filter, on by default; `collapsedGroups` is per-group collapse,
+  // all expanded by default; `unfilteredGroups` tracks groups where "+N
+  // more" was used to see past the filter without disabling it everywhere.
+  // All three are per-mount, transient state like the rest of this page's
+  // view state — they reset on navigation rather than persisting.
+  const [mineOnly, setMineOnly] = useState(true)
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
-  const [collapseInitialised, setCollapseInitialised] = useState(false)
+  const [unfilteredGroups, setUnfilteredGroups] = useState<Set<string>>(new Set())
 
   // Stops an in-flight rebuild loop from issuing another round once the page
   // has navigated away (design.md decision 2) — a round already in flight is
@@ -335,17 +313,6 @@ export function SeriesPage() {
       abortedRef.current = true
     }
   }, [])
-
-  if (data?.found && !collapseInitialised) {
-    const groups = groupExtras(data.series.extras)
-    const startCollapsed = data.series.extras.length > EXTRAS_COLLAPSE_THRESHOLD
-    const initial: Record<string, boolean> = {}
-    groups.forEach((group, index) => {
-      initial[extrasGroupKey(group, index)] = startCollapsed
-    })
-    setCollapsedGroups(initial)
-    setCollapseInitialised(true)
-  }
 
   function patchSeries(updater: (series: SeriesDto) => SeriesDto) {
     setData((prev) => (prev && prev.found ? { found: true, series: updater(prev.series) } : prev))
@@ -414,6 +381,28 @@ export function SeriesPage() {
     setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
+  // Reveals a group's remaining tiles from its "+N more" control: a
+  // collapsed group simply uncollapses (into whatever the filter currently
+  // shows); a group hidden only by the "in my list" filter is instead added
+  // to unfilteredGroups, so this one group shows everything while every
+  // other group keeps following the filter (design.md decision 3).
+  function revealGroupTiles(key: string, wasCollapsed: boolean) {
+    if (wasCollapsed) {
+      setCollapsedGroups((prev) => ({ ...prev, [key]: false }))
+    } else {
+      setUnfilteredGroups((prev) => new Set(prev).add(key))
+    }
+  }
+
+  // Every click resets the per-group overrides and expands every group, so
+  // the effect of the toggle — in either direction — is always visible
+  // rather than hidden behind a collapsed or overridden group.
+  function toggleMineOnly() {
+    setMineOnly((prev) => !prev)
+    setUnfilteredGroups(new Set())
+    setCollapsedGroups({})
+  }
+
   if (Number.isNaN(animeId)) {
     return <p className="series-page__empty">Anime not found.</p>
   }
@@ -463,19 +452,34 @@ export function SeriesPage() {
     .filter((e): e is SeriesEntryDto => e !== undefined)
 
   const extrasGroups = groupExtras(series.extras)
-  const anyExtrasGroupOpen = extrasGroups.some((group, index) => !collapsedGroups[extrasGroupKey(group, index)])
-  // No group offers a collapse control once every extra is already Completed
-  // — there is nothing left worth hiding (design.md decision 6 of
-  // series-page-improvements).
-  const allExtrasCompleted = series.extras.length > 0 && series.extras.every((e) => e.entry?.status === 'Completed')
+  // Membership, not status, per group's visible tiles (design.md decision 3):
+  // Dropped and Plan-to-watch entries count exactly like Completed ones.
+  const extrasGroupView = extrasGroups.map((group, index) => {
+    const key = extrasGroupKey(group, index)
+    const isCollapsed = collapsedGroups[key] ?? false
+    const isUnfiltered = unfilteredGroups.has(key)
+    const visibleItems = isCollapsed ? [] : mineOnly && !isUnfiltered ? group.items.filter((e) => e.entry != null) : group.items
+    return { group, key, isCollapsed, visibleItems }
+  })
+  const nothingHidden = extrasGroupView.every(({ group, visibleItems }) => visibleItems.length === group.items.length)
 
   function toggleAllExtrasGroups() {
-    const nextCollapsed = anyExtrasGroupOpen
-    const next: Record<string, boolean> = {}
-    extrasGroups.forEach((group, index) => {
-      next[extrasGroupKey(group, index)] = nextCollapsed
-    })
-    setCollapsedGroups(next)
+    if (nothingHidden) {
+      const next: Record<string, boolean> = {}
+      extrasGroups.forEach((group, index) => {
+        next[extrasGroupKey(group, index)] = true
+      })
+      setCollapsedGroups(next)
+      setUnfilteredGroups(new Set())
+    } else {
+      setMineOnly(false)
+      setUnfilteredGroups(new Set())
+      const next: Record<string, boolean> = {}
+      extrasGroups.forEach((group, index) => {
+        next[extrasGroupKey(group, index)] = false
+      })
+      setCollapsedGroups(next)
+    }
   }
 
   const scoreAndProgress = (
@@ -651,7 +655,14 @@ export function SeriesPage() {
               <dd>
                 <ul className="series-page__tie-list">
                   {highestMalEntries.map((entry) => {
-                    const revealed = isCompletedAndScored(entry)
+                    // Settled status is enough — Completed or Dropped — since
+                    // a dropped entry frequently carries no score of my own
+                    // and requiring one would hide the stat indefinitely.
+                    // Both statuses close the door on being spoiled about
+                    // which entry is the series' best, which is what this
+                    // box withholds the entry's title and link to guard
+                    // against (design.md decision 7).
+                    const revealed = isScoreRevealableStatus(entry.entry?.status)
                     return (
                       <li key={entry.animeId}>
                         {revealed ? (
@@ -752,50 +763,44 @@ export function SeriesPage() {
         <section className="series-box">
           <div className="series-page__more-header">
             <h2>More</h2>
-            {!allExtrasCompleted && (
+            <div className="series-page__more-controls">
+              <button
+                type="button"
+                className={`series-page__toggle-mine${mineOnly ? ' series-page__toggle-mine--active' : ''}`}
+                aria-pressed={mineOnly}
+                onClick={toggleMineOnly}
+              >
+                In my list
+              </button>
               <button type="button" className="series-page__toggle-all" onClick={toggleAllExtrasGroups}>
                 {extrasGroups.length > 1
-                  ? anyExtrasGroupOpen
+                  ? nothingHidden
                     ? 'Collapse all'
                     : 'Expand all'
-                  : anyExtrasGroupOpen
+                  : nothingHidden
                     ? 'Collapse'
                     : 'Expand'}
               </button>
-            )}
+            </div>
           </div>
-          {extrasGroups.map((group, index) => {
-            const key = extrasGroupKey(group, index)
-            // Every group renders fully expanded once every extra is
-            // Completed — the stored collapsedGroups state (including the
-            // >12-extras auto-collapse) is simply not consulted then.
-            const isCollapsed = !allExtrasCompleted && (collapsedGroups[key] ?? false)
+          {extrasGroupView.map(({ group, key, isCollapsed, visibleItems }) => {
             const groupId = `series-extras-${key}`
-            // Collapsing never hides an entry I've actually watched or
-            // completed — only the untouched ones fold away.
-            const visibleItems = isCollapsed ? group.items.filter(hasWatchProgress) : group.items
             const hiddenCount = group.items.length - visibleItems.length
             return (
               <div key={key} className="series-page__extras-group">
                 <h3>
-                  {allExtrasCompleted ? (
-                    <span className="series-page__extras-group-label">
-                      {mediaTypeLabel(group.mediaType)} ({group.items.length})
+                  <button
+                    type="button"
+                    className="series-page__extras-group-toggle"
+                    aria-expanded={!isCollapsed}
+                    aria-controls={groupId}
+                    onClick={() => toggleExtrasGroup(key)}
+                  >
+                    <span className="series-page__extras-group-caret" aria-hidden="true">
+                      {isCollapsed ? '▸' : '▾'}
                     </span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="series-page__extras-group-toggle"
-                      aria-expanded={!isCollapsed}
-                      aria-controls={groupId}
-                      onClick={() => toggleExtrasGroup(key)}
-                    >
-                      <span className="series-page__extras-group-caret" aria-hidden="true">
-                        {isCollapsed ? '▸' : '▾'}
-                      </span>
-                      {mediaTypeLabel(group.mediaType)} ({group.items.length})
-                    </button>
-                  )}
+                    {mediaTypeLabel(group.mediaType)} ({group.items.length})
+                  </button>
                 </h3>
                 {visibleItems.length > 0 && (
                   <ul id={groupId} className="series-page__extras-grid">
@@ -804,8 +809,12 @@ export function SeriesPage() {
                     ))}
                   </ul>
                 )}
-                {isCollapsed && hiddenCount > 0 && (
-                  <button type="button" className="series-page__extras-group-hint" onClick={() => toggleExtrasGroup(key)}>
+                {hiddenCount > 0 && (
+                  <button
+                    type="button"
+                    className="series-page__extras-group-hint"
+                    onClick={() => revealGroupTiles(key, isCollapsed)}
+                  >
                     +{hiddenCount} more
                   </button>
                 )}

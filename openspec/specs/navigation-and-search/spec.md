@@ -268,6 +268,25 @@ The badge SHALL stay legible and keep reading as a badge at that size — a tint
 - **WHEN** a series has four main-line entries and three extras
 - **THEN** its badge line reports seven entries
 
+### Requirement: Search result text is not clipped by its own line box
+No line of text in a search result SHALL be clipped by the line box it is laid out in. This covers every row of the type-ahead dropdown — a result's title and, on a series row, the "Series" badge line beneath it — and every card on the results page, including a series card's badge line.
+
+Where a line's height is pinned to a fixed value (as the dropdown's rows are, to keep every row the same height), that value SHALL be at least the height of the glyphs the line renders, across the whole range of the app's fluid root font size, so that no ascender, descender, or bracket is shaved off along the line's top or bottom edge. A fixed row height SHALL likewise leave room for the lines it contains at that largest size, rather than squeezing them.
+
+Sizing a line to its glyphs SHALL NOT be achieved by letting the dropdown's rows differ in height from one another, which the "A series result is marked as a series" requirement forbids: the row's own height SHALL absorb the difference so that a dropdown of five rows stays one height whichever of those rows are series.
+
+#### Scenario: A dropdown title is drawn in full
+- **WHEN** the type-ahead dropdown shows a result whose title contains tall or bracketed characters, at any window width
+- **THEN** every character is drawn whole, with nothing cut off along the top or bottom of the line
+
+#### Scenario: A series badge line is drawn in full
+- **WHEN** a series result is shown, in the dropdown or as a results-page card
+- **THEN** the "Series" pill's text and the entry-count text beside it are drawn whole, with nothing cut off along the top of the line
+
+#### Scenario: Rows stay uniform after the fix
+- **WHEN** the dropdown lists both series rows and anime rows
+- **THEN** every row is still the same height and the dropdown does not change height as the matches change while typing
+
 ### Requirement: A series result opens the series page
 The system SHALL navigate to the series page when a series result is activated, rather than to any individual anime's detail page.
 
@@ -328,9 +347,11 @@ The system SHALL include NSFW-rated anime (MAL ratings `r+` and `rx`) in every s
 - **THEN** it still appears in the search results, because the setting scopes to the season browser only
 
 ### Requirement: Full search results page
-The system SHALL provide a dedicated search results page that lists every anime matching a submitted query, presented the same way as the seasonal page (picture, title, media type, and episode count per card, using the same content-width-filling grid layout and the same fixed per-row card count at ordinary desktop widths). Results SHALL default to the order returned by the search API (closest match first) and SHALL additionally be sortable by Popularity, MAL score, Alphabetical, and My score; the Popularity sort SHALL place unranked anime (MAL popularity rank absent or zero) last. A double-quoted query SHALL constrain results to exact title matches. The query and sort SHALL be held in the URL so back-navigation restores the same view.
+The system SHALL provide a dedicated search results page that lists every anime matching a submitted query, presented the same way as the seasonal page (picture, title, media type, episode count, and MAL score per card, laid out exactly as a season card lays them out, using the same content-width-filling grid layout and the same fixed per-row card count at ordinary desktop widths). The MAL score SHALL follow the season card's rules in full, including showing nothing at all — no value, no placeholder, no reveal control — while the global hide-scores toggle is on. Results SHALL default to the order returned by the search API (closest match first) and SHALL additionally be sortable by Popularity, MAL score, Alphabetical, and My score; the Popularity sort SHALL place unranked anime (MAL popularity rank absent or zero) last. A double-quoted query SHALL constrain results to exact title matches. The query and sort SHALL be held in the URL so back-navigation restores the same view.
 
 Under the default relevance order, matched series (see "Series appear in search results") SHALL be shown FIRST, ahead of the anime cards, to a maximum of 3. Under any other sort — Popularity, MAL score, Alphabetical, or My score — series SHALL be omitted, since those orderings are defined over per-anime figures a series does not have. The result count shown on the page SHALL continue to count anime only.
+
+A series card SHALL NOT show a MAL score in that slot: its badge line already occupies the slot an anime card uses for its meta line, and a series has no single MAL score of its own.
 
 Results SHALL be loaded with continuous (infinite) scroll rather than numbered pages: an initial chunk renders immediately and further chunks are appended automatically as the user scrolls toward the end of the loaded results, with no pagination controls anywhere on the page. Sorting SHALL be applied server-side across the whole candidate result set before it is chunked, so the order is global rather than per-chunk and an item never moves between chunks as more load. Changing the sort SHALL reset the accumulated results to the first chunk. Series cards SHALL all be shown up front rather than participating in chunked reveal.
 
@@ -338,7 +359,19 @@ The system SHALL provide a multi-select Type filter on the search results page, 
 
 #### Scenario: Viewing full results for a query
 - **WHEN** I submit a search
-- **THEN** the search page shows all matching anime as cards with picture, title, type, and episode count, in the API's relevance order by default
+- **THEN** the search page shows all matching anime as cards with picture, title, type, episode count, and MAL score, in the API's relevance order by default
+
+#### Scenario: A search card's score sits where a season card's does
+- **WHEN** I compare a search results card with a season card for the same anime
+- **THEN** both show the type and episode count at the start of the meta line and the MAL score at its end, laid out identically
+
+#### Scenario: Hiding scores removes the search card score entirely
+- **WHEN** the global hide-scores toggle is on and I view search results
+- **THEN** no card shows a MAL score, a placeholder, or a reveal control
+
+#### Scenario: A series card has no score slot
+- **WHEN** a series card is shown among the results
+- **THEN** its badge line occupies the meta line and no MAL score is shown on it
 
 #### Scenario: Search grid matches the season grid's layout
 - **WHEN** search results are displayed at any window width

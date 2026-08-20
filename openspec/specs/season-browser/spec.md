@@ -184,15 +184,29 @@ The season header SHALL place the step navigation (previous/next arrows with the
 - **THEN** the arrows and season label sit centered in the header with the year/season quick-jump dropdowns directly to their right, rather than the quick-jump sitting alone at the far right edge
 
 ### Requirement: Season card content
-The system SHALL show, on each season card, the anime's title, picture, episode count, and type (TV/movie/etc).
+The system SHALL show, on each season card, the anime's title, picture, episode count, type (TV/movie/etc), and MAL score.
+
+The type and episode count SHALL sit at the leading edge of the card's meta line and the MAL score at its trailing edge, on that same line and sharing its baseline, so a column of cards reads as one row of figures per card rather than as a stack of separate lines. The score SHALL be rendered in the app's MAL colour, in the same two-decimal format every other MAL score uses.
+
+An anime with no MAL score SHALL show nothing in that slot rather than a placeholder — an unrated or not-yet-aired title simply has no figure to report there, and the type and episode count keep their own position regardless.
+
+While the global hide-scores toggle is on, the card SHALL show no score at all: no value, no placeholder, and no per-score reveal control, so a season of cards under hiding carries no score furniture. The type and episode count SHALL stay exactly where they are.
 
 #### Scenario: Rendering a season card
 - **WHEN** season anime are displayed
-- **THEN** each card shows the anime's title, picture, episode count, and type
+- **THEN** each card shows the anime's title, picture, episode count and type at the start of its meta line, and its MAL score at the end of that same line
 
 #### Scenario: Unknown episode count on a season card
 - **WHEN** a season anime's total episode count is unknown
 - **THEN** the card shows the episode count as `?`
+
+#### Scenario: An anime with no MAL score
+- **WHEN** a season anime has no MAL score
+- **THEN** its card's meta line shows only the type and episode count, with nothing in the score slot
+
+#### Scenario: Hiding scores removes the card score entirely
+- **WHEN** the global hide-scores toggle is on
+- **THEN** no season card shows a MAL score, a placeholder, or a reveal control, and the type and episode count are unmoved
 
 ### Requirement: Season grid fills the content width
 The season results grid SHALL size its cards so that each row spans the full width of the page content, leaving no unused gutter to the right of the last card in a row, and SHALL show cover images larger than the fixed-width browse card. The number of cards per row SHALL adapt to the available width, but SHALL be a fixed count at ordinary desktop widths (above the mobile breakpoint) rather than one derived by dividing the container width by a minimum card size — the latter can flip the column count from a small, incidental change in the page's effective width (e.g. a scrollbar or a different display's exact resolution/scaling) even though nothing about the window's actual size class changed. The page's outer container SHALL likewise fill the available display width rather than being capped to a fixed design width, so the grid (and the rest of the page) render the same way regardless of which display, or display configuration, the browser is on.

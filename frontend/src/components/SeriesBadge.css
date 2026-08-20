@@ -7,16 +7,20 @@
   opacity: 0.85;
 }
 
-/* Sized to match .anime-card__meta's ~16px line box (12px text, default
-   line-height) so a series card's badge line is no taller than an anime
-   card's TYPE · N ep line, keeping grid rows the same height. */
+/* Not provably clipped at 14px (10px text in a 14px box clears the glyph
+   content area), but it's the tightest line box in the badge and the least
+   slack of anything else on the row it sits in. 16px puts its glyphs in the
+   same margin every other line on this page now has, at the cost of one
+   extra pixel of pill height on a line with 8px of room. The badge line
+   still sits inside the card's inherited line box either way, so a series
+   card stays no taller than the anime cards beside it. */
 .series-badge__pill {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 0 8px;
-  line-height: 14px;
+  line-height: 16px;
   border-radius: 999px;
   border: 1px solid var(--accent-border);
   background: var(--accent-bg);

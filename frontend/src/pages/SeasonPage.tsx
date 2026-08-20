@@ -526,7 +526,7 @@ export function SeasonPage() {
                 pictureUrl={item.pictureUrl}
                 className="anime-card--fluid"
               >
-                <AnimeCardMeta mediaType={item.mediaType} totalEpisodes={item.totalEpisodes} />
+                <AnimeCardMeta mediaType={item.mediaType} totalEpisodes={item.totalEpisodes} malScore={item.malScore} />
               </AnimeCard>
             </Fragment>
           ))}

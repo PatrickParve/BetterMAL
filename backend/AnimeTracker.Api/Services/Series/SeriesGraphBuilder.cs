@@ -33,7 +33,7 @@ public class SeriesGraphBuilder(
     // timestamp as needing a rebuild, so a classification correction reaches
     // already-stored series on their next read instead of requiring the user
     // to find and rebuild each one by hand (design.md decision 3).
-    public static readonly DateTimeOffset ClassificationRevisedAt = new(2026, 8, 16, 0, 0, 0, TimeSpan.Zero);
+    public static readonly DateTimeOffset ClassificationRevisedAt = new(2026, 8, 20, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>Builds and persists the series reachable from
     /// <paramref name="seedAnimeId"/>, spending at most <paramref name="fetchBudget"/>
@@ -151,12 +151,38 @@ public class SeriesGraphBuilder(
             // without any special-casing — it's still admitted as a member
             // above, just not expanded from its own side, unless
             // expandLeanMembers just upgraded it above.
-            var outgoingIds = metadata.RelatedAnime
+            var storyOutgoingIds = metadata.RelatedAnime
                 .Where(r => SeriesRelations.IsTraversable(r.RelationType))
                 .Select(r => r.RelatedAnimeId);
 
+            // Music-aware `other` edges (design.md decision 1): one batched
+            // lookup of the cached MediaType of this node's `other`-relation
+            // neighbours, not a per-edge query. A neighbour with no cached
+            // row at all is left out of the dictionary and therefore treated
+            // as not traversable, spending no fetch budget on it.
+            var otherRelationIds = metadata.RelatedAnime
+                .Where(r => r.RelationType == "other")
+                .Select(r => r.RelatedAnimeId)
+                .Distinct()
+                .ToList();
+
+            var otherNeighbourMediaTypes = otherRelationIds.Count > 0
+                ? await db.AnimeMetadata.AsNoTracking()
+                    .Where(a => otherRelationIds.Contains(a.Id))
+                    .Select(a => new { a.Id, a.MediaType })
+                    .ToDictionaryAsync(a => a.Id, a => a.MediaType, ct)
+                : [];
+
+            var musicOutgoingIds = otherRelationIds.Where(id =>
+                otherNeighbourMediaTypes.TryGetValue(id, out var neighbourMediaType) &&
+                SeriesRelations.IsTraversableMusicEdge(metadata.MediaType, neighbourMediaType));
+
+            var outgoingIds = storyOutgoingIds.Concat(musicOutgoingIds);
+
             var incomingIds = await db.AnimeRelatedAnime.AsNoTracking()
-                .Where(r => r.RelatedAnimeId == animeId && SeriesRelations.TraversalSet.Contains(r.RelationType))
+                .Where(r => r.RelatedAnimeId == animeId &&
+                    (SeriesRelations.TraversalSet.Contains(r.RelationType) ||
+                        (r.RelationType == "other" && (r.Anime.MediaType == "music") != (metadata.MediaType == "music"))))
                 .Select(r => r.AnimeId)
                 .ToListAsync(ct);
 

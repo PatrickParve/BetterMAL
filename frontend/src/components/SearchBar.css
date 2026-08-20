@@ -79,13 +79,17 @@
 /* Fixed rather than left to the content: a series row's title+badge stack
    and an anime row's bare title would otherwise measure to different
    heights, making the dropdown grow or shrink as matches change mid-typing.
-   52px = the 40px thumbnail plus this row's own 6px top/bottom padding. */
+   56px content budget (44px) = the title's 22px line-height + 2px gap +
+   the badge pill's 18px (line-height plus its own border) — the glyph
+   content area each of those lines needs at the app's largest fluid root
+   font (18px, reached at any window ≥ 1280px), with a little slack left
+   over. */
 .search-bar__result {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  height: 52px;
+  height: 56px;
   box-sizing: border-box;
   padding: 6px 8px;
   border: none;
@@ -120,13 +124,17 @@
 /* The root's 145% line-height computes to a length (~23px) on :root and
    inherits as that length, not as a ratio — so both the title and the badge
    line sat in ~23px line boxes here, which is what made a series row taller
-   than an anime row. Pinned to fit the row's 40px content box: 20 + 2px gap
-   + 16 = 38px. */
+   than an anime row. Pinned instead to the glyph content area the line
+   actually needs: at the app's largest fluid root font (18px, reached at
+   any window ≥ 1280px), 18px system-ui's glyph content area is 21px
+   (fontBoundingBoxAscent 17 + fontBoundingBoxDescent 4), so a line-height
+   below that shaves a sliver off the top and bottom of every character via
+   negative half-leading. 22px keeps a whole pixel of slack. */
 .search-bar__result-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 20px;
+  line-height: 22px;
 }
 
 .search-bar__result .series-badge {

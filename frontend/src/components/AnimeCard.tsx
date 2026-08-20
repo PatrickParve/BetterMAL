@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
+import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { mediaTypeLabel, pickDisplayTitle } from '../utils/anime.ts'
 import './AnimeCard.css'
 
@@ -46,11 +47,28 @@ export function AnimeCard({ animeId, title, englishTitle, pictureUrl, to, childr
 }
 
 // The `{TYPE} · {N} ep` meta line shown on browse cards (season, search) below
-// the title.
-export function AnimeCardMeta({ mediaType, totalEpisodes }: { mediaType: string | null; totalEpisodes: number | null }) {
+// the title, with the anime's MAL score trailing at the line's end. While
+// scores are globally hidden the score is omitted entirely — no value, no
+// placeholder, no reveal control — rather than using ScoreValue, whose
+// hidden branch always renders a reveal button (score-visibility spec's
+// browse-card exception; "always show completed/dropped scores" is
+// deliberately not consulted here, since these cards carry no watch status).
+export function AnimeCardMeta({
+  mediaType,
+  totalEpisodes,
+  malScore,
+}: {
+  mediaType: string | null
+  totalEpisodes: number | null
+  malScore: number | null
+}) {
+  const { hidden } = useScoreVisibility()
   return (
     <span className="anime-card__meta">
-      {mediaTypeLabel(mediaType)} · {totalEpisodes ?? '?'} ep
+      <span>
+        {mediaTypeLabel(mediaType)} · {totalEpisodes ?? '?'} ep
+      </span>
+      {!hidden && malScore != null && <span className="anime-card__meta-score score--mal">{malScore.toFixed(2)}</span>}
     </span>
   )
 }
