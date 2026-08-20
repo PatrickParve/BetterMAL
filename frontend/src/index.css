@@ -27,6 +27,22 @@
   --status-dropped-bg: rgba(220, 38, 38, 0.12);
   --status-dropped-border: rgba(220, 38, 38, 0.45);
 
+  /* Recap podium rank colours (RecapPage.tsx's renderPodiumCard). Silver is
+     the hard one: a literal silver (#c0c0c0-ish) sits nearly on top of
+     --border in the light theme and all but disappears — this token is a
+     cool slate-blue instead, which reads as "silver" through the
+     gold/silver/bronze family rather than through the literal hue, and is
+     darkened enough to clear text contrast on its own tint. */
+  --medal-gold: #a16207;
+  --medal-gold-bg: rgba(161, 98, 7, 0.12);
+  --medal-gold-border: rgba(161, 98, 7, 0.45);
+  --medal-silver: #475569;
+  --medal-silver-bg: rgba(71, 85, 105, 0.12);
+  --medal-silver-border: rgba(71, 85, 105, 0.45);
+  --medal-bronze: #9a3412;
+  --medal-bronze-bg: rgba(154, 52, 18, 0.12);
+  --medal-bronze-border: rgba(154, 52, 18, 0.45);
+
   /* App-wide score colour language: blue is MAL/broadcast, purple is me.
      Aliased rather than used raw so the two can diverge from
      --status-completed/--accent later without touching every rule that
@@ -99,6 +115,16 @@
     --status-dropped: #f87171;
     --status-dropped-bg: rgba(248, 113, 113, 0.16);
     --status-dropped-border: rgba(248, 113, 113, 0.5);
+
+    --medal-gold: #eab308;
+    --medal-gold-bg: rgba(234, 179, 8, 0.16);
+    --medal-gold-border: rgba(234, 179, 8, 0.5);
+    --medal-silver: #94a3b8;
+    --medal-silver-bg: rgba(148, 163, 184, 0.16);
+    --medal-silver-border: rgba(148, 163, 184, 0.5);
+    --medal-bronze: #fb923c;
+    --medal-bronze-bg: rgba(251, 146, 60, 0.16);
+    --medal-bronze-border: rgba(251, 146, 60, 0.5);
 
     --mal: var(--status-completed);
     --mal-bg: var(--status-completed-bg);

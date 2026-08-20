@@ -98,7 +98,7 @@
   top: 0;
   bottom: 0;
   right: 0;
-  width: calc(100% - 34px);
+  width: calc(100% - 32px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -114,32 +114,48 @@
   left: 0;
 }
 
-/* Sized to fill the pill's own rounded end cap exactly (diameter ==
-   track height == twice the border-radius), so the knob hugs the track's
-   edge flush rather than floating inset from it. box-sizing: border-box
-   keeps the knob's own 1px border inside that 34px, instead of padding it
-   out past the cap. */
+/* Inset within the track rather than filling its end cap (design.md
+   decision 8): a 3px gap to the track's inner edge on every side is what
+   stops the knob — and its shadow — from painting over the track's own
+   border. Vertically centred via top: 50% + the translate below (composed
+   with the checked-state slide, hence the shared transform property rather
+   than left/right). box-sizing: border-box keeps the knob's own 1px border
+   inside that 26px. */
 .navbar__score-switch-knob {
   position: absolute;
-  top: 0;
-  left: 0;
+  top: 50%;
+  left: 3px;
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: var(--bg);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow);
+  /* Tight enough that even at the knob's 3px inset it can never reach the
+     track's border (was var(--shadow), whose primary layer casts 10px
+     down — exactly what smudged the track's bottom border). */
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
   color: var(--text-h);
-  transform: translateX(0);
+  transform: translate(0, -50%);
   transition: transform 0.2s ease;
 }
 
+/* A percentage here would resolve against the knob's own box, not the
+   track's (that's how CSS translate() percentages work) — so the offset is
+   built from the track's and knob's own dimensions as literal constants
+   instead. The switch button is a border-box element (the browser's own
+   form-control default, not set explicitly in this file), so its 100px
+   width already includes its own 1px-each-side border — the knob's actual
+   travel range is that 100px minus the track's own 2px of border, minus
+   the knob's 26px, minus its 3px gap on each end. Keeping every
+   contributing width in the calc (rather than one pre-added number, as the
+   old translateX(66px) was) is what keeps the two end gaps visibly equal
+   if any of them changes. */
 .navbar__score-switch--checked .navbar__score-switch-knob {
-  transform: translateX(66px);
+  transform: translate(calc(100px - 2px - 26px - 6px), -50%);
 }
 
 /* Slash drawn (offset 0) and pupil hidden (scale 0) by default — the switch's

@@ -38,18 +38,40 @@
   background: var(--bg);
   color: var(--text);
   cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease,
+    transform 0.12s ease;
 }
 
-.recap-page__tab:hover:not(:disabled) {
+/* Six explicit states (design.md decision 6), shared by all three recap
+   control groups (mode tabs, time filter, ranking-basis toggle) so a
+   selected time filter and a selected recap-type tab look alike. The halo
+   below is box-shadow, so none of these ever change the control's box —
+   the cluster's shared --control-h height stays untouched. */
+.recap-page__tab:hover:not(:disabled):not(.recap-page__tab--active) {
+  background: var(--accent-bg);
   color: var(--text-h);
   border-color: var(--accent-border);
 }
 
-.recap-page__tab--active,
-.recap-page__tab--active:hover {
-  border-color: var(--accent);
-  background: var(--accent);
+.recap-page__tab--active {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 65%, black));
   color: #fff;
+  font-weight: 600;
+  box-shadow: 0 0 0 3px var(--accent-bg), 0 4px 10px -2px var(--accent-border);
+}
+
+/* Distinct from resting-selected (spec scenario "Hovering the
+   already-selected option") — a hover that does nothing is a dead control. */
+.recap-page__tab--active:hover:not(:disabled) {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 85%, white), var(--accent));
+  box-shadow: 0 0 0 5px var(--accent-bg), 0 6px 16px -2px var(--accent-border);
+  transform: translateY(-1px);
+}
+
+.recap-page__tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .recap-page__tab:disabled {
@@ -120,14 +142,36 @@
   cursor: not-allowed;
 }
 
-.recap-page__season-link {
+/* A real <Link> (design.md decision 7 — it must stay a real anchor for
+   middle-click/⌘-click/"copy link address") styled to match the
+   --control-h controls it sits beside: the period selects and the round
+   stepper arrows. */
+.recap-page__season-button {
+  height: var(--control-h);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
   font-size: 14px;
-  color: var(--accent);
+  font-weight: 500;
   text-decoration: none;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
-.recap-page__season-link:hover {
-  text-decoration: underline;
+.recap-page__season-button:hover {
+  color: var(--text-h);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.recap-page__season-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .recap-page__loading,
@@ -174,6 +218,8 @@
 }
 
 .recap-page__stat {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -183,7 +229,27 @@
   background: var(--code-bg);
   text-decoration: none;
   color: inherit;
-  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+/* A persistent marker of which kind of tile this is (spec scenario
+   "Followable and aggregate tiles differ at rest") — a leading rail inside
+   the padding box (task 5.1), so it never changes the tile's own box. Its
+   colour (task 5.2) is the same followable/aggregate signal the hover
+   treatment below already carries, just visible without moving the
+   pointer: accent for a tile with somewhere to lead, --border otherwise. */
+.recap-page__stat::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--border);
+}
+
+.recap-page__stat--link::before {
+  background: var(--accent);
 }
 
 /* Quieter, background-only feedback for the tiles that lead nowhere (Mean
@@ -198,12 +264,14 @@
    tile with something to show, and a plain <div> for a followable tile
    whose count is 0 — it still reads as "this kind of tile" on hover, but
    has nowhere to lead, so only the anchor gets the pointer cursor and an
-   explicit focus ring. */
+   explicit focus ring. Both also lift slightly (task 5.4), on top of the
+   accent tint/border/shadow the followable tiles already had. */
 .recap-page__stat--link:hover,
 .recap-page__stat--link:focus-visible {
   background: var(--accent-bg);
   border-color: var(--accent-border);
   box-shadow: var(--shadow);
+  transform: translateY(-2px);
 }
 
 a.recap-page__stat--link {
@@ -216,8 +284,9 @@ a.recap-page__stat--link:focus-visible {
 }
 
 .recap-page__stat-value {
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--text-h);
 }
 
@@ -225,6 +294,8 @@ a.recap-page__stat--link:focus-visible {
   font-size: 12px;
   color: var(--text);
   opacity: 0.75;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .recap-page__section-header {
@@ -349,6 +420,247 @@ a.recap-page__stat--link:focus-visible {
   color: var(--mine);
   background: var(--mine-bg);
   border: 1px solid var(--mine-border);
+}
+
+/* Podium: the top 3 of the top 10, rendered as cards in a single row, left
+   to right in rank order and sized to match — #1 biggest and leftmost, #3
+   smallest and rightmost. DOM order already is rank order, so visual order
+   and reading/keyboard order are simply the same thing here — no
+   grid-column reordering needed. `align-items: end` keeps every card's
+   bottom edge on one line, so #2 and #3 — each shorter than #1 by however
+   much narrower their own column is — sit lower, their tops trailing down
+   and away from #1's rather than lined up with it. A shorter podium (fewer
+   than 3 entries) simply leaves its trailing column(s) empty — no
+   placeholder card is ever rendered for a missing rank. */
+.recap-podium {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.05fr) minmax(0, 0.95fr);
+  align-items: end;
+  gap: 16px;
+  list-style: none;
+  /* Capped rather than filling the lead column's full width — left
+     unbounded, the row's cards (and their aspect-ratio posters) scaled up
+     to dominate the page. */
+  max-width: 640px;
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+/* Each card reads its rank colour through one local alias set here, so the
+   badge, band, glow, and sheen below are all written once against
+   var(--medal*) rather than three times each (design.md decision 3). */
+.recap-podium__card {
+  --medal: var(--medal-gold);
+  --medal-bg: var(--medal-gold-bg);
+  --medal-border: var(--medal-gold-border);
+  position: relative;
+  border: 1px solid var(--medal-border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(var(--medal-bg), var(--medal-bg)), var(--code-bg);
+}
+
+.recap-podium__card--silver {
+  --medal: var(--medal-silver);
+  --medal-bg: var(--medal-silver-bg);
+  --medal-border: var(--medal-silver-border);
+}
+
+.recap-podium__card--bronze {
+  --medal: var(--medal-bronze);
+  --medal-bg: var(--medal-bronze-bg);
+  --medal-border: var(--medal-bronze-border);
+}
+
+/* The medal band the badge sits in — a decorative tint across the card's
+   top edge, not a separate markup element. */
+.recap-podium__card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 44px;
+  background: linear-gradient(180deg, var(--medal-bg), transparent);
+  pointer-events: none;
+}
+
+.recap-podium__link {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 12px 14px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.recap-podium__badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 2px solid var(--medal);
+  background: var(--bg);
+  color: var(--medal);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The 260/368 ratio (design: matches AnimeDetailPage's own poster box, not
+   the flatter 2/3 the card grids use) is set here via the classic
+   padding-top-percentage technique rather than as `aspect-ratio` directly
+   on the <img> — WebKit has been observed to mis-size an aspect-ratio'd
+   replaced element when its available width comes from a CSS Grid `fr`
+   track rather than a definite length, producing a taller (more cropped)
+   box than Chromium renders for the same rule. Padding-top is a plain
+   percentage-of-width calculation, unrelated to that replaced-element
+   sizing algorithm, and resolves identically everywhere. */
+.recap-podium__picture-frame {
+  position: relative;
+  width: 100%;
+  padding-top: calc(368 / 260 * 100%);
+}
+
+.recap-podium__picture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.recap-podium__picture--placeholder {
+  border: 1px solid var(--border);
+}
+
+/* Two-line clamp with the height reserved unconditionally (task 3.5), so a
+   one-line and a two-line title produce cards of identical height. */
+.recap-podium__title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: calc(2 * 1.3em);
+  line-height: 1.3em;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+  text-align: center;
+}
+
+/* Below this width there's no room for three cards side by side — the
+   podium stacks into one column in rank order, every card full width
+   (spec scenario "Narrow displays stack the podium"). */
+@media (max-width: 720px) {
+  .recap-podium {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Podium motion (design.md decision 4): three effects, all on
+   transform/opacity only, so none of them ever triggers layout — the "no
+   reflow" guarantee holds even though the card visibly moves. Keyed on the
+   card element itself, which React remounts whenever the period, filter,
+   basis, or type narrowing changes (renderPodiumCard's key), so the
+   entrance re-runs on every genuinely new set and never on an unrelated
+   re-render. */
+@keyframes recap-podium-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.recap-podium__card {
+  animation: recap-podium-rise 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.recap-podium__card--gold {
+  animation-delay: 0ms;
+}
+
+.recap-podium__card--silver {
+  animation-delay: 80ms;
+}
+
+.recap-podium__card--bronze {
+  animation-delay: 160ms;
+}
+
+.recap-podium__card:hover,
+.recap-podium__card:focus-within {
+  transform: translateY(-4px) scale(1.015);
+  /* A 0-offset blur+spread glows evenly on every side rather than casting
+     mostly downward the way a drop-shadow-style offset would. */
+  box-shadow: 0 0 20px 4px var(--medal-border);
+}
+
+/* #1's continuous decorative motion — a narrow highlight sweeping across the
+   medal band on a slow loop. Pure CSS, so it's inherently absent from the
+   accessibility tree (no element to aria-hide) and pointer-events: none
+   keeps it from ever intercepting a click on the card beneath it. */
+@keyframes recap-podium-sheen {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(220%);
+  }
+}
+
+.recap-podium__card--gold::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  width: 40%;
+  height: 44px;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: recap-podium-sheen 5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* One query switches every podium motion off: the arrival, the pointer
+   response, and #1's sheen alike — leaving the podium fully legible and
+   fully operable, with the colour part of the hover feedback (the
+   medal-tinted box-shadow) still shown. */
+@media (prefers-reduced-motion: reduce) {
+  .recap-podium__card {
+    animation: none;
+    transition: none;
+  }
+
+  .recap-podium__card--gold::after {
+    animation: none;
+  }
+
+  .recap-podium__card:hover,
+  .recap-podium__card:focus-within {
+    transform: none;
+  }
+
+  .recap-page__stat--link:hover,
+  .recap-page__stat--link:focus-visible {
+    transform: none;
+  }
+
+  .recap-page__tab--active:hover {
+    transform: none;
+  }
 }
 
 /* Top 10 */

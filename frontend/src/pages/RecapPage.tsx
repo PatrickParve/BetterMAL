@@ -15,6 +15,7 @@ import {
 } from '../api/types.ts'
 import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
 import { describeSeasonRanking, describeYearRanking, RankingSection } from '../components/RankingSection.tsx'
+import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreDistribution } from '../components/ScoreDistribution.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
@@ -340,8 +341,10 @@ export function RecapPage() {
   function renderSeasonPageLink() {
     if (mode !== 'season') return null
     return (
-      <Link to={`/season?year=${startYear}&season=${season}`} className="recap-page__season-link">
-        Browse {seasonLabel(season)} {startYear} on the season page
+      <Link to={`/season?year=${startYear}&season=${season}`} className="recap-page__season-button">
+        <CalendarIcon />
+        Browse the season
+        <span aria-hidden="true">&rsaquo;</span>
       </Link>
     )
   }
@@ -488,13 +491,53 @@ export function RecapPage() {
   function renderHotTakes(hotTakes: RecapHotTakeDto[]) {
     return (
       <section className="recap-page__section">
-        <h2>Hot takes</h2>
+        <h2>Biggest Hot takes</h2>
         {hotTakes.length === 0 ? (
           <p className="recap-page__empty-note">No hot takes for this period.</p>
         ) : (
           <ul className="recap-hot-take-list">{hotTakes.map(renderHotTake)}</ul>
         )}
       </section>
+    )
+  }
+
+  const MEDALS = ['gold', 'silver', 'bronze'] as const
+
+  // A card for one of the top 3, rendered in place of the equivalent row
+  // (design.md decision 1). The key folds in every input that can change
+  // which ten anime — and in which order — are shown, so React remounts the
+  // cards (re-running the entrance animation, tasks.md 4.1/4.5) exactly when
+  // the set genuinely changes, and reuses them across an unrelated re-render.
+  function renderPodiumCard(item: RecapRowDto, index: number, effectiveBasis: RankingBasis) {
+    const rank = index + 1
+    const medal = MEDALS[index]
+    const displayTitle = pickDisplayTitle(item.title, item.englishTitle)
+    const key = `${mode}:${startYear}:${endYear}:${season}:${filter}:${effectiveBasis}:${typeFilter}:${item.animeId}`
+    return (
+      <li key={key} className={`recap-podium__card recap-podium__card--${medal}`}>
+        <Link to={`/anime/${item.animeId}`} className="recap-podium__link">
+          <span className="recap-podium__badge">{rank}</span>
+          <div className="recap-podium__picture-frame">
+            {item.pictureUrl ? (
+              <img src={item.pictureUrl} alt="" className="recap-podium__picture" />
+            ) : (
+              <div className="recap-podium__picture recap-podium__picture--placeholder" aria-hidden="true" />
+            )}
+          </div>
+          <span className="recap-podium__title" title={displayTitle}>
+            {displayTitle}
+          </span>
+          {effectiveBasis === 'mine' ? (
+            <ScoreChip role="mine" size="compact">
+              {item.myScore ?? '—'}
+            </ScoreChip>
+          ) : (
+            <ScoreChip role="mal" size="compact">
+              <ScoreValue value={item.malScore} completed={item.malRevealed} />
+            </ScoreChip>
+          )}
+        </Link>
+      </li>
     )
   }
 
@@ -520,6 +563,8 @@ export function RecapPage() {
       return a.title.localeCompare(b.title)
     })
     const topTen = ranked.slice(0, TOP_TEN_SIZE)
+    const podium = topTen.slice(0, 3)
+    const rows = topTen.slice(3)
 
     return (
       <section className="recap-page__section">
@@ -568,30 +613,35 @@ export function RecapPage() {
         {topTen.length === 0 ? (
           <p className="recap-page__empty-note">No anime of this type in this period.</p>
         ) : (
-          <ol className="recap-top-ten-list">
-            {topTen.map((item, index) => (
-              <li key={item.animeId} className="recap-top-ten-row">
-                <span className="recap-top-ten-row__rank">#{index + 1}</span>
-                <Link to={`/anime/${item.animeId}`} className="recap-top-ten-row__link">
-                  {item.pictureUrl ? (
-                    <img src={item.pictureUrl} alt="" className="recap-top-ten-row__picture" />
-                  ) : (
-                    <div className="recap-top-ten-row__picture recap-top-ten-row__picture--placeholder" aria-hidden="true" />
-                  )}
-                  <span className="recap-top-ten-row__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
-                    {pickDisplayTitle(item.title, item.englishTitle)}
-                  </span>
-                </Link>
-                <span className="recap-top-ten-row__score">
-                  {effectiveBasis === 'mine' ? (
-                    (item.myScore ?? '—')
-                  ) : (
-                    <ScoreValue value={item.malScore} completed={item.malRevealed} />
-                  )}
-                </span>
-              </li>
-            ))}
-          </ol>
+          <>
+            <ol className="recap-podium">{podium.map((item, index) => renderPodiumCard(item, index, effectiveBasis))}</ol>
+            {rows.length > 0 && (
+              <ol className="recap-top-ten-list" start={4}>
+                {rows.map((item, index) => (
+                  <li key={item.animeId} className="recap-top-ten-row">
+                    <span className="recap-top-ten-row__rank">#{index + 4}</span>
+                    <Link to={`/anime/${item.animeId}`} className="recap-top-ten-row__link">
+                      {item.pictureUrl ? (
+                        <img src={item.pictureUrl} alt="" className="recap-top-ten-row__picture" />
+                      ) : (
+                        <div className="recap-top-ten-row__picture recap-top-ten-row__picture--placeholder" aria-hidden="true" />
+                      )}
+                      <span className="recap-top-ten-row__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
+                        {pickDisplayTitle(item.title, item.englishTitle)}
+                      </span>
+                    </Link>
+                    <span className="recap-top-ten-row__score">
+                      {effectiveBasis === 'mine' ? (
+                        (item.myScore ?? '—')
+                      ) : (
+                        <ScoreValue value={item.malScore} completed={item.malRevealed} />
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </>
         )}
 
         {narrowed.length > TOP_TEN_SIZE && (
@@ -705,7 +755,7 @@ export function RecapPage() {
   return (
     <div className="recap-page">
       <div className="recap-page__header">
-        <h1>{periodLabel} recap</h1>
+        <h1>Recap of {periodLabel}</h1>
         {renderModeTabs()}
       </div>
 
@@ -747,5 +797,15 @@ export function RecapPage() {
 
       {overlay && <RankingOverlay title={overlay.title} rows={overlay.rows} onClose={() => setOverlay(null)} />}
     </div>
+  )
+}
+
+function CalendarIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="16" rx="3" />
+      <path d="M3 10h18" />
+      <path d="M8 3v4M16 3v4" />
+    </svg>
   )
 }
