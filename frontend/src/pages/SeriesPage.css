@@ -19,6 +19,25 @@
   align-items: flex-start;
 }
 
+/* A landscape picture is shown much larger, so the title/status/links column
+   beside it and the score chips/progress bar beneath it need their own grid
+   cells rather than sharing the flex column the portrait layout uses:
+   picture top-left, title/meta/links top-right, chips+progress directly
+   under the picture in the row below. Column 1 is pinned to the picture's
+   own width (--header-picture-w, shared with .series-page__picture--landscape
+   below) rather than left as `auto` — an `auto` track sizes itself to the
+   widest content in the column across every row, and the score chips/
+   progress row underneath is often wider than the picture itself, which
+   would silently push column 2 (and the title block in it) further right
+   than the picture's own edge regardless of column-gap. */
+.series-page__header--landscape {
+  --header-picture-w: clamp(280px, 38vw, 420px);
+  display: grid;
+  grid-template-columns: var(--header-picture-w) minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 12px;
+}
+
 .series-page__picture {
   width: clamp(140px, 20vw, 200px);
   aspect-ratio: 140 / 198;
@@ -30,6 +49,37 @@
 
 .series-page__picture--placeholder {
   border: 1px solid var(--border);
+}
+
+/* Landscape art takes its own natural height instead of being cropped to
+   the portrait 140/198 box, and is shown noticeably larger than the
+   portrait box — width alone communicates that, since a landscape picture's
+   height is already smaller relative to its width. */
+.series-page__picture--landscape {
+  width: var(--header-picture-w, clamp(280px, 38vw, 420px));
+  aspect-ratio: auto;
+  height: auto;
+}
+
+.series-page__header--landscape .series-page__picture {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.series-page__header--landscape .series-page__header-info {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+/* Spans both columns rather than just the picture's — column 1 alone is
+   only as wide as the picture, which isn't room enough for every score chip
+   to sit on one line without shrinking the chips themselves. */
+.series-page__header-below {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .series-page__header-info {
@@ -436,13 +486,16 @@
   text-align: center;
 }
 
+/* --extras-gap is read by SeriesExtraTile.css's landscape-tile sizer, so the
+   grid's actual gap and that calc can never drift apart. */
 .series-page__extras-grid {
+  --extras-gap: 12px;
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 12px;
+  gap: var(--extras-gap);
 }
 
 .series-page__extras-group-hint {
@@ -477,6 +530,28 @@
     flex-direction: column;
     align-items: center;
     text-align: center;
+  }
+
+  /* Same single-column stack as the portrait layout — picture, then info,
+     then (for a landscape picture) the chips/progress block below it. */
+  .series-page__header--landscape {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .series-page__picture--landscape {
+    width: min(320px, 88vw);
+  }
+
+  .series-page__header--landscape .series-page__header-info {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .series-page__header--landscape .series-page__header-below {
+    grid-column: 1;
+    grid-row: 3;
+    align-items: center;
   }
 
   .series-page__header-info {

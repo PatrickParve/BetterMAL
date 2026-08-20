@@ -91,6 +91,7 @@ export function AiringPage() {
 
   const isCurrentWeek = weekStartIso(referenceDate) === weekStartIso(todayIso())
   const isEmptyWeek = week !== null && week.days.every((day) => day.slots.length === 0)
+  const today = todayIso()
 
   // Sliced, not `new Date(referenceDate)` — see toLocalIso above.
   const selectedYear = Number(referenceDate.slice(0, 4))
@@ -147,36 +148,42 @@ export function AiringPage() {
           <p className="airing-page__empty">Nothing airing this week.</p>
         ) : (
           <div className="airing-page__grid">
-            {week.days.map((day) => (
-              <div key={day.localDate} className="airing-day">
-                {/* Sliced, not `new Date(day.localDate)` — parsing a bare ISO date
-                    with the Date constructor reads it as UTC and can land on the
-                    wrong local day (see toLocalIso above). */}
-                <div className="airing-day__header">
-                  {day.dayOfWeek} {Number(day.localDate.slice(8, 10))}.{Number(day.localDate.slice(5, 7))}
-                </div>
-                <ul className="airing-day__slots">
-                  {day.slots.map((slot) => (
-                    <li key={`${slot.animeId}-${slot.localTime}-${slot.episodeNumber ?? 'x'}`}>
-                      <Link to={`/anime/${slot.animeId}`} className="airing-slot">
-                        <span className="airing-slot__time">{slot.localTime}</span>
-                        <span className="airing-slot__body">
-                          {slot.pictureUrl ? (
-                            <img src={slot.pictureUrl} alt="" className="airing-slot__thumb" />
-                          ) : (
-                            <div className="airing-slot__thumb airing-slot__thumb--placeholder" aria-hidden="true" />
-                          )}
-                          <span className="airing-slot__info">
-                            <span className="airing-slot__title">{pickDisplayTitle(slot.title, slot.englishTitle)}</span>
-                            <span className="airing-slot__episode">{formatEpisodeLabel(slot)}</span>
+            {week.days.map((day) => {
+              const isToday = day.localDate === today
+              return (
+                <div key={day.localDate} className="airing-day">
+                  {/* Sliced, not `new Date(day.localDate)` — parsing a bare ISO date
+                      with the Date constructor reads it as UTC and can land on the
+                      wrong local day (see toLocalIso above). */}
+                  <div
+                    className={isToday ? 'airing-day__header airing-day__header--today' : 'airing-day__header'}
+                    aria-current={isToday ? 'date' : undefined}
+                  >
+                    {day.dayOfWeek} {Number(day.localDate.slice(8, 10))}.{Number(day.localDate.slice(5, 7))}
+                  </div>
+                  <ul className="airing-day__slots">
+                    {day.slots.map((slot) => (
+                      <li key={`${slot.animeId}-${slot.localTime}-${slot.episodeNumber ?? 'x'}`}>
+                        <Link to={`/anime/${slot.animeId}`} className="airing-slot">
+                          <span className="airing-slot__time">{slot.localTime}</span>
+                          <span className="airing-slot__body">
+                            {slot.pictureUrl ? (
+                              <img src={slot.pictureUrl} alt="" className="airing-slot__thumb" />
+                            ) : (
+                              <div className="airing-slot__thumb airing-slot__thumb--placeholder" aria-hidden="true" />
+                            )}
+                            <span className="airing-slot__info">
+                              <span className="airing-slot__title">{pickDisplayTitle(slot.title, slot.englishTitle)}</span>
+                              <span className="airing-slot__episode">{formatEpisodeLabel(slot)}</span>
+                            </span>
                           </span>
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            })}
           </div>
         ))}
     </div>

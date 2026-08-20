@@ -67,6 +67,15 @@
   flex: 0 0 260px;
 }
 
+/* A landscape picture is shown noticeably larger than the portrait box, so
+   the column carrying it (and the progress bar/actions stacked beneath it)
+   widens to match — --picture-w is shared with .picture--landscape below so
+   the column and the image can never drift out of sync. */
+.anime-detail-page__picture-col--landscape {
+  --picture-w: clamp(320px, 27vw, 400px);
+  flex-basis: var(--picture-w);
+}
+
 .anime-detail-page__picture {
   width: 260px;
   height: 368px;
@@ -77,6 +86,14 @@
 
 .anime-detail-page__picture--placeholder {
   border: 1px solid var(--border);
+}
+
+/* Landscape art takes its own natural height instead of being cropped to
+   the portrait 368px box, and is shown wider than the portrait box at the
+   width the column above now reserves for it. */
+.anime-detail-page__picture--landscape {
+  width: var(--picture-w, clamp(320px, 27vw, 400px));
+  height: auto;
 }
 
 .anime-detail-page__progress-row {
@@ -211,6 +228,13 @@
 
   .anime-detail-page__picture-col {
     flex: 0 0 auto;
+  }
+
+  /* The column's flex-basis no longer applies once stacked (flex: 0 0 auto
+     above sizes it to content instead), so the picture's own width is what
+     could otherwise overflow a narrow viewport — cap it directly. */
+  .anime-detail-page__picture--landscape {
+    width: min(360px, 85vw);
   }
 
   .anime-detail-page__score-boxes {

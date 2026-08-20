@@ -519,10 +519,43 @@ An edit saved from a tile SHALL update it in place without reloading the page.
 - **WHEN** an extra has a rewatch count of 1
 - **THEN** its tile shows a rewatch indicator reading 1
 
+### Requirement: Landscape artwork is shown whole on the series page
+An entry whose picture is landscape — its intrinsic width greater than its intrinsic height — SHALL have that picture shown whole wherever the series page renders it: the page header's picture, a main-line timeline card's picture, and a More tile's picture. No part of a landscape picture SHALL be cropped away to fill a portrait box.
+
+In the page header, the picture SHALL keep the width it already has and take whatever height its own proportions give it at that width, so the title, status pill, personal badge, year span, links, score averages, and progress beside it keep their existing positions.
+
+On a timeline card and on a More tile, the card's picture area SHALL keep the height it has for portrait artwork, so every card in a row still lines its picture, title, and footer up with its neighbours. The landscape picture SHALL be fitted whole inside that area rather than cropped to fill it, and the card carrying it MAY be wider than its portrait neighbours so that the fitted picture is shown at a useful size rather than reduced to a sliver of the card's height.
+
+A card's extra width SHALL be a consequence of its artwork's orientation alone. It SHALL NOT vary with how long the entry ran, how long the wait before it was, its episode count, its scores, or my progress on it, and SHALL take only one widened size rather than a size computed per image, so a wider card can never be read as a duration or magnitude signal.
+
+This treatment SHALL apply only to landscape artwork. A portrait picture, a square picture, and the placeholder shown when an entry has no picture SHALL keep their existing boxes and their existing card widths unchanged.
+
+Because a picture's proportions are not known until the image itself has loaded, the page SHALL render the existing portrait boxes until then and adopt the landscape treatment once a picture is known to be landscape. The page SHALL NOT request, store, or wait on any additional data to make this decision.
+
+#### Scenario: A landscape header picture is not cropped
+- **WHEN** I open a series whose root entry's picture is wider than it is tall
+- **THEN** the header shows that whole picture at its own proportions, and the title, pill, badge, year span, links, averages, and progress beside it are positioned exactly as on any other series page
+
+#### Scenario: A landscape timeline card shows its whole picture
+- **WHEN** a main-line entry's picture is wider than it is tall
+- **THEN** its timeline card shows the whole picture, the card is wider than its portrait neighbours, and its picture area, title, chips, and footer still line up with theirs
+
+#### Scenario: A landscape More tile shows its whole picture
+- **WHEN** an extra's picture is wider than it is tall
+- **THEN** its More tile shows the whole picture and is wider than the portrait tiles in its group, while its rows stay aligned with them
+
+#### Scenario: Card width still says nothing about duration
+- **WHEN** a series has one entry that ran a single cour and another that ran for several years, both with portrait pictures
+- **THEN** both cards render at the same width, and the only cards that differ in width anywhere on the page are those whose own artwork is landscape
+
+#### Scenario: Portrait artwork is untouched
+- **WHEN** I open a series in which every picture is taller than it is wide
+- **THEN** the header picture, every timeline card, and every More tile render exactly as they do today
+
 ### Requirement: Series timeline ribbon
 The series page SHALL present the main line as one chronological list of cards, one per entry, in watch order — including an entry with no air date yet, such as an announced but unscheduled next season, shown inline in its correct sequence position rather than set apart from the dated entries around it. This section SHALL be the page's only presentation of the main line — there SHALL NOT be a separate, non-chronological list of main-line entries elsewhere on the page.
 
-Every card SHALL be the same fixed size regardless of how long that entry ran, and every pair of adjacent cards SHALL be separated by the same fixed spacing regardless of how long the real wait between them was — a variable-width, aspect-ratio-locked poster reads as inconsistent image sizing rather than as a duration or gap signal, so neither a card's width nor the space around it varies with real elapsed time.
+Every card SHALL be the same fixed size regardless of how long that entry ran, and every pair of adjacent cards SHALL be separated by the same fixed spacing regardless of how long the real wait between them was — a variable-width, aspect-ratio-locked poster reads as inconsistent image sizing rather than as a duration or gap signal, so neither a card's width nor the space around it varies with real elapsed time. The single exception SHALL be a card whose own artwork is landscape, which the landscape-artwork requirement widens to one alternative size for that reason alone; every card of a given orientation SHALL still be the same size as every other card of that orientation, whatever their durations.
 
 Elapsed time on a card SHALL be stated in words rather than implied by position on a scale the cards do not have. There SHALL NOT be a year ruler above the cards, and there SHALL NOT be a connector or any other element between cards stating the wait between them. Instead, each dated card SHALL state its own air range — the month and year it started and the month and year it ended — abbreviating to a single date for an entry that aired on one day. A dated entry that is still broadcasting SHALL state its start month and year and SHALL be marked as still running by its airing indicator rather than by an invented end date.
 
@@ -615,6 +648,10 @@ The timeline SHALL scroll within its own container when it does not fit, rather 
 #### Scenario: A rewatched main-line entry shows its count
 - **WHEN** a main-line entry has a rewatch count of 2
 - **THEN** its card shows a rewatch indicator reading 2
+
+#### Scenario: Two landscape cards are the same width as each other
+- **WHEN** a series has two main-line entries with landscape artwork, one that ran for one cour and one that ran for several years
+- **THEN** both of their cards render at the same widened size as each other, and every portrait card on the timeline renders at the usual size
 
 ### Requirement: Score and progress colour language
 The series page SHALL use one colour convention throughout: MAL's figures and broadcast progress SHALL use the app's blue — the colour the airing-progress bar already fills with for episodes aired — and my own figures and my watched progress SHALL use the app's purple accent. This SHALL apply to the score averages, the per-entry score bars on the timeline, and the progress fills alike, so which side of a figure is "the world" and which is "me" is readable without labels.

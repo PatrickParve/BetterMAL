@@ -402,6 +402,12 @@ The ranking SHALL be presented in three tiers, each visually distinct from the n
 - **Ranks 4–10 — top-ten card row.** A single row of poster cards, smaller than the showcase cards, each carrying its own rank badge, title, and both scores, inside a bordered, coloured box of its own so the tier reads as a defined group rather than loose posters. The badge SHALL remain fully legible over any poster artwork, bright or dark, rather than relying on a translucent overlay whose contrast depends on the art beneath it.
 - **Ranks 11 and beyond — flat rows.** The existing full-width rows, each with plain `#N` rank text, poster, title, my score, right-aligned MAL score, and its action button.
 
+The showcase tier's medal identity SHALL be drawn from the application-wide medal colours — the same gold, silver, and bronze the recap podium uses — rather than from a palette local to this page, so the two surfaces that rank a top three in the app cannot drift apart in colour. Its rank badge SHALL take the same form as the recap podium's: a medal-coloured outline around a neutral fill, carrying the rank as a bare number. The medal treatment carried over SHALL be colour and badge form only; the podium's own sizing, entrance animation, hover response, and rank-1 sheen SHALL NOT follow it onto this page.
+
+A showcase card's score chips SHALL be compact — sized for the narrow column beside the poster rather than to the app's default chip width — and within them the role label ("My score", "MAL") SHALL be large enough to read as a label rather than as fine print, at a size closer to its own value's than today's, while staying subordinate to that value.
+
+Both card tiers (ranks 1–3 and 4–10) SHALL render an entry's poster in the same proportions the anime pages give that poster, so the artwork shown here is the artwork the anime's own detail page shows, not a differently-cropped portion of it. Neither tier SHALL crop a poster to proportions narrower than that box in order to fit its layout. The flat-row tier's small thumbnail is unaffected by this rule.
+
 The rank of any entry SHALL be readable from the entry itself, in every tier, without relying on its position in the layout.
 
 Because a page holds 50 entries, the showcase and top-ten tiers SHALL appear only on page 1; every entry on page 2 and beyond SHALL use the flat row form.
@@ -454,9 +460,25 @@ Because a page holds 50 entries, the showcase and top-ten tiers SHALL appear onl
 - **WHEN** I look at the three showcase cards
 - **THEN** they run 1, 2, 3 in reading order, and each card states its own rank
 
+#### Scenario: The showcase and the recap podium agree on gold
+- **WHEN** I compare a Top anime showcase card with the recap page's podium card of the same rank
+- **THEN** both carry the same medal colour and the same badge form, in light mode and in dark mode alike
+
+#### Scenario: The podium's motion does not follow its colours
+- **WHEN** the top-anime page's first page renders
+- **THEN** the showcase cards appear without an entrance animation, rank 1 carries no sweeping sheen, and hovering a card does not lift it
+
 #### Scenario: A showcase card's two score boxes match
 - **WHEN** I look at a showcase card's "My score" and "MAL" chips
 - **THEN** the two boxes are the same width and height as each other, even though "My score" is longer text than "MAL"
+
+#### Scenario: A showcase chip's label is readable
+- **WHEN** I look at a showcase card's score chips
+- **THEN** each chip's label is legible beside its value rather than reading as fine print, and the chip itself takes no more room beside the poster than its two short lines need
+
+#### Scenario: A top-ten poster matches the anime's own page
+- **WHEN** I open the detail page of an anime shown in the showcase or top-ten tier
+- **THEN** its poster there is the same picture, showing the same extent of the artwork, as the Top anime card showed — neither is a narrower crop of the other
 
 #### Scenario: Ranks 4 to 10 form their own tier
 - **WHEN** the top-anime page's first page renders

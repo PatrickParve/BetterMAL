@@ -274,7 +274,7 @@ export function TopAnimePage() {
                     )}
                   </Link>
                   <div className="top-anime-showcase__info">
-                    <span className="top-anime-rank top-anime-rank--lg">#{item.rank}</span>
+                    <span className="top-anime-rank top-anime-rank--lg">{item.rank}</span>
                     <Link to={`/anime/${item.animeId}`} className="top-anime-showcase__title-link">
                       <span
                         className="top-anime-showcase__title"
@@ -303,14 +303,16 @@ export function TopAnimePage() {
                 <li key={item.animeId} className="top-anime-card">
                   <Link to={`/anime/${item.animeId}`} className="top-anime-card__link">
                     <span className="top-anime-rank top-anime-rank--sm">#{item.rank}</span>
-                    {item.pictureUrl ? (
-                      <img src={item.pictureUrl} alt="" className="top-anime-card__picture" />
-                    ) : (
-                      <div
-                        className="top-anime-card__picture top-anime-card__picture--placeholder"
-                        aria-hidden="true"
-                      />
-                    )}
+                    <span className="top-anime-card__picture-frame">
+                      {item.pictureUrl ? (
+                        <img src={item.pictureUrl} alt="" className="top-anime-card__picture" />
+                      ) : (
+                        <div
+                          className="top-anime-card__picture top-anime-card__picture--placeholder"
+                          aria-hidden="true"
+                        />
+                      )}
+                    </span>
                     <span className="top-anime-card__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
                       {pickDisplayTitle(item.title, item.englishTitle)}
                     </span>

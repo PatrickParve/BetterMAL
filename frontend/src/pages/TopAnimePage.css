@@ -2,20 +2,6 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
-
-  /* Literal medal colours, not the theme's --status- or --accent tokens —
-     those are tuned for text-on-tint use and don't hold up as solid fills
-     in dark mode, whereas a medal's colour is its meaning and should read
-     the same regardless of theme (design.md decision 2). */
-  --medal-gold: #b8860b;
-  --medal-gold-bg: rgba(184, 134, 11, 0.12);
-  --medal-gold-border: rgba(184, 134, 11, 0.5);
-  --medal-silver: #71797e;
-  --medal-silver-bg: rgba(113, 121, 126, 0.12);
-  --medal-silver-border: rgba(113, 121, 126, 0.5);
-  --medal-bronze: #8c5a2b;
-  --medal-bronze-bg: rgba(140, 90, 43, 0.12);
-  --medal-bronze-border: rgba(140, 90, 43, 0.5);
 }
 
 .top-anime-page__header h1 {
@@ -186,6 +172,13 @@
   text-align: right;
 }
 
+/* Right-aligned column, so a hidden score's reveal control ends where the
+   value would end rather than sitting centred in the column (design.md D7,
+   score-visibility spec). */
+.top-anime-row__mal-score .score-value {
+  justify-content: flex-end;
+}
+
 .top-anime-row__action {
   font: inherit;
   font-size: 13px;
@@ -216,13 +209,13 @@
   opacity: 0.75;
 }
 
-/* Shared rank-badge family (design.md decision 3): one pill, two sizes/
-   fills. --lg (showcase tier) is medal-filled with white text — the
-   ~3.5:1 contrast that gives clears the WCAG large-text bar at this size.
-   --sm (top-10 tier) uses the neutral --text-h/--bg pair instead, which
-   auto-inverts with the theme and holds ~15:1 against itself, so legibility
-   never depends on the poster art underneath — unlike the translucent-black
-   pill it replaces. */
+/* Shared rank-badge family (design.md decision 4): one base, two distinct
+   forms. --lg (showcase tier) is the recap podium's medal-outlined circle —
+   a neutral fill keeps it legible regardless of theme, and it reads its
+   colour from the ancestor card's --medal alias, so it never needs a
+   per-rank override. --sm (top-10 tier) stays a filled pill in the neutral
+   --text-h/--bg pair: it sits over poster art, where legibility can't depend
+   on contrast against the artwork beneath it. */
 .top-anime-rank {
   display: inline-flex;
   align-items: center;
@@ -232,10 +225,13 @@
 }
 
 .top-anime-rank--lg {
-  padding: 2px 12px;
-  font-size: 20px;
-  font-weight: 800;
-  color: #fff;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--medal);
+  background: var(--bg);
+  color: var(--medal);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .top-anime-rank--sm {
@@ -266,12 +262,19 @@
   }
 }
 
+/* Each card reads its rank colour through one local alias set here, so the
+   border, surface, and medal band below are each written once against
+   var(--medal*) rather than three times over — the same aliasing the recap
+   podium uses for its own cards (design.md decision 3). */
 .top-anime-showcase__item {
   display: flex;
   gap: 14px;
   padding: 14px;
   border-radius: 12px;
-  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--medal-border);
+  background: linear-gradient(var(--medal-bg), var(--medal-bg)), var(--code-bg);
   transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
@@ -282,42 +285,48 @@
   box-shadow: var(--shadow);
 }
 
+/* The medal band the badge sits in — a decorative tint across the card's
+   top edge, not a separate markup element. */
+.top-anime-showcase__item::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 44px;
+  background: linear-gradient(180deg, var(--medal-bg), transparent);
+  pointer-events: none;
+}
+
 .top-anime-showcase__item--rank-1 {
-  border-color: var(--medal-gold-border);
-  background: var(--medal-gold-bg);
+  --medal: var(--medal-gold);
+  --medal-bg: var(--medal-gold-bg);
+  --medal-border: var(--medal-gold-border);
   /* Ring-plus-elevation rather than a thicker border or a larger poster, so
      rank 1's extra prominence doesn't change the box's size and unbalance
      the 3-up row (design.md decision 4). */
-  box-shadow: 0 0 0 1px var(--medal-gold-border), var(--shadow);
+  box-shadow: 0 0 0 1px var(--medal-border), var(--shadow);
 }
 .top-anime-showcase__item--rank-1:hover,
 .top-anime-showcase__item--rank-1:focus-within {
   background: var(--accent-bg);
   border-color: var(--accent-border);
-  box-shadow: 0 0 0 1px var(--medal-gold-border), var(--shadow);
+  box-shadow: 0 0 0 1px var(--medal-border), var(--shadow);
 }
 
 .top-anime-showcase__item--rank-2 {
-  border-color: var(--medal-silver-border);
-  background: var(--medal-silver-bg);
+  --medal: var(--medal-silver);
+  --medal-bg: var(--medal-silver-bg);
+  --medal-border: var(--medal-silver-border);
 }
 
 .top-anime-showcase__item--rank-3 {
-  border-color: var(--medal-bronze-border);
-  background: var(--medal-bronze-bg);
-}
-
-.top-anime-showcase__item--rank-1 .top-anime-rank--lg {
-  background: var(--medal-gold);
-}
-.top-anime-showcase__item--rank-2 .top-anime-rank--lg {
-  background: var(--medal-silver);
-}
-.top-anime-showcase__item--rank-3 .top-anime-rank--lg {
-  background: var(--medal-bronze);
+  --medal: var(--medal-bronze);
+  --medal-bg: var(--medal-bronze-bg);
+  --medal-border: var(--medal-bronze-border);
 }
 
 .top-anime-showcase__poster-link {
+  position: relative;
+  z-index: 1;
   flex: 0 0 auto;
   display: block;
 }
@@ -330,7 +339,10 @@
 .top-anime-showcase__picture {
   display: block;
   width: 140px;
-  aspect-ratio: 2 / 3;
+  /* Matches AnimeDetailPage's own poster box, not the flatter 2/3 the card
+     grids use — the width here is definite, so aspect-ratio is safe
+     directly on the <img> (design.md D6). */
+  aspect-ratio: 260 / 368;
   object-fit: cover;
   border-radius: 8px;
   background: var(--code-bg);
@@ -341,6 +353,8 @@
 }
 
 .top-anime-showcase__info {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -374,6 +388,10 @@
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  /* Capped so the pair stops spanning the full info column now that the
+     chips themselves are tighter — `align-self: stretch` still splits
+     whatever width this row has evenly between the two chips. */
+  max-width: 180px;
   /* The info column's `align-items: flex-start` stops this row from
      stretching to the column's width on its own, which left it hugging its
      content — too narrow for the two chips below to split evenly. */
@@ -388,15 +406,23 @@
   flex: 1 1 0;
   min-width: 0;
   gap: 1px;
-  padding: 4px 8px;
+  padding: 3px 6px;
 }
 
 .top-anime-showcase__scores .score-chip__label {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .top-anime-showcase__scores .score-chip__value {
-  font-size: 13px;
+  font-size: 14px;
+}
+
+/* The chip's label and value both begin at the chip's leading edge, so a
+   hidden score's reveal control starts there too — where the value would
+   start, and where the "My score" chip's own `—` already sits (design.md
+   D7). */
+.top-anime-showcase__scores .score-value {
+  justify-content: flex-start;
 }
 
 /* Card grid (ranks 4-10): a fixed 7-up row at desktop, matching the season
@@ -454,9 +480,27 @@
   outline-offset: 2px;
 }
 
-.top-anime-card__picture {
+/* The 260/368 ratio (matches AnimeDetailPage's own poster box, not the
+   flatter 2/3 the card grids use) is set here via the classic
+   padding-top-percentage technique rather than as `aspect-ratio` directly
+   on the <img> — WebKit has been observed to mis-size an aspect-ratio'd
+   replaced element when its available width comes from a CSS Grid `fr`
+   track rather than a definite length, producing a taller (more cropped)
+   box than Chromium renders for the same rule. Padding-top is a plain
+   percentage-of-width calculation, unrelated to that replaced-element
+   sizing algorithm, and resolves identically everywhere (design.md D6). */
+.top-anime-card__picture-frame {
+  position: relative;
+  display: block;
   width: 100%;
-  aspect-ratio: 2 / 3;
+  padding-top: calc(368 / 260 * 100%);
+}
+
+.top-anime-card__picture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   border-radius: 8px;
   background: var(--code-bg);
@@ -484,4 +528,11 @@
   justify-content: space-between;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+}
+
+/* MAL sits at the card's trailing edge, opposite my score at its leading
+   edge, so a hidden score's reveal control ends where the value would end
+   (design.md D7). */
+.top-anime-card__scores .score-value {
+  justify-content: flex-end;
 }

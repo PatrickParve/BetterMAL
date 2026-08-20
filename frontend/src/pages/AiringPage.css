@@ -106,6 +106,14 @@
   border-bottom: 1px solid var(--border);
 }
 
+.airing-day__header--today {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 700;
+  border-bottom-color: var(--accent);
+  border-radius: 6px 6px 0 0;
+}
+
 .airing-day__slots {
   list-style: none;
   margin: 0;

@@ -16,6 +16,7 @@ import { ScoreValue } from '../components/ScoreValue.tsx'
 import { SeriesExtraTile } from '../components/SeriesExtraTile.tsx'
 import { SeriesTimeline } from '../components/SeriesTimeline.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
+import { useLandscapePicture } from '../hooks/useLandscapePicture.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { formatRuntime, isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle } from '../utils/anime.ts'
 import './SeriesPage.css'
@@ -313,6 +314,7 @@ export function SeriesPage() {
   const [rebuilding, setRebuilding] = useState(false)
   const [rebuildCount, setRebuildCount] = useState<number | null>(null)
   const { openEditor } = useEntryEditor()
+  const [pictureRef, isLandscapePicture] = useLandscapePicture(data?.found ? data.series.pictureUrl : null)
 
   // More-section collapse state, keyed by extras group. Initialised once
   // per mount from series.extras.length > 12 (design.md decision 5) via the
@@ -476,11 +478,61 @@ export function SeriesPage() {
     setCollapsedGroups(next)
   }
 
+  const scoreAndProgress = (
+    <>
+      <div className="series-page__score-chips">
+        <MalScoreChip
+          label="MAL · Main series"
+          average={scores.malMain}
+          completed={malGroupRevealed(series.mainLine, series)}
+        />
+        {series.extras.length > 0 && (
+          <MalScoreChip
+            label="MAL · Everything"
+            average={scores.malAll}
+            completed={malGroupRevealed([...series.mainLine, ...series.extras], series)}
+          />
+        )}
+        <MineScoreChip label="Mine · Main series" average={scores.mineMain} />
+        {series.extras.length > 0 && <MineScoreChip label="Mine · Everything" average={scores.mineAll} />}
+      </div>
+
+      <div className="series-page__progress">
+        {isOngoing ? (
+          <AiringProgressBar
+            aired={mainLineAiredEpisodes}
+            watched={stats.myWatchedEpisodes}
+            total={stats.mainLineEpisodeTotal > 0 ? stats.mainLineEpisodeTotal : null}
+            finished={false}
+            labelMode="none"
+          />
+        ) : (
+          <ProgressBar
+            watched={stats.myWatchedEpisodes}
+            total={stats.mainLineEpisodeTotal > 0 ? stats.mainLineEpisodeTotal : null}
+          />
+        )}
+        <ProgressReadout
+          watched={stats.myWatchedEpisodes}
+          aired={mainLineAiredEpisodes}
+          total={stats.mainLineEpisodeTotal}
+          hasUnknownTotal={stats.hasUnknownEpisodeCounts}
+          showAired={isOngoing}
+        />
+      </div>
+    </>
+  )
+
   return (
     <div className="series-page">
-      <div className="series-page__header">
+      <div className={`series-page__header${isLandscapePicture ? ' series-page__header--landscape' : ''}`}>
         {series.pictureUrl ? (
-          <img src={series.pictureUrl} alt="" className="series-page__picture" />
+          <img
+            ref={pictureRef}
+            src={series.pictureUrl}
+            alt=""
+            className={`series-page__picture${isLandscapePicture ? ' series-page__picture--landscape' : ''}`}
+          />
         ) : (
           <div className="series-page__picture series-page__picture--placeholder" aria-hidden="true" />
         )}
@@ -529,47 +581,9 @@ export function SeriesPage() {
             </a>
           </div>
 
-          <div className="series-page__score-chips">
-            <MalScoreChip
-              label="MAL · Main series"
-              average={scores.malMain}
-              completed={malGroupRevealed(series.mainLine, series)}
-            />
-            {series.extras.length > 0 && (
-              <MalScoreChip
-                label="MAL · Everything"
-                average={scores.malAll}
-                completed={malGroupRevealed([...series.mainLine, ...series.extras], series)}
-              />
-            )}
-            <MineScoreChip label="Mine · Main series" average={scores.mineMain} />
-            {series.extras.length > 0 && <MineScoreChip label="Mine · Everything" average={scores.mineAll} />}
-          </div>
-
-          <div className="series-page__progress">
-            {isOngoing ? (
-              <AiringProgressBar
-                aired={mainLineAiredEpisodes}
-                watched={stats.myWatchedEpisodes}
-                total={stats.mainLineEpisodeTotal > 0 ? stats.mainLineEpisodeTotal : null}
-                finished={false}
-                labelMode="none"
-              />
-            ) : (
-              <ProgressBar
-                watched={stats.myWatchedEpisodes}
-                total={stats.mainLineEpisodeTotal > 0 ? stats.mainLineEpisodeTotal : null}
-              />
-            )}
-            <ProgressReadout
-              watched={stats.myWatchedEpisodes}
-              aired={mainLineAiredEpisodes}
-              total={stats.mainLineEpisodeTotal}
-              hasUnknownTotal={stats.hasUnknownEpisodeCounts}
-              showAired={isOngoing}
-            />
-          </div>
+          {!isLandscapePicture && scoreAndProgress}
         </div>
+        {isLandscapePicture && <div className="series-page__header-below">{scoreAndProgress}</div>}
       </div>
 
       <section className="series-box">

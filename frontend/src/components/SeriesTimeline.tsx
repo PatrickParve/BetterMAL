@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { SeriesEntryDto } from '../api/types.ts'
+import { useLandscapePicture } from '../hooks/useLandscapePicture.ts'
 import { isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_LABELS } from '../utils/anime.ts'
 import { ScoreChip } from './ScoreChip.tsx'
 import { ScoreValue } from './ScoreValue.tsx'
@@ -77,14 +78,15 @@ function TimelineCard({ entry, onEdit }: { entry: SeriesEntryDto; onEdit: (entry
   const airRange = undated ? null : formatAirRange(entry)
   const watched = watchedFigureLabel(entry)
   const completed = isScoreRevealableStatus(entry.entry?.status)
+  const [pictureRef, isLandscape] = useLandscapePicture(entry.pictureUrl)
 
   return (
     <div
-      className={`series-timeline__card${undated ? ' series-timeline__card--undated' : ''}`}
+      className={`series-timeline__card${undated ? ' series-timeline__card--undated' : ''}${isLandscape ? ' series-timeline__card--landscape' : ''}`}
     >
       <Link to={`/anime/${entry.animeId}`} className="series-timeline__card-link">
         {entry.pictureUrl ? (
-          <img src={entry.pictureUrl} alt="" className="series-timeline__card-picture" />
+          <img ref={pictureRef} src={entry.pictureUrl} alt="" className="series-timeline__card-picture" />
         ) : (
           <div className="series-timeline__card-picture series-timeline__card-picture--placeholder" aria-hidden="true" />
         )}

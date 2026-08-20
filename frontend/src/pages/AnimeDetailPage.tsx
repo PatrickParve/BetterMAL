@@ -14,6 +14,7 @@ import {
   useEpisodeIncrement,
   useSetEpisodesWatched,
 } from "../context/CompletionPromptContext.tsx";
+import { useLandscapePicture } from "../hooks/useLandscapePicture.ts";
 import { usePageData } from "../hooks/usePageData.ts";
 import {
   isScoreRevealableStatus,
@@ -129,6 +130,7 @@ export function AnimeDetailPage() {
   const { openEditor } = useEntryEditor();
   const increment = useEpisodeIncrement();
   const setEpisodesWatched = useSetEpisodesWatched();
+  const [pictureRef, isLandscapePicture] = useLandscapePicture(detail?.pictureUrl);
 
   async function handleRefresh() {
     if (refreshing) return;
@@ -333,12 +335,13 @@ export function AnimeDetailPage() {
       )}
 
       <div className="anime-detail-page__body">
-        <div className="anime-detail-page__picture-col">
+        <div className={`anime-detail-page__picture-col${isLandscapePicture ? " anime-detail-page__picture-col--landscape" : ""}`}>
           {detail.pictureUrl ? (
             <img
+              ref={pictureRef}
               src={detail.pictureUrl}
               alt=""
-              className="anime-detail-page__picture"
+              className={`anime-detail-page__picture${isLandscapePicture ? " anime-detail-page__picture--landscape" : ""}`}
             />
           ) : (
             <div
