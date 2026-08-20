@@ -43,6 +43,29 @@
   --medal-bronze-bg: rgba(154, 52, 18, 0.12);
   --medal-bronze-border: rgba(154, 52, 18, 0.45);
 
+  /* Score board tier colours (ScoreBoardOverlay.tsx's scoreTier, design.md
+     decision 3 of add-recap-score-board-and-hold-scroll): 7/6-5/4-1 alias
+     the --medal-* tokens above rather than duplicating them — the podium
+     already solved the light-theme silver problem, and a second silver
+     token would have to solve it again. Only 10, 9, and 8 are new.
+     --tier-blue is deliberately a cooler, cyan-leaning blue rather than
+     --mal (#2563eb) — the app's colour language reads blue as "MAL", and an
+     8 slot on a board of *my* scores drawn in that same blue would read as
+     somebody else's opinion (design.md decision 4). --tier-apex-sheen is
+     the near-white the apex gradient mixes with — "purple and white mixed"
+     can't be one colour, so the apex tier is drawn as a gradient between
+     --tier-apex and this sheen (ScoreBoardOverlay.css). */
+  --tier-apex: #7c3aed;
+  --tier-apex-bg: rgba(124, 58, 237, 0.12);
+  --tier-apex-border: rgba(124, 58, 237, 0.45);
+  --tier-apex-sheen: #f5f3ff;
+  --tier-red: #dc2626;
+  --tier-red-bg: rgba(220, 38, 38, 0.12);
+  --tier-red-border: rgba(220, 38, 38, 0.45);
+  --tier-blue: #0891b2;
+  --tier-blue-bg: rgba(8, 145, 178, 0.12);
+  --tier-blue-border: rgba(8, 145, 178, 0.45);
+
   /* App-wide score colour language: blue is MAL/broadcast, purple is me.
      Aliased rather than used raw so the two can diverge from
      --status-completed/--accent later without touching every rule that
@@ -125,6 +148,17 @@
     --medal-bronze: #fb923c;
     --medal-bronze-bg: rgba(251, 146, 60, 0.16);
     --medal-bronze-border: rgba(251, 146, 60, 0.5);
+
+    --tier-apex: #8b5cf6;
+    --tier-apex-bg: rgba(139, 92, 246, 0.16);
+    --tier-apex-border: rgba(139, 92, 246, 0.5);
+    --tier-apex-sheen: #f3e8ff;
+    --tier-red: #fb7185;
+    --tier-red-bg: rgba(251, 113, 133, 0.16);
+    --tier-red-border: rgba(251, 113, 133, 0.5);
+    --tier-blue: #22d3ee;
+    --tier-blue-bg: rgba(34, 211, 238, 0.16);
+    --tier-blue-border: rgba(34, 211, 238, 0.5);
 
     --mal: var(--status-completed);
     --mal-bg: var(--status-completed-bg);

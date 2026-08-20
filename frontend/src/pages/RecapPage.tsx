@@ -15,6 +15,7 @@ import {
 } from '../api/types.ts'
 import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
 import { describeSeasonRanking, describeYearRanking, RankingSection } from '../components/RankingSection.tsx'
+import { ScoreBoardOverlay, type ScoreBoardGroup } from '../components/ScoreBoardOverlay.tsx'
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreDistribution } from '../components/ScoreDistribution.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
@@ -57,17 +58,26 @@ function describeTimeRanking(row: RecapTimeRankingDto): RankingOverlayRow {
   }
 }
 
-// Ten zero-filled buckets for scores 1-10, matching
+// Ten ascending slots for scores 1-10, matching
 // ProfileService.BuildScoreDistribution's shape (design.md decision 3) —
 // computed over every included entry of the period, not the top 10's
-// media-type-narrowed set (design.md decision 4).
-function scoreBucketsOf(items: RecapRowDto[]): ScoreDistributionBucketDto[] {
-  const counts = new Map<number, number>()
+// media-type-narrowed set (design.md decision 4). Carries the entries
+// themselves, not only a count, so the rating distribution's buckets and the
+// score board's slots (add-recap-score-board-and-hold-scroll's design.md
+// decision 1) are both derived from this one selection rule and can never
+// disagree about how many anime carry a score.
+function scoreGroupsOf(items: RecapRowDto[]): ScoreBoardGroup[] {
+  const byScore = new Map<number, RecapRowDto[]>()
   for (const item of items) {
     if (item.myScore == null) continue
-    counts.set(item.myScore, (counts.get(item.myScore) ?? 0) + 1)
+    const list = byScore.get(item.myScore)
+    if (list) list.push(item)
+    else byScore.set(item.myScore, [item])
   }
-  return Array.from({ length: 10 }, (_, i) => i + 1).map((score) => ({ score, count: counts.get(score) ?? 0 }))
+  return Array.from({ length: 10 }, (_, i) => i + 1).map((score) => ({
+    score,
+    items: (byScore.get(score) ?? []).sort((a, b) => a.title.localeCompare(b.title)),
+  }))
 }
 
 function isRecapMode(value: string | null): value is RecapMode {
@@ -136,6 +146,11 @@ export function RecapPage() {
   // rows already described) serves the season, year, and both time-watched
   // rankings alike.
   const [overlay, setOverlay] = useState<{ title: string; rows: RankingOverlayRow[] } | null>(null)
+  // The score board (design.md decision 5): page-local state opened from
+  // the distribution's section header, matching `overlay` above — no URL
+  // parameter and no history entry, so back still leaves the recap exactly
+  // as it does with the board closed.
+  const [boardOpen, setBoardOpen] = useState(false)
 
   const modeParam = searchParams.get('mode')
   const mode: RecapMode = isRecapMode(modeParam) ? modeParam : 'yearly'
@@ -173,17 +188,24 @@ export function RecapPage() {
     getRecap({ mode, startYear, endYear, season, filter }),
   )
 
-  const scoreBuckets = useMemo(() => (recap ? scoreBucketsOf(recap.items) : []), [recap])
+  const scoreGroups = useMemo(() => (recap ? scoreGroupsOf(recap.items) : []), [recap])
+  const scoreBuckets: ScoreDistributionBucketDto[] = scoreGroups.map((g) => ({ score: g.score, count: g.items.length }))
 
-  function updateParams(updates: Record<string, string | null>) {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev)
-      for (const [key, value] of Object.entries(updates)) {
-        if (value === null) params.delete(key)
-        else params.set(key, value)
-      }
-      return params
-    })
+  // `options.keepScroll` (design.md decision 7) is opt-in per call site — only
+  // the ranking-basis toggle and the media-type select pass it. Every other
+  // call site stays byte-identical, so it keeps today's scroll-to-top.
+  function updateParams(updates: Record<string, string | null>, options?: { keepScroll?: boolean }) {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev)
+        for (const [key, value] of Object.entries(updates)) {
+          if (value === null) params.delete(key)
+          else params.set(key, value)
+        }
+        return params
+      },
+      options?.keepScroll ? { state: { keepScroll: true } } : undefined,
+    )
   }
 
   // Falls back off a selected filter that turned out empty for this period,
@@ -440,10 +462,22 @@ export function RecapPage() {
   // No meanScore prop (design.md decision 4): the stat block directly above
   // already reports the period's mean, so the recap's block carries no mean
   // line of its own.
-  function renderDistribution(buckets: ScoreDistributionBucketDto[]) {
+  function renderDistribution(buckets: ScoreDistributionBucketDto[], groups: ScoreBoardGroup[]) {
+    const totalScored = groups.reduce((sum, g) => sum + g.items.length, 0)
     return (
       <section className="recap-page__section">
-        <h2>Rating distribution</h2>
+        <div className="recap-page__section-header">
+          <h2>Rating distribution</h2>
+          <button
+            type="button"
+            className="recap-page__board-button"
+            disabled={totalScored === 0}
+            title={totalScored === 0 ? 'Nothing scored in this period' : undefined}
+            onClick={() => setBoardOpen(true)}
+          >
+            Score board
+          </button>
+        </div>
         <ScoreDistribution
           buckets={buckets}
           compact
@@ -577,7 +611,7 @@ export function RecapPage() {
                   type="button"
                   className={effectiveBasis === 'mine' ? 'recap-page__tab recap-page__tab--active' : 'recap-page__tab'}
                   aria-pressed={effectiveBasis === 'mine'}
-                  onClick={() => updateParams({ basis: null })}
+                  onClick={() => updateParams({ basis: null }, { keepScroll: true })}
                 >
                   My score
                 </button>
@@ -585,7 +619,7 @@ export function RecapPage() {
                   type="button"
                   className={effectiveBasis === 'mal' ? 'recap-page__tab recap-page__tab--active' : 'recap-page__tab'}
                   aria-pressed={effectiveBasis === 'mal'}
-                  onClick={() => updateParams({ basis: 'mal' })}
+                  onClick={() => updateParams({ basis: 'mal' }, { keepScroll: true })}
                 >
                   MAL score
                 </button>
@@ -595,7 +629,9 @@ export function RecapPage() {
               <select
                 className="recap-page__type-select"
                 value={typeFilter}
-                onChange={(e) => updateParams({ type: e.target.value === 'all' ? null : e.target.value })}
+                onChange={(e) =>
+                  updateParams({ type: e.target.value === 'all' ? null : e.target.value }, { keepScroll: true })
+                }
                 aria-label="Filter top 10 by type"
               >
                 <option value="all">All types</option>
@@ -785,7 +821,7 @@ export function RecapPage() {
             {renderTopTen(recap)}
             <div className="recap-page__lead-aside">
               {renderStats(recap.stats)}
-              {renderDistribution(scoreBuckets)}
+              {renderDistribution(scoreBuckets, scoreGroups)}
             </div>
           </div>
 
@@ -796,6 +832,13 @@ export function RecapPage() {
       )}
 
       {overlay && <RankingOverlay title={overlay.title} rows={overlay.rows} onClose={() => setOverlay(null)} />}
+      {boardOpen && (
+        <ScoreBoardOverlay
+          title={`Score board — ${periodLabel}`}
+          groups={scoreGroups}
+          onClose={() => setBoardOpen(false)}
+        />
+      )}
     </div>
   )
 }

@@ -32,6 +32,14 @@ export function useScrollRestoration(): void {
   const navigationType = useNavigationType()
   const { key, isRestore, snapshot } = usePageState()
 
+  // Opt-in per navigation (design.md decision 7 of
+  // add-recap-score-board-and-hold-scroll): a caller that wants the fresh
+  // visit below to hold the current scroll position instead of resetting it
+  // passes `{ state: { keepScroll: true } }` to `setSearchParams`. Nothing
+  // infers this from the URL — same-path query changes reset by default, so
+  // existing callers (TopAnimePage's paging/type switch) are untouched.
+  const keepScroll = (location.state as { keepScroll?: boolean } | null)?.keepScroll ?? false
+
   // Assigned during render, so it already points at the entry being
   // displayed before any layout effect of a navigation runs — including the
   // fresh-visit `scrollTo(0, 0)` below and any scroll event that produces.
@@ -58,6 +66,19 @@ export function useScrollRestoration(): void {
   // the top before jumping to the saved position.
   useLayoutEffect(() => {
     if (!(navigationType === 'POP' && isRestore)) {
+      if (keepScroll) {
+        // A push mints a new location.key with a fresh, empty snapshot whose
+        // scrollY defaults to 0 — skipping the reset without seeding it
+        // would leave that lie on the entry, so navigating away and back
+        // would restore to the top instead of here (design.md decision 8).
+        // Seeded in the hook rather than at the call site, so every future
+        // user of the flag gets this for free. A POP carrying this flag
+        // never reaches this branch: the restore branch above wins when a
+        // snapshot exists, and a POP with none (reload, then back) is a
+        // fresh document already at scroll 0, so there's nothing to reset.
+        pageStateStore.putScroll(keyRef.current, window.scrollY)
+        return
+      }
       window.scrollTo(0, 0)
       return
     }
@@ -103,5 +124,5 @@ export function useScrollRestoration(): void {
       window.removeEventListener('touchstart', onUserInput)
       window.removeEventListener('keydown', onUserInput)
     }
-  }, [location.key, navigationType, isRestore, snapshot])
+  }, [location.key, navigationType, isRestore, snapshot, keepScroll])
 }

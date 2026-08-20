@@ -313,6 +313,49 @@ a.recap-page__stat--link:focus-visible {
   flex-wrap: wrap;
 }
 
+/* Opens the score board (design.md decision 5 of
+   add-recap-score-board-and-hold-scroll) — the same pill-button form as
+   .recap-page__season-button, but an inert <button> rather than a <Link>. */
+.recap-page__board-button {
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.recap-page__board-button:hover:not(:disabled) {
+  color: var(--text-h);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.recap-page__board-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.recap-page__board-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* The distribution section's header sits in the lead grid's narrow aside
+   column (down to ~14rem, RecapPage.css's --lead grid), where the heading
+   and the button can't always share a row at the Top 10 header's width — it
+   wraps instead of clipping, same as the header at the sub-1024px collapse
+   where the aside goes full width. */
+.recap-page__lead-aside .recap-page__section-header {
+  row-gap: 8px;
+}
+
 /* Hot takes */
 
 .recap-hot-take-list {

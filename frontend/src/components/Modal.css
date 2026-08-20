@@ -25,3 +25,7 @@
 .modal--wide {
   max-width: 640px;
 }
+
+.modal--board {
+  max-width: min(1080px, 100%);
+}
