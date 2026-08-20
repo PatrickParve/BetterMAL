@@ -89,15 +89,12 @@
   --tier-border: var(--tier-apex-border);
 }
 
-/* Sticky within the modal's own scroll container (Modal.css's
-   max-height: 85vh; overflow-y: auto) rather than a nested scrollable box,
-   so a slot's header stays identifiable while a large multi-year board
-   scrolls past it. The opaque --bg backing keeps the tinted overlay from
-   letting scrolled-past posters show through underneath it. */
+/* A plain block in the scrolling list — not sticky. `position: relative`
+   is only here so the apex tier's absolutely-positioned wave (below) has
+   something to anchor to; it does not travel or pin as the board scrolls.
+   The only motion in the board is a tile's own hover/focus lift. */
 .score-board__slot-header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  position: relative;
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -131,11 +128,11 @@
 
 .score-board__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 10px;
 }
 
-/* The 2:3 poster ratio is set with the padding-top-percentage technique
+/* The poster ratio is set with the padding-top-percentage technique
    (RecapPage.css's .recap-podium__picture-frame uses the same trick, for
    the same reason) rather than the `aspect-ratio` property. `aspect-ratio`
    on an item sized by a CSS Grid `fr` track plus a border is exactly the
@@ -146,12 +143,15 @@
    padding has no such cross-engine inconsistency. This box carries no
    border/radius of its own; those live on the absolutely-positioned
    `.score-board__poster` below, sized against this box's fixed padding
-   rather than against the image content, so the two can never disagree. */
+   rather than against the image content, so the two can never disagree.
+   MAL's `large` poster (what `PictureUrl` stores) is 425x600, a 1.412
+   ratio — matching it here means `object-fit: cover` scales the art
+   instead of cropping the ~6% off each side a taller 1.5 box was cutting. */
 .score-board__tile {
   position: relative;
   display: block;
   width: 100%;
-  padding-top: 150%;
+  padding-top: calc(600 / 425 * 100%);
   transition: top 0.15s ease;
 }
 
@@ -186,8 +186,11 @@
   background: var(--code-bg);
   transition: box-shadow 0.15s ease;
   /* Explicit hint (spec allows the UA to ignore it) toward the
-     highest-quality resampling available for a fairly steep downscale — the
-     source posters run 400-600px wide, shown here at ~100-165px. */
+     highest-quality resampling available for what is now a gentle downscale
+     rather than a steep one — the tile grew from ~100px to ~150px+ tracks
+     specifically to close that gap. That grid/aspect-ratio change is the
+     actual fix for the softness; this hint and the top-based lift above are
+     unrelated (resolution, not compositing) and are left as they were. */
   image-rendering: high-quality;
 }
 
@@ -203,45 +206,78 @@
 
 /* Apex (10): a purple-and-white gradient rather than a flat colour
    (design.md decision 3) — the mark that belongs to no other slot. The
-   numeral reads the same gradient as text; the sheen sweep below reuses the
-   podium's #1-card motion vocabulary (RecapPage.css's recap-podium-sheen). */
+   numeral reads the same gradient as text. `overflow: hidden` clips the
+   wave below to this bar's own box. */
 .score-board__slot--apex .score-board__slot-header {
-  position: relative;
   overflow: hidden;
   background: linear-gradient(135deg, var(--tier-apex), var(--tier-apex-sheen) 50%, var(--tier-apex));
   border-color: var(--tier-apex-border);
 }
 
+/* Painted above the wave (z-index: 1 vs. its z-index: 0) so the numeral and
+   count stay crisp while the wave drifts behind them — the same stacking
+   that keeps the podium's #1 card legible through its own wave. The dark
+   text-shadow is extra insurance the podium's card doesn't need: this
+   numeral's own fill (like the count, in dark theme) trends toward
+   near-white at its brightest, the same colour family as the wave's
+   highlight, so a bright pass behind can otherwise erase the contrast
+   between glyph and background at the moment they coincide. The shadow
+   gives the glyph a dark edge independent of whatever passes behind it. */
 .score-board__slot--apex .score-board__slot-score {
+  position: relative;
+  z-index: 1;
   background: linear-gradient(135deg, var(--tier-apex), var(--tier-apex-sheen) 50%, var(--tier-apex));
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
 }
 
 .score-board__slot--apex .score-board__slot-count {
+  position: relative;
+  z-index: 1;
   color: var(--text-h);
   opacity: 0.85;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
+/* The same continuous whole-surface drift as the podium's #1 card
+   (RecapPage.css's recap-podium-wave), not the old intermittent band sweep
+   — the two "first place" marks in the app now share one motion
+   vocabulary. Geometry and timing match the podium's version.
+   The two layers' periods (160px, 240px) fall in and out of phase as they
+   travel, so there are moments the layers overlap and their combined alpha
+   peaks. A neutral white highlight at that peak reads as desaturating the
+   purple toward grey/silver rather than as a brighter purple — so unlike
+   the podium (which mixes its highlight from --medal), the highlight
+   colour here is pre-mixed toward white *and* var(--tier-apex)
+   (--wave-hi/--wave-lo) rather than plain white: even at full overlap the
+   brightest point stays a light purple, the same family as this header's
+   own --tier-apex-sheen peak, and can't drift toward a colour that reads
+   as a different tier's silver. */
 .score-board__slot--apex .score-board__slot-header::after {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  width: 40%;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.6), transparent);
-  animation: score-board-sheen 5s ease-in-out infinite;
+  z-index: 0;
+  inset: -20% -520px;
+  --wave-hi: color-mix(in srgb, white 55%, var(--tier-apex));
+  --wave-lo: color-mix(in srgb, white 35%, var(--tier-apex));
+  background-image:
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--wave-hi) 60%, transparent), transparent),
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--wave-lo) 40%, transparent), transparent);
+  background-size: 160px 100%, 240px 62%;
+  background-position: 0 0, 0 100%;
+  background-repeat: repeat-x, repeat-x;
+  animation: score-board-wave 20s linear infinite;
   pointer-events: none;
 }
 
-@keyframes score-board-sheen {
+@keyframes score-board-wave {
   from {
-    transform: translateX(-120%);
+    transform: translate3d(0, 0, 0);
   }
   to {
-    transform: translateX(320%);
+    transform: translate3d(480px, 0, 0);
   }
 }
 

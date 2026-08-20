@@ -107,11 +107,11 @@ a.score-distribution__row--link:focus-visible {
 
 .score-distribution--compact .score-distribution__row {
   gap: 6px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .score-distribution--compact .score-distribution__bar-track {
-  height: 8px;
+  height: 9px;
 }
 
 .score-distribution--compact .score-distribution__count,

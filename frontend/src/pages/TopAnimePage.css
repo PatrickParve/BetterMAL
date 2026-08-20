@@ -312,6 +312,57 @@
   box-shadow: 0 0 0 1px var(--medal-border), var(--shadow);
 }
 
+/* #1's continuous decorative motion, matching the recap podium's own gold
+   card (RecapPage.css's recap-podium-wave) — a slow drift of light across
+   the card's whole surface, never confined to one edge and never off-card.
+   Pure CSS, so it's inherently absent from the accessibility tree (no
+   element to aria-hide) and pointer-events: none keeps it from ever
+   intercepting a click on the card beneath it. */
+@keyframes top-anime-showcase-wave {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(480px, 0, 0);
+  }
+}
+
+.top-anime-showcase__item--rank-1::after {
+  content: '';
+  position: absolute;
+  /* Below the poster link and info column's z-index: 1 — the wave passes
+     behind the artwork rather than over it. */
+  z-index: 0;
+  /* Covers the card's full height, and overhangs 520px on each side —
+     comfortably more than the 480px the layer travels — so no uncovered
+     edge of it can ever scroll into view mid-cycle. */
+  inset: -20% -520px;
+  /* Unlike the recap podium's version of this wave, both layers here span
+     the card's full height (not one at a partial height bottom-aligned) —
+     this card's poster only occupies a fixed-width column beside the info
+     text, rather than covering most of the card the way the podium's poster
+     does, so a partial-height layer's edge would sit exposed behind the
+     title/score chips as a visible seam instead of staying hidden under the
+     artwork. */
+  background-image:
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--medal) 22%, transparent), transparent),
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--medal) 14%, transparent), transparent);
+  background-size: 160px 100%, 240px 100%;
+  background-position: 0 0, 0 0;
+  background-repeat: repeat-x, repeat-x;
+  /* 480px = LCM(160, 240): a whole number of periods of both tiled layers,
+     so the end frame is pixel-identical to the start and `infinite` loops
+     with no seam and no gap. */
+  animation: top-anime-showcase-wave 20s linear infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .top-anime-showcase__item--rank-1::after {
+    animation: none;
+  }
+}
+
 .top-anime-showcase__item--rank-2 {
   --medal: var(--medal-silver);
   --medal-bg: var(--medal-silver-bg);
@@ -349,6 +400,10 @@
 }
 
 .top-anime-showcase__picture--placeholder {
+  /* No background of its own — unlike a loaded poster, rank 1's placeholder
+     must stay transparent so its card's ::after wave (below it in z-index)
+     shows through. */
+  background: none;
   border: 1px solid var(--border);
 }
 
@@ -390,8 +445,10 @@
   flex-wrap: wrap;
   /* Capped so the pair stops spanning the full info column now that the
      chips themselves are tighter — `align-self: stretch` still splits
-     whatever width this row has evenly between the two chips. */
-  max-width: 180px;
+     whatever width this row has evenly between the two chips. Widened from
+     180px to fit "MAL score" (renamed from "MAL" to match "My score"'s own
+     two-word label) without forcing it to wrap. */
+  max-width: 210px;
   /* The info column's `align-items: flex-start` stops this row from
      stretching to the column's width on its own, which left it hugging its
      content — too narrow for the two chips below to split evenly. */
@@ -400,21 +457,40 @@
 
 /* Smaller than ScoreChip's default size, scoped to this card only — the
    default 130px-min-width chip crowds the info column next to the poster
-   and title. `flex: 1 1 0` splits the row evenly so "My score" and "MAL"
-   match widths regardless of their label/value text differing in length. */
+   and title. `flex: 1 1 0` splits the row evenly so "My score" and "MAL
+   score" match widths regardless of their label/value text differing in
+   length; `white-space: nowrap` on the label (below) keeps either from
+   wrapping to a second line and growing taller than its sibling. Bolder
+   weights, a thicker border, and a more saturated background than
+   ScoreChip's own defaults make the pair read clearly against the card's
+   already-tinted gold/silver/bronze surface, where the default subtle chip
+   tended to blend in. */
 .top-anime-showcase__scores .score-chip {
   flex: 1 1 0;
   min-width: 0;
-  gap: 1px;
-  padding: 3px 6px;
+  gap: 2px;
+  padding: 5px 8px;
+  border-width: 1.5px;
+}
+
+.top-anime-showcase__scores .score-chip--mal {
+  background: color-mix(in srgb, var(--mal) 18%, var(--mal-bg));
+}
+
+.top-anime-showcase__scores .score-chip--mine {
+  background: color-mix(in srgb, var(--mine) 18%, var(--mine-bg));
 }
 
 .top-anime-showcase__scores .score-chip__label {
   font-size: 12px;
+  font-weight: 600;
+  opacity: 0.9;
+  white-space: nowrap;
 }
 
 .top-anime-showcase__scores .score-chip__value {
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 /* The chip's label and value both begin at the chip's leading edge, so a

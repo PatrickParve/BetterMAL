@@ -287,7 +287,7 @@ export function TopAnimePage() {
                       <ScoreChip role="mine" label="My score">
                         {item.entry?.myScore ?? '—'}
                       </ScoreChip>
-                      <ScoreChip role="mal" label="MAL">
+                      <ScoreChip role="mal" label="MAL score">
                         <ScoreValue value={item.malScore} completed={isScoreRevealableStatus(item.entry?.status)} />
                       </ScoreChip>
                     </div>

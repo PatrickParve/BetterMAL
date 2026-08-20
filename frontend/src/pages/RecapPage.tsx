@@ -412,9 +412,11 @@ export function RecapPage() {
   // even when the recap itself is showing "What I watched".
   //
   // A followable tile whose own count is 0 has nowhere to lead — following
-  // it would only land on an empty list — so it keeps the accent highlight
-  // (still reads as "this kind of tile"), but renders as a plain, unlinked
-  // `<div>` rather than a `<Link>` (design.md decision 7).
+  // it would only land on an empty list — so it renders as a plain, unlinked
+  // `<div>` and takes the same aggregate treatment an aggregate tile takes,
+  // rather than keeping the accent rail of a tile with somewhere to go
+  // (design.md decision 6): the accent marker always means "this leads
+  // somewhere".
   function renderStats(stats: RecapStatsDto) {
     const scopeLink = (focus?: string, filterOverride?: RecapTimeFilter) =>
       `/my-list?${myListScopeSearch(mode, startYear, endYear, season, filterOverride ?? filter, typeFilter, focus)}`
@@ -445,10 +447,7 @@ export function RecapPage() {
                 <span className="recap-page__stat-label">{tile.label}</span>
               </Link>
             ) : (
-              <div
-                key={tile.label}
-                className={tile.to ? 'recap-page__stat recap-page__stat--link' : 'recap-page__stat'}
-              >
+              <div key={tile.label} className="recap-page__stat">
                 <span className="recap-page__stat-value">{tile.value}</span>
                 <span className="recap-page__stat-label">{tile.label}</span>
               </div>
@@ -535,13 +534,15 @@ export function RecapPage() {
     )
   }
 
-  const MEDALS = ['gold', 'silver', 'bronze'] as const
+  const MEDALS = ['gold', 'silver', 'bronze', 'plain', 'plain'] as const
 
-  // A card for one of the top 3, rendered in place of the equivalent row
-  // (design.md decision 1). The key folds in every input that can change
-  // which ten anime — and in which order — are shown, so React remounts the
-  // cards (re-running the entrance animation, tasks.md 4.1/4.5) exactly when
-  // the set genuinely changes, and reuses them across an unrelated re-render.
+  // A card for one of the top 5, rendered in place of the equivalent row
+  // (design.md decision 1). Ranks 4-5 take the neutral `--plain` variant —
+  // visibly subordinate to the three medals rather than a fourth/fifth
+  // colour of their own. The key folds in every input that can change which
+  // ten anime — and in which order — are shown, so React remounts the cards
+  // (re-running the entrance animation, tasks.md 4.1/4.5) exactly when the
+  // set genuinely changes, and reuses them across an unrelated re-render.
   function renderPodiumCard(item: RecapRowDto, index: number, effectiveBasis: RankingBasis) {
     const rank = index + 1
     const medal = MEDALS[index]
@@ -597,8 +598,8 @@ export function RecapPage() {
       return a.title.localeCompare(b.title)
     })
     const topTen = ranked.slice(0, TOP_TEN_SIZE)
-    const podium = topTen.slice(0, 3)
-    const rows = topTen.slice(3)
+    const podium = topTen.slice(0, 5)
+    const rows = topTen.slice(5)
 
     return (
       <section className="recap-page__section">
@@ -652,10 +653,10 @@ export function RecapPage() {
           <>
             <ol className="recap-podium">{podium.map((item, index) => renderPodiumCard(item, index, effectiveBasis))}</ol>
             {rows.length > 0 && (
-              <ol className="recap-top-ten-list" start={4}>
+              <ol className="recap-top-ten-list" start={6}>
                 {rows.map((item, index) => (
                   <li key={item.animeId} className="recap-top-ten-row">
-                    <span className="recap-top-ten-row__rank">#{index + 4}</span>
+                    <span className="recap-top-ten-row__rank">#{index + 6}</span>
                     <Link to={`/anime/${item.animeId}`} className="recap-top-ten-row__link">
                       {item.pictureUrl ? (
                         <img src={item.pictureUrl} alt="" className="recap-top-ten-row__picture" />

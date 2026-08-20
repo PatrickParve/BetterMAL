@@ -6,13 +6,13 @@
 
 .recap-page__section h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-h);
 }
 
 .recap-ranking-list {
-  --ranking-poster-h: 40px;
+  --ranking-poster-h: 44px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -21,6 +21,9 @@
   gap: 6px;
 }
 
+/* calc(1em + 1px) rather than a fixed px (design.md decision 8): the row
+   inherits the fluid root size today, and nothing inside it re-applies the
+   rule, so a step up from that root cannot compound. */
 .recap-ranking-row__link {
   display: flex;
   align-items: center;
@@ -31,6 +34,7 @@
   border-radius: 8px;
   text-decoration: none;
   color: var(--text-h);
+  font-size: calc(1em + 1px);
   transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
@@ -56,7 +60,7 @@
 
 .recap-ranking-row__meta {
   flex: 0 0 auto;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text);
   opacity: 0.8;
 }
@@ -68,7 +72,7 @@
 }
 
 .recap-ranking-row__poster {
-  width: 28px;
+  width: 30px;
   height: var(--ranking-poster-h);
   object-fit: cover;
   border-radius: 4px;
@@ -82,7 +86,7 @@
 .recap-page__see-all-ranks {
   align-self: flex-start;
   font: inherit;
-  font-size: 14px;
+  font-size: 15px;
   padding: 0;
   border: none;
   background: none;
