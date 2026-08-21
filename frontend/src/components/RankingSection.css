@@ -8,6 +8,18 @@
   margin: 0;
   font-size: 18px;
   font-weight: 600;
+}
+
+/* Split from the rule above and wrapped in :where() so this default carries
+   only the bare element's specificity (0,0,1) — lower than .tinted-title's
+   single class (0,1,0). A section+element selector here (0,1,1) would beat
+   .tinted-title outright and silently win every tinted title's fallback
+   colour and its forced-colors colour back to --text-h (confirmed live:
+   Biggest Hot takes rendered in --text-h, not its family's red, with the
+   @supports gradient rule removed) — the exact "title is never invisible"
+   fallback path the section-colour-language capability requires actually
+   working. */
+:where(.recap-page__section) h2 {
   color: var(--text-h);
 }
 

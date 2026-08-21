@@ -29,6 +29,23 @@ export function isScoreRevealableStatus(status: WatchStatus | null | undefined):
   return status === 'Completed' || status === 'Dropped'
 }
 
+export type ScoreTier = 'apex' | 'red' | 'blue' | 'gold' | 'silver' | 'bronze'
+
+// Fixed 10 -> 1 tier mapping (design.md decision 3 of
+// add-recap-score-board-and-hold-scroll) — a design decision, not a computed
+// ranking, so it's stated here where TypeScript can be read rather than
+// derived from `score` in CSS. Shared by ScoreBoardOverlay and
+// ScoreDistribution's recap-only tier colouring so the two can never
+// disagree on which colour a score carries.
+export function scoreTier(score: number): ScoreTier {
+  if (score === 10) return 'apex'
+  if (score === 9) return 'red'
+  if (score === 8) return 'blue'
+  if (score === 7) return 'gold'
+  if (score === 6 || score === 5) return 'silver'
+  return 'bronze'
+}
+
 export const STATUS_LABELS: Record<WatchStatus, string> = {
   Watching: 'Watching',
   OnHold: 'On hold',

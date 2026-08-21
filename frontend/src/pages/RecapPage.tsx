@@ -33,10 +33,10 @@ import './RecapPage.css'
 
 type RankingBasis = 'mine' | 'mal'
 
-const MODE_OPTIONS: { value: RecapMode; label: string }[] = [
+const MODE_OPTIONS: { value: RecapMode; label: string; family?: 'year' | 'season' }[] = [
   { value: 'multiYear', label: 'Multi-year' },
-  { value: 'yearly', label: 'Yearly' },
-  { value: 'season', label: 'Season' },
+  { value: 'yearly', label: 'Yearly', family: 'year' },
+  { value: 'season', label: 'Season', family: 'season' },
 ]
 
 // A generous floor for the year selects — recaps look at the past, so
@@ -241,18 +241,23 @@ export function RecapPage() {
   function renderModeTabs() {
     return (
       <div className="recap-page__mode-tabs" role="tablist" aria-label="Recap type">
-        {MODE_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            role="tab"
-            aria-selected={mode === option.value}
-            className={mode === option.value ? 'recap-page__tab recap-page__tab--active' : 'recap-page__tab'}
-            onClick={() => switchMode(option.value)}
-          >
-            {option.label}
-          </button>
-        ))}
+        {MODE_OPTIONS.map((option) => {
+          const familyClass = option.family ? ` family--${option.family}` : ''
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="tab"
+              aria-selected={mode === option.value}
+              className={
+                (mode === option.value ? 'recap-page__tab recap-page__tab--active' : 'recap-page__tab') + familyClass
+              }
+              onClick={() => switchMode(option.value)}
+            >
+              {option.label}
+            </button>
+          )
+        })}
       </div>
     )
   }
@@ -480,6 +485,7 @@ export function RecapPage() {
         <ScoreDistribution
           buckets={buckets}
           compact
+          tiered
           hrefForScore={(score) =>
             `/my-list?${myListScopeSearch(mode, startYear, endYear, season, filter, typeFilter, `score-${score}`)}`
           }
@@ -524,7 +530,7 @@ export function RecapPage() {
   function renderHotTakes(hotTakes: RecapHotTakeDto[]) {
     return (
       <section className="recap-page__section">
-        <h2>Biggest Hot takes</h2>
+        <h2 className="tinted-title family--hot">Biggest Hot takes</h2>
         {hotTakes.length === 0 ? (
           <p className="recap-page__empty-note">No hot takes for this period.</p>
         ) : (
@@ -610,7 +616,11 @@ export function RecapPage() {
               <div className="recap-page__basis-toggle" role="group" aria-label="Rank top 10 by">
                 <button
                   type="button"
-                  className={effectiveBasis === 'mine' ? 'recap-page__tab recap-page__tab--active' : 'recap-page__tab'}
+                  className={
+                    effectiveBasis === 'mine'
+                      ? 'recap-page__tab recap-page__tab--active family--mine'
+                      : 'recap-page__tab family--mine'
+                  }
                   aria-pressed={effectiveBasis === 'mine'}
                   onClick={() => updateParams({ basis: null }, { keepScroll: true })}
                 >
@@ -618,7 +628,11 @@ export function RecapPage() {
                 </button>
                 <button
                   type="button"
-                  className={effectiveBasis === 'mal' ? 'recap-page__tab recap-page__tab--active' : 'recap-page__tab'}
+                  className={
+                    effectiveBasis === 'mal'
+                      ? 'recap-page__tab recap-page__tab--active family--mal'
+                      : 'recap-page__tab family--mal'
+                  }
                   aria-pressed={effectiveBasis === 'mal'}
                   onClick={() => updateParams({ basis: 'mal' }, { keepScroll: true })}
                 >
@@ -667,7 +681,13 @@ export function RecapPage() {
                         {pickDisplayTitle(item.title, item.englishTitle)}
                       </span>
                     </Link>
-                    <span className="recap-top-ten-row__score">
+                    <span
+                      className={
+                        effectiveBasis === 'mine'
+                          ? 'recap-top-ten-row__score score--mine'
+                          : 'recap-top-ten-row__score score--mal'
+                      }
+                    >
                       {effectiveBasis === 'mine' ? (
                         (item.myScore ?? '—')
                       ) : (
@@ -702,6 +722,7 @@ export function RecapPage() {
         rows={recap.seasonRanking.map(describeSeasonRanking)}
         onSeeAll={setOverlay}
         style={style}
+        family="season"
       />
     )
   }
@@ -715,6 +736,7 @@ export function RecapPage() {
         rows={recap.seasonTimeRanking.map(describeTimeRanking)}
         onSeeAll={setOverlay}
         style={style}
+        family="season"
       />
     )
   }
@@ -728,6 +750,7 @@ export function RecapPage() {
         rows={recap.yearRanking.map(describeYearRanking)}
         onSeeAll={setOverlay}
         style={style}
+        family="year"
       />
     )
   }
@@ -741,6 +764,7 @@ export function RecapPage() {
         rows={recap.yearTimeRanking.map(describeTimeRanking)}
         onSeeAll={setOverlay}
         style={style}
+        family="year"
       />
     )
   }

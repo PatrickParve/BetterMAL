@@ -42,35 +42,51 @@
     transform 0.12s ease;
 }
 
+/* --fam-* defaults (section-colour-language capability): a tab with no
+   palette class computes the same accent colours it always has. Written
+   with :where() so this default carries zero specificity — a palette class
+   like .family--year is a single class selector defined in index.css, whose
+   position in the bundled stylesheet relative to this file is a build
+   detail, not something the override should depend on. Without :where()
+   here, whichever of this rule or .family--year happens to land later in
+   the bundle would silently win, and index.css currently bundles first. */
+:where(.recap-page__tab) {
+  --fam-from: var(--accent);
+  --fam-to: color-mix(in srgb, var(--accent) 65%, black);
+  --fam-bg: var(--accent-bg);
+  --fam-border: var(--accent-border);
+  --fam-ink: #fff;
+}
+
 /* Six explicit states (design.md decision 6), shared by all three recap
    control groups (mode tabs, time filter, ranking-basis toggle) so a
    selected time filter and a selected recap-type tab look alike. The halo
    below is box-shadow, so none of these ever change the control's box —
    the cluster's shared --control-h height stays untouched. */
 .recap-page__tab:hover:not(:disabled):not(.recap-page__tab--active) {
-  background: var(--accent-bg);
+  background: var(--fam-bg);
   color: var(--text-h);
-  border-color: var(--accent-border);
+  border-color: var(--fam-border);
 }
 
 .recap-page__tab--active {
   border-color: transparent;
-  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 65%, black));
-  color: #fff;
+  background: linear-gradient(135deg, var(--fam-from), var(--fam-to));
+  color: var(--fam-ink);
   font-weight: 600;
-  box-shadow: 0 0 0 3px var(--accent-bg), 0 4px 10px -2px var(--accent-border);
+  box-shadow: 0 0 0 3px var(--fam-bg), 0 4px 10px -2px var(--fam-border);
 }
 
 /* Distinct from resting-selected (spec scenario "Hovering the
    already-selected option") — a hover that does nothing is a dead control. */
 .recap-page__tab--active:hover:not(:disabled) {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 85%, white), var(--accent));
-  box-shadow: 0 0 0 5px var(--accent-bg), 0 6px 16px -2px var(--accent-border);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--fam-from) 85%, white), var(--fam-from));
+  box-shadow: 0 0 0 5px var(--fam-bg), 0 6px 16px -2px var(--fam-border);
   transform: translateY(-1px);
 }
 
 .recap-page__tab:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--fam-from);
   outline-offset: 2px;
 }
 

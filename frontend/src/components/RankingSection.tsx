@@ -73,6 +73,7 @@ type RankingSectionProps = {
   rows: RankingOverlayRow[]
   onSeeAll: (overlay: { title: string; rows: RankingOverlayRow[] }) => void
   style?: CSSProperties
+  family?: 'year' | 'season'
 }
 
 // One rendering for every ranking a page shows — capped at
@@ -82,11 +83,14 @@ type RankingSectionProps = {
 // show at most one overlay at a time) and passes it in via onSeeAll. `style`
 // is RecapPage's grid-placement hook (design.md decision 8) for a multi-year
 // recap's row-aligned rankings grid — unused (and harmless) elsewhere.
-export function RankingSection({ title, noun, rows, onSeeAll, style }: RankingSectionProps) {
+// `family` tints the title per the section-colour-language capability; the
+// caller decides the family rather than it being inferred from `title`, so a
+// reworded heading can never silently lose its colour.
+export function RankingSection({ title, noun, rows, onSeeAll, style, family }: RankingSectionProps) {
   const visible = rows.slice(0, VISIBLE_RANK_COUNT)
   return (
     <section className="recap-page__section" style={style}>
-      <h2>{title}</h2>
+      <h2 className={family ? `tinted-title family--${family}` : undefined}>{title}</h2>
       {renderRankingRows(visible)}
       {rows.length > VISIBLE_RANK_COUNT && (
         <button type="button" className="recap-page__see-all-ranks" onClick={() => onSeeAll({ title, rows })}>

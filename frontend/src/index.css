@@ -81,6 +81,33 @@
   --mine-bg: var(--accent-bg);
   --mine-border: var(--accent-border);
 
+  /* Section colour families (section-colour-language capability): a family
+     names what a section is about, not a rank or a score, so each gets its
+     own pair rather than reusing the medal, tier, MAL, or mine tokens in
+     place. The year family is achromatic — silver running to the theme's
+     own extreme — so a year-level section is tellable by the absence of
+     hue among the coloured families. It's zinc, not the podium's cool
+     slate-blue --medal-silver, so "silver" title and "silver" medal stay
+     tellable apart. The season pair is orange-to-amber here rather than a
+     true orange-to-yellow: a true yellow can't clear 4.5:1 on a white
+     light-theme background, so the light theme trades hue purity for
+     legibility and reserves true yellow for the dark theme's darker page. */
+  --family-year-from: #71717a;
+  --family-year-to: #09090b;
+  --family-year-bg: rgba(113, 113, 122, 0.12);
+  --family-year-border: rgba(113, 113, 122, 0.45);
+  --family-year-ink: #fff;
+  --family-season-from: #c2410c;
+  --family-season-to: #a16207;
+  --family-season-bg: rgba(194, 65, 12, 0.12);
+  --family-season-border: rgba(194, 65, 12, 0.45);
+  --family-season-ink: #fff;
+  --family-hot-from: #b91c1c;
+  --family-hot-to: #c2410c;
+  --family-hot-bg: rgba(185, 28, 28, 0.12);
+  --family-hot-border: rgba(185, 28, 28, 0.45);
+  --family-hot-ink: #fff;
+
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
@@ -166,6 +193,28 @@
     --mine: var(--accent);
     --mine-bg: var(--accent-bg);
     --mine-border: var(--accent-border);
+
+    /* The year family is the one family whose *direction* flips: it fills
+       toward white here instead of toward black, so its --ink has to flip
+       with it — a light label on this near-white fill would be as
+       unreadable as the light theme's dark fill would be under a dark
+       label. Every other family keeps a #fff ink because its fill stays
+       dark-ish in both themes. */
+    --family-year-from: #a1a1aa;
+    --family-year-to: #fafafa;
+    --family-year-bg: rgba(161, 161, 170, 0.16);
+    --family-year-border: rgba(161, 161, 170, 0.5);
+    --family-year-ink: #09090b;
+    --family-season-from: #fb923c;
+    --family-season-to: #facc15;
+    --family-season-bg: rgba(251, 146, 60, 0.16);
+    --family-season-border: rgba(251, 146, 60, 0.5);
+    --family-season-ink: #fff;
+    --family-hot-from: #f87171;
+    --family-hot-to: #fb923c;
+    --family-hot-bg: rgba(248, 113, 113, 0.16);
+    --family-hot-border: rgba(248, 113, 113, 0.5);
+    --family-hot-ink: #fff;
   }
 
   #social .button-icon {
@@ -294,6 +343,81 @@ code {
 .score--mine {
   color: var(--mine);
   font-variant-numeric: tabular-nums;
+}
+
+/* Section colour families, aliased into one local --fam-* vocabulary exactly
+   as .recap-podium__card aliases its rank's medal into --medal*. --mal and
+   --mine reuse the score-presentation capability's own tokens rather than
+   redefining "MAL blue"/"mine purple" a second time; their --fam-to is
+   derived the same way the active tab already mixes --accent with black, so
+   no new colour is needed for either. */
+.family--year {
+  --fam-from: var(--family-year-from);
+  --fam-to: var(--family-year-to);
+  --fam-bg: var(--family-year-bg);
+  --fam-border: var(--family-year-border);
+  --fam-ink: var(--family-year-ink);
+}
+
+.family--season {
+  --fam-from: var(--family-season-from);
+  --fam-to: var(--family-season-to);
+  --fam-bg: var(--family-season-bg);
+  --fam-border: var(--family-season-border);
+  --fam-ink: var(--family-season-ink);
+}
+
+.family--hot {
+  --fam-from: var(--family-hot-from);
+  --fam-to: var(--family-hot-to);
+  --fam-bg: var(--family-hot-bg);
+  --fam-border: var(--family-hot-border);
+  --fam-ink: var(--family-hot-ink);
+}
+
+.family--mal {
+  --fam-from: var(--mal);
+  --fam-to: color-mix(in srgb, var(--mal) 65%, black);
+  --fam-bg: var(--mal-bg);
+  --fam-border: var(--mal-border);
+  --fam-ink: #fff;
+}
+
+.family--mine {
+  --fam-from: var(--mine);
+  --fam-to: color-mix(in srgb, var(--mine) 65%, black);
+  --fam-bg: var(--mine-bg);
+  --fam-border: var(--mine-border);
+  --fam-ink: #fff;
+}
+
+/* Tinted section title (section-colour-language capability): the direct
+   analogue of .score--mal/.score--mine above, but painting a gradient
+   across the title's own box instead of a flat colour. color is set
+   unconditionally first so a browser without background-clip: text, or a
+   forced-colors mode, renders a solid legible title rather than transparent
+   text — never rely on the @supports block alone for legibility. Sets no
+   size, weight, margin, or display, so the h2 keeps every geometric
+   property it has today. */
+.tinted-title {
+  color: var(--fam-from);
+}
+
+@supports (-webkit-background-clip: text) or (background-clip: text) {
+  .tinted-title {
+    background-image: linear-gradient(90deg, var(--fam-from), var(--fam-to));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+@media (forced-colors: active) {
+  .tinted-title {
+    -webkit-text-fill-color: revert;
+    background-image: none;
+    color: CanvasText;
+  }
 }
 
 /* Covers every search field the app renders (navbar SearchBar, Settings'

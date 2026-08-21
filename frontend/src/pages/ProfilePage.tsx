@@ -33,9 +33,9 @@ const STRIP_VISIBLE_TILES = 10
 
 type TopSeriesBasis = 'mine' | 'mal'
 
-const TOP_SERIES_BASIS_TABS: { value: TopSeriesBasis; label: string }[] = [
-  { value: 'mine', label: 'My score' },
-  { value: 'mal', label: 'MAL score' },
+const TOP_SERIES_BASIS_TABS: { value: TopSeriesBasis; label: string; family: 'mine' | 'mal' }[] = [
+  { value: 'mine', label: 'My score', family: 'mine' },
+  { value: 'mal', label: 'MAL score', family: 'mal' },
 ]
 
 function topSeriesBasisValue(item: TopSeriesItemDto, basis: TopSeriesBasis): number | null {
@@ -534,9 +534,9 @@ export function ProfilePage() {
               role="tab"
               aria-selected={topSeriesBasis === tab.value}
               className={
-                topSeriesBasis === tab.value
+                (topSeriesBasis === tab.value
                   ? 'profile-media-tabs__tab profile-media-tabs__tab--active'
-                  : 'profile-media-tabs__tab'
+                  : 'profile-media-tabs__tab') + ` family--${tab.family}`
               }
               onClick={() => setTopSeriesBasis(tab.value)}
             >
@@ -681,6 +681,7 @@ export function ProfilePage() {
               noun="years"
               rows={profile.favouriteYears.map(describeYearRanking)}
               onSeeAll={setRankingOverlay}
+              family="year"
             />
           </section>
           <section className="profile-box">
@@ -689,6 +690,7 @@ export function ProfilePage() {
               noun="seasons"
               rows={profile.favouriteSeasons.map(describeSeasonRanking)}
               onSeeAll={setRankingOverlay}
+              family="season"
             />
           </section>
         </div>
@@ -696,11 +698,11 @@ export function ProfilePage() {
 
       <div className="profile-page__divergence-row">
         <section className="profile-box">
-          <h2>They liked it, I didn't</h2>
+          <h2 className="tinted-title family--mal">They liked it, I didn't</h2>
           <DivergenceList items={profile.theyLikedItIDidnt} />
         </section>
         <section className="profile-box">
-          <h2>I liked it, they didn't</h2>
+          <h2 className="tinted-title family--mine">I liked it, they didn't</h2>
           <DivergenceList items={profile.iLikedItTheyDidnt} />
         </section>
       </div>

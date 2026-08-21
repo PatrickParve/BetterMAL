@@ -118,3 +118,53 @@ a.score-distribution__row--link:focus-visible {
 .score-distribution--compact .score-distribution__share {
   width: 3.5ch;
 }
+
+/* Recap-only tier colouring (design.md decision 5): a local --tier alias
+   per row, exactly the pattern ScoreBoardOverlay.css's --tier already uses
+   for its slots — read from the same scoreTier the board reads, never a
+   second copy of the 10->1 mapping. __count and __share are deliberately
+   left off this list: they stay on the block's ordinary text colour so a
+   row's colour is carried by the score and its bar, not smeared across
+   every cell. */
+.score-distribution__row--tier-apex {
+  --tier: var(--tier-apex);
+}
+.score-distribution__row--tier-red {
+  --tier: var(--tier-red);
+}
+.score-distribution__row--tier-blue {
+  --tier: var(--tier-blue);
+}
+.score-distribution__row--tier-gold {
+  --tier: var(--medal-gold);
+}
+.score-distribution__row--tier-silver {
+  --tier: var(--medal-silver);
+}
+.score-distribution__row--tier-bronze {
+  --tier: var(--medal-bronze);
+}
+
+.score-distribution__row--tiered .score-distribution__label {
+  color: var(--tier);
+}
+
+.score-distribution__row--tiered .score-distribution__bar {
+  background: var(--tier);
+}
+
+/* The 10 row takes the board's own apex gradient rather than a flat fill
+   (design.md decision 5), so the distribution and the board agree there
+   too — same gradient and stops as ScoreBoardOverlay.css's
+   .score-board__slot--apex .score-board__slot-score/-header. Declared after
+   the generic --tiered rule above so it wins the tie on source order. */
+.score-distribution__row--tier-apex .score-distribution__label {
+  background: linear-gradient(135deg, var(--tier-apex), var(--tier-apex-sheen) 50%, var(--tier-apex));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.score-distribution__row--tier-apex .score-distribution__bar {
+  background: linear-gradient(135deg, var(--tier-apex), var(--tier-apex-sheen) 50%, var(--tier-apex));
+}

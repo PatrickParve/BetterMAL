@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type FocusEvent, type MouseEvent as 
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import type { RecapRowDto } from '../api/types.ts'
-import { mediaTypeLabel, pickDisplayTitle } from '../utils/anime.ts'
+import { mediaTypeLabel, pickDisplayTitle, scoreTier } from '../utils/anime.ts'
 import { Modal } from './Modal.tsx'
 import './ScoreBoardOverlay.css'
 
@@ -12,20 +12,6 @@ type ScoreBoardOverlayProps = {
   title: string
   groups: ScoreBoardGroup[]
   onClose: () => void
-}
-
-type Tier = 'apex' | 'red' | 'blue' | 'gold' | 'silver' | 'bronze'
-
-// Fixed 10 -> 1 tier mapping (design.md decision 3) — a design decision, not
-// a computed ranking, so it's stated here where TypeScript can be read
-// rather than derived from `score` in CSS.
-function scoreTier(score: number): Tier {
-  if (score === 10) return 'apex'
-  if (score === 9) return 'red'
-  if (score === 8) return 'blue'
-  if (score === 7) return 'gold'
-  if (score === 6 || score === 5) return 'silver'
-  return 'bronze'
 }
 
 const VIEWPORT_MARGIN = 8
