@@ -42,22 +42,6 @@
     transform 0.12s ease;
 }
 
-/* --fam-* defaults (section-colour-language capability): a tab with no
-   palette class computes the same accent colours it always has. Written
-   with :where() so this default carries zero specificity — a palette class
-   like .family--year is a single class selector defined in index.css, whose
-   position in the bundled stylesheet relative to this file is a build
-   detail, not something the override should depend on. Without :where()
-   here, whichever of this rule or .family--year happens to land later in
-   the bundle would silently win, and index.css currently bundles first. */
-:where(.recap-page__tab) {
-  --fam-from: var(--accent);
-  --fam-to: color-mix(in srgb, var(--accent) 65%, black);
-  --fam-bg: var(--accent-bg);
-  --fam-border: var(--accent-border);
-  --fam-ink: #fff;
-}
-
 /* Six explicit states (design.md decision 6), shared by all three recap
    control groups (mode tabs, time filter, ranking-basis toggle) so a
    selected time filter and a selected recap-type tab look alike. The halo
@@ -395,8 +379,8 @@ a.recap-page__stat--link:focus-visible {
 
 .recap-hot-take:hover,
 .recap-hot-take:focus-within {
-  background: var(--accent-bg);
-  border-color: var(--accent-border);
+  background: var(--fam-bg);
+  border-color: var(--fam-border);
   box-shadow: var(--shadow);
 }
 

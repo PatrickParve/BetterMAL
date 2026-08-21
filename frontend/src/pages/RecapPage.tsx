@@ -145,7 +145,11 @@ export function RecapPage() {
   // Only one ranking overlay can be open at a time, so a single slot (title +
   // rows already described) serves the season, year, and both time-watched
   // rankings alike.
-  const [overlay, setOverlay] = useState<{ title: string; rows: RankingOverlayRow[] } | null>(null)
+  const [overlay, setOverlay] = useState<{
+    title: string
+    rows: RankingOverlayRow[]
+    family?: 'year' | 'season'
+  } | null>(null)
   // The score board (design.md decision 5): page-local state opened from
   // the distribution's section header, matching `overlay` above — no URL
   // parameter and no history entry, so back still leaves the recap exactly
@@ -497,7 +501,7 @@ export function RecapPage() {
   function renderHotTake(take: RecapHotTakeDto) {
     const malLikedMore = take.divergence > 0
     return (
-      <li key={take.animeId} className="recap-hot-take">
+      <li key={take.animeId} className={malLikedMore ? 'recap-hot-take family--mal' : 'recap-hot-take family--mine'}>
         <Link to={`/anime/${take.animeId}`} className="recap-hot-take__link">
           {take.pictureUrl ? (
             <img src={take.pictureUrl} alt="" className="recap-hot-take__picture" />
@@ -529,8 +533,8 @@ export function RecapPage() {
 
   function renderHotTakes(hotTakes: RecapHotTakeDto[]) {
     return (
-      <section className="recap-page__section">
-        <h2 className="tinted-title family--hot">Biggest Hot takes</h2>
+      <section className="recap-page__section family--hot">
+        <h2 className="section-band">Biggest Hot takes</h2>
         {hotTakes.length === 0 ? (
           <p className="recap-page__empty-note">No hot takes for this period.</p>
         ) : (
@@ -856,7 +860,9 @@ export function RecapPage() {
         </>
       )}
 
-      {overlay && <RankingOverlay title={overlay.title} rows={overlay.rows} onClose={() => setOverlay(null)} />}
+      {overlay && (
+        <RankingOverlay title={overlay.title} rows={overlay.rows} family={overlay.family} onClose={() => setOverlay(null)} />
+      )}
       {boardOpen && (
         <ScoreBoardOverlay
           title={`Score board — ${periodLabel}`}

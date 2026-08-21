@@ -194,8 +194,8 @@
 
 .profile-list-row:hover,
 .profile-list-row:focus-within {
-  background: var(--accent-bg);
-  border-color: var(--accent-border);
+  background: var(--fam-bg);
+  border-color: var(--fam-border);
 }
 
 .profile-list-row__link {
@@ -298,19 +298,6 @@
   color: var(--text);
   cursor: pointer;
   transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
-}
-
-/* --fam-* defaults, mirroring RecapPage.css's .recap-page__tab: wrapped in
-   :where() so this default carries zero specificity and a palette class
-   like .family--mal always wins on specificity rather than depending on
-   which stylesheet the bundler happens to place later (RecapPage.css has
-   the same comment with the measured cascade order). */
-:where(.profile-media-tabs__tab) {
-  --fam-from: var(--accent);
-  --fam-to: color-mix(in srgb, var(--accent) 65%, black);
-  --fam-bg: var(--accent-bg);
-  --fam-border: var(--accent-border);
-  --fam-ink: #fff;
 }
 
 .profile-media-tabs__tab:hover {

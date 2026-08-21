@@ -14,6 +14,7 @@ type RankingOverlayProps = {
   title: string
   rows: RankingOverlayRow[]
   onClose: () => void
+  family?: 'year' | 'season'
 }
 
 // The recap page's rankings show five at a time; this overlay lists every
@@ -22,11 +23,15 @@ type RankingOverlayProps = {
 // and time-watched rankings alike — each caller maps its own DTO into the
 // normalised row shape via a describe() function shared with its inline
 // five-row list, so the two representations of one ranking can never drift.
-export function RankingOverlay({ title, rows, onClose }: RankingOverlayProps) {
+// `family` carries the family of the ranking that opened this overlay
+// (design.md decision 8) so its title bands and its rows highlight the same
+// colour they do inline — without it, "See all" would drop into a
+// purple-accented overlay regardless of which ranking was opened.
+export function RankingOverlay({ title, rows, onClose, family }: RankingOverlayProps) {
   return (
     <Modal onClose={onClose} labelledBy="ranking-overlay-title" className="modal--wide">
-      <div className="ranking-overlay">
-        <h2 id="ranking-overlay-title" className="ranking-overlay__title">
+      <div className={family ? `ranking-overlay family--${family}` : 'ranking-overlay'}>
+        <h2 id="ranking-overlay-title" className={family ? 'ranking-overlay__title section-band' : 'ranking-overlay__title'}>
           {title}
         </h2>
 

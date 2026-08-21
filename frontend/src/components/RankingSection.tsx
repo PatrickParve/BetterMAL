@@ -71,7 +71,7 @@ type RankingSectionProps = {
   title: string
   noun: string
   rows: RankingOverlayRow[]
-  onSeeAll: (overlay: { title: string; rows: RankingOverlayRow[] }) => void
+  onSeeAll: (overlay: { title: string; rows: RankingOverlayRow[]; family?: 'year' | 'season' }) => void
   style?: CSSProperties
   family?: 'year' | 'season'
 }
@@ -83,17 +83,19 @@ type RankingSectionProps = {
 // show at most one overlay at a time) and passes it in via onSeeAll. `style`
 // is RecapPage's grid-placement hook (design.md decision 8) for a multi-year
 // recap's row-aligned rankings grid — unused (and harmless) elsewhere.
-// `family` tints the title per the section-colour-language capability; the
-// caller decides the family rather than it being inferred from `title`, so a
-// reworded heading can never silently lose its colour.
+// `family` bands the title and colours the section's rows per the
+// section-colour-language capability; the class sits on the section rather
+// than the title alone (design.md decision 1) so every row inherits it too.
+// The caller decides the family rather than it being inferred from `title`,
+// so a reworded heading can never silently lose its colour.
 export function RankingSection({ title, noun, rows, onSeeAll, style, family }: RankingSectionProps) {
   const visible = rows.slice(0, VISIBLE_RANK_COUNT)
   return (
-    <section className="recap-page__section" style={style}>
-      <h2 className={family ? `tinted-title family--${family}` : undefined}>{title}</h2>
+    <section className={family ? `recap-page__section family--${family}` : 'recap-page__section'} style={style}>
+      <h2 className={family ? 'section-band' : undefined}>{title}</h2>
       {renderRankingRows(visible)}
       {rows.length > VISIBLE_RANK_COUNT && (
-        <button type="button" className="recap-page__see-all-ranks" onClick={() => onSeeAll({ title, rows })}>
+        <button type="button" className="recap-page__see-all-ranks" onClick={() => onSeeAll({ title, rows, family })}>
           See all {rows.length} {noun}
         </button>
       )}

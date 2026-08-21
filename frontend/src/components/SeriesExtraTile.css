@@ -146,6 +146,7 @@
 }
 
 .series-extra-tile__status {
+  flex: 0 1 auto;
   font-size: 11px;
   color: var(--text);
   opacity: 0.85;
@@ -156,11 +157,14 @@
 }
 
 /* Shared with SeriesEntryRow/SeriesTimeline so a rewatch count reads the
-   same way wherever it appears on the series page. */
+   same way wherever it appears on the series page. A footer child now (not
+   nested inside the truncating status span), so spacing comes from the
+   footer's own `gap` rather than a margin of its own. flex: 0 0 auto keeps
+   it from being squeezed when the status text runs long. */
 .series-rewatch-badge {
   display: inline-flex;
   align-items: center;
-  margin-left: 6px;
+  flex: 0 0 auto;
   padding: 1px 6px;
   border-radius: 999px;
   background: var(--code-bg);

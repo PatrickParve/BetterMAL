@@ -2,7 +2,11 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  max-width: 640px;
+  /* Wide enough that an action's explanation, its run state, and its button
+     sit comfortably without the explanation collapsing to a narrow ribbon of
+     text, capped so a line never runs the full width of a wide window
+     (settings-page spec "Settings layout"). */
+  max-width: 760px;
 }
 
 .settings-page__header {
@@ -27,17 +31,189 @@
   font-size: 14px;
 }
 
-.settings-box {
+/* A named group (settings-page spec "Settings are organised into named
+   groups"): every control on the page belongs to exactly one of these. */
+.settings-group {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
+  gap: 16px;
+  padding: 16px 20px;
   border: 1px solid var(--border);
   border-radius: 12px;
 }
 
-.settings-box h2 {
+.settings-group__header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-group__header h2 {
   margin: 0;
+  font-size: 18px;
+}
+
+.settings-group__hint {
+  margin: 0;
+  color: var(--text);
+  opacity: 0.75;
+  font-size: 13px;
+}
+
+.settings-group__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* An instant preference (settings-page spec "A preference is visibly not a
+   job"): one compact row, control on the left, taking effect immediately —
+   deliberately a single line rather than SettingsAction's titled block, so
+   the two kinds are tellable apart without reading either's hint. */
+.settings-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.settings-toggle-row input {
+  margin-top: 3px;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.settings-toggle-row input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings-toggle-row__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-toggle-row__label {
+  color: var(--text-h);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.settings-toggle-row__hint {
+  color: var(--text);
+  opacity: 0.75;
+  font-size: 12px;
+}
+
+/* An action that starts work (settings-page spec "A preference is visibly
+   not a job"): a titled block with its own explanation, optional run state,
+   and a single button — wraps at narrow widths (spec "Narrow windows do not
+   break the page") rather than shrinking the button out of reach. */
+.settings-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-action + .settings-action {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-action__info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.settings-action__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.settings-action__hint {
+  margin: 0;
+  color: var(--text);
+  opacity: 0.75;
+  font-size: 13px;
+}
+
+.settings-action__control {
+  flex: 0 0 auto;
+}
+
+/* The shared background-job readout (settings-page spec "Background jobs
+   report progress the same way"): a proportional track plus the
+   processed-of-total counts, identical across all three jobs so a reader
+   learns to read it once. */
+.job-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 320px;
+}
+
+.job-progress__track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--code-bg);
+  overflow: hidden;
+}
+
+.job-progress__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.job-progress__counts {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Visibly distinct from a completed run rather than differing only in
+   wording (settings-page spec "A failed run is marked as failed"). */
+.job-progress--failed .job-progress__fill {
+  background: var(--danger, #d64545);
+}
+
+.job-progress--failed .job-progress__counts {
+  color: var(--danger, #d64545);
+}
+
+/* A sub-block within a group that isn't one of the three background jobs —
+   the force-refresh picker and the pending reconciliation diff — set off
+   from the group's other controls with a divider. */
+.settings-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-subsection__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.settings-subsection__hint {
+  margin: 0;
+  color: var(--text);
+  opacity: 0.75;
+  font-size: 13px;
 }
 
 .settings-box__hint {
@@ -74,19 +250,6 @@
 .settings-box__link:hover {
   color: var(--text-h);
   border-color: var(--accent-border);
-}
-
-.settings-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.settings-toggle input {
-  cursor: pointer;
 }
 
 .settings-box__buttons {
@@ -194,13 +357,15 @@
 
 .settings-refresh-picker {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: flex-start;
 }
 
 .settings-refresh-picker__search {
   position: relative;
-  flex: 1 1 auto;
+  flex: 1 1 200px;
+  min-width: 0;
 }
 
 .settings-refresh-picker__search input {

@@ -35,8 +35,8 @@
 
 .ranking-overlay__link:hover,
 .ranking-overlay__link:focus-within {
-  background: var(--accent-bg);
-  border-color: var(--accent-border);
+  background: var(--fam-bg);
+  border-color: var(--fam-border);
   box-shadow: var(--shadow);
 }
 

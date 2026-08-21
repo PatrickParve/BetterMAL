@@ -96,17 +96,30 @@
   --family-year-to: #09090b;
   --family-year-bg: rgba(113, 113, 122, 0.12);
   --family-year-border: rgba(113, 113, 122, 0.45);
-  --family-year-ink: #fff;
   --family-season-from: #c2410c;
   --family-season-to: #a16207;
   --family-season-bg: rgba(194, 65, 12, 0.12);
   --family-season-border: rgba(194, 65, 12, 0.45);
-  --family-season-ink: #fff;
   --family-hot-from: #b91c1c;
   --family-hot-to: #c2410c;
   --family-hot-bg: rgba(185, 28, 28, 0.12);
   --family-hot-border: rgba(185, 28, 28, 0.45);
-  --family-hot-ink: #fff;
+
+  /* --fam-* accent defaults (section-colour-language capability, design.md
+     decision 2 of banded-section-titles-and-settings-restyle): declared once
+     here rather than on any consuming element. A default declared on the row
+     element itself would beat the value *inherited* from a .family--x
+     ancestor no matter how low its specificity — inheritance always loses to
+     a declaration matching the element — so the default has to live above
+     every family class, and :root is the only place unconditionally above
+     all of them. --fam-ink is a single value per theme, not one per family
+     (decision 4): every family's fill is dark in the light theme and light
+     in the dark theme, so one ink per theme covers all of them. */
+  --fam-from: var(--accent);
+  --fam-to: color-mix(in srgb, var(--accent) 65%, black);
+  --fam-bg: var(--accent-bg);
+  --fam-border: var(--accent-border);
+  --fam-ink: #fff;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -195,26 +208,23 @@
     --mine-border: var(--accent-border);
 
     /* The year family is the one family whose *direction* flips: it fills
-       toward white here instead of toward black, so its --ink has to flip
-       with it — a light label on this near-white fill would be as
-       unreadable as the light theme's dark fill would be under a dark
-       label. Every other family keeps a #fff ink because its fill stays
-       dark-ish in both themes. */
+       toward white here instead of toward black. --fam-ink flips with it
+       below — every family's fill is light in this theme, so the single ink
+       that covers all of them is the dark one (design.md decision 4). */
     --family-year-from: #a1a1aa;
     --family-year-to: #fafafa;
     --family-year-bg: rgba(161, 161, 170, 0.16);
     --family-year-border: rgba(161, 161, 170, 0.5);
-    --family-year-ink: #09090b;
     --family-season-from: #fb923c;
     --family-season-to: #facc15;
     --family-season-bg: rgba(251, 146, 60, 0.16);
     --family-season-border: rgba(251, 146, 60, 0.5);
-    --family-season-ink: #fff;
     --family-hot-from: #f87171;
     --family-hot-to: #fb923c;
     --family-hot-bg: rgba(248, 113, 113, 0.16);
     --family-hot-border: rgba(248, 113, 113, 0.5);
-    --family-hot-ink: #fff;
+
+    --fam-ink: #09090b;
   }
 
   #social .button-icon {
@@ -356,7 +366,6 @@ code {
   --fam-to: var(--family-year-to);
   --fam-bg: var(--family-year-bg);
   --fam-border: var(--family-year-border);
-  --fam-ink: var(--family-year-ink);
 }
 
 .family--season {
@@ -364,7 +373,6 @@ code {
   --fam-to: var(--family-season-to);
   --fam-bg: var(--family-season-bg);
   --fam-border: var(--family-season-border);
-  --fam-ink: var(--family-season-ink);
 }
 
 .family--hot {
@@ -372,7 +380,6 @@ code {
   --fam-to: var(--family-hot-to);
   --fam-bg: var(--family-hot-bg);
   --fam-border: var(--family-hot-border);
-  --fam-ink: var(--family-hot-ink);
 }
 
 .family--mal {
@@ -380,7 +387,6 @@ code {
   --fam-to: color-mix(in srgb, var(--mal) 65%, black);
   --fam-bg: var(--mal-bg);
   --fam-border: var(--mal-border);
-  --fam-ink: #fff;
 }
 
 .family--mine {
@@ -388,35 +394,52 @@ code {
   --fam-to: color-mix(in srgb, var(--mine) 65%, black);
   --fam-bg: var(--mine-bg);
   --fam-border: var(--mine-border);
-  --fam-ink: #fff;
 }
 
-/* Tinted section title (section-colour-language capability): the direct
-   analogue of .score--mal/.score--mine above, but painting a gradient
-   across the title's own box instead of a flat colour. color is set
-   unconditionally first so a browser without background-clip: text, or a
-   forced-colors mode, renders a solid legible title rather than transparent
-   text — never rely on the @supports block alone for legibility. Sets no
-   size, weight, margin, or display, so the h2 keeps every geometric
-   property it has today. */
-.tinted-title {
-  color: var(--fam-from);
-}
+/* In the dark theme --mal/--mine are themselves light colours, so mixing
+   --fam-to toward black (the light-theme rule above) would run the ramp
+   across the middle of the lightness range and leave no single ink able to
+   sit on it (design.md decision 5). Mixing toward white instead keeps the
+   fill light-on-light, consistent with every other family in this theme, so
+   the single dark --fam-ink above holds for these two as well. --mal and
+   --mine themselves are untouched — only the second gradient stop moves. */
+@media (prefers-color-scheme: dark) {
+  .family--mal {
+    --fam-to: color-mix(in srgb, var(--mal) 65%, white);
+  }
 
-@supports (-webkit-background-clip: text) or (background-clip: text) {
-  .tinted-title {
-    background-image: linear-gradient(90deg, var(--fam-from), var(--fam-to));
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+  .family--mine {
+    --fam-to: color-mix(in srgb, var(--mine) 65%, white);
   }
 }
 
+/* Banded section title (section-colour-language capability): a full-width
+   filled block rather than gradient-painted text, so a family names the
+   section beneath it and not just its heading's letters. font-size/weight
+   are set explicitly (rather than left to the ambient h2 rule) so every
+   banded title takes the same type scale wherever it's used — a band inside
+   .recap-page__section already lands on 18px/600 via that section's own h2
+   rule, but a band with no such ancestor (profile's divergence titles,
+   sitting directly in .profile-box) would otherwise fall back to the plain
+   heading's larger, lighter clamp() size, breaking the "every banded title
+   is the same height" rule the section-colour-language spec requires. */
+.section-band {
+  display: block;
+  box-sizing: border-box;
+  padding: 8px 14px;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  background-image: linear-gradient(135deg, var(--fam-from), var(--fam-to));
+  color: var(--fam-ink);
+}
+
 @media (forced-colors: active) {
-  .tinted-title {
-    -webkit-text-fill-color: revert;
+  .section-band {
     background-image: none;
     color: CanvasText;
+    border: 1px solid CanvasText;
   }
 }
 

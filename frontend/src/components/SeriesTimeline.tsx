@@ -129,12 +129,12 @@ function TimelineCard({ entry, onEdit }: { entry: SeriesEntryDto; onEdit: (entry
         <span className="series-timeline__card-status">
           {entry.entry ? STATUS_LABELS[entry.entry.status] : 'Not in list'}
           {watched && <span className="series-timeline__card-status-progress"> · {watched}</span>}
-          {!!entry.entry?.rewatchCount && (
-            <span className="series-rewatch-badge" title={`Rewatched ${entry.entry.rewatchCount} times`}>
-              ↻ {entry.entry.rewatchCount}
-            </span>
-          )}
         </span>
+        {!!entry.entry?.rewatchCount && (
+          <span className="series-rewatch-badge" title={`Rewatched ${entry.entry.rewatchCount} times`}>
+            ↻ {entry.entry.rewatchCount}
+          </span>
+        )}
         <button type="button" className="series-timeline__card-edit" onClick={() => onEdit(entry)}>
           {entry.entry ? 'Edit' : 'Add'}
         </button>

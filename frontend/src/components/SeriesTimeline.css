@@ -39,7 +39,7 @@
    edge. --card-w drives the card's width so a landscape card (below) can
    widen by overriding one custom property rather than duplicating the rule. */
 .series-timeline__card {
-  --card-w: 168px;
+  --card-w: 192px;
   position: relative;
   display: flex;
   flex: 0 0 auto;
@@ -55,7 +55,7 @@
    picture's height stays pinned to the portrait width's figure below, since
    --card-w has already widened by the time it's read there. */
 .series-timeline__card--landscape {
-  --card-w: 336px;
+  --card-w: 384px;
 }
 
 .series-timeline__card:hover,
@@ -86,7 +86,7 @@
 }
 
 /* height rather than aspect-ratio: an identical result for a portrait card
-   (calc(168px * 3 / 2) = 252px, the same box 2 / 3 already produced), but one
+   (calc(192px * 3 / 2) = 288px, the same box 2 / 3 already produced), but one
    that a landscape card can pin back to the portrait figure below instead of
    inheriting its own widened --card-w. */
 .series-timeline__card-picture {
@@ -106,7 +106,7 @@
    shows the whole picture with `contain` rather than cropping it to fill a
    taller box. */
 .series-timeline__card--landscape .series-timeline__card-picture {
-  height: calc(168px * 3 / 2);
+  height: calc(192px * 3 / 2);
   object-fit: contain;
 }
 
@@ -217,6 +217,7 @@
 }
 
 .series-timeline__card-status {
+  flex: 0 1 auto;
   font-size: 10px;
   color: var(--text);
   opacity: 0.85;
@@ -248,11 +249,15 @@
 }
 
 /* Shared with SeriesEntryRow/SeriesExtraTile so a rewatch count reads the
-   same way wherever it appears on the series page. */
+   same way wherever it appears on the series page. A footer child now (not
+   nested inside the truncating status span), so spacing comes from the
+   footer's own `gap` rather than a margin of its own — an ellipsized status
+   can no longer clip it (series-page spec). flex: 0 0 auto keeps it from
+   being squeezed when the status text runs long. */
 .series-rewatch-badge {
   display: inline-flex;
   align-items: center;
-  margin-left: 6px;
+  flex: 0 0 auto;
   padding: 1px 6px;
   border-radius: 999px;
   background: var(--code-bg);

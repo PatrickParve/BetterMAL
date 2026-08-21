@@ -11,14 +11,9 @@
 }
 
 /* Split from the rule above and wrapped in :where() so this default carries
-   only the bare element's specificity (0,0,1) — lower than .tinted-title's
-   single class (0,1,0). A section+element selector here (0,1,1) would beat
-   .tinted-title outright and silently win every tinted title's fallback
-   colour and its forced-colors colour back to --text-h (confirmed live:
-   Biggest Hot takes rendered in --text-h, not its family's red, with the
-   @supports gradient rule removed) — the exact "title is never invisible"
-   fallback path the section-colour-language capability requires actually
-   working. */
+   only the bare element's specificity (0,0,1) — lower than .section-band's
+   single class (0,1,0), so a banded title's own colour always wins here
+   regardless of which stylesheet the bundler happens to place later. */
 :where(.recap-page__section) h2 {
   color: var(--text-h);
 }
@@ -52,8 +47,8 @@
 
 .recap-ranking-row__link:hover,
 .recap-ranking-row__link:focus-within {
-  background: var(--accent-bg);
-  border-color: var(--accent-border);
+  background: var(--fam-bg);
+  border-color: var(--fam-border);
   box-shadow: var(--shadow);
 }
 

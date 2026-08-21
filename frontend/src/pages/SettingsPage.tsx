@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   acceptReconciliationDiff,
   cancelReconciliationDiff,
@@ -30,6 +30,123 @@ import { useAnimeSearch } from '../hooks/useAnimeSearch.ts'
 import { useClickOutside } from '../hooks/useClickOutside.ts'
 import { STATUS_LABELS, formatTimestamp } from '../utils/anime.ts'
 import './SettingsPage.css'
+
+// A named group of controls (design.md decision 10): every control on the
+// page belongs to exactly one of these, in an order that runs cheapest/most
+// reversible first — instant preferences, the routine sync, the minutes-long
+// jobs, the account connection last.
+function SettingsGroup({ title, hint, children }: { title: string; hint: string; children: ReactNode }) {
+  return (
+    <section className="settings-group">
+      <div className="settings-group__header">
+        <h2>{title}</h2>
+        <p className="settings-group__hint">{hint}</p>
+      </div>
+      <div className="settings-group__body">{children}</div>
+    </section>
+  )
+}
+
+// An instant preference (design.md decision 10): one compact row, control on
+// the left, taking effect the moment it's changed — visually distinct from
+// SettingsAction's titled block-with-a-button so a reader can tell the two
+// apart without reading either's explanation.
+function SettingsToggleRow({
+  checked,
+  onChange,
+  label,
+  hint,
+}: {
+  checked: boolean
+  onChange: () => void
+  label: string
+  hint: string
+}) {
+  return (
+    <label className="settings-toggle-row">
+      <input type="checkbox" checked={checked} onChange={onChange} />
+      <span className="settings-toggle-row__text">
+        <span className="settings-toggle-row__label">{label}</span>
+        <span className="settings-toggle-row__hint">{hint}</span>
+      </span>
+    </label>
+  )
+}
+
+// An action that starts work (design.md decision 10): name, explanation,
+// optional run state (a JobProgress for the three background jobs), and one
+// button — the titled-block shape SettingsToggleRow's one-line form is built
+// to contrast with.
+function SettingsAction({
+  title,
+  hint,
+  state,
+  button,
+}: {
+  title: string
+  hint: string
+  state?: ReactNode
+  button: ReactNode
+}) {
+  return (
+    <div className="settings-action">
+      <div className="settings-action__info">
+        <h3 className="settings-action__title">{title}</h3>
+        <p className="settings-action__hint">{hint}</p>
+        {state}
+      </div>
+      <div className="settings-action__control">{button}</div>
+    </div>
+  )
+}
+
+type JobPhase = 'not-started' | 'running' | 'complete' | 'failed'
+
+// Normalises the three jobs' own phase unions (ResyncPhase/AiringFullRefreshPhase
+// lack 'Failed'; SeriesBulkBuildPhase has it) into one shape JobProgress reads.
+function jobPhase(phase: 'NotStarted' | 'Running' | 'Complete' | 'Failed'): JobPhase {
+  switch (phase) {
+    case 'NotStarted':
+      return 'not-started'
+    case 'Running':
+      return 'running'
+    case 'Complete':
+      return 'complete'
+    case 'Failed':
+      return 'failed'
+  }
+}
+
+// The shared background-job readout (design.md decision 10): a
+// role="progressbar" track filled done/total plus the counts beside it,
+// used identically by all three background jobs so a reader learns to read
+// it once. A job that has never run shows nothing rather than a zeroed
+// state, and a failed run is marked visually distinct rather than differing
+// only in wording.
+function JobProgress({ phase, done, total, noun }: { phase: JobPhase; done: number; total: number; noun: string }) {
+  if (phase === 'not-started') return null
+  const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0
+  return (
+    <div className={phase === 'failed' ? 'job-progress job-progress--failed' : 'job-progress'}>
+      <div
+        className="job-progress__track"
+        role="progressbar"
+        aria-valuenow={done}
+        aria-valuemin={0}
+        aria-valuemax={total}
+      >
+        <div className="job-progress__fill" style={{ width: `${pct}%` }} />
+      </div>
+      <span className="job-progress__counts">
+        {phase === 'running'
+          ? `Running… ${done}/${total} ${noun}`
+          : phase === 'failed'
+            ? `Failed after ${done}/${total} ${noun} — see backend logs.`
+            : `Complete — ${done}/${total} ${noun}`}
+      </span>
+    </div>
+  )
+}
 
 // Operational/settings page: sync status + manual triggers, pending
 // reconciliation-diff review, MAL re-authorization, and on-demand
@@ -221,35 +338,22 @@ export function SettingsPage() {
         <p className="settings-page__subtitle">Sync status, corrective tools, and account connections.</p>
       </div>
 
-      <section className="settings-box">
-        <h2>Score display</h2>
-        <p className="settings-box__hint">
-          Reveal MAL scores for shows you've completed or dropped even while the global "hide scores" toggle is on.
-        </p>
-        <label className="settings-toggle">
-          <input
-            type="checkbox"
-            checked={alwaysShowCompletedScores}
-            onChange={toggleAlwaysShowCompletedScores}
-          />
-          Always show MAL scores for completed and dropped shows
-        </label>
-      </section>
+      <SettingsGroup title="Preferences" hint="Change how the app displays things for you. Takes effect immediately.">
+        <SettingsToggleRow
+          checked={alwaysShowCompletedScores}
+          onChange={toggleAlwaysShowCompletedScores}
+          label="Always show MAL scores for completed and dropped shows"
+          hint={`Reveal MAL scores for shows you've completed or dropped even while the global "hide scores" toggle is on.`}
+        />
+        <SettingsToggleRow
+          checked={hideHentai}
+          onChange={toggleHideHentai}
+          label="Hide NSFW"
+          hint="Hides NSFW (MAL Rx) from the seasonal page. R and R+ titles, search results, and anything already in your list are unaffected."
+        />
+      </SettingsGroup>
 
-      <section className="settings-box">
-        <h2>Content</h2>
-        <p className="settings-box__hint">
-          Hides NSFW (MAL Rx) from the seasonal page. R and R+ titles, search results, and anything already in
-          your list are unaffected.
-        </p>
-        <label className="settings-toggle">
-          <input type="checkbox" checked={hideHentai} onChange={toggleHideHentai} />
-          Hide NSFW
-        </label>
-      </section>
-
-      <section className="settings-box">
-        <h2>Sync status</h2>
+      <SettingsGroup title="Sync" hint="The state of your ongoing MyAnimeList sync, and the actions that drive it.">
         {status ? (
           <dl className="settings-stats">
             <div className="settings-stats__row">
@@ -272,135 +376,127 @@ export function SettingsPage() {
             {reconciling ? 'Reconciling…' : 'Run full reconciliation'}
           </button>
         </div>
-      </section>
 
-      <section className="settings-box">
-        <h2>Correct imported data</h2>
-        <p className="settings-box__hint">
-          One-time corrective re-sync: re-fetches your full MyAnimeList and corrects status, score, and episode
-          counts, and backfills English title, duration, and source. Takes several minutes; entries with unsynced
-          local edits are left untouched.
-        </p>
-        {resyncStatus && resyncStatus.phase !== 'NotStarted' && (
-          <p className="settings-box__hint">
-            {resyncStatus.phase === 'Running'
-              ? `Resyncing… ${resyncStatus.synced}/${resyncStatus.total}`
-              : `Last run complete: ${resyncStatus.synced}/${resyncStatus.total} processed.`}
-          </p>
-        )}
-        <div className="settings-box__buttons">
-          <button
-            type="button"
-            onClick={handleResyncFromMal}
-            disabled={startingFullResync || resyncStatus?.phase === 'Running'}
-          >
-            {resyncStatus?.phase === 'Running' ? 'Resyncing…' : 'Run corrective re-sync'}
-          </button>
-        </div>
-      </section>
-
-      <section className="settings-box">
-        <h2>Airing dates</h2>
-        <p className="settings-box__hint">
-          Re-fetches per-episode airing dates from AniList for every anime in my list, in case something looks
-          wrong. Skips shows that have already finished airing and were fetched successfully before — their
-          episode dates can't change further. Paced to stay under AniList's rate limit, so a full list can take a
-          while; runs in the background.
-        </p>
-        {airingRefreshStatus && airingRefreshStatus.phase !== 'NotStarted' && (
-          <p className="settings-box__hint">
-            {airingRefreshStatus.phase === 'Running'
-              ? `Refreshing… ${airingRefreshStatus.synced}/${airingRefreshStatus.total}`
-              : `Last run complete: ${airingRefreshStatus.synced}/${airingRefreshStatus.total} processed.`}
-          </p>
-        )}
-        <div className="settings-box__buttons">
-          <button
-            type="button"
-            onClick={handleAiringFullRefresh}
-            disabled={startingAiringRefresh || airingRefreshStatus?.phase === 'Running'}
-          >
-            {airingRefreshStatus?.phase === 'Running' ? 'Refreshing…' : 'Refresh all airing dates'}
-          </button>
-        </div>
-      </section>
-
-      <section className="settings-box">
-        <h2>Build all series</h2>
-        <p className="settings-box__hint">
-          Builds a franchise for every anime in my list that isn't part of one yet, so the profile page's Top series
-          ranking can be completed on demand instead of only filling in a little on each profile visit. Runs in the
-          background; can take a while for a large list.
-        </p>
-        {seriesBulkBuildStatus && seriesBulkBuildStatus.phase !== 'NotStarted' && (
-          <p className="settings-box__hint">
-            {seriesBulkBuildStatus.phase === 'Running'
-              ? `Building… ${seriesBulkBuildStatus.built}/${seriesBulkBuildStatus.total}`
-              : seriesBulkBuildStatus.phase === 'Failed'
-                ? `Last run failed after ${seriesBulkBuildStatus.built}/${seriesBulkBuildStatus.total} processed — see backend logs.`
-                : `Last run complete: ${seriesBulkBuildStatus.built}/${seriesBulkBuildStatus.total} processed.`}
-          </p>
-        )}
-        <div className="settings-box__buttons">
-          <button
-            type="button"
-            onClick={handleSeriesBulkBuild}
-            disabled={startingSeriesBulkBuild || seriesBulkBuildStatus?.phase === 'Running'}
-          >
-            {seriesBulkBuildStatus?.phase === 'Running' ? 'Building…' : 'Build all series from my list'}
-          </button>
-        </div>
-      </section>
-
-      {diff && (
-        <section className="settings-box">
-          <h2>Pending reconciliation diff</h2>
-          <p className="settings-box__hint">Computed {formatTimestamp(diff.computedAt)} — review before applying.</p>
-          <ul className="settings-diff-list">
-            {diff.entries.map((entry) => (
-              <li key={entry.animeId} className="settings-diff-row">
-                {entry.pictureUrl ? (
-                  <img src={entry.pictureUrl} alt="" className="settings-diff-row__picture" />
-                ) : (
-                  <div
-                    className="settings-diff-row__picture settings-diff-row__picture--placeholder"
-                    aria-hidden="true"
-                  />
-                )}
-                <span className="settings-diff-row__title" title={entry.title}>
-                  {entry.title}
-                </span>
-                <span className="settings-diff-row__detail">
-                  {entry.changeType === 'Added' ? 'New entry' : 'Updated'} — {STATUS_LABELS[entry.status]},{' '}
-                  {entry.episodesWatched} ep{entry.myScore !== null ? `, score ${entry.myScore}` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {diffError && <p className="settings-box__error">{diffError}</p>}
-          <div className="settings-box__buttons">
-            <button type="button" onClick={handleCancelDiff} disabled={reviewing}>
-              Cancel
-            </button>
-            <button type="button" onClick={handleAcceptDiff} disabled={reviewing}>
-              {reviewing ? 'Applying…' : 'Accept'}
-            </button>
+        {diff && (
+          <div className="settings-subsection">
+            <h3 className="settings-subsection__title">Pending reconciliation diff</h3>
+            <p className="settings-subsection__hint">
+              Computed {formatTimestamp(diff.computedAt)} — review before applying.
+            </p>
+            <ul className="settings-diff-list">
+              {diff.entries.map((entry) => (
+                <li key={entry.animeId} className="settings-diff-row">
+                  {entry.pictureUrl ? (
+                    <img src={entry.pictureUrl} alt="" className="settings-diff-row__picture" />
+                  ) : (
+                    <div
+                      className="settings-diff-row__picture settings-diff-row__picture--placeholder"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span className="settings-diff-row__title" title={entry.title}>
+                    {entry.title}
+                  </span>
+                  <span className="settings-diff-row__detail">
+                    {entry.changeType === 'Added' ? 'New entry' : 'Updated'} — {STATUS_LABELS[entry.status]},{' '}
+                    {entry.episodesWatched} ep{entry.myScore !== null ? `, score ${entry.myScore}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {diffError && <p className="settings-box__error">{diffError}</p>}
+            <div className="settings-box__buttons">
+              <button type="button" onClick={handleCancelDiff} disabled={reviewing}>
+                Cancel
+              </button>
+              <button type="button" onClick={handleAcceptDiff} disabled={reviewing}>
+                {reviewing ? 'Applying…' : 'Accept'}
+              </button>
+            </div>
           </div>
-        </section>
-      )}
+        )}
+      </SettingsGroup>
 
-      <section className="settings-box">
-        <h2>MyAnimeList connection</h2>
+      <SettingsGroup title="Data tools" hint="Long-running corrective and backfill jobs.">
+        <SettingsAction
+          title="Correct imported data"
+          hint="One-time corrective re-sync: re-fetches your full MyAnimeList and corrects status, score, and episode counts, and backfills English title, duration, and source. Takes several minutes; entries with unsynced local edits are left untouched."
+          state={
+            <JobProgress
+              phase={resyncStatus ? jobPhase(resyncStatus.phase) : 'not-started'}
+              done={resyncStatus?.synced ?? 0}
+              total={resyncStatus?.total ?? 0}
+              noun="processed"
+            />
+          }
+          button={
+            <button
+              type="button"
+              onClick={handleResyncFromMal}
+              disabled={startingFullResync || resyncStatus?.phase === 'Running'}
+            >
+              {resyncStatus?.phase === 'Running' ? 'Resyncing…' : 'Run corrective re-sync'}
+            </button>
+          }
+        />
+
+        <SettingsAction
+          title="Airing dates"
+          hint="Re-fetches per-episode airing dates from AniList for every anime in my list, in case something looks wrong. Skips shows that have already finished airing and were fetched successfully before — their episode dates can't change further. Paced to stay under AniList's rate limit, so a full list can take a while; runs in the background."
+          state={
+            <JobProgress
+              phase={airingRefreshStatus ? jobPhase(airingRefreshStatus.phase) : 'not-started'}
+              done={airingRefreshStatus?.synced ?? 0}
+              total={airingRefreshStatus?.total ?? 0}
+              noun="processed"
+            />
+          }
+          button={
+            <button
+              type="button"
+              onClick={handleAiringFullRefresh}
+              disabled={startingAiringRefresh || airingRefreshStatus?.phase === 'Running'}
+            >
+              {airingRefreshStatus?.phase === 'Running' ? 'Refreshing…' : 'Refresh all airing dates'}
+            </button>
+          }
+        />
+
+        <SettingsAction
+          title="Build all series"
+          hint="Builds a franchise for every anime in my list that isn't part of one yet, so the profile page's Top series ranking can be completed on demand instead of only filling in a little on each profile visit. Runs in the background; can take a while for a large list."
+          state={
+            <JobProgress
+              phase={seriesBulkBuildStatus ? jobPhase(seriesBulkBuildStatus.phase) : 'not-started'}
+              done={seriesBulkBuildStatus?.built ?? 0}
+              total={seriesBulkBuildStatus?.total ?? 0}
+              noun="processed"
+            />
+          }
+          button={
+            <button
+              type="button"
+              onClick={handleSeriesBulkBuild}
+              disabled={startingSeriesBulkBuild || seriesBulkBuildStatus?.phase === 'Running'}
+            >
+              {seriesBulkBuildStatus?.phase === 'Running' ? 'Building…' : 'Build all series from my list'}
+            </button>
+          }
+        />
+
+        <div className="settings-subsection">
+          <h3 className="settings-subsection__title">Force-refresh anime metadata</h3>
+          <p className="settings-subsection__hint">Search for a specific anime to refresh its cached metadata immediately.</p>
+          <AnimeRefreshPicker />
+        </div>
+      </SettingsGroup>
+
+      <SettingsGroup title="Account" hint="Your MyAnimeList connection.">
         <p className="settings-box__hint">{authStatus?.connected ? 'Connected.' : 'Not connected.'}</p>
         <a className="settings-box__link" href="/api/mal-auth/start">
           Re-authorize with MAL
         </a>
-      </section>
-
-      <section className="settings-box">
-        <h2>Force-refresh anime metadata</h2>
-        <AnimeRefreshPicker />
-      </section>
+      </SettingsGroup>
     </div>
   )
 }

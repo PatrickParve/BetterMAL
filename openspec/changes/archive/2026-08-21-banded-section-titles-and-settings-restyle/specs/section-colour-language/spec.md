@@ -1,45 +1,4 @@
-# section-colour-language Specification
-
-## Purpose
-The section-colour-language capability defines the cross-page vocabulary of colour families a page section can be drawn in — the achromatic year family, the season family, the hot-take family, and the existing MAL/mine score roles reused rather than redefined — and the tinted-title treatment that carries a family onto a section's heading and, where a control selects the same subject, onto that control too. It exists so that what a section on the recap or profile page is about — a season, a year, a disagreement between my opinion and MAL's — is readable from colour alone, consistently, on both pages, without redefining or disturbing the podium medals, the score-board tiers, the status colours, or either score role that the colours are drawn from or sit alongside.
-
-## Requirements
-
-### Requirement: Named section colour families
-The app SHALL define a small set of named **colour families**, each a pair of related colours, that a page section can be drawn in so what a section is about is readable before its text is:
-
-- **year** — achromatic: a silver running to the theme's own extreme, black in the light theme and white in the dark one. The year family SHALL be the only family carrying no hue, so a year-level section is tellable from every other section by the absence of colour rather than by a colour of its own;
-- **season** — an orange and a yellow;
-- **hot take** — a fiery red running to an orange;
-- **MAL** and **mine** — the two score colour roles the `score-presentation` capability already defines, reused here rather than redefined, so a section about MAL's opinion carries the same blue a MAL score carries and a section about mine carries the same purple.
-
-Each family SHALL be defined as its own named colour pair rather than by reusing an existing token in place, so a family's colour can change without silently altering the podium medals, the score-board tiers, the status colours, or either score role.
-
-Every family SHALL be legible against the page background in both the light and the dark theme, and the five families SHALL be tellable apart from one another in both.
-
-The achromatic year family SHALL be kept clear of the two neutrals it could otherwise be confused with. It SHALL NOT open at the colour an untinted heading is drawn in, or a year-level title would read as a title nobody had tinted; and it SHALL be a true neutral rather than the cool slate the podium's silver medal and the score board's silver tier use, so the two are tellable apart even though families are never drawn on a card or a slot and medals are never drawn on a title. No family's colours SHALL be so close to the podium's gold, silver, or bronze, or to a score-board tier, that a section title reads as a rank.
-
-A family SHALL be identifiable from the first of its two colours alone, since a title may cover only the opening portion of its ramp (see the next requirement).
-
-#### Scenario: Families are distinguishable
-- **WHEN** a page shows sections drawn in the year, season, hot-take, MAL, and mine families
-- **THEN** each is tellable apart from the other four, in the light theme and in the dark theme alike
-
-#### Scenario: A family is not a rank
-- **WHEN** a section drawn in a family sits on the same page as the podium's medals or the score board's tiers
-- **THEN** the family's colour is not mistakable for a medal or a tier colour
-
-#### Scenario: The achromatic family still reads as tinted
-- **WHEN** a year-family title sits on the same page as an untinted section title
-- **THEN** the two are tellable apart, the year title opening at a silver plainly lighter than the colour the untinted heading is drawn in
-
-#### Scenario: The achromatic family in both themes
-- **WHEN** I view a year-family title in the light theme and again in the dark theme
-- **THEN** it runs from silver toward black in the first and from silver toward white in the second, legible against the page background in both
-
-#### Scenario: The score families are the score roles
-- **WHEN** a section is drawn in the MAL family and a MAL score is shown on the same page
-- **THEN** the two carry the same blue, and likewise the mine family and my own score carry the same purple
+## ADDED Requirements
 
 ### Requirement: Banded section titles
 A section title drawn in a family SHALL be presented as a **band**: a filled block spanning the full width of the section's content — the list, table, or block the title heads — with the title's text centred on it.
@@ -122,6 +81,15 @@ Where a row is itself about one of the two score roles — as a my-score-vs-MAL 
 #### Scenario: A section with no family is unchanged
 - **WHEN** I hover a row of a section whose title carries no family
 - **THEN** it takes the app's accent highlight exactly as it does today
+
+## REMOVED Requirements
+
+### Requirement: Tinted section titles
+**Reason**: Replaced by "Banded section titles". Painting the family's gradient through the title's own letters made a family read as a slightly off-colour heading rather than as a label for the section beneath it — the colour stopped where the words stopped, and the section it named carried no mark of its own.
+
+**Migration**: Every title that was tinted becomes banded instead, with the same words, in the same family, in the same place. No section gains or loses a family, and no section's content changes.
+
+## MODIFIED Requirements
 
 ### Requirement: A family's title and its control share its colours
 Where a control selects the same subject a banded title describes, the control SHALL carry that subject's family. The recap's **Yearly** recap-type tab SHALL carry the year family, matching the year-level ranking titles a yearly period produces, and its **Season** tab SHALL carry the season family, matching the season-level ranking titles — so the tab pressed and the sections it produces are visibly the same colour.

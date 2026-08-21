@@ -343,7 +343,11 @@ export function ProfilePage() {
   // Only one ranking overlay can be open at a time, so a single slot serves
   // both Favourite seasons and Favourite years (same pattern as RecapPage's
   // ranking pairs).
-  const [rankingOverlay, setRankingOverlay] = useState<{ title: string; rows: RankingOverlayRow[] } | null>(null)
+  const [rankingOverlay, setRankingOverlay] = useState<{
+    title: string
+    rows: RankingOverlayRow[]
+    family?: 'year' | 'season'
+  } | null>(null)
   const topAnimeStripScroll = useStripScroll(`top-anime:${mediaType}`)
   const rewatchedStripScroll = useStripScroll(`rewatched:${rewatchedMediaType}`)
   const topSeriesStripScroll = useStripScroll('top-series')
@@ -675,7 +679,7 @@ export function ProfilePage() {
         </section>
       ) : (
         <div className="profile-page__favourites-row">
-          <section className="profile-box">
+          <section className="profile-box family--year">
             <RankingSection
               title="Favourite years"
               noun="years"
@@ -684,7 +688,7 @@ export function ProfilePage() {
               family="year"
             />
           </section>
-          <section className="profile-box">
+          <section className="profile-box family--season">
             <RankingSection
               title="Favourite seasons"
               noun="seasons"
@@ -697,12 +701,12 @@ export function ProfilePage() {
       )}
 
       <div className="profile-page__divergence-row">
-        <section className="profile-box">
-          <h2 className="tinted-title family--mal">They liked it, I didn't</h2>
+        <section className="profile-box family--mal">
+          <h2 className="section-band">They liked it, I didn't</h2>
           <DivergenceList items={profile.theyLikedItIDidnt} />
         </section>
-        <section className="profile-box">
-          <h2 className="tinted-title family--mine">I liked it, they didn't</h2>
+        <section className="profile-box family--mine">
+          <h2 className="section-band">I liked it, they didn't</h2>
           <DivergenceList items={profile.iLikedItTheyDidnt} />
         </section>
       </div>
@@ -711,6 +715,7 @@ export function ProfilePage() {
         <RankingOverlay
           title={rankingOverlay.title}
           rows={rankingOverlay.rows}
+          family={rankingOverlay.family}
           onClose={() => setRankingOverlay(null)}
         />
       )}
