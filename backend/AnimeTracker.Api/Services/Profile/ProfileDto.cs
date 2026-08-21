@@ -14,7 +14,8 @@ public record AnimeStatsDto(
     int PlanToWatch,
     int TotalEntries,
     int Rewatched,
-    int Episodes);
+    int Episodes,
+    int Movies);
 
 public record ActivityFeedItemDto(
     long Id,
@@ -95,12 +96,28 @@ public record TopSeriesItemDto(
 /// 4).</summary>
 public record TopSeriesSectionDto(List<TopSeriesItemDto> Items);
 
+/// <summary>One entry the progress bar can't resolve a total for — neither a
+/// published episode count nor a known non-zero aired count, despite the
+/// anime having actually started airing — identifying enough to let the
+/// unresolved-entries overlay open its detail page.</summary>
+public record UnresolvedEpisodeEntryDto(int AnimeId, string Title, string? EnglishTitle, string? PictureUrl, int EpisodesWatched);
+
 /// <summary>All-list episode progress (profile-stats "All-list episode
-/// progress"). Entries whose anime has no published <c>TotalEpisodes</c> are
-/// excluded from <c>EpisodesWatched</c>, <c>EpisodesTotal</c>, and
-/// <c>EntriesCounted</c> — only <c>TotalEntries</c> counts them, so the
-/// exclusion stays visible rather than silent.</summary>
-public record EpisodeProgressDto(int EpisodesWatched, int EpisodesTotal, int EntriesCounted, int TotalEntries);
+/// progress"). <c>TotalEntries</c> is my whole list, dropped entries
+/// included, kept only to contextualise <c>UnresolvedEntries</c> (design.md
+/// decision 9) — the figure itself excludes dropped entries outright. Every
+/// other entry's total resolves, in order, to its anime's published
+/// <c>TotalEpisodes</c>, then its stored aired-so-far count when that's known
+/// and non-zero. An entry with neither, whose anime hasn't started airing at
+/// all, has nothing to progress against yet and is excluded outright, same as
+/// a dropped entry. Anything else reaching that point is genuinely
+/// <b>unresolved</b>: counted in <c>UnresolvedEntries</c>, listed in full in
+/// <c>UnresolvedAnime</c> (alphabetical by title), and excluded from
+/// <c>EpisodesWatched</c>/<c>EpisodesTotal</c> alike, so the gap stays visible
+/// rather than silent.</summary>
+public record EpisodeProgressDto(
+    int EpisodesWatched, int EpisodesTotal, int UnresolvedEntries, int TotalEntries,
+    List<UnresolvedEpisodeEntryDto> UnresolvedAnime);
 
 public record ScoreDistributionBucketDto(int Score, int Count);
 

@@ -22,4 +22,13 @@ public interface IEpisodeScheduleService
     /// as of nowUtc, or null when none has. Backs the home page's
     /// airing-progress bar and the detail page's aired count.</summary>
     Task<int?> EpisodesAiredAsOfAsync(AnimeMetadata anime, DateTimeOffset nowUtc, CancellationToken ct = default);
+
+    /// <summary>The same aired-so-far count as <see
+    /// cref="EpisodesAiredAsOfAsync(AnimeMetadata,DateTimeOffset,CancellationToken)"/>,
+    /// for many anime at once in a single database read. An anime with no
+    /// stored aired row is absent from the result. Backs the profile page's
+    /// whole-list episode progress bar (design.md decision 8), so it can
+    /// resolve every unknown-total entry's aired count without a query per
+    /// entry.</summary>
+    Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<AnimeMetadata> anime, DateTimeOffset nowUtc, CancellationToken ct = default);
 }

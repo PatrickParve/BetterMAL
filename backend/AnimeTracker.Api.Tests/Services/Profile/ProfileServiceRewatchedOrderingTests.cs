@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Profile;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +27,8 @@ public class ProfileServiceRewatchedOrderingTests
             new FakeActivityLogRepository(),
             new FakeTopAnimeSelectionRepository(),
             new SeriesRankingLookup(db),
-            new FakeSeriesBuildTrigger());
+            new FakeSeriesBuildTrigger(),
+            new FakeEpisodeScheduleService());
 
     private static UserAnimeEntry Entry(int animeId, string title, int rewatchCount, int? myScore) =>
         new()
@@ -82,6 +84,8 @@ public class ProfileServiceRewatchedOrderingTests
         public Task<List<ActivityLog>> GetRecentAsync(int count, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<List<ActivityLog>> GetAllAsync(CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<List<ActivityLog>> GetEpisodeProgressInRangeAsync(DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 
     private sealed class FakeTopAnimeSelectionRepository : ITopAnimeSelectionRepository
@@ -97,5 +101,17 @@ public class ProfileServiceRewatchedOrderingTests
         public List<int> Enqueued { get; } = [];
         public void Enqueue(int animeId) => Enqueued.Add(animeId);
         public Task<int> WaitAsync(CancellationToken ct) => throw new NotImplementedException();
+    }
+
+    private sealed class FakeEpisodeScheduleService : IEpisodeScheduleService
+    {
+        public Task<ResolvedEpisode?> ResolveOnLocalDateAsync(AnimeMetadata anime, DateOnly localDate, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<DateTimeOffset?> NextAiringInstantAsync(AnimeMetadata anime, DateTimeOffset afterUtc, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<int?> EpisodesAiredAsOfAsync(AnimeMetadata anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<AnimeMetadata> anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult(new Dictionary<int, int>());
     }
 }

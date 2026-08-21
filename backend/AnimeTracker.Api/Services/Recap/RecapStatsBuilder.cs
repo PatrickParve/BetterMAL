@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Profile;
+using AnimeTracker.Api.Services.Watching;
 
 namespace AnimeTracker.Api.Services.Recap;
 
@@ -7,22 +8,33 @@ namespace AnimeTracker.Api.Services.Recap;
 public static class RecapStatsBuilder
 {
     private const int HotTakeCount = 5;
-    private const string MovieMediaType = "movie";
 
-    public static RecapStatsDto Build(List<UserAnimeEntry> included, List<UserAnimeEntry> wholeList, List<UserAnimeEntry> airedIncluded)
+    public static RecapStatsDto Build(
+        List<UserAnimeEntry> included, List<UserAnimeEntry> wholeList, List<UserAnimeEntry> airedIncluded,
+        IReadOnlyDictionary<int, int> watchLog, string filter)
     {
         var scored = included.Where(e => e.MyScore is not null).ToList();
-        var nonMovies = included.Where(e => e.Anime.MediaType != MovieMediaType).ToList();
+        var nonMovies = included.Where(e => !WatchMath.IsMovie(e.Anime)).ToList();
 
         // D6: a movie counts when its included entry has at least one
         // episode watched — status-agnostic, same as "episodes watched"
         // reading progress rather than status.
-        var moviesWatched = included.Count(e => e.Anime.MediaType == MovieMediaType && e.EpisodesWatched > 0);
+        var moviesWatched = included.Count(e => WatchMath.IsMovie(e.Anime) && e.EpisodesWatched > 0);
+
+        // design.md decisions 5/6: under "watched", an entry's figure is its
+        // logged in-period episodes when the log reaches it, else the
+        // rewatch-inclusive fallback for a pre-tracking completion — the
+        // only place a stored rewatch count is read. Under "aired" (and on
+        // every season recap, which always resolves to "aired") it's the
+        // plain stored count, with no log lookup and no rewatch multiplier.
+        var episodesWatched = nonMovies.Sum(e => EntryEpisodeFigure(e, filter, watchLog));
 
         // D7: runtime uses each anime's cached duration, falling back to the
         // app's one standing assumption — movies included, unlike the
-        // episode count above.
-        var timeSpentSeconds = included.Sum(e => (long)e.EpisodesWatched * RecapTimeMath.EpisodeSeconds(e.Anime));
+        // episode count above. Computed over the same per-entry figure
+        // Episodes watched reports, so dividing one by the other always
+        // yields a plausible runtime.
+        var timeSpentSeconds = included.Sum(e => (long)EntryEpisodeFigure(e, filter, watchLog) * WatchMath.EpisodeSeconds(e.Anime));
 
         // D2 (decision 2): counted on the anime's air-start date, from
         // airedIncluded, never from `included`. An in-progress entry has no
@@ -37,10 +49,20 @@ public static class RecapStatsBuilder
             Completed: included.Count(e => e.Status == WatchStatus.Completed),
             Dropped: included.Count(e => e.Status == WatchStatus.Dropped),
             CurrentlyWatching: currentlyWatching,
-            EpisodesWatched: nonMovies.Sum(e => e.EpisodesWatched),
+            EpisodesWatched: episodesWatched,
             MoviesWatched: moviesWatched,
             TimeSpentSeconds: timeSpentSeconds,
             HotTakes: BuildHotTakes(included, wholeList));
+    }
+
+    private static int EntryEpisodeFigure(UserAnimeEntry entry, string filter, IReadOnlyDictionary<int, int> watchLog)
+    {
+        if (filter != RecapTimeFilter.Watched)
+            return entry.EpisodesWatched;
+
+        return watchLog.TryGetValue(entry.AnimeId, out var loggedEpisodes)
+            ? loggedEpisodes
+            : WatchMath.RewatchInclusiveEpisodes(entry);
     }
 
     // D4 (polish-recap-page design.md decision 2): a hot take must clear the

@@ -1,0 +1,125 @@
+.unresolved-episodes {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  --unresolved-row-h: 78px;
+}
+
+.unresolved-episodes__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.unresolved-episodes__title {
+  margin: 0;
+}
+
+.unresolved-episodes__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.unresolved-episodes__close:hover {
+  color: var(--text-h);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.unresolved-episodes__close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.unresolved-episodes__list-frame {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+/* Six outer row heights (each row's content plus its 1px top and bottom
+   border) plus the five 6px gaps between them, derived from the row's own
+   --unresolved-row-h so the two cannot drift apart the way a bare vh figure
+   could — same reasoning as EditHistoryOverlay's five-row list. */
+.unresolved-episodes__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: calc(6 * (var(--unresolved-row-h) + 2px) + 5 * 6px);
+}
+
+.unresolved-episodes__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 0 0;
+  min-height: var(--unresolved-row-h);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.unresolved-episodes__row:hover,
+.unresolved-episodes__row:focus-within {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.unresolved-episodes__link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.unresolved-episodes__link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.unresolved-episodes__picture {
+  width: 57px;
+  height: 78px;
+  object-fit: cover;
+  background: var(--code-bg);
+  flex: 0 0 auto;
+}
+
+.unresolved-episodes__picture--placeholder {
+  border: 1px solid var(--border);
+}
+
+.unresolved-episodes__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.unresolved-episodes__row-title {
+  min-width: 0;
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+.unresolved-episodes__detail {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.85;
+}

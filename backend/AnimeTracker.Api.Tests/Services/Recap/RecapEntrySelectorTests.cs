@@ -95,4 +95,49 @@ public class RecapEntrySelectorTests
 
         Assert.Equal(4, included.Count);
     }
+
+    // The logged-progress arm under "watched" (design.md decision 3,
+    // tasks.md 5.3/5.8).
+
+    [Fact]
+    public void AnEntryWithLoggedProgressAloneIsIncludedWithNoCompletionDate()
+    {
+        var entry = Entry(1, WatchStatus.Watching);
+
+        var included = RecapEntrySelector.Select([entry], RecapPeriod.Yearly(2024), RecapTimeFilter.Watched, watchedAnimeIds: new HashSet<int> { 1 });
+
+        Assert.Single(included);
+    }
+
+    [Fact]
+    public void AnEntryQualifyingOnBothArmsIsCountedOnce()
+    {
+        var entry = Entry(1, WatchStatus.Completed, completedAt: new DateOnly(2024, 5, 1));
+
+        var included = RecapEntrySelector.Select([entry], RecapPeriod.Yearly(2024), RecapTimeFilter.Watched, watchedAnimeIds: new HashSet<int> { 1 });
+
+        Assert.Single(included);
+    }
+
+    [Fact]
+    public void ARewatchPlacesAnAnimeInALaterPeriodsRecap()
+    {
+        var entry = Entry(1, WatchStatus.Completed, completedAt: new DateOnly(2022, 6, 1));
+
+        var included2022 = RecapEntrySelector.Select([entry], RecapPeriod.Yearly(2022), RecapTimeFilter.Watched, watchedAnimeIds: new HashSet<int>());
+        var included2024 = RecapEntrySelector.Select([entry], RecapPeriod.Yearly(2024), RecapTimeFilter.Watched, watchedAnimeIds: new HashSet<int> { 1 });
+
+        Assert.Single(included2022);
+        Assert.Single(included2024);
+    }
+
+    [Fact]
+    public void NoLoggedProgressAndNoCompletionDateInPeriodExcludesTheEntry()
+    {
+        var entry = Entry(1, WatchStatus.Watching);
+
+        var included = RecapEntrySelector.Select([entry], RecapPeriod.Yearly(2024), RecapTimeFilter.Watched, watchedAnimeIds: new HashSet<int>());
+
+        Assert.Empty(included);
+    }
 }

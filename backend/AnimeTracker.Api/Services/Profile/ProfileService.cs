@@ -1,7 +1,9 @@
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Recap;
 using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Services.Watching;
 
 namespace AnimeTracker.Api.Services.Profile;
 
@@ -10,7 +12,8 @@ public class ProfileService(
     IActivityLogRepository activityLogRepository,
     ITopAnimeSelectionRepository topAnimeSelectionRepository,
     SeriesRankingLookup seriesRankingLookup,
-    ISeriesBuildTrigger seriesBuildTrigger) : IProfileService
+    ISeriesBuildTrigger seriesBuildTrigger,
+    IEpisodeScheduleService episodeScheduleService) : IProfileService
 {
     private const int RecentActivityCount = 20;
 
@@ -28,10 +31,11 @@ public class ProfileService(
 
     private const int TopAnimeMinimumSize = 10;
 
-    // No per-anime episode duration is cached (MAL's field isn't fetched
-    // anywhere), so "Days" approximates using MAL's own fallback assumption
-    // for unknown durations rather than tracking real runtimes. Internal
-    // (not private) so SeriesService's runtime stats fall back to the same
+    // The app-wide fallback runtime for an anime with no cached average
+    // episode duration (design.md decision 2) — not the sole basis for
+    // "Days" any more, since most anime now carry a real cached duration
+    // that WatchMath.EpisodeSeconds prefers. Internal (not private) so
+    // WatchMath and SeriesService's runtime stats fall back to the same
     // assumption instead of a second literal.
     internal const int AssumedMinutesPerEpisode = 24;
 
@@ -41,12 +45,25 @@ public class ProfileService(
         var recentActivityWindow = await activityLogRepository.GetRecentAsync(RecentActivityFetchWindow, ct);
         var orderedAnimeIds = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
 
+        // profile-stats "All-list episode progress" (design.md decision 8):
+        // resolved in one batched call, over just the shortfall — non-dropped
+        // entries whose anime publishes no total episode count at all. A show
+        // that hasn't started airing has nothing to fetch here (it's excluded
+        // from the figure outright — BuildEpisodeProgress), so it's left out
+        // of the shortfall too.
+        var undeterminedTotalAnime = entries
+            .Where(e => e.Status != WatchStatus.Dropped && e.Anime.TotalEpisodes is null && e.Anime.AiringStatus != "not_yet_aired")
+            .Select(e => e.Anime)
+            .DistinctBy(a => a.Id)
+            .ToList();
+        var airedCounts = await episodeScheduleService.EpisodesAiredAsOfAsync(undeterminedTotalAnime, DateTimeOffset.UtcNow, ct);
+
         var (theyLikedItIDidnt, iLikedItTheyDidnt) = BuildOpinionDivergence(entries);
         var (favouriteSeasons, favouriteYears) = BuildFavouriteSeasonsAndYears(entries);
 
         return new ProfileDto(
             BuildStats(entries),
-            BuildEpisodeProgress(entries),
+            BuildEpisodeProgress(entries, airedCounts),
             BuildActivityFeed(recentActivityWindow),
             BuildTopAnimeSection(entries, orderedAnimeIds, TopAnimeMediaTypeScope.All),
             BuildRewatchedSection(entries, TopAnimeMediaTypeScope.All),
@@ -300,7 +317,9 @@ public class ProfileService(
         log.PreviousEpisodesWatched is not { } previous
         || (ParseNewEpisodesWatched(log) is { } newEpisodesWatched && newEpisodesWatched > previous);
 
-    private static int? ParseNewEpisodesWatched(ActivityLog log)
+    // internal (not private): reused by RecapWatchLog so the "Episode N"
+    // format is parsed in exactly one place (tasks.md 5.2).
+    internal static int? ParseNewEpisodesWatched(ActivityLog log)
     {
         const string prefix = "Episode ";
         return log.ChangeDetail is { } detail && detail.StartsWith(prefix, StringComparison.Ordinal)
@@ -309,13 +328,21 @@ public class ProfileService(
             : null;
     }
 
+    // profile-stats "Anime stats computed from local data" (design.md
+    // decisions 1, 2, 4): Episodes is rewatch-inclusive and excludes movies
+    // and music (neither is episodic); Movies picks up exactly what Episodes
+    // dropped. Days is a different, wider population by design — every
+    // entry, whatever its media type or status — since a film or a dropped
+    // show still consumed the time I spent on it even though it contributes
+    // no episodes.
     private static AnimeStatsDto BuildStats(List<UserAnimeEntry> entries)
     {
-        var totalEpisodes = entries.Sum(e => e.EpisodesWatched);
         var scored = entries.Where(e => e.MyScore is not null).ToList();
+        var episodeEligible = entries.Where(e => !WatchMath.IsMovie(e.Anime) && !WatchMath.IsMusic(e.Anime));
+        var totalSeconds = entries.Sum(e => (long)WatchMath.RewatchInclusiveEpisodes(e) * WatchMath.EpisodeSeconds(e.Anime));
 
         return new AnimeStatsDto(
-            Days: Math.Round(totalEpisodes * AssumedMinutesPerEpisode / 1440.0, 1),
+            Days: Math.Round(totalSeconds / 86400.0, 1),
             MeanScore: scored.Count > 0 ? Math.Round(scored.Average(e => e.MyScore!.Value), 2) : null,
             Watching: entries.Count(e => e.Status == WatchStatus.Watching),
             Completed: entries.Count(e => e.Status == WatchStatus.Completed),
@@ -324,23 +351,54 @@ public class ProfileService(
             PlanToWatch: entries.Count(e => e.Status == WatchStatus.PlanToWatch),
             TotalEntries: entries.Count,
             Rewatched: entries.Count(e => e.RewatchCount > 0),
-            Episodes: totalEpisodes);
+            Episodes: episodeEligible.Sum(WatchMath.RewatchInclusiveEpisodes),
+            Movies: entries.Count(e => WatchMath.IsMovie(e.Anime) && e.EpisodesWatched > 0));
     }
 
-    // profile-stats "All-list episode progress": an entry with no published
-    // TotalEpisodes has nothing to progress toward, so it's excluded from
-    // every figure but TotalEntries. Watched is clamped to the anime's total
-    // so a stored over-count (or a rewatch, which doesn't multiply the
-    // contribution) can never push the bar past 100%.
-    private static EpisodeProgressDto BuildEpisodeProgress(List<UserAnimeEntry> entries)
+    // profile-stats "All-list episode progress" (design.md decision 7):
+    // dropped entries are excluded outright; every other entry resolves its
+    // total to its published TotalEpisodes, else the aired-so-far count when
+    // known and non-zero. Failing both, a show that hasn't started airing at
+    // all has nothing to progress against yet — that's a legitimate "not
+    // applicable", not a data gap — so it's excluded outright too, the same
+    // as a dropped entry. Anything else reaching this point (airing or
+    // finished, with no published total and no stored aired rows) really is
+    // missing data and is unresolved: it sits out of both sides of the
+    // figure but is still returned in full (alphabetical by title) so the
+    // frontend's unresolved-entries overlay can list exactly what the count
+    // covers. Watched is clamped to the resolved total so a stored
+    // over-count (or a rewatch, which doesn't multiply the contribution)
+    // can never push the bar past 100%.
+    private static EpisodeProgressDto BuildEpisodeProgress(List<UserAnimeEntry> entries, IReadOnlyDictionary<int, int> airedCounts)
     {
-        var counted = entries.Where(e => e.Anime.TotalEpisodes is not null).ToList();
+        var episodesWatched = 0;
+        var episodesTotal = 0;
+        var unresolvedAnime = new List<UserAnimeEntry>();
 
-        return new EpisodeProgressDto(
-            EpisodesWatched: counted.Sum(e => Math.Min(e.EpisodesWatched, e.Anime.TotalEpisodes!.Value)),
-            EpisodesTotal: counted.Sum(e => e.Anime.TotalEpisodes!.Value),
-            EntriesCounted: counted.Count,
-            TotalEntries: entries.Count);
+        foreach (var entry in entries.Where(e => e.Status != WatchStatus.Dropped))
+        {
+            var total = entry.Anime.TotalEpisodes
+                ?? (airedCounts.TryGetValue(entry.AnimeId, out var aired) && aired > 0 ? aired : null);
+
+            if (total is { } resolvedTotal)
+            {
+                episodesTotal += resolvedTotal;
+                episodesWatched += Math.Min(entry.EpisodesWatched, resolvedTotal);
+                continue;
+            }
+
+            if (entry.Anime.AiringStatus == "not_yet_aired")
+                continue;
+
+            unresolvedAnime.Add(entry);
+        }
+
+        var unresolvedAnimeDto = unresolvedAnime
+            .OrderBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase)
+            .Select(e => new UnresolvedEpisodeEntryDto(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.EpisodesWatched))
+            .ToList();
+
+        return new EpisodeProgressDto(episodesWatched, episodesTotal, unresolvedAnime.Count, entries.Count, unresolvedAnimeDto);
     }
 
     // profile-stats "Favourite seasons and years" (design.md decision 6): a

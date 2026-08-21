@@ -65,6 +65,21 @@
   opacity: 0.75;
 }
 
+.profile-page__unresolved-button {
+  font: inherit;
+  font-size: 12px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  opacity: 1;
+}
+
+.profile-page__unresolved-button:hover {
+  text-decoration: underline;
+}
+
 .profile-box {
   display: flex;
   flex-direction: column;

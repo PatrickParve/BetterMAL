@@ -10,6 +10,14 @@ public interface IEpisodeAiringRepository
     /// asOfUtc, or null when the anime has no aired row.</summary>
     Task<int?> GetMaxAiredEpisodeAsync(int animeId, DateTimeOffset asOfUtc, CancellationToken ct = default);
 
+    /// <summary>The same aired-so-far count as <see
+    /// cref="GetMaxAiredEpisodeAsync"/>, for many anime at once in a single
+    /// database read. An anime with no stored aired row is absent from the
+    /// result rather than present with zero, so "nothing stored" stays
+    /// distinguishable from "nothing aired yet". Returns an empty dictionary
+    /// without touching the database when animeIds is empty.</summary>
+    Task<Dictionary<int, int>> GetMaxAiredEpisodesAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset asOfUtc, CancellationToken ct = default);
+
     /// <summary>The earliest AirsAtUtc strictly after afterUtc, or null when no
     /// future row is stored.</summary>
     Task<DateTimeOffset?> GetNextAiringInstantAsync(int animeId, DateTimeOffset afterUtc, CancellationToken ct = default);

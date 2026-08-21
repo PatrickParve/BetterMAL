@@ -28,4 +28,7 @@ public class EpisodeScheduleService(
 
     public Task<int?> EpisodesAiredAsOfAsync(AnimeMetadata anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
         repository.GetMaxAiredEpisodeAsync(anime.Id, nowUtc, ct);
+
+    public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<AnimeMetadata> anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+        repository.GetMaxAiredEpisodesAsync(anime.Select(a => a.Id).ToList(), nowUtc, ct);
 }

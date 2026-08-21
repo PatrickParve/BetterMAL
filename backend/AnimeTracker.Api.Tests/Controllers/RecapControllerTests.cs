@@ -2,6 +2,7 @@ using AnimeTracker.Api.Controllers;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Recap;
+using AnimeTracker.Api.Services.Scheduling;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AnimeTracker.Api.Tests.Controllers;
@@ -103,7 +104,9 @@ public class RecapControllerTests
     public async Task Get_AiredMultiYearRecapPopulatesTheTimeRankings()
     {
         var repository = new FakeUserAnimeEntryRepository([WatchedEntry(1, new DateOnly(2021, 4, 15), 12)]);
-        var controller = new RecapController(new RecapService(repository), new RecordingAvailabilityService());
+        var controller = new RecapController(
+            new RecapService(repository, new FakeActivityLogRepository(), new FakeBroadcastLocalTimeConverter()),
+            new RecordingAvailabilityService());
 
         var result = await controller.Get(RecapMode.MultiYear, 2020, 2022, null, null, RecapTimeFilter.Aired, CancellationToken.None);
 
@@ -117,7 +120,9 @@ public class RecapControllerTests
     public async Task Get_SeasonRecapLeavesTheTimeRankingsEmpty()
     {
         var repository = new FakeUserAnimeEntryRepository([WatchedEntry(1, new DateOnly(2021, 4, 15), 12)]);
-        var controller = new RecapController(new RecapService(repository), new RecordingAvailabilityService());
+        var controller = new RecapController(
+            new RecapService(repository, new FakeActivityLogRepository(), new FakeBroadcastLocalTimeConverter()),
+            new RecordingAvailabilityService());
 
         var result = await controller.Get(RecapMode.Season, null, null, 2021, "spring", RecapTimeFilter.Aired, CancellationToken.None);
 
@@ -131,7 +136,9 @@ public class RecapControllerTests
     public async Task Get_WatchedFilterLeavesTheTimeRankingsEmpty()
     {
         var repository = new FakeUserAnimeEntryRepository([WatchedEntry(1, new DateOnly(2021, 4, 15), 12)]);
-        var controller = new RecapController(new RecapService(repository), new RecordingAvailabilityService());
+        var controller = new RecapController(
+            new RecapService(repository, new FakeActivityLogRepository(), new FakeBroadcastLocalTimeConverter()),
+            new RecordingAvailabilityService());
 
         var result = await controller.Get(RecapMode.MultiYear, 2020, 2022, null, null, RecapTimeFilter.Watched, CancellationToken.None);
 
@@ -188,6 +195,23 @@ public class RecapControllerTests
             Requests.Add((period, filter));
             return Task.FromResult(EmptyRecap(period, filter));
         }
+    }
+
+    private sealed class FakeActivityLogRepository : IActivityLogRepository
+    {
+        public Task<List<ActivityLog>> GetRecentAsync(int count, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<List<ActivityLog>> GetAllAsync(CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<List<ActivityLog>> GetEpisodeProgressInRangeAsync(DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
+            Task.FromResult(new List<ActivityLog>());
+    }
+
+    private sealed class FakeBroadcastLocalTimeConverter : IBroadcastLocalTimeConverter
+    {
+        public DateOnly GetStartOfWeek(DateOnly referenceDate) => referenceDate;
+        public DateOnly GetLocalDate(DateTimeOffset instantUtc) => DateOnly.FromDateTime(instantUtc.UtcDateTime);
+        public TimeOnly GetLocalTime(DateTimeOffset instantUtc) => TimeOnly.FromDateTime(instantUtc.UtcDateTime);
+        public DateTimeOffset LocalMidnightUtc(DateOnly localDate) => new(localDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
     }
 
     private sealed class RecordingAvailabilityService : IRecapAvailabilityService

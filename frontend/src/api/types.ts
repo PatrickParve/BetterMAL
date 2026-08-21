@@ -278,6 +278,7 @@ export type AnimeStatsDto = {
   totalEntries: number
   rewatched: number
   episodes: number
+  movies: number
 }
 
 export type TopAnimeEntryDto = {
@@ -344,14 +345,26 @@ export type OpinionDivergenceItemDto = {
   isCompleted: boolean
 }
 
+export type UnresolvedEpisodeEntryDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  episodesWatched: number
+}
+
 // All-list episode progress (profile-stats "All-list episode progress").
-// Entries whose anime has no published totalEpisodes are excluded from
-// episodesWatched/episodesTotal/entriesCounted; only totalEntries counts them.
+// Dropped entries are excluded outright; every other entry's total resolves
+// to its published total episode count, else its aired-so-far count when
+// known and non-zero, else it's unresolved — counted in unresolvedEntries and
+// excluded from episodesWatched/episodesTotal alike. unresolvedAnime lists
+// those same entries in full, alphabetical by title.
 export type EpisodeProgressDto = {
   episodesWatched: number
   episodesTotal: number
-  entriesCounted: number
+  unresolvedEntries: number
   totalEntries: number
+  unresolvedAnime: UnresolvedEpisodeEntryDto[]
 }
 
 export type ProfileDto = {

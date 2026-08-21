@@ -384,7 +384,7 @@ public class RecapRankingBuilderTests
         var included = new List<UserAnimeEntry> { winter, spring };
 
         var ranking = RecapRankingBuilder.BuildSeasonTimeRanking(included, RecapPeriod.Yearly(2022));
-        var stats = RecapStatsBuilder.Build(included, included, []);
+        var stats = RecapStatsBuilder.Build(included, included, [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(stats.TimeSpentSeconds, ranking.Sum(r => r.TimeSpentSeconds));
     }

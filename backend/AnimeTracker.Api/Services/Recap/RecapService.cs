@@ -1,9 +1,13 @@
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Scheduling;
 
 namespace AnimeTracker.Api.Services.Recap;
 
-public class RecapService(IUserAnimeEntryRepository entryRepository) : IRecapService
+public class RecapService(
+    IUserAnimeEntryRepository entryRepository,
+    IActivityLogRepository activityLogRepository,
+    IBroadcastLocalTimeConverter localTimeConverter) : IRecapService
 {
     public async Task<RecapDto> GetRecapAsync(RecapPeriod period, string filter, CancellationToken ct = default)
     {
@@ -13,17 +17,28 @@ public class RecapService(IUserAnimeEntryRepository entryRepository) : IRecapSer
         // that season, whatever filter (if any) the caller sent.
         var effectiveFilter = period.Mode == RecapMode.Season ? RecapTimeFilter.Aired : filter;
 
-        var included = RecapEntrySelector.Select(wholeList, period, effectiveFilter);
+        // design.md decision 3/5: the period's logged episode progress,
+        // fetched once and reused for both selection and the stat block's
+        // per-period episode figure — a half-open UTC instant range so a
+        // row on the period's exact last local instant is still included.
+        var (start, end) = period.DateRange;
+        var fromUtc = localTimeConverter.LocalMidnightUtc(start);
+        var toUtc = localTimeConverter.LocalMidnightUtc(end.AddDays(1));
+        var logRows = await activityLogRepository.GetEpisodeProgressInRangeAsync(fromUtc, toUtc, ct);
+        var watchLog = RecapWatchLog.BuildMap(logRows);
+        var watchedAnimeIds = (IReadOnlySet<int>)watchLog.Keys.ToHashSet();
+
+        var included = RecapEntrySelector.Select(wholeList, period, effectiveFilter, watchedAnimeIds);
 
         // Both filters' counts for *this* period (design.md decision 2), not
         // just the one actually selected on. The aired-attributed list is
         // also what RecapStatsBuilder counts CurrentlyWatching from
         // (decision 2), so it's kept rather than reduced straight to a count.
-        var watchedCount = RecapEntrySelector.Select(wholeList, period, RecapTimeFilter.Watched).Count;
+        var watchedCount = RecapEntrySelector.Select(wholeList, period, RecapTimeFilter.Watched, watchedAnimeIds).Count;
         var airedIncluded = RecapEntrySelector.Select(wholeList, period, RecapTimeFilter.Aired);
         var airedCount = airedIncluded.Count;
 
-        var stats = RecapStatsBuilder.Build(included, wholeList, airedIncluded);
+        var stats = RecapStatsBuilder.Build(included, wholeList, airedIncluded, watchLog, effectiveFilter);
         var items = included
             .Select(ToRow)
             .OrderBy(r => r.Title, StringComparer.OrdinalIgnoreCase)

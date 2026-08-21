@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Season;
+using AnimeTracker.Api.Services.Watching;
 
 namespace AnimeTracker.Api.Services.Recap;
 
@@ -200,7 +201,7 @@ public static class RecapRankingBuilder
     }
 
     private static long GroupTimeSeconds(List<UserAnimeEntry> group) =>
-        group.Sum(e => (long)e.EpisodesWatched * RecapTimeMath.EpisodeSeconds(e.Anime));
+        group.Sum(e => (long)e.EpisodesWatched * WatchMath.EpisodeSeconds(e.Anime));
 
     private static List<RecapRankingPosterDto> TopPostersByTime(List<UserAnimeEntry> group) =>
         group

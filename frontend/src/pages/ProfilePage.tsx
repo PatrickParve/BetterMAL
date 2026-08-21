@@ -19,6 +19,7 @@ import { describeSeasonRanking, describeYearRanking, RankingSection } from '../c
 import { ScoreDistribution } from '../components/ScoreDistribution.tsx'
 import { TopAnimeSelectionOverlay } from '../components/TopAnimeSelectionOverlay.tsx'
 import { TruncatedTitle } from '../components/TruncatedTitle.tsx'
+import { UnresolvedEpisodesOverlay } from '../components/UnresolvedEpisodesOverlay.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { usePageState } from '../state/PageStateContext.tsx'
@@ -118,6 +119,7 @@ const STAT_LABELS: { key: keyof ProfileDto['stats']; label: string }[] = [
   { key: 'days', label: 'Days' },
   { key: 'rewatched', label: 'Rewatched' },
   { key: 'episodes', label: 'Episodes' },
+  { key: 'movies', label: 'Movies' },
 ]
 
 function formatStatValue(key: keyof ProfileDto['stats'], value: number | null): string {
@@ -340,6 +342,7 @@ export function ProfilePage() {
 
   const [showHistory, setShowHistory] = useState(false)
   const [showTopAnimeSelect, setShowTopAnimeSelect] = useState(false)
+  const [showUnresolvedEpisodes, setShowUnresolvedEpisodes] = useState(false)
   // Only one ranking overlay can be open at a time, so a single slot serves
   // both Favourite seasons and Favourite years (same pattern as RecapPage's
   // ranking pairs).
@@ -379,9 +382,20 @@ export function ProfilePage() {
               watched={profile.episodeProgress.episodesWatched}
               total={profile.episodeProgress.episodesTotal}
             />
-            <p className="profile-page__episode-progress-note">
-              {profile.episodeProgress.entriesCounted} of {profile.episodeProgress.totalEntries} entries counted
-            </p>
+            {profile.episodeProgress.unresolvedEntries > 0 && (
+              <p className="profile-page__episode-progress-note">
+                {`${profile.episodeProgress.unresolvedEntries} ${
+                  profile.episodeProgress.unresolvedEntries === 1 ? 'entry' : 'entries'
+                } whose episode count isn't known yet`}{' '}
+                <button
+                  type="button"
+                  className="profile-page__unresolved-button"
+                  onClick={() => setShowUnresolvedEpisodes(true)}
+                >
+                  View
+                </button>
+              </p>
+            )}
           </>
         )}
       </section>
@@ -720,6 +734,12 @@ export function ProfilePage() {
         />
       )}
       {showHistory && <EditHistoryOverlay onClose={() => setShowHistory(false)} />}
+      {showUnresolvedEpisodes && (
+        <UnresolvedEpisodesOverlay
+          entries={profile.episodeProgress.unresolvedAnime}
+          onClose={() => setShowUnresolvedEpisodes(false)}
+        />
+      )}
       {showTopAnimeSelect && topAnime && (
         <TopAnimeSelectionOverlay
           section={topAnime}

@@ -9,7 +9,8 @@ public class RecapStatsBuilderTests
 {
     private static UserAnimeEntry Entry(
         int animeId, string? mediaType, int episodesWatched, int? myScore = null, double? malScore = null,
-        int? durationSeconds = null, WatchStatus status = WatchStatus.Watching) =>
+        int? durationSeconds = null, WatchStatus status = WatchStatus.Watching,
+        int rewatchCount = 0, int? totalEpisodes = null) =>
         new()
         {
             AnimeId = animeId,
@@ -20,10 +21,12 @@ public class RecapStatsBuilderTests
                 MediaType = mediaType,
                 MalScore = malScore,
                 AverageEpisodeDurationSeconds = durationSeconds,
+                TotalEpisodes = totalEpisodes,
             },
             EpisodesWatched = episodesWatched,
             MyScore = myScore,
             Status = status,
+            RewatchCount = rewatchCount,
         };
 
     [Fact]
@@ -32,7 +35,7 @@ public class RecapStatsBuilderTests
         var series = Entry(1, "tv", episodesWatched: 12);
         var movie = Entry(2, "movie", episodesWatched: 1);
 
-        var stats = RecapStatsBuilder.Build([series, movie], [series, movie], []);
+        var stats = RecapStatsBuilder.Build([series, movie], [series, movie], [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(12, stats.EpisodesWatched);
         Assert.Equal(1, stats.MoviesWatched);
@@ -45,7 +48,7 @@ public class RecapStatsBuilderTests
         var scoredB = Entry(2, "tv", 12, myScore: 6);
         var unscored = Entry(3, "tv", 12, myScore: null);
 
-        var stats = RecapStatsBuilder.Build([scoredA, scoredB, unscored], [scoredA, scoredB, unscored], []);
+        var stats = RecapStatsBuilder.Build([scoredA, scoredB, unscored], [scoredA, scoredB, unscored], [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(7.0, stats.MeanScore);
     }
@@ -55,7 +58,7 @@ public class RecapStatsBuilderTests
     {
         var unscored = Entry(1, "tv", 12, myScore: null);
 
-        var stats = RecapStatsBuilder.Build([unscored], [unscored], []);
+        var stats = RecapStatsBuilder.Build([unscored], [unscored], [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Null(stats.MeanScore);
     }
@@ -65,7 +68,7 @@ public class RecapStatsBuilderTests
     {
         var noCachedDuration = Entry(1, "tv", episodesWatched: 5, durationSeconds: null);
 
-        var stats = RecapStatsBuilder.Build([noCachedDuration], [noCachedDuration], []);
+        var stats = RecapStatsBuilder.Build([noCachedDuration], [noCachedDuration], [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(5L * ProfileService.AssumedMinutesPerEpisode * 60, stats.TimeSpentSeconds);
     }
@@ -75,7 +78,7 @@ public class RecapStatsBuilderTests
     {
         var cached = Entry(1, "tv", episodesWatched: 5, durationSeconds: 1500);
 
-        var stats = RecapStatsBuilder.Build([cached], [cached], []);
+        var stats = RecapStatsBuilder.Build([cached], [cached], [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(5L * 1500, stats.TimeSpentSeconds);
     }
@@ -85,7 +88,7 @@ public class RecapStatsBuilderTests
     {
         var movie = Entry(1, "movie", episodesWatched: 1, durationSeconds: 6000);
 
-        var stats = RecapStatsBuilder.Build([movie], [movie], []);
+        var stats = RecapStatsBuilder.Build([movie], [movie], [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(0, stats.EpisodesWatched);
         Assert.Equal(6000L, stats.TimeSpentSeconds);
@@ -116,7 +119,7 @@ public class RecapStatsBuilderTests
         var watching = Entry(4, "tv", 6, status: WatchStatus.Watching);
 
         var stats = RecapStatsBuilder.Build(
-            [completed, dropped1, dropped2, watching], [completed, dropped1, dropped2, watching], [watching]);
+            [completed, dropped1, dropped2, watching], [completed, dropped1, dropped2, watching], [watching], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(1, stats.Completed);
         Assert.Equal(2, stats.Dropped);
@@ -128,7 +131,7 @@ public class RecapStatsBuilderTests
     {
         var watching = Entry(1, "tv", 6, status: WatchStatus.Watching);
 
-        var stats = RecapStatsBuilder.Build([watching], [watching], [watching]);
+        var stats = RecapStatsBuilder.Build([watching], [watching], [watching], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(1, stats.CurrentlyWatching);
     }
@@ -140,7 +143,7 @@ public class RecapStatsBuilderTests
         // never lands in `included` — only in the aired-attributed list.
         var watching = Entry(1, "tv", 6, status: WatchStatus.Watching);
 
-        var stats = RecapStatsBuilder.Build([], [watching], [watching]);
+        var stats = RecapStatsBuilder.Build([], [watching], [watching], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(1, stats.CurrentlyWatching);
     }
@@ -153,7 +156,7 @@ public class RecapStatsBuilderTests
         var completed = Entry(1, "tv", 12, status: WatchStatus.Completed);
         var watchingOutsidePeriod = Entry(2, "tv", 6, status: WatchStatus.Watching);
 
-        var stats = RecapStatsBuilder.Build([completed], [completed, watchingOutsidePeriod], [completed]);
+        var stats = RecapStatsBuilder.Build([completed], [completed, watchingOutsidePeriod], [completed], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(0, stats.CurrentlyWatching);
     }
@@ -165,7 +168,7 @@ public class RecapStatsBuilderTests
         // null, so it never lands in airedIncluded for any period.
         var watchingNoAiredFrom = Entry(1, "tv", 6, status: WatchStatus.Watching);
 
-        var stats = RecapStatsBuilder.Build([], [watchingNoAiredFrom], []);
+        var stats = RecapStatsBuilder.Build([], [watchingNoAiredFrom], [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(0, stats.CurrentlyWatching);
     }
@@ -178,7 +181,7 @@ public class RecapStatsBuilderTests
         var onHold = Entry(3, "tv", 2, status: WatchStatus.OnHold);
 
         var stats = RecapStatsBuilder.Build(
-            [completed, dropped], [completed, dropped, onHold], [completed, dropped, onHold]);
+            [completed, dropped], [completed, dropped, onHold], [completed, dropped, onHold], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(0, stats.CurrentlyWatching);
     }
@@ -189,7 +192,7 @@ public class RecapStatsBuilderTests
         var wholeList = SpreadPopulation();
         var included = wholeList.Take(2).ToList();
 
-        var stats = RecapStatsBuilder.Build(included, wholeList, []);
+        var stats = RecapStatsBuilder.Build(included, wholeList, [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(2, stats.HotTakes.Count);
     }
@@ -200,7 +203,7 @@ public class RecapStatsBuilderTests
         var wholeList = SpreadPopulation();
         var included = wholeList.Take(1).ToList();
 
-        var stats = RecapStatsBuilder.Build(included, wholeList, []);
+        var stats = RecapStatsBuilder.Build(included, wholeList, [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Single(stats.HotTakes);
     }
@@ -211,7 +214,7 @@ public class RecapStatsBuilderTests
         var wholeList = SpreadPopulation();
         var unscored = Entry(99, "tv", 12, myScore: null, malScore: 7.0);
 
-        var stats = RecapStatsBuilder.Build([unscored], wholeList, []);
+        var stats = RecapStatsBuilder.Build([unscored], wholeList, [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Empty(stats.HotTakes);
     }
@@ -221,7 +224,7 @@ public class RecapStatsBuilderTests
     {
         var wholeList = SpreadPopulation();
 
-        var stats = RecapStatsBuilder.Build(wholeList, wholeList, []);
+        var stats = RecapStatsBuilder.Build(wholeList, wholeList, [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(5, stats.HotTakes.Count);
         var divergences = stats.HotTakes.Select(h => Math.Abs(h.Divergence)).ToList();
@@ -238,7 +241,7 @@ public class RecapStatsBuilderTests
         watching.Status = WatchStatus.Watching;
         var included = new List<UserAnimeEntry> { dropped, watching };
 
-        var stats = RecapStatsBuilder.Build(included, wholeList, []);
+        var stats = RecapStatsBuilder.Build(included, wholeList, [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.True(stats.HotTakes.Single(h => h.AnimeId == dropped.AnimeId).MalRevealed);
         Assert.False(stats.HotTakes.Single(h => h.AnimeId == watching.AnimeId).MalRevealed);
@@ -250,7 +253,7 @@ public class RecapStatsBuilderTests
         var wholeList = SpreadPopulation();
         var included = wholeList.Take(4).ToList();
 
-        var stats = RecapStatsBuilder.Build(included, wholeList, []);
+        var stats = RecapStatsBuilder.Build(included, wholeList, [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Equal(4, stats.HotTakes.Count);
     }
@@ -264,7 +267,7 @@ public class RecapStatsBuilderTests
         // satisfied.
         var neutralButDivergent = wholeList[6];
 
-        var stats = RecapStatsBuilder.Build([neutralButDivergent], wholeList, []);
+        var stats = RecapStatsBuilder.Build([neutralButDivergent], wholeList, [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Empty(stats.HotTakes);
     }
@@ -277,7 +280,7 @@ public class RecapStatsBuilderTests
         // rule's like/dislike boundaries are crossed.
         var agreed = Entry(98, "tv", 12, myScore: 9, malScore: 8.4);
 
-        var stats = RecapStatsBuilder.Build([agreed], wholeList, []);
+        var stats = RecapStatsBuilder.Build([agreed], wholeList, [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Empty(stats.HotTakes);
     }
@@ -290,7 +293,7 @@ public class RecapStatsBuilderTests
         // just short of the 1.0 SD threshold.
         var almostDivergent = Entry(97, "tv", 12, myScore: 5, malScore: 8.36);
 
-        var stats = RecapStatsBuilder.Build([almostDivergent], wholeList, []);
+        var stats = RecapStatsBuilder.Build([almostDivergent], wholeList, [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Empty(stats.HotTakes);
     }
@@ -307,8 +310,66 @@ public class RecapStatsBuilderTests
         var context = ScoreDivergence.TryCompute(wholeList)!.Value;
         Assert.True(ScoreDivergence.IsTheyLikedItIDidnt(candidate, context.DivergenceOf(candidate)));
 
-        var stats = RecapStatsBuilder.Build([candidate], wholeList, []);
+        var stats = RecapStatsBuilder.Build([candidate], wholeList, [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
 
         Assert.Contains(stats.HotTakes, h => h.AnimeId == candidate.AnimeId);
+    }
+
+    // The per-period episode figure under "watched" (design.md decisions
+    // 5/6, tasks.md 5.5/5.8): a logged figure is used verbatim; an entry with
+    // no log entry falls back to the rewatch-inclusive count; "aired" never
+    // reads the log or the rewatch multiplier.
+
+    [Fact]
+    public void LoggedEpisodesAreUsedVerbatimUnderWatched()
+    {
+        var entry = Entry(1, "tv", episodesWatched: 20, totalEpisodes: 24, rewatchCount: 1, status: WatchStatus.Watching);
+        var watchLog = new Dictionary<int, int> { [1] = 9 };
+
+        var stats = RecapStatsBuilder.Build([entry], [entry], [], watchLog, RecapTimeFilter.Watched);
+
+        Assert.Equal(9, stats.EpisodesWatched);
+    }
+
+    [Fact]
+    public void APreTrackingCompletionFallsBackToTheRewatchInclusiveCount()
+    {
+        var entry = Entry(1, "tv", episodesWatched: 12, totalEpisodes: 12, rewatchCount: 1, status: WatchStatus.Completed);
+
+        var stats = RecapStatsBuilder.Build([entry], [entry], [], new Dictionary<int, int>(), RecapTimeFilter.Watched);
+
+        Assert.Equal(24, stats.EpisodesWatched);
+    }
+
+    [Fact]
+    public void TheStoredRewatchCountIsNotReadTwiceWhenTheLogAlsoHoldsProgress()
+    {
+        var entry = Entry(1, "tv", episodesWatched: 12, totalEpisodes: 12, rewatchCount: 1, status: WatchStatus.Completed);
+        var watchLog = new Dictionary<int, int> { [1] = 24 };
+
+        var stats = RecapStatsBuilder.Build([entry], [entry], [], watchLog, RecapTimeFilter.Watched);
+
+        Assert.Equal(24, stats.EpisodesWatched);
+    }
+
+    [Fact]
+    public void RewatchesDoNotCountUnderAired()
+    {
+        var entry = Entry(1, "tv", episodesWatched: 12, totalEpisodes: 12, rewatchCount: 1, status: WatchStatus.Completed);
+
+        var stats = RecapStatsBuilder.Build([entry], [entry], [], new Dictionary<int, int>(), RecapTimeFilter.Aired);
+
+        Assert.Equal(12, stats.EpisodesWatched);
+    }
+
+    [Fact]
+    public void TimeSpentUsesTheSameLoggedFigureAsEpisodesWatched()
+    {
+        var entry = Entry(1, "tv", episodesWatched: 20, totalEpisodes: 24, durationSeconds: 1400, status: WatchStatus.Watching);
+        var watchLog = new Dictionary<int, int> { [1] = 9 };
+
+        var stats = RecapStatsBuilder.Build([entry], [entry], [], watchLog, RecapTimeFilter.Watched);
+
+        Assert.Equal(9L * 1400, stats.TimeSpentSeconds);
     }
 }

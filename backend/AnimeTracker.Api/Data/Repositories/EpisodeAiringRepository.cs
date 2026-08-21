@@ -11,6 +11,18 @@ public class EpisodeAiringRepository(AnimeTrackerDbContext db) : IEpisodeAiringR
             .Select(e => (int?)e.Episode)
             .MaxAsync(ct);
 
+    public async Task<Dictionary<int, int>> GetMaxAiredEpisodesAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset asOfUtc, CancellationToken ct = default)
+    {
+        if (animeIds.Count == 0)
+            return [];
+
+        return await db.EpisodeAirings.AsNoTracking()
+            .Where(e => animeIds.Contains(e.AnimeId) && e.AirsAtUtc <= asOfUtc)
+            .GroupBy(e => e.AnimeId)
+            .Select(g => new { AnimeId = g.Key, MaxEpisode = g.Max(e => e.Episode) })
+            .ToDictionaryAsync(x => x.AnimeId, x => x.MaxEpisode, ct);
+    }
+
     public Task<DateTimeOffset?> GetNextAiringInstantAsync(int animeId, DateTimeOffset afterUtc, CancellationToken ct = default) =>
         db.EpisodeAirings.AsNoTracking()
             .Where(e => e.AnimeId == animeId && e.AirsAtUtc > afterUtc)

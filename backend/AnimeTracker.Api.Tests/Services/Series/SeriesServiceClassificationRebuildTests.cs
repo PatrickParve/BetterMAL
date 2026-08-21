@@ -94,5 +94,7 @@ public class SeriesServiceClassificationRebuildTests
             throw new NotImplementedException();
         public Task<int?> EpisodesAiredAsOfAsync(AnimeMetadata anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
             throw new NotImplementedException();
+        public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<AnimeMetadata> anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 }
