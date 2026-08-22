@@ -274,6 +274,8 @@ The page SHALL re-read the anime only for the manual **Refresh data** action, wh
 ### Requirement: Progress bar and overlay status editor
 The system SHALL show, below the picture, a progress bar (`watched/total`, or `watched/?` when the total is unknown) with the current status next to it. The `watched` count SHALL be directly editable in place, per the "Inline editable episode count" requirement, so a specific episode number can be set without opening the overlay. The edit button — the second of the three action buttons stacked beneath the progress bar, shown only once the anime is in my list — SHALL open an overlay on top of the page for updating episodes watched, rewatch count, and score, applying the list-editing business rules. The editor SHALL NOT include start/finish date fields, since those are set automatically by the app's date logic.
 
+While the anime has aired no episode, the progress bar SHALL NOT be shown at all — no track, no `watched/total` count, and no increment control — per the "The editable progress row appears only once an episode has aired" requirement. The status text that sits beside the bar SHALL still be shown in that case, since it is the page's only statement of the entry's status and is not an edit control, and the action buttons beneath SHALL still be shown. The bar SHALL appear as specified above once the anime has aired an episode.
+
 #### Scenario: Opening the editor
 - **WHEN** I click the edit button beneath the progress bar
 - **THEN** an overlay opens with fields for episodes watched, rewatch count, and score, and no start/finish date fields
@@ -290,6 +292,14 @@ The system SHALL show, below the picture, a progress bar (`watched/total`, or `w
 - **WHEN** the anime is not in my list, so no entry exists yet
 - **THEN** the count is not editable in place, and the add buttons rather than an edit button are what put it in my list
 
+#### Scenario: No bar before the first episode
+- **WHEN** I open the detail page for an anime that has aired no episode
+- **THEN** no progress bar, count, or increment control is shown, while the status text beside it and the action buttons beneath it are shown as usual
+
+#### Scenario: The bar appears with the first episode
+- **WHEN** that anime airs its first episode and I open its detail page again
+- **THEN** the progress bar, count, and increment control are shown as they are for any other anime
+
 ### Requirement: Broadcast progress on the detail page progress bar
 While the anime is currently airing, the detail page's progress bar SHALL render broadcast progress — episodes aired out of the anime's total episode count — as a fill behind my watched fill, in the same blue used by the home page's airing-progress bar, so how much of the show exists yet is visible alongside how much of it I have seen. My watched progress SHALL keep the site's purple accent, layered on top within the same track.
 
@@ -300,6 +310,8 @@ When the total episode count is known, the aired fill SHALL span episodes aired 
 The bar's label SHALL remain `watched/total` (or `watched/?` when the total is unknown) and SHALL NOT restate the aired count, which the info box's Status field already names. The `watched` count SHALL remain editable in place and the increment button SHALL remain, exactly as specified by the "Progress bar and overlay status editor" requirement — the aired fill is an addition to that bar, not a replacement for it.
 
 When my episodes watched changes on this page — by increment, by in-place edit, or from the entry editor — my fill SHALL update in place without a reload, and the aired fill SHALL be unaffected.
+
+This requirement describes fills within a bar that is being drawn. Where the "Progress bar and overlay status editor" requirement withholds the bar entirely — an anime that has aired no episode — there is no track for either fill, and this requirement has nothing to add.
 
 #### Scenario: Airing anime shows broadcast progress
 - **WHEN** I open the detail page of a currently airing anime with 12 total episodes, 5 aired, and 3 watched
@@ -319,7 +331,7 @@ When my episodes watched changes on this page — by increment, by in-place edit
 
 #### Scenario: Not yet aired keeps the plain bar
 - **WHEN** I open the detail page of an anime that has not yet aired
-- **THEN** no aired fill is drawn
+- **THEN** no aired fill is drawn — there is no bar at all, per "Progress bar and overlay status editor"
 
 #### Scenario: Airing with an unknown total
 - **WHEN** I open the detail page of a currently airing anime with an unpublished total episode count and 10 episodes aired, of which I have watched 5

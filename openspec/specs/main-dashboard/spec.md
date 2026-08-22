@@ -12,6 +12,8 @@ The row's scroll position SHALL be preserved when a card's episodes-watched chan
 
 Each card SHALL show the standard watched/total progress bar directly in front of its episode count, on the same line, so the card reads as `[bar] watched/total [+]`. The bar SHALL be the same watched/total bar used on My List and the anime detail page — the accent fill measured as episodes watched out of total episodes — and the count SHALL read `watched/?` when the total episode count is unknown. When the total is unknown and the anime is not currently airing, the track SHALL be empty. While the anime is currently airing, the bar SHALL additionally carry the blue aired fill specified by the "Broadcast progress on currently-watching cards" requirement, which also governs how the fills are measured when the total is unknown. Incrementing from the plus control SHALL update the bar's accent fill together with the count.
 
+A card whose anime has aired no episode is the one exception to the two paragraphs above: it SHALL show no progress row at all — no bar, no count, and no plus control — per the "The editable progress row appears only once an episode has aired" requirement in the `list-editing` capability, since there is nothing on such a card to increment. The card SHALL still render its picture and title and SHALL still link to the detail page, and its next-episode countdown SHALL still be shown when one is known. The progress row SHALL return once the anime has aired an episode.
+
 The progress row — the bar, the `watched/total` count, and the plus control — SHALL NOT be part of the card's navigation link: clicking anywhere within that row SHALL NOT navigate to the detail page. The count itself SHALL be directly editable in place, per the "Inline editable episode count" requirement.
 
 The row SHALL reserve enough space inside its scrollable area for hover treatments on the edge cards, so that hovering the first or last card's plus control (or the card itself) renders the full hover state without any part being clipped by the row's scroll boundary, both when the row is scrolled fully left and fully right.
@@ -71,6 +73,14 @@ The row SHALL reserve enough space inside its scrollable area for hover treatmen
 #### Scenario: Progress bar with unknown total
 - **WHEN** a currently-watching card renders for an anime with an unknown total episode count that is not currently airing
 - **THEN** its track is empty and the count reads `watched/?`
+
+#### Scenario: No progress row before the first episode
+- **WHEN** a currently-watching card renders for an anime that has aired no episode
+- **THEN** the card shows no bar, no count, and no plus control, while still showing its picture, title, and any next-episode countdown
+
+#### Scenario: The progress row returns with the first episode
+- **WHEN** that anime airs its first episode and the dashboard is read again
+- **THEN** its card shows the progress bar, count, and plus control as any other card does
 
 #### Scenario: Bar follows an increment
 - **WHEN** I click the plus control on a currently-watching card
@@ -148,6 +158,34 @@ The new order SHALL instead take effect the next time the page's dashboard data 
 #### Scenario: A restore reorders in place rather than flashing
 - **WHEN** I increment a card, open that anime's detail page, and then press back to the main page
 - **THEN** the carousel appears immediately in the order it had when I left, with no loading state, and settles into the new order in place once the background refresh returns
+
+### Requirement: Rewatches appear in the currently-watching carousel
+
+The main dashboard's "Currently watching" section SHALL include entries whose status is **Rewatching** alongside those whose status is Watching, since both are runs in progress and both are incremented from the same control.
+
+A Rewatching card SHALL be rendered identically to a Watching one — same picture, title, progress row, and "+" control — and SHALL take its place in the section's existing ordering (episodes watched descending, then title) rather than being grouped separately or pinned. A Rewatching entry's anime has always finished airing, so no next-episode countdown applies to its card; its absence SHALL be the ordinary "no countdown known" case rather than a special one.
+
+Incrementing a Rewatching card SHALL behave exactly as incrementing a Watching one, including the rule that finishing the run returns the entry to Completed and increases its rewatch count, per the `list-editing` capability. Once that happens the entry is no longer in progress, so it SHALL leave this section on the next read, the same way a completed first viewing does.
+
+#### Scenario: A rewatch is on the dashboard
+
+- **WHEN** an entry's status is Rewatching
+- **THEN** it appears in the Currently watching section, rendered like any other card there
+
+#### Scenario: Ordered together, not grouped apart
+
+- **WHEN** the section holds both Watching and Rewatching entries
+- **THEN** they are ordered together by episodes watched descending and then title, with no separation between the two statuses
+
+#### Scenario: Incrementing a rewatch from the dashboard
+
+- **WHEN** I press "+" on a Rewatching card below the last available episode
+- **THEN** its episodes watched increases by one and its bar and count update in place, exactly as for a Watching card
+
+#### Scenario: A finished rewatch leaves the section
+
+- **WHEN** I press "+" on a Rewatching card and thereby reach everything available
+- **THEN** the entry returns to Completed with its rewatch count increased, and is no longer in Currently watching on the next read
 
 ### Requirement: Broadcast progress on currently-watching cards
 While an anime is currently airing, its currently-watching card's progress bar SHALL render broadcast progress — episodes aired out of the anime's total episode count — as a fill behind my watched fill, in the same blue used by the home page's airing-progress bar and by the anime detail page's bar. My watched progress SHALL keep the site's purple accent, layered on top within the same track.

@@ -68,6 +68,27 @@ An anime's runtime per episode SHALL be its cached average episode duration wher
 - **WHEN** I rewatch a twelve-episode series once
 - **THEN** Days grows by the runtime of twelve further episodes
 
+### Requirement: Rewatching has its own place in the status breakdown
+
+The profile page's per-status counts SHALL include **Rewatching** as its own figure, rather than folding rewatches into Watching or Completed. The per-status counts SHALL continue to sum to Total Entries.
+
+The episode and time formulas SHALL be unaffected. Episodes is already defined as an entry's episodes watched plus one complete run per recorded rewatch, and Days from that same rewatch-inclusive count. Under this change a rewatch in progress is exactly that — the rewatch count holds the runs already finished, and episodes watched holds the current run's progress, because entering Rewatching resets the count to 0 and the rewatch count is only increased once a run finishes. No formula changes; the arithmetic is identical to the rewatch-in-progress case the capability already describes.
+
+#### Scenario: Rewatches are counted separately
+
+- **WHEN** my list holds entries in every status, including two Rewatching ones
+- **THEN** the stats show a Rewatching count of two, and neither the Watching nor the Completed count includes them
+
+#### Scenario: The breakdown still sums
+
+- **WHEN** the per-status counts are added together
+- **THEN** they equal Total Entries
+
+#### Scenario: A rewatch in progress counts the same as before
+
+- **WHEN** my list holds a Rewatching twelve-episode series with a rewatch count of two whose episodes watched reads one
+- **THEN** it contributes twenty-five episodes, exactly as the same entry did under the previous representation
+
 ### Requirement: Profile list-row posters fill the row
 The system SHALL render the poster in every profile list row — "Latest updates" rows, full edit-history rows, and both opinion-divergence lists' rows — flush with the row's top, bottom, and leading edges, filling the row's full height with no padding between the poster and those edges. The poster's leading corners SHALL follow the row's own corner radius, and a row SHALL take its height from its list rather than from the poster's natural aspect ratio — the poster SHALL never inflate a row to its own intrinsic size. A row whose anime has no picture SHALL render its placeholder at the same full-height size.
 
