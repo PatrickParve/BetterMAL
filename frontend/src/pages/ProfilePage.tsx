@@ -113,6 +113,7 @@ const STAT_LABELS: { key: keyof ProfileDto['stats']; label: string }[] = [
   { key: 'meanScore', label: 'Mean score' },
   { key: 'totalEntries', label: 'Total entries' },
   { key: 'watching', label: 'Watching' },
+  { key: 'rewatching', label: 'Rewatching' },
   { key: 'planToWatch', label: 'Plan to watch' },
   { key: 'onHold', label: 'On-hold' },
   { key: 'dropped', label: 'Dropped' },

@@ -38,7 +38,18 @@ export function CompletionPromptProvider({ children }: { children: ReactNode }) 
     }
     target.onSaved(saved)
 
-    const justCompleted = target.previousStatus !== 'Completed' && saved.status === 'Completed'
+    // list-editing: "Completion prompt fires only on entering Completed" — a
+    // rewatch reaching the total re-completes the entry but already carries a
+    // score from its first viewing, so it's excluded here alongside an entry
+    // that was already Completed. `completedAt` being null distinguishes a
+    // currently-airing anime "caught up" on what's aired (gate-editing-on-
+    // aired-episodes: no finish date while still airing) from an actual
+    // finish — the former isn't done yet, so it shouldn't be asked to score.
+    const justCompleted =
+      target.previousStatus !== 'Completed' &&
+      target.previousStatus !== 'Rewatching' &&
+      saved.status === 'Completed' &&
+      saved.completedAt !== null
     if (!justCompleted) return
 
     setPrompt({

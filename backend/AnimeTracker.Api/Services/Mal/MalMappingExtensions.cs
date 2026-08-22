@@ -27,6 +27,10 @@ public static class MalMappingExtensions
         WatchStatus.OnHold => "on_hold",
         WatchStatus.Dropped => "dropped",
         WatchStatus.PlanToWatch => "plan_to_watch",
+        // mal-write-sync: MAL has no rewatching status, so a rewatch is
+        // pushed as a normal in-progress watch (design.md D4) — reconciliation
+        // is taught not to read that back as a demotion (see ReconciliationService).
+        WatchStatus.Rewatching => "watching",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null),
     };
 

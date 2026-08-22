@@ -3,7 +3,7 @@ import { AnimeCard } from './AnimeCard.tsx'
 import { ProgressBar } from './ProgressBar.tsx'
 import type { CurrentlyWatchingItemDto, IncrementTarget } from '../api/types.ts'
 import { useEpisodeIncrement, useSetEpisodesWatched } from '../context/CompletionPromptContext.tsx'
-import { pickDisplayTitle } from '../utils/anime.ts'
+import { hasAiredEpisodes, pickDisplayTitle } from '../utils/anime.ts'
 import './CurrentlyWatchingCarousel.css'
 
 type CurrentlyWatchingCarouselProps = {
@@ -68,10 +68,11 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
       animeTitle: pickDisplayTitle(item.title, item.englishTitle),
       pictureUrl: item.pictureUrl,
       episodesWatched: item.episodesWatched,
-      // The dashboard's currently-watching items are all Status == Watching
-      // by construction (MainDashboardService filters on it), and the DTO
-      // carries no status field, so the pre-increment status is known here.
-      previousStatus: 'Watching',
+      // main-dashboard: this section now also holds Rewatching entries, so the
+      // pre-increment status has to come from the item itself rather than
+      // being assumed Watching — otherwise a rewatch reaching the total would
+      // incorrectly trip the completion-score prompt.
+      previousStatus: item.status,
       // CurrentlyWatchingItemDto carries no score field; the carousel has
       // nothing to pre-fill the completion prompt with.
       currentScore: null,
@@ -120,19 +121,21 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
               className="carousel__card"
               footer={
                 <>
-                  <ProgressBar
-                    watched={item.episodesWatched}
-                    total={item.totalEpisodes}
-                    // Gated on airing status, not just an aired count being present:
-                    // a finished show's aired count equals its total, so an ungated
-                    // fill would paint every finished card's track solid blue.
-                    aired={item.currentlyAiring ? item.episodesAired : null}
-                    onIncrement={() => increment(item)}
-                    onSetWatched={(value) => setWatched(item, value)}
-                    max={item.episodesAired ?? item.totalEpisodes}
-                    incrementPending={pendingId === item.animeId}
-                    incrementLabel={`Increment episodes watched for ${pickDisplayTitle(item.title, item.englishTitle)}`}
-                  />
+                  {hasAiredEpisodes(item.airingStatus, item.episodesAired) && (
+                    <ProgressBar
+                      watched={item.episodesWatched}
+                      total={item.totalEpisodes}
+                      // Gated on airing status, not just an aired count being present:
+                      // a finished show's aired count equals its total, so an ungated
+                      // fill would paint every finished card's track solid blue.
+                      aired={item.currentlyAiring ? item.episodesAired : null}
+                      onIncrement={() => increment(item)}
+                      onSetWatched={(value) => setWatched(item, value)}
+                      max={item.episodesAired ?? item.totalEpisodes}
+                      incrementPending={pendingId === item.animeId}
+                      incrementLabel={`Increment episodes watched for ${pickDisplayTitle(item.title, item.englishTitle)}`}
+                    />
+                  )}
                   {item.nextEpisode && (
                     <span className="carousel__countdown">
                       Next ep: in {item.nextEpisode.days} days, {item.nextEpisode.hours} h

@@ -15,7 +15,8 @@ public record AnimeStatsDto(
     int TotalEntries,
     int Rewatched,
     int Episodes,
-    int Movies);
+    int Movies,
+    int Rewatching);
 
 public record ActivityFeedItemDto(
     long Id,

@@ -26,7 +26,7 @@ export const SERIES_TRAVERSAL_RELATIONS = new Set([
 // so a community average can no longer bias or spoil a viewing still ahead
 // of them.
 export function isScoreRevealableStatus(status: WatchStatus | null | undefined): boolean {
-  return status === 'Completed' || status === 'Dropped'
+  return status === 'Completed' || status === 'Dropped' || status === 'Rewatching'
 }
 
 export type ScoreTier = 'apex' | 'red' | 'blue' | 'gold' | 'silver' | 'bronze'
@@ -52,17 +52,29 @@ export const STATUS_LABELS: Record<WatchStatus, string> = {
   PlanToWatch: 'Plan to watch',
   Completed: 'Completed',
   Dropped: 'Dropped',
+  Rewatching: 'Rewatching',
 }
 
 // Modifier-class suffix per status, used to color-code list rows and filter
 // tabs (watching = green, completed = blue, plan to watch = purple, on hold
-// = yellow, dropped = red) via the --status-* variables in index.css.
+// = yellow, dropped = red, rewatching = a darker blue than completed) via the
+// --status-* variables in index.css.
 export const STATUS_CLASS: Record<WatchStatus, string> = {
   Watching: 'watching',
   OnHold: 'onhold',
   PlanToWatch: 'plantowatch',
   Completed: 'completed',
   Dropped: 'dropped',
+  Rewatching: 'rewatching',
+}
+
+// Mirrors backend/AnimeTracker.Api/Services/Entries/AiredEpisodeGate.cs
+// HasAired (design.md D1 of gate-editing-on-aired-episodes): a known aired
+// count settles it outright; an unknown count falls back to airing status,
+// treating anything but "not yet aired" — including an unrecorded status —
+// as having aired, since the app cannot prove otherwise.
+export function hasAiredEpisodes(airingStatus: string | null, episodesAired: number | null): boolean {
+  return episodesAired !== null ? episodesAired >= 1 : airingStatus !== 'not_yet_aired'
 }
 
 // Compact airing-status labels for the My list Plan-to-watch badge. The

@@ -1,3 +1,5 @@
+using AnimeTracker.Api.Models;
+
 namespace AnimeTracker.Api.Services.Dashboard;
 
 public record NextEpisodeEtaDto(int Days, int Hours);
@@ -11,7 +13,13 @@ public record CurrentlyWatchingItemDto(
     int? TotalEpisodes,
     int? EpisodesAired,
     bool CurrentlyAiring,
-    NextEpisodeEtaDto? NextEpisode);
+    NextEpisodeEtaDto? NextEpisode,
+    WatchStatus Status,
+    // gate-editing-on-aired-episodes: the raw airing status, since
+    // CurrentlyAiring alone can't distinguish finished_airing from
+    // not_yet_aired once EpisodesAired is unknown — the frontend gate needs
+    // that distinction to decide whether to draw the progress row at all.
+    string? AiringStatus);
 
 public record AiringTodayItemDto(
     int AnimeId,

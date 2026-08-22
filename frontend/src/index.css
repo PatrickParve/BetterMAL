@@ -26,6 +26,9 @@
   --status-dropped: #dc2626;
   --status-dropped-bg: rgba(220, 38, 38, 0.12);
   --status-dropped-border: rgba(220, 38, 38, 0.45);
+  --status-rewatching: #1d4ed8;
+  --status-rewatching-bg: rgba(29, 78, 216, 0.12);
+  --status-rewatching-border: rgba(29, 78, 216, 0.45);
 
   /* Recap podium rank colours (RecapPage.tsx's renderPodiumCard). Silver is
      the hard one: a literal silver (#c0c0c0-ish) sits nearly on top of
@@ -178,6 +181,9 @@
     --status-dropped: #f87171;
     --status-dropped-bg: rgba(248, 113, 113, 0.16);
     --status-dropped-border: rgba(248, 113, 113, 0.5);
+    --status-rewatching: #3b82f6;
+    --status-rewatching-bg: rgba(59, 130, 246, 0.18);
+    --status-rewatching-border: rgba(59, 130, 246, 0.55);
 
     --medal-gold: #eab308;
     --medal-gold-bg: rgba(234, 179, 8, 0.16);

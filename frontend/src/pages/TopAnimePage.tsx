@@ -194,6 +194,8 @@ export function TopAnimePage() {
       animeId: item.animeId,
       animeTitle: pickDisplayTitle(item.title, item.englishTitle),
       totalEpisodes: item.totalEpisodes,
+      airingStatus: item.airingStatus,
+      episodesAired: item.episodesAired,
       entry: item.entry,
       onSaved: (saved) => setEntry(item.animeId, saved),
       onDeleted: () => setEntry(item.animeId, null),

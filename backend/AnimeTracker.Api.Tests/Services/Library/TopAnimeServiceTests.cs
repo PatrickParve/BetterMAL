@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Library;
 using AnimeTracker.Api.Services.Mal;
@@ -22,11 +23,12 @@ public class TopAnimeServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    private static TopAnimeService CreateService(AnimeTrackerDbContext db, FakeMalClient malClient) =>
+    private static TopAnimeService CreateService(AnimeTrackerDbContext db, FakeMalClient malClient, Dictionary<int, int>? airedSoFar = null) =>
         new(
             db,
             malClient,
             new TopAnimeRepository(db),
+            new FakeEpisodeScheduleService(airedSoFar),
             new FakeBroadcastLocalTimeConverter(),
             new RefreshGate(),
             NullLogger<TopAnimeService>.Instance);
@@ -144,6 +146,42 @@ public class TopAnimeServiceTests
         // row is unchanged from yesterday's seed.
         var log = await db.TopAnimeFetchLogs.SingleAsync(f => f.RankingType == "all");
         Assert.Equal(yesterday, log.LastFetchedAt);
+    }
+
+    // gate-editing-on-aired-episodes task 5.8: TopAnimeItemDto carries the
+    // same aired-episode facts as the dashboard's currently-watching cards.
+    [Fact]
+    public async Task GetRankingAsync_RowsCarryAiringStatusAndEpisodesAired()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = "currently_airing" });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<string, List<MalAnimeListEdge>>
+        {
+            ["all"] = [Edge(1, 1)],
+        });
+        var service = CreateService(db, malClient, airedSoFar: new Dictionary<int, int> { [1] = 7 });
+
+        var result = await service.GetRankingAsync(TopAnimeRankingType.All);
+
+        var row = Assert.Single(result);
+        Assert.Equal("currently_airing", row.AiringStatus);
+        Assert.Equal(7, row.EpisodesAired);
+    }
+
+    private sealed class FakeEpisodeScheduleService(Dictionary<int, int>? airedSoFar = null) : IEpisodeScheduleService
+    {
+        private readonly Dictionary<int, int> _airedSoFar = airedSoFar ?? [];
+
+        public Task<ResolvedEpisode?> ResolveOnLocalDateAsync(AnimeMetadata anime, DateOnly localDate, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<DateTimeOffset?> NextAiringInstantAsync(AnimeMetadata anime, DateTimeOffset afterUtc, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<int?> EpisodesAiredAsOfAsync(AnimeMetadata anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<AnimeMetadata> anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult(anime.Where(a => _airedSoFar.ContainsKey(a.Id)).ToDictionary(a => a.Id, a => _airedSoFar[a.Id]));
     }
 
     private sealed class FakeBroadcastLocalTimeConverter : IBroadcastLocalTimeConverter

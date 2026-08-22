@@ -1,4 +1,10 @@
 .navbar {
+  /* Clears the tallest line box the fluid root font produces (18px root ×
+     145% line-height = 26.1px) plus the controls' 1px borders, with room to
+     spare. Fixed rather than derived from the root font so the row stays
+     flush across the font's whole fluid range instead of only agreeing at
+     one window width (design.md decision D1). */
+  --navbar-control-h: 40px;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -19,10 +25,15 @@
 
 /* Flexible basis so the field shares the group with the score toggle,
    Profile, and Settings without being squeezed to button width; its own
-   max-width (search-bar.css) caps how far it grows. */
+   max-width (search-bar.css) caps how far it grows. Height matches the rest
+   of the navbar's page controls (design.md decision D2) — scoped here
+   rather than in search-bar.css so the Settings page's own field, which
+   shares the same component, keeps its current size. */
 .navbar__links--right .search-bar {
   flex: 1 1 200px;
   min-width: 160px;
+  height: var(--navbar-control-h);
+  box-sizing: border-box;
 }
 
 /* The score toggle, Profile, and Settings as one unbroken unit — flex-wrap
@@ -37,7 +48,11 @@
 }
 
 .navbar__link {
-  padding: 8px 12px;
+  height: var(--navbar-control-h);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
   border-radius: 6px;
   border: 1px solid transparent;
   color: var(--text);
@@ -55,6 +70,17 @@
 .navbar__link--active {
   color: var(--text-h);
   background: var(--accent-bg);
+  border-color: var(--accent);
+}
+
+/* `:hover` and `--active` alone tie in specificity (one class each), but a
+   combined `:hover` pseudo-class counts as a class of its own — so
+   `.navbar__link:hover` (two classes) outranks `.navbar__link--active` (one)
+   regardless of source order, and would win back the soft hover border on an
+   active-and-hovered link. This rule matches that same two-class
+   specificity, so which one wins is source order again — and it comes after. */
+.navbar__link--active:hover {
+  border-color: var(--accent);
 }
 
 /* The score-visibility switch (design.md decision 7). A fixed-width pill so
@@ -196,8 +222,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  box-sizing: border-box;
+  width: var(--navbar-control-h);
+  height: var(--navbar-control-h);
   border-radius: 6px;
   border: 1px solid transparent;
   color: var(--text);
@@ -207,6 +234,19 @@
   color: var(--text-h);
   background: var(--accent-bg);
   border-color: var(--accent-border);
+}
+
+.navbar__settings--active {
+  color: var(--text-h);
+  background: var(--accent-bg);
+  border-color: var(--accent);
+}
+
+/* Same specificity fix as .navbar__link--active:hover above — plain
+   `:hover` would otherwise outrank `--active` on its own and win back the
+   soft border on an active-and-hovered gear. */
+.navbar__settings--active:hover {
+  border-color: var(--accent);
 }
 
 @media (max-width: 900px) {

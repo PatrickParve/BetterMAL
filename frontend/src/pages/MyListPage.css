@@ -136,6 +136,11 @@
   --tab-color: var(--status-dropped);
   --tab-bg: var(--status-dropped-bg);
 }
+.my-list-page__tab--rewatching {
+  --tab-border: var(--status-rewatching-border);
+  --tab-color: var(--status-rewatching);
+  --tab-bg: var(--status-rewatching-bg);
+}
 
 .my-list-page__tab:hover {
   color: var(--text-h);
@@ -209,6 +214,9 @@
 }
 .my-list-row--dropped {
   border-left-color: var(--status-dropped);
+}
+.my-list-row--rewatching {
+  border-left-color: var(--status-rewatching);
 }
 
 .my-list-row__rank {

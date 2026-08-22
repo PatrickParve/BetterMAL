@@ -39,6 +39,7 @@ public static class ActivityFeedComposer
         [WatchStatus.PlanToWatch] = "Plan to watch",
         [WatchStatus.Completed] = "Completed",
         [WatchStatus.Dropped] = "Dropped",
+        [WatchStatus.Rewatching] = "Rewatching",
     };
 
     public static ActivityFieldGroup? FieldGroupOf(ActivityChangeType changeType) => changeType switch

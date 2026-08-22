@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Season;
 
@@ -9,12 +10,27 @@ namespace AnimeTracker.Api.Services.Dashboard;
 public class MainDashboardService(
     IUserAnimeEntryRepository entryRepository,
     IEpisodeScheduleService scheduleService,
+    ICompletedEntryReopenService reopenService,
     IBroadcastLocalTimeConverter broadcastConverter) : IMainDashboardService
 {
     public async Task<MainDashboardDto> GetDashboardAsync(CancellationToken ct = default)
     {
         var entries = await entryRepository.GetAllAsync(ct);
         var now = DateTimeOffset.UtcNow;
+
+        // design.md D6: must run before the Watching/Rewatching filter below
+        // — a still-Completed entry discarded by that filter first would
+        // never be reopened, and would never reach Currently watching however
+        // often the page is opened. Not free like the other read paths: this
+        // one resolves aired counts only for the Completed-and-airing subset,
+        // in one bulk query, since nothing else here needs them.
+        var completedAiring = entries.Where(e => e.Status == WatchStatus.Completed && e.Anime.AiringStatus == "currently_airing").ToList();
+        if (completedAiring.Count > 0)
+        {
+            var airedSoFarByAnimeId = await scheduleService.EpisodesAiredAsOfAsync(completedAiring.Select(e => e.Anime).ToList(), now, ct);
+            await reopenService.ReopenAsync(completedAiring, airedSoFarByAnimeId, ct);
+        }
+
         // "Airing today" is a local-calendar concept; ResolveForDate expects a
         // local reference date, so derive today in the broadcast-local zone
         // rather than from UTC (which is off by a day near local midnight).
@@ -22,7 +38,10 @@ public class MainDashboardService(
         var currentSeasonQuarter = SeasonCalendar.GetSeasonFor(today);
 
         var currentlyWatching = new List<CurrentlyWatchingItemDto>();
-        foreach (var e in OrderCurrentlyWatching(entries.Where(e => e.Status == WatchStatus.Watching)))
+        // main-dashboard: Rewatching entries are runs in progress just like
+        // Watching ones (design.md D5), so they share this section and its
+        // ordering rather than being grouped separately.
+        foreach (var e in OrderCurrentlyWatching(entries.Where(e => e.Status is WatchStatus.Watching or WatchStatus.Rewatching)))
         {
             currentlyWatching.Add(new CurrentlyWatchingItemDto(
                 e.AnimeId,
@@ -33,7 +52,9 @@ public class MainDashboardService(
                 e.Anime.TotalEpisodes,
                 await scheduleService.EpisodesAiredAsOfAsync(e.Anime, now, ct),
                 e.Anime.AiringStatus == "currently_airing",
-                ToEta(await scheduleService.NextAiringInstantAsync(e.Anime, now, ct), now)));
+                ToEta(await scheduleService.NextAiringInstantAsync(e.Anime, now, ct), now),
+                e.Status,
+                e.Anime.AiringStatus));
         }
 
         // Resolve each show against today's local date through the shared

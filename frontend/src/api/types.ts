@@ -1,4 +1,4 @@
-export type WatchStatus = 'Watching' | 'OnHold' | 'PlanToWatch' | 'Completed' | 'Dropped'
+export type WatchStatus = 'Watching' | 'OnHold' | 'PlanToWatch' | 'Completed' | 'Dropped' | 'Rewatching'
 
 export type MalAuthStatus = {
   connected: boolean
@@ -30,6 +30,10 @@ export type UserAnimeEntryEditRequest = {
   // edited" for every other field here, so it can't also mean "clear".
   startedAt?: string | null
   completedAt?: string | null
+  // Only consulted when this same edit returns a Rewatching entry to
+  // Completed by choosing Completed explicitly (design.md D2) — omitted or
+  // false leaves the rewatch count unchanged, true increases it by one.
+  countsAsRewatch?: boolean
 }
 
 // The dropdown's "series" row (design.md decision 5) — id is the series id,
@@ -63,6 +67,15 @@ export type EntryEditorTarget = {
   animeId: number
   animeTitle: string
   totalEpisodes: number | null
+  // The anime's raw airing status (`finished_airing`/`currently_airing`/
+  // `not_yet_aired`, or null when unrecorded) — needed to decide whether
+  // Rewatching is offered (design.md D0). null also covers callers that
+  // don't have this data plumbed through yet (tasks.md 2.9).
+  airingStatus: string | null
+  // Aired-so-far episode count, null-means-unknown — paired with
+  // airingStatus so the overlay can compute hasAiredEpisodes() itself
+  // (gate-editing-on-aired-episodes design.md D7).
+  episodesAired: number | null
   entry: UserAnimeEntryDto | null
   onSaved?: (entry: UserAnimeEntryDto) => void
   onDeleted?: () => void
@@ -99,6 +112,11 @@ export type CurrentlyWatchingItemDto = {
   episodesAired: number | null
   currentlyAiring: boolean
   nextEpisode: NextEpisodeEtaDto | null
+  status: WatchStatus
+  // gate-editing-on-aired-episodes: the raw airing status — currentlyAiring
+  // alone can't distinguish finished_airing from not_yet_aired once
+  // episodesAired is unknown, and the frontend gate needs that distinction.
+  airingStatus: string | null
 }
 
 export type AiringTodayItemDto = {
@@ -229,6 +247,11 @@ export type TopAnimeItemDto = {
   totalEpisodes: number | null
   malScore: number | null
   entry: UserAnimeEntryDto | null
+  // gate-editing-on-aired-episodes: this page opens the entry editor, so it
+  // needs the same aired-episode facts as CurrentlyWatchingItemDto to gate
+  // the editor's own fields.
+  airingStatus: string | null
+  episodesAired: number | null
 }
 
 // The Top anime page's ranking-list selector. Mirrors the backend's
@@ -279,6 +302,7 @@ export type AnimeStatsDto = {
   rewatched: number
   episodes: number
   movies: number
+  rewatching: number
 }
 
 export type TopAnimeEntryDto = {

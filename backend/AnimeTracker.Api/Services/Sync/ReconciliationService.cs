@@ -63,7 +63,16 @@ public class ReconciliationService(
                 continue;
             }
 
-            if (local.Status == remote.Status && local.EpisodesWatched == remote.EpisodesWatched &&
+            // mal-write-sync: a Rewatching entry is pushed to MAL as `watching`
+            // (design.md D4), so MAL reports it back as `watching` too — treated
+            // here as matching rather than a difference, so reconciliation never
+            // demotes a rewatch back to Watching on that basis alone. Every other
+            // remote status still diffs normally, and every other field still
+            // compares exactly as it did before this status carve-out.
+            var statusMatches = local.Status == remote.Status
+                || (local.Status == WatchStatus.Rewatching && remote.Status == WatchStatus.Watching);
+
+            if (statusMatches && local.EpisodesWatched == remote.EpisodesWatched &&
                 local.MyScore == remote.MyScore && local.RewatchCount == remote.RewatchCount &&
                 local.StartedAt == remote.StartedAt && local.CompletedAt == remote.CompletedAt)
             {

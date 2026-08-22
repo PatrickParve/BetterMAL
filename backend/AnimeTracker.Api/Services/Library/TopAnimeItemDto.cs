@@ -13,4 +13,9 @@ public record TopAnimeItemDto(
     string? PictureUrl,
     int? TotalEpisodes,
     double? MalScore,
-    UserAnimeEntryDto? Entry);
+    UserAnimeEntryDto? Entry,
+    // gate-editing-on-aired-episodes: this page opens the entry editor, so it
+    // needs the same aired-episode facts as CurrentlyWatchingItemDto to gate
+    // the editor's own fields.
+    string? AiringStatus,
+    int? EpisodesAired);

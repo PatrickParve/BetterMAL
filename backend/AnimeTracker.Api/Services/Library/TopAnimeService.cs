@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Mal;
@@ -13,6 +14,7 @@ public class TopAnimeService(
     AnimeTrackerDbContext db,
     IMalClient malClient,
     ITopAnimeRepository topAnimeRepository,
+    IEpisodeScheduleService scheduleService,
     IBroadcastLocalTimeConverter broadcastConverter,
     RefreshGate refreshGate,
     ILogger<TopAnimeService> logger) : ITopAnimeService
@@ -24,6 +26,12 @@ public class TopAnimeService(
         await EnsureFreshAsync(rankingType, ct);
 
         var rows = await topAnimeRepository.GetRankingAsync(rankingType, ct);
+
+        // Resolved for the whole ranking in one bulk query rather than one
+        // per row (task 4.2) — the ranking runs up to 500 rows.
+        var airedSoFarByAnimeId = await scheduleService.EpisodesAiredAsOfAsync(
+            rows.Select(r => r.Anime).ToList(), DateTimeOffset.UtcNow, ct);
+
         return rows
             .Select(r => new TopAnimeItemDto(
                 r.Rank,
@@ -33,7 +41,9 @@ public class TopAnimeService(
                 r.Anime.PictureUrl,
                 r.Anime.TotalEpisodes,
                 r.Anime.MalScore,
-                r.Anime.UserEntry is null ? null : UserAnimeEntryDto.FromEntity(r.Anime.UserEntry)))
+                r.Anime.UserEntry is null ? null : UserAnimeEntryDto.FromEntity(r.Anime.UserEntry),
+                r.Anime.AiringStatus,
+                airedSoFarByAnimeId.TryGetValue(r.AnimeId, out var aired) ? aired : null))
             .ToList();
     }
 

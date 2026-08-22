@@ -24,6 +24,30 @@ public class EntriesController(IUserAnimeEntryEditService editService) : Control
         {
             return BadRequest(new { error = ex.Message });
         }
+        catch (CannotCompleteUnknownAiredCountException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (RewatchingNotEligibleException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (EpisodesWatchedRequiresAiredEpisodeException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (StatusRequiresAiredEpisodeException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (ScoreRequiresAiredEpisodeException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (RewatchCountRequiresAiredEpisodeException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
         catch (ArgumentOutOfRangeException ex)
         {
             return BadRequest(new { error = ex.Message });

@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { Link } from 'react-router-dom'
 import type { MyListItemDto } from '../api/types.ts'
-import { airingStatusShortLabel, isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_CLASS } from '../utils/anime.ts'
+import { airingStatusShortLabel, hasAiredEpisodes, isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_CLASS } from '../utils/anime.ts'
 import { ProgressBar } from './ProgressBar.tsx'
 import { ScoreValue } from './ScoreValue.tsx'
 
@@ -37,6 +37,9 @@ export const MyListRow = memo(function MyListRow({
 }: MyListRowProps) {
   const displayTitle = pickDisplayTitle(item.title, item.englishTitle)
   const airingLabel = showAiringBadge ? airingStatusShortLabel(item.airingStatus) : null
+  // list-editing: no progress or score control for an anime that has aired
+  // no episode — the cells stay in the row (below) so columns stay aligned.
+  const aired = hasAiredEpisodes(item.airingStatus, item.episodesAired)
 
   return (
     <li className={`my-list-row my-list-row--${STATUS_CLASS[item.entry.status]}`}>
@@ -58,33 +61,37 @@ export const MyListRow = memo(function MyListRow({
         </span>
       </Link>
       <span className="my-list-row__progress">
-        <ProgressBar
-          watched={item.entry.episodesWatched}
-          total={item.totalEpisodes}
-          onIncrement={() => onIncrement(item)}
-          onSetWatched={(value) => onSetWatched(item, value)}
-          max={item.episodesAired ?? item.totalEpisodes}
-          incrementPending={incrementPending}
-          incrementLabel={`Increment episodes watched for ${displayTitle}`}
-        />
+        {aired && (
+          <ProgressBar
+            watched={item.entry.episodesWatched}
+            total={item.totalEpisodes}
+            onIncrement={() => onIncrement(item)}
+            onSetWatched={(value) => onSetWatched(item, value)}
+            max={item.episodesAired ?? item.totalEpisodes}
+            incrementPending={incrementPending}
+            incrementLabel={`Increment episodes watched for ${displayTitle}`}
+          />
+        )}
       </span>
       <span className="my-list-row__my-score">
-        <select
-          className={`my-list-row__score-select${
-            item.entry.myScore ? ' my-list-row__score-select--mine' : ''
-          }`}
-          value={item.entry.myScore ?? 0}
-          disabled={scorePending}
-          onChange={(event) => onScoreChange(item, Number(event.target.value))}
-          aria-label={`Set your score for ${displayTitle}`}
-        >
-          <option value={0}>—</option>
-          {SCORE_OPTIONS.map((score) => (
-            <option key={score} value={score}>
-              {score}
-            </option>
-          ))}
-        </select>
+        {aired && (
+          <select
+            className={`my-list-row__score-select${
+              item.entry.myScore ? ' my-list-row__score-select--mine' : ''
+            }`}
+            value={item.entry.myScore ?? 0}
+            disabled={scorePending}
+            onChange={(event) => onScoreChange(item, Number(event.target.value))}
+            aria-label={`Set your score for ${displayTitle}`}
+          >
+            <option value={0}>—</option>
+            {SCORE_OPTIONS.map((score) => (
+              <option key={score} value={score}>
+                {score}
+              </option>
+            ))}
+          </select>
+        )}
       </span>
       <span className="my-list-row__mal-score score--mal">
         <ScoreValue value={item.malScore} completed={isScoreRevealableStatus(item.entry.status)} />

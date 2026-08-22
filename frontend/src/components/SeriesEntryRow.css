@@ -38,6 +38,9 @@
 .series-entry-row--dropped {
   border-left-color: var(--status-dropped);
 }
+.series-entry-row--rewatching {
+  border-left-color: var(--status-rewatching);
+}
 
 .series-entry-row__rank {
   width: 4ch;

@@ -18,6 +18,10 @@ function linkClassName({ isActive }: { isActive: boolean }) {
   return isActive ? 'navbar__link navbar__link--active' : 'navbar__link'
 }
 
+function settingsClassName({ isActive }: { isActive: boolean }) {
+  return isActive ? 'navbar__settings navbar__settings--active' : 'navbar__settings'
+}
+
 export function Navbar() {
   const { hidden, toggle } = useScoreVisibility()
   // Built at render, not hoisted into NAV_LINKS, so a long-lived tab open
@@ -67,7 +71,7 @@ export function Navbar() {
           <NavLink to="/profile" className={linkClassName}>
             Profile
           </NavLink>
-          <NavLink to="/settings" className="navbar__settings" aria-label="Settings">
+          <NavLink to="/settings" className={settingsClassName} aria-label="Settings">
             <GearIcon />
           </NavLink>
         </div>

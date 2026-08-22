@@ -352,7 +352,8 @@ public class ProfileService(
             TotalEntries: entries.Count,
             Rewatched: entries.Count(e => e.RewatchCount > 0),
             Episodes: episodeEligible.Sum(WatchMath.RewatchInclusiveEpisodes),
-            Movies: entries.Count(e => WatchMath.IsMovie(e.Anime) && e.EpisodesWatched > 0));
+            Movies: entries.Count(e => WatchMath.IsMovie(e.Anime) && e.EpisodesWatched > 0),
+            Rewatching: entries.Count(e => e.Status == WatchStatus.Rewatching));
     }
 
     // profile-stats "All-list episode progress" (design.md decision 7):

@@ -52,6 +52,20 @@
   color: var(--mine);
 }
 
+/* Overrides the column layout above: a checkbox reads left of its label, on
+   one row, not stretched to the form's full control width like a select or
+   date input. */
+.entry-editor__field--checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.entry-editor__field--checkbox input {
+  width: auto;
+  height: auto;
+}
+
 .entry-editor__dates {
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -87,6 +101,16 @@
   margin: 0;
   font-size: 14px;
   color: var(--text);
+}
+
+/* Explains why the status/score/rewatch controls above are restricted
+   (gate-editing-on-aired-episodes) — muted so it reads as informational,
+   not an error. */
+.entry-editor__aired-note {
+  margin: -6px 0 0;
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.75;
 }
 
 .entry-editor__error {

@@ -1,16 +1,29 @@
 import { useState, type FormEvent } from 'react'
 import { Modal } from './Modal.tsx'
 import { deleteEntry, updateEntry } from '../api/client.ts'
-import type { EntryEditorTarget, UserAnimeEntryEditRequest, WatchStatus } from '../api/types.ts'
+import type { EntryEditorTarget, UserAnimeEntryDto, UserAnimeEntryEditRequest, WatchStatus } from '../api/types.ts'
+import { hasAiredEpisodes } from '../utils/anime.ts'
 import './EntryEditorOverlay.css'
 
 const STATUS_OPTIONS: { value: WatchStatus; label: string }[] = [
   { value: 'Watching', label: 'Watching' },
+  { value: 'Rewatching', label: 'Rewatching' },
   { value: 'OnHold', label: 'On hold' },
   { value: 'PlanToWatch', label: 'Plan to watch' },
   { value: 'Completed', label: 'Completed' },
   { value: 'Dropped', label: 'Dropped' },
 ]
+
+// design.md D0: Rewatching is reachable only for an anime that has finished
+// airing, and only for an entry with durable evidence of having finished it
+// at least once — mirrors backend RewatchingEligibility so the option is
+// disabled here before a rejected save is ever attempted.
+function canEnterRewatching(entry: UserAnimeEntryDto | null, airingStatus: string | null): boolean {
+  if (!entry) return false
+  const animeFinished = airingStatus === null || airingStatus === 'finished_airing'
+  const finishedOnce = entry.completedAt !== null || entry.rewatchCount > 0 || entry.status === 'Completed'
+  return animeFinished && finishedOnce
+}
 
 type EntryEditorOverlayProps = {
   target: EntryEditorTarget
@@ -23,7 +36,7 @@ type EntryEditorOverlayProps = {
 // start/finish dates. Also offers Delete — removing the anime from my list
 // entirely — but only when editing an existing entry, not while adding one.
 export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps) {
-  const { animeId, animeTitle, totalEpisodes, entry, onSaved, onDeleted } = target
+  const { animeId, animeTitle, totalEpisodes, airingStatus, episodesAired, entry, onSaved, onDeleted } = target
   // Captured once (the parent remounts this component per target via `key`,
   // see EntryEditorContext) so the save handler can tell which fields the
   // user actually touched and send only those — a stale page open in another
@@ -41,12 +54,25 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
   const [rewatchCount, setRewatchCount] = useState(initialRewatchCount)
   const [startedAt, setStartedAt] = useState(initialStartedAt)
   const [completedAt, setCompletedAt] = useState(initialCompletedAt)
+  // list-editing: "Ending a rewatch early asks whether it counts" — defaults
+  // to not counting, since an abandoned rewatch is the situation that produces
+  // this transition (design.md D2).
+  const [countsAsRewatch, setCountsAsRewatch] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   const canComplete = totalEpisodes !== null
+  const canRewatch = canEnterRewatching(entry, airingStatus)
+  // list-editing: nothing may be tracked against an anime that has aired no
+  // episode — composes with (doesn't replace) the fill-target and rewatching
+  // eligibility checks above, so an option can be unavailable for either
+  // reason (gate-editing-on-aired-episodes design.md D2/D5).
+  const hasAired = hasAiredEpisodes(airingStatus, episodesAired)
+  // Only a Rewatching entry being ended early (choosing Completed rather than
+  // reaching the total) asks this question — never from any other status.
+  const endingRewatchEarly = initialStatus === 'Rewatching' && status === 'Completed'
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -66,6 +92,7 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
       rewatchCount: rewatchCount !== initialRewatchCount ? rewatchCount : undefined,
       startedAt: startedAt !== initialStartedAt ? startedAt || null : undefined,
       completedAt: completedAt !== initialCompletedAt ? completedAt || null : undefined,
+      countsAsRewatch: endingRewatchEarly ? countsAsRewatch : undefined,
     }
     try {
       const saved = await updateEntry(animeId, request)
@@ -128,12 +155,31 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
             <span>Status</span>
             <select value={status} onChange={(event) => setStatus(event.target.value as WatchStatus)}>
               {STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value} disabled={option.value === 'Completed' && !canComplete}>
+                <option
+                  key={option.value}
+                  value={option.value}
+                  disabled={
+                    (option.value === 'Completed' && (!canComplete || !hasAired)) ||
+                    (option.value === 'Rewatching' && (!canRewatch || !hasAired)) ||
+                    ((option.value === 'Dropped' || option.value === 'OnHold') && !hasAired)
+                  }
+                >
                   {option.label}
                 </option>
               ))}
             </select>
           </label>
+
+          {endingRewatchEarly && (
+            <label className="entry-editor__field entry-editor__field--checkbox">
+              <input
+                type="checkbox"
+                checked={countsAsRewatch}
+                onChange={(event) => setCountsAsRewatch(event.target.checked)}
+              />
+              <span>Count this as a rewatch</span>
+            </label>
+          )}
 
           <label className="entry-editor__field">
             <span>Episodes watched</span>
@@ -155,7 +201,7 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
             >
               <option value={0}>No score</option>
               {Array.from({ length: 10 }, (_, i) => i + 1).map((score) => (
-                <option key={score} value={score}>
+                <option key={score} value={score} disabled={!hasAired}>
                   {score}
                 </option>
               ))}
@@ -167,11 +213,18 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
             <input
               type="number"
               min={0}
-              max={100}
+              max={hasAired ? 100 : 0}
               value={rewatchCount}
               onChange={(event) => setRewatchCount(Number(event.target.value))}
             />
           </label>
+
+          {!hasAired && (
+            <p className="entry-editor__aired-note">
+              This anime hasn't aired an episode yet, so status, score, and rewatch count are limited until it
+              does. An existing value can still be cleared.
+            </p>
+          )}
 
           <details className="entry-editor__dates">
             <summary>Dates</summary>

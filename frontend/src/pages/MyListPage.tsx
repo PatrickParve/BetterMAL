@@ -32,11 +32,14 @@ type ScoreFilter = 'any' | 'rated' | 'unrated' | `${number}`
 // 10 down to 1, between Rated and Unrated in the select (tasks.md 4.1).
 const SCORE_FILTER_VALUES = Array.from({ length: 10 }, (_, i) => 10 - i)
 
-const GROUP_ORDER: WatchStatus[] = ['Watching', 'OnHold', 'PlanToWatch', 'Completed', 'Dropped']
+// Rewatching sits directly after Currently watching — both are runs in
+// progress (library-views spec, "My list grouped and ordered by status").
+const GROUP_ORDER: WatchStatus[] = ['Watching', 'Rewatching', 'OnHold', 'PlanToWatch', 'Completed', 'Dropped']
 
 const FILTER_TABS: { value: StatusFilter; label: string }[] = [
   { value: 'All', label: 'All' },
   { value: 'Watching', label: 'Watching' },
+  { value: 'Rewatching', label: 'Rewatching' },
   { value: 'Completed', label: 'Completed' },
   { value: 'PlanToWatch', label: 'Plan to watch' },
   { value: 'OnHold', label: 'On hold' },
@@ -322,6 +325,8 @@ export function MyListPage() {
         animeId: item.animeId,
         animeTitle: pickDisplayTitle(item.title, item.englishTitle),
         totalEpisodes: item.totalEpisodes,
+        airingStatus: item.airingStatus,
+        episodesAired: item.episodesAired,
         entry: item.entry,
         onSaved: (saved) => patchItem(setItems, item.animeId, saved),
         onDeleted: () => setItems((prev) => prev && prev.filter((i) => i.animeId !== item.animeId)),

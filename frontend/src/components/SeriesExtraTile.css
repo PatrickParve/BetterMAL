@@ -29,6 +29,9 @@
 .series-extra-tile--dropped {
   border-left-color: var(--status-dropped);
 }
+.series-extra-tile--rewatching {
+  border-left-color: var(--status-rewatching);
+}
 
 .series-extra-tile__link {
   display: flex;

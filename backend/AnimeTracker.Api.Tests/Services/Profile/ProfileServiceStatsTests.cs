@@ -127,6 +127,47 @@ public class ProfileServiceStatsTests
         Assert.Equal(Math.Round(expectedSeconds / 86400.0, 1), profile.Stats.Days);
     }
 
+    // profile-stats "Rewatching has its own place in the status breakdown"
+    // (tasks.md 5.10).
+    [Fact]
+    public async Task RewatchingIsCountedSeparatelyAndTheBreakdownStillSumsToTotalEntries()
+    {
+        using var db = CreateDb();
+        List<UserAnimeEntry> entries =
+        [
+            Entry(1, "tv", episodesWatched: 5, status: WatchStatus.Watching),
+            Entry(2, "tv", episodesWatched: 1, totalEpisodes: 12, rewatchCount: 2, status: WatchStatus.Rewatching),
+            Entry(3, "tv", episodesWatched: 3, totalEpisodes: 12, rewatchCount: 1, status: WatchStatus.Rewatching),
+            Entry(4, "tv", episodesWatched: 12, totalEpisodes: 12, status: WatchStatus.Completed),
+            Entry(5, "tv", episodesWatched: 0, status: WatchStatus.PlanToWatch),
+            Entry(6, "tv", episodesWatched: 2, status: WatchStatus.OnHold),
+            Entry(7, "tv", episodesWatched: 1, status: WatchStatus.Dropped),
+        ];
+
+        var profile = await CreateService(db, entries).GetProfileAsync();
+
+        Assert.Equal(2, profile.Stats.Rewatching);
+        Assert.Equal(1, profile.Stats.Watching);
+        Assert.Equal(1, profile.Stats.Completed);
+        var sum = profile.Stats.Watching + profile.Stats.Completed + profile.Stats.OnHold +
+                  profile.Stats.Dropped + profile.Stats.PlanToWatch + profile.Stats.Rewatching;
+        Assert.Equal(profile.Stats.TotalEntries, sum);
+    }
+
+    [Fact]
+    public async Task ARewatchInProgressContributesTheSameEpisodeFigureAsUnderThePreviousRepresentation()
+    {
+        using var db = CreateDb();
+        // "a twelve-episode series with a rewatch count of two whose episodes
+        // watched currently reads one" (design.md D7) -> 2*12 + 1 = 25.
+        List<UserAnimeEntry> entries =
+            [Entry(1, "tv", episodesWatched: 1, totalEpisodes: 12, rewatchCount: 2, status: WatchStatus.Rewatching)];
+
+        var profile = await CreateService(db, entries).GetProfileAsync();
+
+        Assert.Equal(25, profile.Stats.Episodes);
+    }
+
     private sealed class FakeUserAnimeEntryRepository(List<UserAnimeEntry> entries) : IUserAnimeEntryRepository
     {
         public Task<UserAnimeEntry?> GetByAnimeIdAsync(int animeId, CancellationToken ct = default) =>

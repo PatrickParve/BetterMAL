@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Season;
 using Microsoft.EntityFrameworkCore;
@@ -54,6 +55,8 @@ public class EpisodeScheduleRefreshBackgroundService(
         var db = services.GetRequiredService<AnimeTrackerDbContext>();
         var refreshService = services.GetRequiredService<IEpisodeScheduleRefreshService>();
         var localTimeConverter = services.GetRequiredService<IBroadcastLocalTimeConverter>();
+        var scheduleService = services.GetRequiredService<IEpisodeScheduleService>();
+        var reopenService = services.GetRequiredService<ICompletedEntryReopenService>();
 
         var state = await db.AiringRefreshStates.FirstOrDefaultAsync(ct);
         if (state is null)
@@ -98,5 +101,18 @@ public class EpisodeScheduleRefreshBackgroundService(
         var uncovered = dueRechecks.Where(id => !passCoverage.Contains(id)).ToList();
         if (uncovered.Count > 0)
             await refreshService.RefreshManyAsync(uncovered, ct);
+
+        // design.md D6 backstop: without this, a Completed entry for a show
+        // nobody opens would never have its reopening pushed to MyAnimeList,
+        // however far behind the aired count grows.
+        var completedAiring = await db.UserAnimeEntries.AsNoTracking()
+            .Include(e => e.Anime)
+            .Where(e => e.Status == WatchStatus.Completed && e.Anime.AiringStatus == "currently_airing")
+            .ToListAsync(ct);
+        if (completedAiring.Count > 0)
+        {
+            var airedSoFarByAnimeId = await scheduleService.EpisodesAiredAsOfAsync(completedAiring.Select(e => e.Anime).ToList(), now, ct);
+            await reopenService.ReopenAsync(completedAiring, airedSoFarByAnimeId, ct);
+        }
     }
 }

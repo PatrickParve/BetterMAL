@@ -20,6 +20,12 @@ public class UserAnimeEntryEditRequest
     public int? MyScore { get; set; }
     public int? RewatchCount { get; set; }
 
+    /// <summary>Only consulted when this edit returns a Rewatching entry to
+    /// Completed by choosing Completed explicitly (not by reaching the total
+    /// episode count) — see design.md D2. Null/false leaves the rewatch count
+    /// unchanged; true increases it by one.</summary>
+    public bool? CountsAsRewatch { get; set; }
+
     private DateOnly? _startedAt;
     public DateOnly? StartedAt
     {

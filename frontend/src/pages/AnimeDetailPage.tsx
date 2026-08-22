@@ -17,6 +17,7 @@ import {
 import { useLandscapePicture } from "../hooks/useLandscapePicture.ts";
 import { usePageData } from "../hooks/usePageData.ts";
 import {
+  hasAiredEpisodes,
   isScoreRevealableStatus,
   mediaTypeLabel,
   pickDisplayTitle,
@@ -221,6 +222,8 @@ export function AnimeDetailPage() {
       animeId: detail.animeId,
       animeTitle: pickDisplayTitle(detail.title, detail.englishTitle),
       totalEpisodes: detail.totalEpisodes,
+      airingStatus: detail.airingStatus,
+      episodesAired: detail.episodesAired,
       entry: detail.entry,
       onSaved: (saved) =>
         setDetail((prev) => (prev ? { ...prev, entry: saved } : prev)),
@@ -268,7 +271,8 @@ export function AnimeDetailPage() {
   const hideAddToWatching =
     detail.entry?.status === "Watching" ||
     detail.entry?.status === "Completed" ||
-    detail.entry?.status === "Dropped";
+    detail.entry?.status === "Dropped" ||
+    detail.entry?.status === "Rewatching";
 
   return (
     <div className="anime-detail-page">
@@ -351,16 +355,18 @@ export function AnimeDetailPage() {
           )}
 
           <div className="anime-detail-page__progress-row">
-            <ProgressBar
-              watched={detail.entry?.episodesWatched ?? 0}
-              total={detail.totalEpisodes}
-              aired={detail.airingStatus === "currently_airing" ? detail.episodesAired : null}
-              onIncrement={detail.entry ? handleIncrement : undefined}
-              onSetWatched={detail.entry ? handleSetWatched : undefined}
-              max={detail.episodesAired ?? detail.totalEpisodes}
-              incrementPending={incrementPending}
-              incrementLabel={`Increment episodes watched for ${pickDisplayTitle(detail.title, detail.englishTitle)}`}
-            />
+            {hasAiredEpisodes(detail.airingStatus, detail.episodesAired) && (
+              <ProgressBar
+                watched={detail.entry?.episodesWatched ?? 0}
+                total={detail.totalEpisodes}
+                aired={detail.airingStatus === "currently_airing" ? detail.episodesAired : null}
+                onIncrement={detail.entry ? handleIncrement : undefined}
+                onSetWatched={detail.entry ? handleSetWatched : undefined}
+                max={detail.episodesAired ?? detail.totalEpisodes}
+                incrementPending={incrementPending}
+                incrementLabel={`Increment episodes watched for ${pickDisplayTitle(detail.title, detail.englishTitle)}`}
+              />
+            )}
             <span className="anime-detail-page__status">
               {detail.entry
                 ? STATUS_LABELS[detail.entry.status]
