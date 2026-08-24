@@ -74,26 +74,109 @@ The aired-episode count SHALL come from the anime's stored per-episode airing ro
 - **WHEN** I open the detail page of an anime that has finished airing or has not yet aired
 - **THEN** the Status field reads "Finished airing" or "Not yet aired" respectively, with no episode counts appended
 
+### Requirement: The two score boxes share one size
+
+The detail page's two score boxes — the MAL box (MAL score, rank, popularity) and my box (my score, and the rewatch count and finish date when it has them) — SHALL be drawn at one shared width: that of whichever of the two needs more room for its own content. Neither box SHALL be narrower than the other, whatever it happens to hold.
+
+That shared width SHALL be the wider box's natural content width, so the pair stays sized to its content and is not stretched to fill the main column, per "Single anime detail layout". The two boxes SHALL also keep the shared height they have today, so the pair reads as one matched figure block beside the title.
+
+Whichever box is wider SHALL be allowed to vary with the anime: my box grows as it gains a rewatch-count line and a finish-date line, and it SHALL take the pair with it when it becomes the wider of the two.
+
+Where my box is not shown at all — no score of my own — the MAL box SHALL render at its own content width, exactly as it does today.
+
+Where the viewport is narrow enough that the two boxes stack, they SHALL keep one shared width in that stacked arrangement too.
+
+#### Scenario: My box is the wider one
+
+- **WHEN** the detail page shows my score, a rewatch count, and a finish date beside the MAL box
+- **THEN** both boxes are drawn at the width my box needs, and neither is narrower than the other
+
+#### Scenario: The MAL box is the wider one
+
+- **WHEN** my box holds my score alone and the MAL box's rank and popularity lines are longer
+- **THEN** both boxes are drawn at the width the MAL box needs
+
+#### Scenario: The pair stays content-sized
+
+- **WHEN** either box is the wider one
+- **THEN** the pair still occupies only the width its content needs, rather than each box taking half the main column
+
+#### Scenario: The boxes stay level
+
+- **WHEN** the two boxes hold a different number of lines
+- **THEN** they are drawn at the same height as well as the same width
+
+#### Scenario: Only the MAL box is shown
+
+- **WHEN** the anime has no score of mine and only the MAL box is drawn
+- **THEN** that box is sized to its own content, unchanged from today
+
+#### Scenario: Stacked on a narrow viewport
+
+- **WHEN** the viewport is narrow enough that the two boxes stack
+- **THEN** both boxes are still drawn at one shared width
+
+### Requirement: Portrait artwork is shown at its own proportions on the detail page
+An anime whose picture is portrait — its intrinsic height greater than or equal to its intrinsic width — SHALL have that picture rendered at its own proportions on the detail page. The whole image SHALL be visible: no part of it SHALL be cut off to make it fill a box of a fixed height.
+
+The picture SHALL keep the width the poster box already has and take whatever height its own proportions give it at that width. A picture whose proportions are taller than the poster box's SHALL therefore be rendered taller than the box rather than centre-cropped to it, and a picture whose proportions are shorter SHALL be rendered shorter rather than cropped to fill it. No maximum height SHALL be imposed: an unusually tall poster SHALL be shown whole.
+
+Everything beside the picture SHALL be unaffected: the page's two-column body, the score, info, and synopsis boxes to its right, and the width of the column the picture sits in SHALL all be exactly as they are today. Only the picture's own height, and the position of the progress controls stacked beneath it in the same column, SHALL follow from the artwork.
+
+Because a picture's proportions are not known until the image itself has loaded, the page SHALL reserve the existing portrait poster box's height until then, so the column does not collapse and then expand as the artwork arrives. The page SHALL NOT request, store, or wait on any additional data to make this decision.
+
+The placeholder shown when an anime has no picture at all SHALL keep the existing fixed poster box, since it has no artwork whose proportions could be adopted.
+
+#### Scenario: A taller-than-usual poster is not cropped
+- **WHEN** I open the detail page of an anime whose poster is taller in proportion than the page's poster box — for example a season whose key art is unusually tall
+- **THEN** the whole poster is shown, as wide as the poster box has always been and taller than it, rather than a centre-cropped slice of it
+
+#### Scenario: An ordinary poster is unchanged in width
+- **WHEN** I open the detail page of an anime whose poster is close to the poster box's proportions
+- **THEN** it is drawn at the same width it always has been, with its own height, and looks as it did before
+
+#### Scenario: A shorter poster is not stretched or cropped
+- **WHEN** I open the detail page of an anime whose poster is shorter in proportion than the poster box
+- **THEN** it is shown whole at its own height rather than being cropped to fill a taller box
+
+#### Scenario: The page beside the picture does not move
+- **WHEN** I open the detail page of an anime with an unusually tall poster
+- **THEN** the score, info, and synopsis boxes beside it sit exactly where they do for any other anime, and the column holding the picture is the same width
+
+#### Scenario: The column does not collapse while the image loads
+- **WHEN** I open a detail page and the picture has not finished loading
+- **THEN** the column reserves the poster box's usual height, and the content beneath the picture does not jump when the image arrives
+
+#### Scenario: A missing picture keeps the portrait placeholder
+- **WHEN** I open the detail page of an anime that has no picture
+- **THEN** the placeholder occupies the fixed portrait poster box as it does today
+
 ### Requirement: Landscape artwork is shown whole on the detail page
 An anime whose picture is landscape — its intrinsic width greater than its intrinsic height — SHALL have that picture rendered at its own proportions on the detail page rather than cropped to the page's portrait poster box. The whole image SHALL be visible: no part of it SHALL be cut off to make it fill a taller box.
 
-The picture SHALL keep the width the poster box already has, taking whatever height its own proportions give it at that width, so the page's two-column body, the controls beneath the picture, and every box beside it keep their existing positions and widths. Only the picture's own height SHALL differ from the portrait case.
+Landscape artwork SHALL additionally be shown **wider** than the portrait poster box: the column holding it SHALL widen to a size that lets a wide, short image read as the page's subject, and the picture SHALL take that width, with whatever height its own proportions give it there. This widening is what distinguishes landscape artwork from portrait artwork, which keeps the poster box's width (see "Portrait artwork is shown at its own proportions on the detail page").
 
-This treatment SHALL apply only to landscape artwork. A portrait picture, a square picture, and the placeholder shown when an anime has no picture at all SHALL keep the existing poster box unchanged, since that box already matches portrait artwork's proportions.
+The controls beneath the picture SHALL follow the widened column, and every box beside it SHALL keep its existing position and width.
 
 Because a picture's proportions are not known until the image itself has loaded, the page SHALL render the existing portrait box until then and adopt the landscape treatment once the artwork is known to be landscape. The page SHALL NOT request, store, or wait on any additional data to make this decision.
+
+The placeholder shown when an anime has no picture at all SHALL keep the existing portrait poster box, since there is no artwork to measure.
 
 #### Scenario: A landscape picture is not cropped
 - **WHEN** I open the detail page of an anime whose picture is wider than it is tall
 - **THEN** the whole picture is shown at its own proportions — a wide, shorter image — rather than a centre-cropped portrait slice of it
 
-#### Scenario: The page around a landscape picture is unchanged
+#### Scenario: Landscape artwork is shown wider than a poster
 - **WHEN** I open that same detail page
-- **THEN** the picture is as wide as the poster box has always been, and the progress controls beneath it and the score, info, and synopsis boxes beside it sit exactly where they do for any other anime
+- **THEN** the picture and the column holding it are wider than the portrait poster box, and the progress controls beneath the picture span that widened column
 
-#### Scenario: Portrait artwork is untouched
+#### Scenario: The boxes beside a landscape picture are unchanged
+- **WHEN** I open that same detail page
+- **THEN** the score, info, and synopsis boxes beside the picture sit exactly where they do for any other anime
+
+#### Scenario: Portrait artwork is not widened
 - **WHEN** I open the detail page of an anime whose picture is taller than it is wide
-- **THEN** its picture fills the same poster box it does today, unchanged
+- **THEN** its picture is drawn at the poster box's width, not the wider landscape width, and takes its own height there
 
 #### Scenario: A missing picture keeps the portrait placeholder
 - **WHEN** I open the detail page of an anime that has no picture

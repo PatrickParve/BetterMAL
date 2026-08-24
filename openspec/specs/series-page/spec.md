@@ -219,7 +219,21 @@ The series page SHALL show the root entry's picture, the series title, a status 
 
 The header SHALL be the page's hero rather than a thumbnail strip: the picture SHALL be rendered large enough to read as the page's subject, and the title, status pill, personal badge, year span, external links, score averages, and main-line progress SHALL all sit inside that one block, so the series' summary is read in one place instead of down a column of separate panels.
 
-The status pill SHALL read `Ongoing` when any member is currently airing **or** when a member has not yet aired, `Upcoming` when no member has finished airing and at least one has not yet aired, and `Finished` otherwise. `Finished` SHALL therefore be reserved for a series with nothing left to come: a series whose aired members have all finished but which has an announced, not-yet-aired member SHALL read `Ongoing`, not `Finished`. The pill SHALL have no `Finished · sequel upcoming` state.
+The status pill SHALL take one of four values, chosen by this precedence:
+
+1. `Airing` — a **main-line** entry of the series is currently airing.
+2. `Ongoing` — no main-line entry is currently airing, and some member of the series is currently airing.
+3. `Upcoming` — no member has finished airing and at least one has not yet aired.
+4. `Ongoing` — some member has not yet aired.
+5. `Finished` — otherwise.
+
+`Airing` SHALL therefore be reserved for a series with something of its main line on the air right now, and `Ongoing` for a series with nothing of its main line on the air but something still to come — either an announced, not-yet-aired member, or a member outside the main line that is currently airing. A series whose main line has finished but whose OVA or special is currently broadcasting SHALL read `Ongoing`, not `Airing` and not `Finished`.
+
+`Finished` SHALL continue to be reserved for a series with nothing left to come: a series whose aired members have all finished but which has an announced, not-yet-aired member SHALL read `Ongoing`, not `Finished`. The pill SHALL have no `Finished · sequel upcoming` state.
+
+The four values SHALL be visually distinguishable from one another, each carrying its own colour rather than two of them sharing one. `Airing` SHALL carry the same colour this page already uses to mark an entry as on the air now, so the header pill and the timeline's on-air marking agree.
+
+The progress bar and progress readout beneath the header SHALL treat `Airing` exactly as they treat `Ongoing`: both values SHALL select the broadcast progress bar and show the aired-episode figure, since both describe a series that is still running.
 
 Beside the status pill the page SHALL show a personal badge describing where I stand in the main line, chosen by this precedence:
 
@@ -234,17 +248,41 @@ A main line consisting of a single still-running entry — a long-running show t
 
 When a currently-airing main-line entry's broadcast episode count is unknown, the page SHALL show no badge rather than claiming `Caught up` or inventing a behind count, since it cannot tell whether I am current.
 
-#### Scenario: Ongoing series
-- **WHEN** I open a series whose latest season is currently airing
-- **THEN** the pill reads "Ongoing"
+#### Scenario: A series with a season on the air
+- **WHEN** I open a series whose latest main-line season is currently airing
+- **THEN** the pill reads "Airing"
+
+#### Scenario: Only an extra is on the air
+- **WHEN** every main-line entry of a series has finished airing and one of its OVAs is currently airing
+- **THEN** the pill reads "Ongoing", not "Airing" and not "Finished"
 
 #### Scenario: A series with an announced sequel is ongoing
 - **WHEN** every aired member of a series has finished but one member has not yet aired
 - **THEN** the pill reads "Ongoing"
 
+#### Scenario: A main-line season on the air outranks an announced sequel
+- **WHEN** one main-line season of a series is currently airing and a further season has been announced but has not aired
+- **THEN** the pill reads "Airing"
+
+#### Scenario: A first season airing before anything has finished
+- **WHEN** a series' only aired member is a main-line entry that is currently airing, and no member has finished airing
+- **THEN** the pill reads "Airing", not "Upcoming"
+
 #### Scenario: Finished means nothing is left to come
 - **WHEN** every member of a series has finished airing and no member is unaired
 - **THEN** the pill reads "Finished"
+
+#### Scenario: Nothing has aired yet
+- **WHEN** no member of a series has finished airing, none is currently airing, and at least one has not yet aired
+- **THEN** the pill reads "Upcoming"
+
+#### Scenario: Airing and Ongoing are told apart at a glance
+- **WHEN** I compare a series reading "Airing" with one reading "Ongoing"
+- **THEN** the two pills carry different colours, and the "Airing" pill carries the same colour the page's timeline uses to mark an entry as on the air now
+
+#### Scenario: An airing series keeps the broadcast progress bar
+- **WHEN** I open a series whose pill reads "Airing"
+- **THEN** the header's progress bar shows broadcast progress behind my watched progress and the readout states the aired-episode figure, exactly as it does for an "Ongoing" series
 
 #### Scenario: Year span
 - **WHEN** a series' earliest entry aired in 2013 and its latest in 2023
@@ -492,6 +530,53 @@ An ordering that fails to save SHALL leave the page showing the order that is ac
 - **WHEN** I reorder my favourites and the save fails
 - **THEN** the page returns to the previously stored order
 
+### Requirement: A More group's heading opens that group in full
+
+Each More group's heading SHALL be the control that opens that group, with collapse as its off state. Activating a heading SHALL show **every** extra in that group — including the extras not in my list — unless the group is already showing every one of them, in which case it SHALL collapse the group so that none of its tiles is rendered.
+
+Opening a group this way SHALL exempt that group, and only that group, from the "in my list" filter: every other group SHALL keep showing exactly what it was showing. An exempted group SHALL stay exempt until the filter is turned back on.
+
+While the "in my list" filter is off, every group is already showing everything, so a heading SHALL simply expand and collapse its group.
+
+The "in my list" control SHALL report itself as **on** only while the filter is in force across every group — that is, while it is on and no group has been opened in full. Opening any group in full SHALL therefore make that control read as off, so the section never reports itself as filtered while showing a group whole.
+
+Activating the "in my list" control while it reads as off SHALL turn the filter on, drop every group's exemption, and expand every group, returning the section to the state a freshly opened series page is in. Activating it while it reads as on SHALL show every extra, as it does today.
+
+#### Scenario: Opening a group that holds nothing of mine
+
+- **WHEN** the filter is on, a group holds seven extras of which none is in my list, and I activate that group's heading
+- **THEN** all seven of its tiles are shown, every other group keeps showing only my own extras, and the "in my list" control now reads as off
+
+#### Scenario: The heading collapses a group it has opened
+
+- **WHEN** I activate the heading of a group that is showing all of its extras
+- **THEN** that group renders no tiles at all
+
+#### Scenario: Opening a group that holds some of mine
+
+- **WHEN** the filter is on, a group holds six extras of which three are in my list, and I activate that group's heading
+- **THEN** all six of its tiles are shown, rather than the three the filter was showing
+
+#### Scenario: Opening one group leaves the others alone
+
+- **WHEN** I open one group in full while the filter is on
+- **THEN** every other group still shows only the extras in my list, each with its own hidden-count control if it has one
+
+#### Scenario: Turning the filter back on re-filters everything
+
+- **WHEN** a group has been opened in full and I activate the "in my list" control, which reads as off
+- **THEN** every group is expanded and showing only the extras in my list, and the control reads as on again
+
+#### Scenario: The heading is a plain toggle while the filter is off
+
+- **WHEN** the "in my list" filter is off and I activate a group's heading twice
+- **THEN** that group collapses and then shows all of its extras again
+
+#### Scenario: A collapsed group offers no hidden-count control
+
+- **WHEN** a group is collapsed
+- **THEN** it shows its heading and entry count alone, with no control naming how many tiles are hidden
+
 ### Requirement: Main series and More sections
 The main line's presentation SHALL be governed by the Series timeline ribbon requirement, not by this one; this requirement governs only the More section, where extras SHALL be presented as poster tiles grouped by media type, so the extras read as a different kind of thing from the chronological main line.
 
@@ -501,15 +586,15 @@ Each of a tile's secondary text lines — the media type/year/episode count line
 
 Each More group SHALL show its entry count in its heading.
 
-The More section SHALL offer two controls: an "in my list" filter and an expand/collapse-all control. Which extras are visible SHALL be governed by those controls alone — the section SHALL NOT force any extra to stay visible on the user's behalf, whatever its status or progress, and SHALL NOT vary its initial state with how many extras the series has.
+The More section SHALL offer two section-wide controls: an "in my list" filter and an expand/collapse-all control. Which extras are visible SHALL be governed by those two controls and the group headings alone — the section SHALL NOT force any extra to stay visible on the user's behalf, whatever its status or progress, and SHALL NOT vary its initial state with how many extras the series has.
 
-The "in my list" filter SHALL be on when a series page is opened: every group renders expanded, showing only the extras that are in my list — whatever their status: Watching, Completed, On hold, Plan to watch, or Dropped alike — and hiding every extra that is not in my list. It SHALL be a two-state control that reports which state it is in. Turning it on SHALL restore that filtered view; turning it off SHALL show every extra.
+The "in my list" filter SHALL be on when a series page is opened: every group renders expanded, showing only the extras that are in my list — whatever their status: Watching, Completed, On hold, Plan to watch, or Dropped alike — and hiding every extra that is not in my list. It SHALL be a two-state control that reports which state it is in, per "A More group's heading opens that group in full". Turning it on SHALL restore that filtered view across every group; turning it off SHALL show every extra.
 
 The expand/collapse-all control SHALL read "Expand" while anything is hidden — whether by the filter, by a collapsed group, or by both — and activating it SHALL show every extra of every group, turning the filter off. Once every extra is shown it SHALL read "Collapse", and activating it SHALL collapse every group so that no tile is rendered at all, including the extras in my list. It SHALL read "Expand all"/"Collapse all" when the series has more than one More group, and "Expand"/"Collapse" without the word "all" when it has exactly one group, since "all" is meaningless applied to a single category.
 
 Both controls SHALL always be offered while the series has extras, whatever my statuses across them.
 
-Each More group SHALL additionally be collapsible on its own, and a collapsed group SHALL NOT render its tiles, so a franchise with many extras cannot make the page arbitrarily long. A group showing fewer tiles than its entry count SHALL offer a control naming how many are hidden, which reveals that group's remaining tiles without changing what any other group shows.
+Each More group SHALL additionally be collapsible on its own from its heading, per "A More group's heading opens that group in full", and a collapsed group SHALL NOT render its tiles, so a franchise with many extras cannot make the page arbitrarily long. A group that is showing at least one tile while the filter hides the rest SHALL offer a control naming how many are hidden, which reveals that group's remaining tiles without changing what any other group shows. A group showing no tiles at all — because it is collapsed, or because nothing in it is in my list — SHALL NOT offer that control: its heading opens it, and its entry count is already in the heading.
 
 An edit saved from a tile SHALL update it in place without reloading the page.
 
@@ -543,10 +628,10 @@ An edit saved from a tile SHALL update it in place without reloading the page.
 
 #### Scenario: A group with nothing of mine in it
 - **WHEN** the filter is on and a group holds no extras that are in my list
-- **THEN** that group shows its heading and entry count with no tiles, and offers a control naming how many are hidden
+- **THEN** that group shows its heading and entry count with no tiles and no hidden-count control, and its heading opens it in full
 
 #### Scenario: Revealing one group's hidden extras
-- **WHEN** I activate that group's hidden-count control
+- **WHEN** the filter is on, a group is showing the extras of mine it holds while hiding others, and I activate that group's hidden-count control
 - **THEN** that group shows all of its tiles while every other group keeps showing only my own extras
 
 #### Scenario: Controls are offered whatever my statuses
