@@ -18,4 +18,14 @@ public interface ISeasonBrowseService
     /// <summary>The furthest season navigable from the current one — see
     /// SeasonHorizon.Resolve. Repository-only read, never calls MAL.</summary>
     Task<SeasonBoundsDto> GetBoundsAsync(CancellationToken ct = default);
+
+    /// <summary>Repository-only read of a year — the union of its four
+    /// seasons' listings, sorted, filtered, and paged as one. Never calls
+    /// MAL.</summary>
+    Task<YearPageDto> GetYearPageAsync(int year, string sortKey, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default);
+
+    /// <summary>Refreshes a year's four seasons from MAL, sequentially and
+    /// subject to each season's own once-per-day/single-flight rules (design
+    /// D2), and folds their four outcomes into one.</summary>
+    Task<YearRefreshResultDto> RefreshYearAsync(int year, CancellationToken ct = default);
 }

@@ -9,6 +9,7 @@ import { PageStateProvider } from './state/PageStateContext.tsx'
 import { useScrollRestoration } from './hooks/useScrollRestoration.ts'
 import { HomePage } from './pages/HomePage.tsx'
 import { SeasonPage } from './pages/SeasonPage.tsx'
+import { YearPage } from './pages/YearPage.tsx'
 import { TopAnimePage } from './pages/TopAnimePage.tsx'
 import { AiringPage } from './pages/AiringPage.tsx'
 import { MyListPage } from './pages/MyListPage.tsx'
@@ -36,6 +37,7 @@ export function AppShell() {
                 <Routes>
                   <Route path="/" element={<HomePage />} />
                   <Route path="/season" element={<SeasonPage />} />
+                  <Route path="/year" element={<YearPage />} />
                   <Route path="/top" element={<TopAnimePage />} />
                   <Route path="/airing" element={<AiringPage />} />
                   <Route path="/my-list" element={<MyListPage />} />

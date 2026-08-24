@@ -34,3 +34,11 @@ public record SeasonRefreshResultDto(SeasonRefreshOutcome Outcome);
 /// SeasonHorizon.Resolve for how it's computed. Never calls MAL; a pure cache
 /// read like SeasonPageDto.</summary>
 public record SeasonBoundsDto(int LatestYear, string LatestSeason);
+
+// LastFetchedAt is the most recent of the year's four season stamps (null
+// only when no season of the year has ever been fetched) — the client's
+// never-cached loading state keys off this exactly as SeasonPageDto's does
+// (design D5/D4's "four terminal states").
+public record YearPageDto(int Year, List<AnimeBrowseItemDto> Items, int Offset, int Limit, int TotalCount, DateTimeOffset? LastFetchedAt, bool HasListing);
+
+public record YearRefreshResultDto(SeasonRefreshOutcome Outcome);

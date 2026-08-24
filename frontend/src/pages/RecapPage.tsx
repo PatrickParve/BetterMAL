@@ -452,6 +452,21 @@ export function RecapPage() {
     )
   }
 
+  // The year-level counterpart of renderSeasonPageLink above (design D6) —
+  // same markup, same height, same hover/focus treatment, just the year
+  // colour family and a /year target. Mutually exclusive with it by mode, so
+  // a multi-year recap offers neither and the control row keeps its shape.
+  function renderYearPageLink() {
+    if (mode !== 'yearly') return null
+    return (
+      <Link to={`/year?year=${startYear}`} className="recap-page__season-button family--year">
+        <CalendarIcon />
+        Browse the year
+        <span aria-hidden="true">&rsaquo;</span>
+      </Link>
+    )
+  }
+
   function renderFilterToggle() {
     if (mode === 'season') return null
     const watchedDisabled = displayedRecap ? displayedRecap.watchedCount === 0 : false
@@ -900,6 +915,7 @@ export function RecapPage() {
         {renderPeriodControls()}
         {renderFilterToggle()}
         {renderSeasonPageLink()}
+        {renderYearPageLink()}
       </div>
 
       {loading && !displayedRecap && <p className="recap-page__loading">Loading&hellip;</p>}

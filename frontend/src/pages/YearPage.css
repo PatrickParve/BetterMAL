@@ -1,0 +1,188 @@
+.year-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Three-zone header: title | nav + quick-jump (centered) | sort + filter
+   (right-aligned) — mirrors SeasonPage.css so the two pages are visually
+   identical below the header. */
+.year-page__header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+}
+
+.year-page__title {
+  margin: 0;
+  grid-column: 1;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+
+.year-page__center {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.year-page__controls {
+  grid-column: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+@media (max-width: 1024px) {
+  .year-page__header {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .year-page__center,
+  .year-page__controls {
+    justify-content: center;
+  }
+}
+
+.year-page__nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.year-page__nav button {
+  font: inherit;
+  font-size: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.year-page__nav button:hover:not(:disabled) {
+  color: var(--text-h);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+/* :not(:disabled) on the hover rule above already stops the accent
+   highlight from applying on hover — this rule is what actually greys the
+   button out, at rest and while hovered alike. */
+.year-page__nav button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Relative anchor for the absolutely-positioned "Updating…" indicator, so
+   its appearance never reflows the header. */
+.year-page__label-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.year-page__label {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-h);
+  min-width: 60px;
+  display: block;
+  text-align: center;
+}
+
+.year-page__updating {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.year-page__jump {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.year-page__sort {
+  font: inherit;
+  font-size: 14px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.year-page__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text);
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.year-page__empty {
+  padding: 48px 0;
+  text-align: center;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+/* Fixed 6-up grid rather than auto-fill/minmax — see SeasonPage.css for why
+   (sub-pixel container-width differences flip the track count between 5 and
+   6, ballooning card size depending on monitor setup). */
+.year-page__grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 1024px) {
+  .year-page__grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 16px;
+  }
+}
+
+.year-page__divider {
+  grid-column: 1 / -1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+  padding: 8px 0 4px;
+  border-top: 1px solid var(--border);
+}
+
+.year-page__sentinel {
+  height: 1px;
+}
+
+.year-page__loading {
+  text-align: center;
+  color: var(--text);
+  opacity: 0.75;
+  font-size: 14px;
+  padding: 12px 0;
+}

@@ -39,14 +39,19 @@ const REFRESH_DEBOUNCE_MS = 400
 // Earliest year selectable in the quick-jump dropdown — anime predate this,
 // but a bounded range keeps the <select> from growing unbounded. The
 // previous-season arrow is floored at the same point (winter of this year)
-// so it can never step past what the dropdown itself offers.
-const EARLIEST_YEAR = 1989
+// so it can never step past what the dropdown itself offers. Exported so the
+// Year page floors its own previous-year arrow and dropdown at the same
+// point (tasks.md 5.7) rather than risking a second value drifting from
+// this one.
+export const EARLIEST_YEAR = 1989
 
 // The client-computed default ceiling, used until GET /api/season/bounds
 // resolves (task 7.1) — mirrors the backend's SeasonHorizon.FutureSeasonWindow,
 // MAL's published forward window as probed 2026-08-18 (design.md Context):
-// current season +2 returned 200, +3 returned 404.
-const FUTURE_SEASON_WINDOW = 2
+// current season +2 returned 200, +3 returned 404. Exported so the Year page
+// seeds its own default ceiling from the same window (add-year-browser
+// design D3) rather than a second value that could drift from this one.
+export const FUTURE_SEASON_WINDOW = 2
 
 function currentSeasonTarget(): { year: number; season: SeasonName } {
   const now = new Date()

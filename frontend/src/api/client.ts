@@ -32,6 +32,8 @@ import type {
   TopSeriesSectionDto,
   UserAnimeEntryDto,
   UserAnimeEntryEditRequest,
+  YearPageDto,
+  YearRefreshResultDto,
 } from './types.ts'
 import { reportReachable, reportUnreachable } from './connectionStatus.ts'
 
@@ -173,6 +175,32 @@ export function refreshSeason(year: number, season: string): Promise<SeasonRefre
 
 export function getSeasonBounds(): Promise<SeasonBoundsDto> {
   return fetchJson<SeasonBoundsDto>('/api/season/bounds')
+}
+
+export function getYearPage(
+  year: number,
+  params: {
+    sort: string
+    includeMyList: boolean
+    hideHentai: boolean
+    types?: string[]
+    offset: number
+    limit: number
+  },
+): Promise<YearPageDto> {
+  const query = new URLSearchParams({
+    sort: params.sort,
+    includeMyList: String(params.includeMyList),
+    hideHentai: String(params.hideHentai),
+    offset: String(params.offset),
+    limit: String(params.limit),
+  })
+  if (params.types && params.types.length > 0) query.set('type', params.types.join(','))
+  return fetchJson<YearPageDto>(`/api/year/${year}?${query.toString()}`)
+}
+
+export function refreshYear(year: number): Promise<YearRefreshResultDto> {
+  return fetchJson<YearRefreshResultDto>(`/api/year/${year}/refresh`, { method: 'POST' })
 }
 
 export function getMyList(): Promise<MyListItemDto[]> {

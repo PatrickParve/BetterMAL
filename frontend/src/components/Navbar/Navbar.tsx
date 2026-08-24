@@ -8,11 +8,12 @@ const NAV_LINKS_BEFORE_RECAP: { to: string; label: string; end?: boolean }[] = [
   { to: '/my-list', label: 'My List' },
 ]
 
-const NAV_LINKS_AFTER_RECAP: { to: string; label: string; end?: boolean }[] = [
+const NAV_LINKS_BETWEEN_RECAP_AND_SEASON: { to: string; label: string; end?: boolean }[] = [
   { to: '/top', label: 'Top' },
   { to: '/season', label: 'Season' },
-  { to: '/airing', label: 'Airing' },
 ]
+
+const NAV_LINKS_AFTER_YEAR: { to: string; label: string; end?: boolean }[] = [{ to: '/airing', label: 'Airing' }]
 
 function linkClassName({ isActive }: { isActive: boolean }) {
   return isActive ? 'navbar__link navbar__link--active' : 'navbar__link'
@@ -29,6 +30,9 @@ export function Navbar() {
   // NavLink's active match compares pathname only, so this is marked active
   // on /recap whatever period is actually showing.
   const recapLink = `/recap?mode=yearly&year=${new Date().getFullYear()}&filter=aired`
+  // Same reasoning as recapLink above — built at render so the Year link
+  // always opens the current year, even in a tab left open across New Year.
+  const yearLink = `/year?year=${new Date().getFullYear()}`
 
   return (
     <header className="navbar">
@@ -41,7 +45,15 @@ export function Navbar() {
         <NavLink to={recapLink} className={linkClassName}>
           Recap
         </NavLink>
-        {NAV_LINKS_AFTER_RECAP.map((link) => (
+        {NAV_LINKS_BETWEEN_RECAP_AND_SEASON.map((link) => (
+          <NavLink key={link.to} to={link.to} end={link.end} className={linkClassName}>
+            {link.label}
+          </NavLink>
+        ))}
+        <NavLink to={yearLink} className={linkClassName}>
+          Year
+        </NavLink>
+        {NAV_LINKS_AFTER_YEAR.map((link) => (
           <NavLink key={link.to} to={link.to} end={link.end} className={linkClassName}>
             {link.label}
           </NavLink>

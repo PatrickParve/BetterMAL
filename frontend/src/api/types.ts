@@ -204,6 +204,20 @@ export type SeasonBoundsDto = {
   latestSeason: string
 }
 
+export type YearPageDto = {
+  year: number
+  items: AnimeBrowseItemDto[]
+  offset: number
+  limit: number
+  totalCount: number
+  lastFetchedAt: string | null
+  hasListing: boolean
+}
+
+export type YearRefreshResultDto = {
+  outcome: 'fetched' | 'notListed' | 'skipped' | 'failed'
+}
+
 // The results page's series row — separate shape from SeriesSearchResult
 // (no `kind`) since it rides in its own `series` array rather than a
 // discriminated `items` union (design.md decision 5).

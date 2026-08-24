@@ -28,8 +28,21 @@ public interface ISeasonRepository
     /// so a type filter would make a genuinely-listed season look unlisted.</summary>
     Task<bool> HasListingAsync(int year, string season, CancellationToken ct = default);
 
+    /// <summary>Point-set form of <see cref="HasListingAsync"/> — a year is
+    /// passed as its four (year, season) points, and answers "does any of
+    /// them have a cached listing row".</summary>
+    Task<bool> HasListingAsync(IReadOnlyCollection<(int Year, string Season)> points, CancellationToken ct = default);
+
     Task<(List<SeasonAnimeItem> Items, int TotalCount)> GetPageAsync(
         int year, string season, SeasonSortKey sort, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default);
+
+    /// <summary>Point-set form of <see cref="GetPageAsync(int,string,SeasonSortKey,bool,bool,IReadOnlyCollection{string}?,int,int,CancellationToken)"/> —
+    /// a year is passed as its four (year, season) points. The ordering,
+    /// filtering, counting, and paging rules are identical whatever the point
+    /// count: the season endpoint passes one point, the year endpoint passes
+    /// four, and both read the same query.</summary>
+    Task<(List<SeasonAnimeItem> Items, int TotalCount)> GetPageAsync(
+        IReadOnlyCollection<(int Year, string Season)> points, SeasonSortKey sort, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default);
 
     /// <summary>The horizon resolver's inputs in one round trip, no MAL call:
     /// for each requested (year, season) point, its fetch timestamp and

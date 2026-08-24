@@ -17,6 +17,10 @@ public class SeasonBrowseService(
     RefreshGate refreshGate,
     ILogger<SeasonBrowseService> logger) : ISeasonBrowseService
 {
+    // Calendar order, not MAL/DB order — RefreshYearAsync walks the year's
+    // four seasons in this order (design D2).
+    private static readonly string[] SeasonsInYearOrder = ["winter", "spring", "summer", "fall"];
+
     public async Task<SeasonPageDto> GetPageAsync(int year, string season, string sortKey, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default)
     {
         var (items, totalCount) = await seasonRepository.GetPageAsync(year, season, ParseSort(sortKey), includeMyList, hideHentai, types, offset, limit, ct);
@@ -86,6 +90,69 @@ public class SeasonBrowseService(
 
         var ceiling = SeasonHorizon.Resolve(current, inputs.LatestCachedSeason, NotListedToday);
         return new SeasonBoundsDto(ceiling.Year, ceiling.Season);
+    }
+
+    public async Task<YearPageDto> GetYearPageAsync(int year, string sortKey, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default)
+    {
+        var points = SeasonsInYearOrder.Select(season => (year, season)).ToList();
+
+        var (items, totalCount) = await seasonRepository.GetPageAsync(points, ParseSort(sortKey), includeMyList, hideHentai, types, offset, limit, ct);
+        var dtoItems = items
+            .Select(i => new AnimeBrowseItemDto(i.AnimeId, i.Title, i.EnglishTitle, i.PictureUrl, i.TotalEpisodes, i.MediaType, i.MalScore, i.PopularityRank, i.MyScore, i.InMyList))
+            .ToList();
+
+        var hasListing = await seasonRepository.HasListingAsync(points, ct);
+        var lastFetchedAt = await GetLatestFetchedAtAsync(points, ct);
+
+        return new YearPageDto(year, dtoItems, offset, limit, totalCount, lastFetchedAt, hasListing);
+    }
+
+    // A year's own DbContext is scoped per request and not thread-safe, so
+    // the four season refreshes below must run one after another rather than
+    // concurrently (design D2) — that also means most visits do nothing more
+    // than four cheap "already fetched today" checks, since RefreshAsync's
+    // own once-per-day gate short-circuits before touching MAL.
+    public async Task<YearRefreshResultDto> RefreshYearAsync(int year, CancellationToken ct = default)
+    {
+        var outcomes = new List<SeasonRefreshOutcome>();
+        foreach (var season in SeasonsInYearOrder)
+        {
+            var result = await RefreshAsync(year, season, ct);
+            outcomes.Add(result.Outcome);
+        }
+
+        return new YearRefreshResultDto(FoldOutcomes(outcomes));
+    }
+
+    // The precedence that makes a year outcome mean for a year what the
+    // corresponding season outcome means for a season (design D2): any
+    // Fetched outranks everything since new data always warrants a re-read;
+    // Skipped outranks NotListed/Failed since a year with even one season
+    // already current today is current, not unlisted or broken; NotListed
+    // outranks Failed so a genuinely unopened year reports the honest
+    // "not listed" rather than a retry message; only a year where every
+    // season failed is reported as failed.
+    private static SeasonRefreshOutcome FoldOutcomes(IReadOnlyCollection<SeasonRefreshOutcome> outcomes)
+    {
+        if (outcomes.Contains(SeasonRefreshOutcome.Fetched)) return SeasonRefreshOutcome.Fetched;
+        if (outcomes.Contains(SeasonRefreshOutcome.Skipped)) return SeasonRefreshOutcome.Skipped;
+        if (outcomes.Contains(SeasonRefreshOutcome.NotListed)) return SeasonRefreshOutcome.NotListed;
+        return SeasonRefreshOutcome.Failed;
+    }
+
+    // The most recent of the four seasons' fetch stamps, or null if none of
+    // them has ever been fetched — what lets the client's never-cached
+    // loading state key off a year exactly as it does off a single season.
+    private async Task<DateTimeOffset?> GetLatestFetchedAtAsync(IReadOnlyCollection<(int Year, string Season)> points, CancellationToken ct)
+    {
+        DateTimeOffset? latest = null;
+        foreach (var (pointYear, pointSeason) in points)
+        {
+            var fetchedAt = await seasonRepository.GetLastFetchedAsync(pointYear, pointSeason, ct);
+            if (fetchedAt is { } value && (latest is null || value > latest))
+                latest = value;
+        }
+        return latest;
     }
 
     private async Task<SeasonRefreshOutcome> FetchAndCacheAsync(int year, string season, DateTimeOffset now, CancellationToken ct)
