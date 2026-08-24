@@ -50,6 +50,20 @@
   opacity: 0.75;
 }
 
+/* Inline within the page's own flow, not the fixed bar ConnectionStatusNotice
+   uses — the backend answered fine here, it's the upstream MAL search that
+   didn't, so this reads as a page-local note rather than a connectivity
+   outage banner. */
+.search-page__fallback-notice {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--status-onhold-border);
+  border-radius: 8px;
+  background: var(--status-onhold-bg);
+  color: var(--text-h);
+  font-size: 14px;
+}
+
 /* Matches .season-page__grid so search and season browsing look identical. */
 .search-page__grid {
   display: grid;

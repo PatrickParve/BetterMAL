@@ -164,13 +164,13 @@
 }
 
 .recap-page__season-button:hover {
+  background: var(--fam-bg);
   color: var(--text-h);
-  background: var(--accent-bg);
-  border-color: var(--accent-border);
+  border-color: var(--fam-border);
 }
 
 .recap-page__season-button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--fam-from);
   outline-offset: 2px;
 }
 

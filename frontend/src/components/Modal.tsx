@@ -1,4 +1,5 @@
 import { useEffect, type MouseEvent, type ReactNode } from 'react'
+import { useScrollLock } from '../hooks/useScrollLock.ts'
 import './Modal.css'
 
 type ModalProps = {
@@ -12,6 +13,8 @@ type ModalProps = {
 // shared by the entry editor and any future overlay (edit-history, top-anime
 // selection) that needs the same open/close behavior.
 export function Modal({ onClose, children, labelledBy, className }: ModalProps) {
+  useScrollLock()
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') onClose()

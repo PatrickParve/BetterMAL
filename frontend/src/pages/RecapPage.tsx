@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { getRecap } from '../api/client.ts'
 import {
@@ -192,12 +192,60 @@ export function RecapPage() {
     getRecap({ mode, startYear, endYear, season, filter }),
   )
 
-  const scoreGroups = useMemo(() => (recap ? scoreGroupsOf(recap.items) : []), [recap])
+  // recapKey embeds the period (and filter), so stepping it mints a new
+  // resource key and usePageData clears `recap` to null until that key's
+  // fetch resolves (same mechanism ProfilePage's topAnime/rewatched strips
+  // hit). The whole body below is gated on recap being non-null, so without
+  // holding the last-loaded period on screen, every period *step* collapsed
+  // the page to just its header for a moment — and a collapsed page has
+  // nowhere for the held scroll position to be, so the browser clamped it
+  // back toward the top regardless of keepScroll.
+  //
+  // `recap` can also lag one render behind the URL: React's "adjust state
+  // during render" pattern inside usePageData re-invokes this component
+  // synchronously when recapKey has changed but its own state hasn't caught
+  // up yet, and during that throwaway pass `recap` is still the *previous*
+  // key's object even though `mode`/`startYear`/`filter` here already read
+  // the new URL. That pass's JSX is discarded, but a plain ref mutation in
+  // it is not — so recapMatchesSelection (mirroring the fallback effect's
+  // own staleness check below) gates every use of `recap` for display,
+  // including the ref write, on it actually describing the current
+  // mode/period/filter, not just being non-null.
+  const recapMatchesSelection =
+    recap !== null &&
+    recap.mode === mode &&
+    recap.startYear === startYear &&
+    recap.endYear === endYear &&
+    (mode === 'season' ? recap.season === season : recap.filter === filter)
+
+  // A fetch that lands with the *selected* filter's count at zero and the
+  // *other* filter's above zero is a real but transient result: the effect
+  // below is about to correct it with a second navigation. Held back from
+  // becoming the displayed value too, the same way a null (still-loading)
+  // result is — otherwise the page would genuinely collapse to "Nothing to
+  // recap" for the one tick between this response landing and the
+  // correction's own response landing, and that collapse is exactly the kind
+  // of height change that clamps the scroll position it's holding.
+  const pendingFilterFallback =
+    recapMatchesSelection &&
+    mode !== 'season' &&
+    ((filter === 'watched' && recap.watchedCount === 0 && recap.airedCount > 0) ||
+      (filter === 'aired' && recap.airedCount === 0 && recap.watchedCount > 0))
+
+  const recapDisplayRef = useRef<RecapDto | null>(null)
+  if (recapMatchesSelection && !pendingFilterFallback) recapDisplayRef.current = recap
+  const displayedRecap = recapMatchesSelection && !pendingFilterFallback ? recap : recapDisplayRef.current
+
+  const scoreGroups = useMemo(() => (displayedRecap ? scoreGroupsOf(displayedRecap.items) : []), [displayedRecap])
   const scoreBuckets: ScoreDistributionBucketDto[] = scoreGroups.map((g) => ({ score: g.score, count: g.items.length }))
 
-  // `options.keepScroll` (design.md decision 7) is opt-in per call site — only
-  // the ranking-basis toggle and the media-type select pass it. Every other
-  // call site stays byte-identical, so it keeps today's scroll-to-top.
+  // `options.keepScroll` (design.md decision 5/7) is opt-in per call site:
+  // the ranking-basis toggle, the media-type select, every period control
+  // (year/season selects and stepper arrows in all three modes), and the
+  // dynamic filter's own empty-selection fallback pass it. The recap-type
+  // tabs (switchMode) and the manual time-filter buttons don't — they change
+  // the shape of the page rather than its period, so they keep today's
+  // scroll-to-top.
   function updateParams(updates: Record<string, string | null>, options?: { keepScroll?: boolean }) {
     setSearchParams(
       (prev) => {
@@ -217,14 +265,18 @@ export function RecapPage() {
   // scenario "Falling back when the selection becomes unavailable"). Only
   // acts once the response actually matches the current selection, so a
   // rapid sequence of changes can't flip the filter based on a stale reply.
+  // Passes keepScroll (design.md decision 5): this fires only as a
+  // correction to a period or mode change the user just made, never in
+  // response to touching the filter itself (its buttons are disabled when
+  // their count is zero, so a manual choice can never be the empty one).
   useEffect(() => {
-    if (!recap || mode === 'season') return
-    if (recap.mode !== mode || recap.startYear !== startYear || recap.endYear !== endYear) return
-    const currentCount = filter === 'watched' ? recap.watchedCount : recap.airedCount
-    const otherCount = filter === 'watched' ? recap.airedCount : recap.watchedCount
-    if (currentCount === 0 && otherCount > 0) updateParams({ filter: filter === 'watched' ? 'aired' : 'watched' })
+    if (!recapMatchesSelection || mode === 'season') return
+    const currentCount = filter === 'watched' ? recap!.watchedCount : recap!.airedCount
+    const otherCount = filter === 'watched' ? recap!.airedCount : recap!.watchedCount
+    if (currentCount === 0 && otherCount > 0)
+      updateParams({ filter: filter === 'watched' ? 'aired' : 'watched' }, { keepScroll: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recap, mode, startYear, endYear, filter])
+  }, [recap, recapMatchesSelection, mode, filter])
 
   function switchMode(next: RecapMode) {
     if (next === mode) return
@@ -281,7 +333,11 @@ export function RecapPage() {
       <div className="recap-page__period-controls">
         {mode === 'multiYear' && (
           <>
-            <select value={startYear} onChange={(e) => updateParams({ from: e.target.value })} aria-label="From year">
+            <select
+              value={startYear}
+              onChange={(e) => updateParams({ from: e.target.value }, { keepScroll: true })}
+              aria-label="From year"
+            >
               {years.map((y) => (
                 <option key={y} value={y}>
                   {y}
@@ -289,7 +345,11 @@ export function RecapPage() {
               ))}
             </select>
             <span className="recap-page__period-sep">&ndash;</span>
-            <select value={endYear} onChange={(e) => updateParams({ to: e.target.value })} aria-label="To year">
+            <select
+              value={endYear}
+              onChange={(e) => updateParams({ to: e.target.value }, { keepScroll: true })}
+              aria-label="To year"
+            >
               {years.map((y) => (
                 <option key={y} value={y}>
                   {y}
@@ -302,13 +362,17 @@ export function RecapPage() {
           <div className="recap-page__period-nav">
             <button
               type="button"
-              onClick={() => updateParams({ year: String(startYear - 1) })}
+              onClick={() => updateParams({ year: String(startYear - 1) }, { keepScroll: true })}
               aria-label="Previous year"
               disabled={startYear <= lowYear}
             >
               &lsaquo;
             </button>
-            <select value={startYear} onChange={(e) => updateParams({ year: e.target.value })} aria-label="Year">
+            <select
+              value={startYear}
+              onChange={(e) => updateParams({ year: e.target.value }, { keepScroll: true })}
+              aria-label="Year"
+            >
               {years.map((y) => (
                 <option key={y} value={y}>
                   {y}
@@ -317,7 +381,7 @@ export function RecapPage() {
             </select>
             <button
               type="button"
-              onClick={() => updateParams({ year: String(startYear + 1) })}
+              onClick={() => updateParams({ year: String(startYear + 1) }, { keepScroll: true })}
               aria-label="Next year"
               disabled={startYear >= highYear}
             >
@@ -331,21 +395,29 @@ export function RecapPage() {
               type="button"
               onClick={() => {
                 const next = shiftSeason(startYear, season, -1)
-                updateParams({ year: String(next.year), season: next.season })
+                updateParams({ year: String(next.year), season: next.season }, { keepScroll: true })
               }}
               aria-label="Previous season"
               disabled={seasonPointIndex(startYear, season) <= seasonPointIndex(lowYear, 'winter')}
             >
               &lsaquo;
             </button>
-            <select value={season} onChange={(e) => updateParams({ season: e.target.value })} aria-label="Season">
+            <select
+              value={season}
+              onChange={(e) => updateParams({ season: e.target.value }, { keepScroll: true })}
+              aria-label="Season"
+            >
               {RECAP_SEASONS.map((s) => (
                 <option key={s} value={s}>
                   {seasonLabel(s)}
                 </option>
               ))}
             </select>
-            <select value={startYear} onChange={(e) => updateParams({ year: e.target.value })} aria-label="Year">
+            <select
+              value={startYear}
+              onChange={(e) => updateParams({ year: e.target.value }, { keepScroll: true })}
+              aria-label="Year"
+            >
               {years.map((y) => (
                 <option key={y} value={y}>
                   {y}
@@ -356,7 +428,7 @@ export function RecapPage() {
               type="button"
               onClick={() => {
                 const next = shiftSeason(startYear, season, 1)
-                updateParams({ year: String(next.year), season: next.season })
+                updateParams({ year: String(next.year), season: next.season }, { keepScroll: true })
               }}
               aria-label="Next season"
               disabled={seasonPointIndex(startYear, season) >= seasonPointIndex(highYear, 'fall')}
@@ -372,7 +444,7 @@ export function RecapPage() {
   function renderSeasonPageLink() {
     if (mode !== 'season') return null
     return (
-      <Link to={`/season?year=${startYear}&season=${season}`} className="recap-page__season-button">
+      <Link to={`/season?year=${startYear}&season=${season}`} className="recap-page__season-button family--season">
         <CalendarIcon />
         Browse the season
         <span aria-hidden="true">&rsaquo;</span>
@@ -382,8 +454,8 @@ export function RecapPage() {
 
   function renderFilterToggle() {
     if (mode === 'season') return null
-    const watchedDisabled = recap ? recap.watchedCount === 0 : false
-    const airedDisabled = recap ? recap.airedCount === 0 : false
+    const watchedDisabled = displayedRecap ? displayedRecap.watchedCount === 0 : false
+    const airedDisabled = displayedRecap ? displayedRecap.airedCount === 0 : false
     return (
       <div className="recap-page__filter-toggle" role="group" aria-label="Time filter">
         <button
@@ -830,15 +902,15 @@ export function RecapPage() {
         {renderSeasonPageLink()}
       </div>
 
-      {loading && !recap && <p className="recap-page__loading">Loading&hellip;</p>}
+      {loading && !displayedRecap && <p className="recap-page__loading">Loading&hellip;</p>}
 
-      {recap && recap.items.length === 0 && (
+      {displayedRecap && displayedRecap.items.length === 0 && (
         <div className="recap-page__empty">
           <p>Nothing to recap for {periodLabel}.</p>
         </div>
       )}
 
-      {recap && recap.items.length > 0 && (
+      {displayedRecap && displayedRecap.items.length > 0 && (
         <>
           {/* Lead section (design.md decision 5): the top anime leads, with
               the stat block and the distribution below it beside the top
@@ -847,16 +919,16 @@ export function RecapPage() {
               them. The lead grid keeps exactly two children: the top anime
               and this single right-hand column. */}
           <div className="recap-page__lead">
-            {renderTopTen(recap)}
+            {renderTopTen(displayedRecap)}
             <div className="recap-page__lead-aside">
-              {renderStats(recap.stats)}
+              {renderStats(displayedRecap.stats)}
               {renderDistribution(scoreBuckets, scoreGroups)}
             </div>
           </div>
 
-          {renderRankings(recap)}
+          {renderRankings(displayedRecap)}
 
-          {renderHotTakes(recap.stats.hotTakes)}
+          {renderHotTakes(displayedRecap.stats.hotTakes)}
         </>
       )}
 

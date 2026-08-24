@@ -153,7 +153,7 @@ public class SeriesService(
             root.Title,
             root.EnglishTitle,
             root.PictureUrl,
-            ComputeStatus(allAnime),
+            ComputeStatus(mainLineMembers.Select(m => m.Anime).ToList(), allAnime),
             firstYear,
             lastYear,
             series.BuiltAt,
@@ -256,8 +256,13 @@ public class SeriesService(
 
     // --- Status pill (3.4) ---
 
-    private static string ComputeStatus(List<AnimeMetadata> members)
+    // Internal (not private), like BuildStats above, so tests can exercise
+    // the precedence directly against plain in-memory models.
+    internal static string ComputeStatus(List<AnimeMetadata> mainLineMembers, List<AnimeMetadata> members)
     {
+        if (mainLineMembers.Any(a => a.AiringStatus == "currently_airing"))
+            return "Airing";
+
         if (members.Any(a => a.AiringStatus == "currently_airing"))
             return "Ongoing";
 

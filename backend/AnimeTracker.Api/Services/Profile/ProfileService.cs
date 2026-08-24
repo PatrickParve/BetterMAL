@@ -117,6 +117,20 @@ public class ProfileService(
         new(s.SeriesId, s.RootAnimeId, s.Title, s.EnglishTitle, s.PictureUrl, s.EntryCount, s.MainLineAiredCount,
             s.MalMain, s.MineMain, s.MalRevealed);
 
+    // No ScheduleMissingSeriesBuildsAsync call here (design.md D10): the same
+    // profile page's Top series read already backfills missing series on
+    // every visit, so a second enqueue from this read would only contend on
+    // the same queue for no extra coverage.
+    public async Task<RewatchedSeriesSectionDto> GetRewatchedSeriesSectionAsync(CancellationToken ct = default)
+    {
+        var rankingIndex = await seriesRankingLookup.LoadAsync(ct);
+        var items = rankingIndex.RewatchedSeries().Select(ToRewatchedSeriesItem).ToList();
+        return new RewatchedSeriesSectionDto(items);
+    }
+
+    private static RewatchedSeriesItemDto ToRewatchedSeriesItem(SeriesRewatchResult s) =>
+        new(s.SeriesId, s.RootAnimeId, s.Title, s.EnglishTitle, s.PictureUrl, s.RewatchSeconds);
+
     // Fire-and-forget: enqueues a bounded batch of my-list anime with no
     // stored series onto the existing background build queue, reusing the
     // ranking projection's membership set rather than issuing a second query

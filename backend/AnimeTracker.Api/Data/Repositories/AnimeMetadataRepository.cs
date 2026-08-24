@@ -20,4 +20,11 @@ public class AnimeMetadataRepository(AnimeTrackerDbContext db) : IAnimeMetadataR
         db.AnimeMetadata.AsNoTracking()
             .Select(a => new AnimeTitleProjection(a.Id, a.Title, a.EnglishTitle, a.PictureUrl, a.PopularityRank))
             .ToListAsync(ct);
+
+    public Task<List<AnimeSearchFallbackProjection>> GetSearchFallbackIndexAsync(CancellationToken ct = default) =>
+        db.AnimeMetadata.AsNoTracking()
+            .Select(a => new AnimeSearchFallbackProjection(
+                a.Id, a.Title, a.EnglishTitle, a.PictureUrl, a.PopularityRank,
+                a.MediaType, a.TotalEpisodes, a.MalScore))
+            .ToListAsync(ct);
 }

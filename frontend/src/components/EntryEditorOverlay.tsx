@@ -48,7 +48,11 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
   const initialStartedAt = entry?.startedAt ?? ''
   const initialCompletedAt = entry?.completedAt ?? ''
 
-  const [status, setStatus] = useState<WatchStatus>(initialStatus)
+  // list-editing "Raising progress resumes an entry" (design.md D5): the
+  // status control follows a raised count until the user picks a status
+  // themselves, at which point their choice stands — so `statusOverride`
+  // rather than a plain `useState` drives which is authoritative.
+  const [statusOverride, setStatusOverride] = useState<WatchStatus | null>(null)
   const [episodesWatched, setEpisodesWatched] = useState(initialEpisodesWatched)
   const [myScore, setMyScore] = useState(initialMyScore)
   const [rewatchCount, setRewatchCount] = useState(initialRewatchCount)
@@ -62,6 +66,17 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
   const [error, setError] = useState<string | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Mirrors the backend's own completion target (UserAnimeEntryEditService.
+  // ApplyEpisodesWatched): aired-so-far while the anime is still airing,
+  // since the eventual total isn't reachable yet; the total otherwise.
+  const completionTarget = airingStatus === 'currently_airing' ? episodesAired : totalEpisodes
+  const resumes =
+    episodesWatched > initialEpisodesWatched &&
+    episodesWatched !== completionTarget &&
+    initialStatus !== 'Watching' && initialStatus !== 'Rewatching' && initialStatus !== 'Completed'
+  const status = statusOverride ?? (resumes ? 'Watching' : initialStatus)
+  const episodesRaised = episodesWatched > initialEpisodesWatched
 
   const canComplete = totalEpisodes !== null
   const canRewatch = canEnterRewatching(entry, airingStatus)
@@ -86,7 +101,12 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
     setSaving(true)
 
     const request: UserAnimeEntryEditRequest = {
-      status: status !== initialStatus ? status : undefined,
+      // Sent whenever the count is being raised, whatever `status` ends up
+      // showing — not just when it differs from initialStatus — so that
+      // re-picking the original status from the editor suppresses the
+      // server's own resume rule instead of leaving it to infer one
+      // (design.md D5, list-editing "Raising progress resumes an entry").
+      status: status !== initialStatus || episodesRaised ? status : undefined,
       episodesWatched: episodesWatched !== initialEpisodesWatched ? episodesWatched : undefined,
       myScore: myScore !== initialMyScore ? myScore : undefined,
       rewatchCount: rewatchCount !== initialRewatchCount ? rewatchCount : undefined,
@@ -153,7 +173,7 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
         <fieldset className="entry-editor__fieldset" disabled={saving}>
           <label className="entry-editor__field">
             <span>Status</span>
-            <select value={status} onChange={(event) => setStatus(event.target.value as WatchStatus)}>
+            <select value={status} onChange={(event) => setStatusOverride(event.target.value as WatchStatus)}>
               {STATUS_OPTIONS.map((option) => (
                 <option
                   key={option.value}

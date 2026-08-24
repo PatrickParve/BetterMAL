@@ -16,6 +16,7 @@ import type {
   RecapQuery,
   ResyncStatusDto,
   RewatchedSectionDto,
+  RewatchedSeriesSectionDto,
   SearchPageDto,
   SeasonBoundsDto,
   SeasonPageDto,
@@ -228,6 +229,14 @@ export function getRewatchedSection(mediaType: TopAnimeMediaType): Promise<Rewat
 // background series builds server-side — invisible to this call.
 export function getTopSeriesSection(): Promise<TopSeriesSectionDto> {
   return fetchJson<TopSeriesSectionDto>('/api/profile/top-series')
+}
+
+// Every series with above-zero total rewatch time, pre-ordered by that total
+// descending then title (design.md D9) — "Most rewatched"'s Series scope.
+// Unlike getTopSeriesSection, this does not trigger background series builds
+// server-side; the profile page's Top series read already does.
+export function getRewatchedSeriesSection(): Promise<RewatchedSeriesSectionDto> {
+  return fetchJson<RewatchedSeriesSectionDto>('/api/profile/rewatched-series')
 }
 
 export function putTopAnimeOrder(

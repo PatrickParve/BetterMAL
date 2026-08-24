@@ -522,6 +522,16 @@
   pointer-events: none;
 }
 
+/* The Series scope's badge (design.md D10/D11) carries a formatted duration
+   like "3d 7.7h" rather than a 1-3 digit count — same shape, position, and
+   white/silver colour as .rewatched-strip__count, just a touch smaller and
+   forced to one line so the longer text still fits a narrow tile. */
+.rewatched-strip__count--time {
+  font-size: 11px;
+  padding: 2px 5px;
+  white-space: nowrap;
+}
+
 /* Same strip mechanics as top-anime-strip/rewatched-strip (tile size,
    hover-scale, padding, drag-scroll) — the difference is the footer, which
    carries both averages as a pair of compact ScoreChips instead of one

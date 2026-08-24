@@ -12,10 +12,25 @@ using AnimeTracker.Api.Models;
 /// "not being edited". The HasStartedAt/HasCompletedAt flags are flipped by
 /// the property setters below, and System.Text.Json only invokes a property's
 /// setter for keys actually present in the request body, so a JSON body that
-/// omits the key entirely leaves the flag false.</summary>
+/// omits the key entirely leaves the flag false.
+///
+/// HasStatus exists for the same reason: the resume-to-Watching rule
+/// (polish-more-progress-and-overlays design.md D5) needs to tell "status
+/// sent, and equal to the stored one" from "status not sent at all", which
+/// Status alone can't express since both cases leave it equal to the stored
+/// value.</summary>
 public class UserAnimeEntryEditRequest
 {
-    public WatchStatus? Status { get; set; }
+    private WatchStatus? _status;
+    public WatchStatus? Status
+    {
+        get => _status;
+        set { _status = value; HasStatus = true; }
+    }
+
+    [JsonIgnore]
+    public bool HasStatus { get; private set; }
+
     public int? EpisodesWatched { get; set; }
     public int? MyScore { get; set; }
     public int? RewatchCount { get; set; }

@@ -65,6 +65,7 @@ export const MyListRow = memo(function MyListRow({
           <ProgressBar
             watched={item.entry.episodesWatched}
             total={item.totalEpisodes}
+            aired={item.airingStatus === 'currently_airing' ? item.episodesAired : null}
             onIncrement={() => onIncrement(item)}
             onSetWatched={(value) => onSetWatched(item, value)}
             max={item.episodesAired ?? item.totalEpisodes}

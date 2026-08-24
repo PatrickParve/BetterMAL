@@ -223,6 +223,7 @@ export type SearchPageDto = {
   limit: number
   totalCount: number
   series: SeriesSearchResultDto[]
+  malSearchFailed: boolean
 }
 
 export type MyListItemDto = {
@@ -433,6 +434,24 @@ export type TopSeriesSectionDto = {
   items: TopSeriesItemDto[]
 }
 
+// One franchise ranked by "Most rewatched"'s Series scope: display fields
+// from its root anime and its total rewatch time in seconds, summed across
+// every member — main line and extras alike (design.md D9).
+export type RewatchedSeriesItemDto = {
+  seriesId: number
+  rootAnimeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  rewatchSeconds: number
+}
+
+// Every series with above-zero total rewatch time (design.md D9), ordered by
+// that total descending then title case-insensitively, with no cap.
+export type RewatchedSeriesSectionDto = {
+  items: RewatchedSeriesItemDto[]
+}
+
 export type SyncStatusDto = {
   pendingCount: number
   lastSyncedAt: string | null
@@ -562,7 +581,7 @@ export type SeriesStatsDto = {
   genres: string[]
 }
 
-export type SeriesStatus = 'Ongoing' | 'Upcoming' | 'Finished'
+export type SeriesStatus = 'Airing' | 'Ongoing' | 'Upcoming' | 'Finished'
 
 export type SeriesDto = {
   seriesId: number

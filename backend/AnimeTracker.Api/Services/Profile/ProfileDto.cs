@@ -97,6 +97,25 @@ public record TopSeriesItemDto(
 /// 4).</summary>
 public record TopSeriesSectionDto(List<TopSeriesItemDto> Items);
 
+/// <summary>One franchise ranked by "Most rewatched"'s Series scope: display
+/// fields from its root anime and its total rewatch time in seconds, summed
+/// across every member — main line and extras alike (design.md D9) — the
+/// same arithmetic <c>WatchMath</c> uses for the profile's own rewatch
+/// stats, so the two can never disagree about what a rewatch is worth.</summary>
+public record RewatchedSeriesItemDto(
+    int SeriesId,
+    int RootAnimeId,
+    string Title,
+    string? EnglishTitle,
+    string? PictureUrl,
+    long RewatchSeconds);
+
+/// <summary>Every series with above-zero total rewatch time (design.md D9),
+/// ordered by that total descending then title case-insensitively, with no
+/// cap — mirrors <see cref="RewatchedSectionDto"/>'s shape for the
+/// media-type scopes.</summary>
+public record RewatchedSeriesSectionDto(List<RewatchedSeriesItemDto> Items);
+
 /// <summary>One entry the progress bar can't resolve a total for — neither a
 /// published episode count nor a known non-zero aired count, despite the
 /// anime having actually started airing — identifying enough to let the

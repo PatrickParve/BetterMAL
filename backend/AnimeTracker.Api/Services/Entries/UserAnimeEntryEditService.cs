@@ -218,6 +218,23 @@ public class UserAnimeEntryEditService(
                 changes.Add((ActivityChangeType.StatusChanged, $"{originalStatus} -> {entry.Status}", null));
             }
         }
+
+        // Resume-to-Watching (design.md D4): raising the count without reaching
+        // everything available is a statement that the anime is being watched
+        // now. Lives outside the completionTarget guard above — unlike the two
+        // arms inside it, this one still applies when the target is unknown,
+        // since a raise can then reach nothing by definition. HasStatus (not
+        // just Status) gates this so an explicit resend of the stored status
+        // suppresses the rule (design.md D5), which the two arms above don't
+        // need since an equal Status leaves them alone regardless.
+        if (newEpisodes > previousEpisodesWatched
+            && newEpisodes != completionTarget
+            && originalStatus is not (WatchStatus.Watching or WatchStatus.Rewatching or WatchStatus.Completed)
+            && !request.HasStatus)
+        {
+            entry.Status = WatchStatus.Watching;
+            changes.Add((ActivityChangeType.StatusChanged, $"{originalStatus} -> {entry.Status}", null));
+        }
     }
 
     private static void ApplyStatus(

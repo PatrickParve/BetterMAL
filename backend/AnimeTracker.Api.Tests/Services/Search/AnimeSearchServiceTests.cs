@@ -37,26 +37,36 @@ public class AnimeSearchServiceTests
 
     private static AnimeSearchService CreateService(
         AnimeTrackerDbContext db, List<AnimeTitleProjection>? localIndex = null,
-        List<MalAnimeListEdge>? malResults = null, ISeriesBuildTrigger? trigger = null) =>
+        List<MalAnimeListEdge>? malResults = null, ISeriesBuildTrigger? trigger = null,
+        List<AnimeSearchFallbackProjection>? fallbackIndex = null, bool malFails = false) =>
         new(
-            new FakeAnimeMetadataRepository(localIndex ?? []),
-            new FakeMalClient(malResults ?? []),
+            new FakeAnimeMetadataRepository(localIndex ?? [], fallbackIndex ?? []),
+            new FakeMalClient(malResults ?? [], malFails),
             db,
             new SeriesSearchLookup(db),
             trigger ?? new FakeSeriesBuildTrigger(),
             NullLogger<AnimeSearchService>.Instance);
 
-    private sealed class FakeAnimeMetadataRepository(List<AnimeTitleProjection> searchIndex) : IAnimeMetadataRepository
+    private sealed class FakeAnimeMetadataRepository(
+        List<AnimeTitleProjection> searchIndex, List<AnimeSearchFallbackProjection> fallbackIndex) : IAnimeMetadataRepository
     {
         public Task<AnimeMetadata?> GetByIdAsync(int id, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<AnimeMetadata>> GetAllAsync(CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<AnimeTitleProjection>> GetSearchIndexAsync(CancellationToken ct = default) => Task.FromResult(searchIndex);
+        public Task<List<AnimeSearchFallbackProjection>> GetSearchFallbackIndexAsync(CancellationToken ct = default) =>
+            Task.FromResult(fallbackIndex);
     }
 
-    private sealed class FakeMalClient(List<MalAnimeListEdge> searchResults) : IMalClient
+    // malFails simulates the live MAL search unreachable/erroring — the case
+    // AnimeSearchService.SearchMalAsync itself already catches and turns into
+    // (Edges: [], Failed: true), so this mirrors that boundary rather than
+    // faking the Failed flag directly.
+    private sealed class FakeMalClient(List<MalAnimeListEdge> searchResults, bool fails = false) : IMalClient
     {
         public Task<MalPagedResponse<MalAnimeListEdge>> SearchAnimeAsync(string query, int limit = 5, CancellationToken ct = default) =>
-            Task.FromResult(new MalPagedResponse<MalAnimeListEdge> { Data = searchResults });
+            fails
+                ? throw new HttpRequestException("Simulated MAL search failure")
+                : Task.FromResult(new MalPagedResponse<MalAnimeListEdge> { Data = searchResults });
 
         public Task<MalPagedResponse<MalAnimeListEdge>> GetSeasonAsync(int year, string season, int limit = 100, int offset = 0, string? sort = null, CancellationToken ct = default) =>
             throw new NotImplementedException();
@@ -194,6 +204,137 @@ public class AnimeSearchServiceTests
         Assert.Empty(withoutSeries.Series);
         Assert.Equal(4, withSeries.TotalCount);
         Assert.Equal(withoutSeries.TotalCount, withSeries.TotalCount);
+    }
+
+    // --- Search results-page fallback (design.md D7/tasks.md 11.2) ---
+
+    [Fact]
+    public async Task SearchPageAsync_FailingMalSearchReturnsLocalMatchesWithFlagTrue()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var fallback = new List<AnimeSearchFallbackProjection>
+        {
+            new(1, "Naruto", null, null, 1, "tv", 220, 8.0),
+        };
+        var service = CreateService(db, fallbackIndex: fallback, malFails: true);
+
+        var page = await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+
+        Assert.True(page.MalSearchFailed);
+        Assert.Single(page.Items);
+        Assert.Equal(1, page.Items[0].AnimeId);
+    }
+
+    [Fact]
+    public async Task SearchPageAsync_SucceedingMalSearchIsUnchangedWithFlagFalse()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var malResults = new List<MalAnimeListEdge> { MalEdge(1, "Naruto", 0) };
+        var service = CreateService(db, malResults: malResults, malFails: false);
+
+        var page = await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+
+        Assert.False(page.MalSearchFailed);
+        Assert.Single(page.Items);
+        Assert.Equal(1, page.Items[0].AnimeId);
+    }
+
+    [Fact]
+    public async Task SearchPageAsync_FailingSearchWithNoLocalMatchReturnsEmptyWithFlagTrue()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var fallback = new List<AnimeSearchFallbackProjection> { new(1, "Bleach", null, null, 1, "tv", 366, 7.9) };
+        var service = CreateService(db, fallbackIndex: fallback, malFails: true);
+
+        var page = await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+
+        Assert.True(page.MalSearchFailed);
+        Assert.Empty(page.Items);
+    }
+
+    [Fact]
+    public async Task SearchPageAsync_QuotedQueryUnderFallbackMatchesExactly()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var fallback = new List<AnimeSearchFallbackProjection>
+        {
+            new(1, "Naruto", null, null, 1, "tv", 220, 8.0),
+            new(2, "Naruto Shippuden", null, null, 2, "tv", 500, 8.2),
+        };
+        var service = CreateService(db, fallbackIndex: fallback, malFails: true);
+
+        var page = await service.SearchPageAsync("\"Naruto\"", "relevance", offset: 0, limit: 50);
+
+        Assert.Single(page.Items);
+        Assert.Equal(1, page.Items[0].AnimeId);
+    }
+
+    [Fact]
+    public async Task SearchPageAsync_LocalRelevanceRanksExactThenPrefixThenSubstringEachByPopularity()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var fallback = new List<AnimeSearchFallbackProjection>
+        {
+            new(1, "Fate", null, null, 50, "tv", 24, 7.5), // exact
+            new(2, "Fate Zero", null, null, 10, "tv", 25, 8.5), // prefix, more popular
+            new(3, "Fate Apocrypha", null, null, 20, "tv", 25, 7.0), // prefix, less popular
+            new(4, "Heaven's Fate", null, null, 5, "tv", 12, 6.5), // substring only, most popular overall
+            new(5, "Strange Fate Tales", null, null, 100, "tv", 12, 6.0), // substring only
+        };
+        var service = CreateService(db, fallbackIndex: fallback, malFails: true);
+
+        var page = await service.SearchPageAsync("Fate", "relevance", offset: 0, limit: 50);
+
+        // Band membership (exact > prefix > substring) dominates popularity —
+        // id 4 is the most popular of all five but still ranks after the
+        // exact and prefix bands, not ahead of them.
+        Assert.Equal([1, 2, 3, 4, 5], page.Items.Select(i => i.AnimeId));
+    }
+
+    [Fact]
+    public async Task SearchPageAsync_FallbackNonRelevanceSortsOrderByMalScore()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var fallback = new List<AnimeSearchFallbackProjection>
+        {
+            new(1, "Fate Zero", null, null, 1, "tv", 25, 7.0),
+            new(2, "Fate Apocrypha", null, null, 2, "tv", 25, 9.0),
+            new(3, "Fate Stay Night", null, null, 3, "tv", 24, 8.0),
+        };
+        var service = CreateService(db, fallbackIndex: fallback, malFails: true);
+
+        var page = await service.SearchPageAsync("Fate", "malScore", offset: 0, limit: 50);
+
+        Assert.Equal([2, 3, 1], page.Items.Select(i => i.AnimeId));
+    }
+
+    [Fact]
+    public async Task SearchPageAsync_SeriesStillRideAlongUnderRelevanceInFallback()
+    {
+        using var db = CreateDb();
+        AddSeries(db, seriesId: 1, rootAnimeId: 301, rootTitle: "Fate Series One", rootPopularityRank: 1);
+        await db.SaveChangesAsync();
+
+        var fallback = new List<AnimeSearchFallbackProjection> { new(500, "Fate Anime", null, null, 1, "tv", 24, 7.5) };
+        var service = CreateService(db, fallbackIndex: fallback, malFails: true);
+
+        var page = await service.SearchPageAsync("fate", "relevance", offset: 0, limit: 50);
+
+        Assert.True(page.MalSearchFailed);
+        Assert.Single(page.Series);
+        Assert.Equal(301, page.Series[0].RootAnimeId);
     }
 
     // --- 8.4 Background series build trigger ---

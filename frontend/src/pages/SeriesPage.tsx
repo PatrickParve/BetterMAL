@@ -25,6 +25,7 @@ const NO_INFO = '—'
 const MAX_REBUILD_ROUNDS = 12
 
 const SERIES_STATUS_CLASS: Record<SeriesStatus, string> = {
+  Airing: 'airing',
   Ongoing: 'ongoing',
   Upcoming: 'upcoming',
   Finished: 'finished',
@@ -302,6 +303,11 @@ export function SeriesPage() {
   const [mineOnly, setMineOnly] = useState(true)
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
   const [unfilteredGroups, setUnfilteredGroups] = useState<Set<string>>(new Set())
+  // series-page "A More group's heading opens that group in full"
+  // (design.md D2): the "in my list" control reports itself on only while
+  // the filter is actually in force across every group — opening any one
+  // group in full (via its heading) makes this read off.
+  const filterActive = mineOnly && unfilteredGroups.size === 0
 
   // Stops an in-flight rebuild loop from issuing another round once the page
   // has navigated away (design.md decision 2) — a round already in flight is
@@ -379,28 +385,37 @@ export function SeriesPage() {
     })
   }
 
-  function toggleExtrasGroup(key: string) {
-    setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }))
-  }
-
-  // Reveals a group's remaining tiles from its "+N more" control: a
-  // collapsed group simply uncollapses (into whatever the filter currently
-  // shows); a group hidden only by the "in my list" filter is instead added
-  // to unfilteredGroups, so this one group shows everything while every
-  // other group keeps following the filter (design.md decision 3).
-  function revealGroupTiles(key: string, wasCollapsed: boolean) {
-    if (wasCollapsed) {
-      setCollapsedGroups((prev) => ({ ...prev, [key]: false }))
-    } else {
-      setUnfilteredGroups((prev) => new Set(prev).add(key))
+  // series-page "A More group's heading opens that group in full"
+  // (design.md D1): the heading has one job — open this group — with
+  // collapse as its off state. A group already showing everything
+  // collapses; anything else expands, and, while the filter is on, is
+  // exempted from it so the heading can show extras the filter would
+  // otherwise hide.
+  function handleExtrasGroupHeadingClick(key: string, showsAll: boolean) {
+    if (showsAll) {
+      setCollapsedGroups((prev) => ({ ...prev, [key]: true }))
+      return
     }
+    setCollapsedGroups((prev) => ({ ...prev, [key]: false }))
+    if (mineOnly) setUnfilteredGroups((prev) => new Set(prev).add(key))
   }
 
-  // Every click resets the per-group overrides and expands every group, so
-  // the effect of the toggle — in either direction — is always visible
-  // rather than hidden behind a collapsed or overridden group.
+  // Reveals a group's remaining tiles from its "+N more" control, which is
+  // only ever offered on an expanded group hiding some of its own behind the
+  // filter (design.md D3) — so this is always the unfilter case; a collapsed
+  // group's heading is what opens it now (D1).
+  function revealGroupTiles(key: string) {
+    setUnfilteredGroups((prev) => new Set(prev).add(key))
+  }
+
+  // design.md D2: filterActive reports whether the filter is actually in
+  // force everywhere, not just the stored intent — so opening one group in
+  // full (D1) immediately reads as "off" here too. Pressing while active
+  // turns the filter off; pressing while inactive turns it on and resets
+  // every per-group override, returning the section to the state a freshly
+  // opened series page is in (both directions already reset the same way).
   function toggleMineOnly() {
-    setMineOnly((prev) => !prev)
+    setMineOnly(!filterActive)
     setUnfilteredGroups(new Set())
     setCollapsedGroups({})
   }
@@ -425,7 +440,7 @@ export function SeriesPage() {
   const { scores, stats } = series
   const displayTitle = pickDisplayTitle(series.title, series.englishTitle)
   const badge = completionBadge(series)
-  const isOngoing = series.status === 'Ongoing'
+  const isRunning = series.status === 'Airing' || series.status === 'Ongoing'
   // The bar and readout's own aired figure, summed straight from each
   // entry's airedEpisodes — distinct from stats.mainLineAiredEpisodes, which
   // excludes a member with an unknown total so the *episode-total* stat never
@@ -460,8 +475,11 @@ export function SeriesPage() {
     const key = extrasGroupKey(group, index)
     const isCollapsed = collapsedGroups[key] ?? false
     const isUnfiltered = unfilteredGroups.has(key)
+    // design.md D1: the group's heading opens it in full unless it's
+    // already showing everything, in which case the heading collapses it.
+    const showsAll = !isCollapsed && (!mineOnly || isUnfiltered)
     const visibleItems = isCollapsed ? [] : mineOnly && !isUnfiltered ? group.items.filter((e) => e.entry != null) : group.items
-    return { group, key, isCollapsed, visibleItems }
+    return { group, key, isCollapsed, showsAll, visibleItems }
   })
   const nothingHidden = extrasGroupView.every(({ group, visibleItems }) => visibleItems.length === group.items.length)
 
@@ -504,7 +522,7 @@ export function SeriesPage() {
       </div>
 
       <div className="series-page__progress">
-        {isOngoing ? (
+        {isRunning ? (
           <AiringProgressBar
             aired={mainLineAiredEpisodes}
             watched={stats.myWatchedEpisodes}
@@ -523,7 +541,7 @@ export function SeriesPage() {
           aired={mainLineAiredEpisodes}
           total={stats.mainLineEpisodeTotal}
           hasUnknownTotal={stats.hasUnknownEpisodeCounts}
-          showAired={isOngoing}
+          showAired={isRunning}
         />
       </div>
     </>
@@ -768,8 +786,8 @@ export function SeriesPage() {
             <div className="series-page__more-controls">
               <button
                 type="button"
-                className={`series-page__toggle-mine${mineOnly ? ' series-page__toggle-mine--active' : ''}`}
-                aria-pressed={mineOnly}
+                className={`series-page__toggle-mine${filterActive ? ' series-page__toggle-mine--active' : ''}`}
+                aria-pressed={filterActive}
                 onClick={toggleMineOnly}
               >
                 In my list
@@ -785,9 +803,14 @@ export function SeriesPage() {
               </button>
             </div>
           </div>
-          {extrasGroupView.map(({ group, key, isCollapsed, visibleItems }) => {
+          {extrasGroupView.map(({ group, key, isCollapsed, showsAll, visibleItems }) => {
             const groupId = `series-extras-${key}`
             const hiddenCount = group.items.length - visibleItems.length
+            // design.md D3: the hidden-count control belongs only to a group
+            // that is showing something and hiding the rest — a group
+            // showing nothing (collapsed, or nothing of mine in it) offers
+            // no control; its heading opens it instead.
+            const showHiddenCountControl = !isCollapsed && visibleItems.length > 0 && hiddenCount > 0
             return (
               <div key={key} className="series-page__extras-group">
                 <h3>
@@ -796,7 +819,7 @@ export function SeriesPage() {
                     className="series-page__extras-group-toggle"
                     aria-expanded={!isCollapsed}
                     aria-controls={groupId}
-                    onClick={() => toggleExtrasGroup(key)}
+                    onClick={() => handleExtrasGroupHeadingClick(key, showsAll)}
                   >
                     <span className="series-page__extras-group-caret" aria-hidden="true">
                       {isCollapsed ? '▸' : '▾'}
@@ -811,12 +834,8 @@ export function SeriesPage() {
                     ))}
                   </ul>
                 )}
-                {hiddenCount > 0 && (
-                  <button
-                    type="button"
-                    className="series-page__extras-group-hint"
-                    onClick={() => revealGroupTiles(key, isCollapsed)}
-                  >
+                {showHiddenCountControl && (
+                  <button type="button" className="series-page__extras-group-hint" onClick={() => revealGroupTiles(key)}>
                     +{hiddenCount} more
                   </button>
                 )}

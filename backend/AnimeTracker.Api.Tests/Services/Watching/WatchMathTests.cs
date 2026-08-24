@@ -3,8 +3,8 @@ using AnimeTracker.Api.Services.Watching;
 
 namespace AnimeTracker.Api.Tests.Services.Watching;
 
-// WatchMath.RewatchInclusiveEpisodes / IsMovie / IsMusic (tasks.md 1.2-1.4,
-// design.md decision 1/4).
+// WatchMath.RewatchOnlyEpisodes / RewatchInclusiveEpisodes / IsMovie / IsMusic
+// (tasks.md 1.2-1.4/8.1/11.3, design.md decision 1/4 and D8).
 public class WatchMathTests
 {
     private static UserAnimeEntry Entry(int episodesWatched, int rewatchCount, int? totalEpisodes) =>
@@ -46,6 +46,47 @@ public class WatchMathTests
         var entry = Entry(episodesWatched: 12, rewatchCount: 0, totalEpisodes: 12);
 
         Assert.Equal(12, WatchMath.RewatchInclusiveEpisodes(entry));
+    }
+
+    // --- RewatchOnlyEpisodes (design.md D8/task 8.1/11.3): the same
+    // arithmetic RewatchInclusiveEpisodes is now expressed in terms of. ---
+
+    [Fact]
+    public void RewatchOnlyEpisodes_ZeroRewatchesIsZero()
+    {
+        var entry = Entry(episodesWatched: 12, rewatchCount: 0, totalEpisodes: 12);
+
+        Assert.Equal(0, WatchMath.RewatchOnlyEpisodes(entry));
+    }
+
+    [Fact]
+    public void RewatchOnlyEpisodes_PublishedTotalIsTheBaselineRegardlessOfCurrentProgress()
+    {
+        var entry = Entry(episodesWatched: 1, rewatchCount: 2, totalEpisodes: 12);
+
+        Assert.Equal(24, WatchMath.RewatchOnlyEpisodes(entry));
+    }
+
+    [Fact]
+    public void RewatchOnlyEpisodes_EpisodesWatchedIsTheBaselineWithNoPublishedTotal()
+    {
+        var entry = Entry(episodesWatched: 8, rewatchCount: 1, totalEpisodes: null);
+
+        Assert.Equal(8, WatchMath.RewatchOnlyEpisodes(entry));
+    }
+
+    [Theory]
+    [InlineData(12, 1, 12, 24)] // published total baseline
+    [InlineData(8, 1, null, 16)] // no published total: episodes-watched baseline
+    [InlineData(1, 2, 12, 25)] // mid-rewatch: completed runs plus current progress
+    [InlineData(12, 0, 12, 12)] // never rewatched
+    public void RewatchInclusiveEpisodes_StillReturnsWhatItDidBeforeTheRefactor(
+        int episodesWatched, int rewatchCount, int? totalEpisodes, int expected)
+    {
+        var entry = Entry(episodesWatched, rewatchCount, totalEpisodes);
+
+        Assert.Equal(expected, WatchMath.RewatchInclusiveEpisodes(entry));
+        Assert.Equal(episodesWatched + WatchMath.RewatchOnlyEpisodes(entry), WatchMath.RewatchInclusiveEpisodes(entry));
     }
 
     [Theory]

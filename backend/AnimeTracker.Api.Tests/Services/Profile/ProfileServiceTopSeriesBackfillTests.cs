@@ -127,6 +127,24 @@ public class ProfileServiceTopSeriesBackfillTests
         Assert.Empty(secondRead);
     }
 
+    // Unlike GetTopSeriesSectionAsync above, GetRewatchedSeriesSectionAsync
+    // deliberately does not enqueue background series builds (design.md
+    // D10/task 9.5/11.6) — the same profile page's Top series read already
+    // does, and queueing the same ids twice only contends on one queue.
+    [Fact]
+    public async Task RewatchedSeriesReadEnqueuesNoBackgroundBuilds()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync(); // no series stored at all -> every list entry would be "missing"
+        var trigger = new SeriesBuildTrigger();
+        var entries = Enumerable.Range(1, 5).Select(Entry).ToList();
+
+        await CreateService(db, entries, trigger).GetRewatchedSeriesSectionAsync();
+        var drained = await DrainAsync(trigger, maxItems: 10);
+
+        Assert.Empty(drained);
+    }
+
     private sealed class FakeUserAnimeEntryRepository(List<UserAnimeEntry> entries) : IUserAnimeEntryRepository
     {
         public Task<UserAnimeEntry?> GetByAnimeIdAsync(int animeId, CancellationToken ct = default) =>

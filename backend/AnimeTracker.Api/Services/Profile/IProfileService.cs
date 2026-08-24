@@ -25,6 +25,17 @@ public interface IProfileService
     /// read.</summary>
     Task<TopSeriesSectionDto> GetTopSeriesSectionAsync(CancellationToken ct = default);
 
+    /// <summary>"Most rewatched"'s Series scope: every franchise with
+    /// above-zero total rewatch time, summed across every member — main line
+    /// and extras alike — using the same per-entry arithmetic <c>WatchMath</c>
+    /// uses for the profile's own rewatch-inclusive stats (design.md
+    /// D8/D9), so a franchise total and those stats can never disagree.
+    /// Deliberately does not schedule background series builds itself — the
+    /// same profile page's Top series read already does that (design.md
+    /// D10), and queueing the same ids twice only contends on one
+    /// queue.</summary>
+    Task<RewatchedSeriesSectionDto> GetRewatchedSeriesSectionAsync(CancellationToken ct = default);
+
     /// <summary>Applies an edited tier order — as displayed under some scope,
     /// which may omit tier members that scope's filter hides — via the
     /// slot-preserving merge: every edited tier's full membership becomes

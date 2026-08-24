@@ -16,6 +16,7 @@ interface SearchReadState {
   items: AnimeBrowseItemDto[]
   totalCount: number
   series: SeriesSearchResultDto[]
+  malSearchFailed: boolean
 }
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
@@ -63,16 +64,18 @@ export function SearchPage() {
   // handled below via `reload`, not a second key.
   const { data, loading, reload } = usePageData<SearchReadState>(`search:${q}`, () =>
     q.length === 0
-      ? Promise.resolve({ items: [], totalCount: 0, series: [] })
+      ? Promise.resolve({ items: [], totalCount: 0, series: [], malSearchFailed: false })
       : getSearchPage(q, { sort, offset: 0, limit: CANDIDATE_LIMIT }).then((result) => ({
           items: result.items,
           totalCount: result.totalCount,
           series: result.series,
+          malSearchFailed: result.malSearchFailed,
         })),
   )
   const items = data?.items ?? []
   const totalCount = data?.totalCount ?? 0
   const series = data?.series ?? []
+  const malSearchFailed = data?.malSearchFailed ?? false
   const [visibleCount, setVisibleCount] = useRestorableState('visibleCount', CHUNK_SIZE)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const reloadRef = useRef(reload)
@@ -172,10 +175,21 @@ export function SearchPage() {
         </div>
       </div>
 
+      {malSearchFailed && (
+        <p className="search-page__fallback-notice" role="status">
+          The MAL search couldn't be reached — these are the app's locally stored matches.
+        </p>
+      )}
+
       {q.length === 0 ? (
         <p className="search-page__empty">Enter a search term to begin.</p>
       ) : items.length === 0 && series.length === 0 && !loading ? (
-        <p className="search-page__empty">No anime found.</p>
+        // A failed-search empty result is explained by the notice above
+        // instead of the ordinary "not found" message, so it reads as
+        // "nothing stored here matches" rather than "this does not exist".
+        malSearchFailed ? null : (
+          <p className="search-page__empty">No anime found.</p>
+        )
       ) : (
         <div className="search-page__grid">
           {series.map((s) => (

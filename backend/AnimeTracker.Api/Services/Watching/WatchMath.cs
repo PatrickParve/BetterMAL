@@ -12,21 +12,38 @@ internal static class WatchMath
     private const string MovieMediaType = "movie";
     private const string MusicMediaType = "music";
 
-    public static int EpisodeSeconds(AnimeMetadata anime) =>
-        anime.AverageEpisodeDurationSeconds ?? ProfileService.AssumedMinutesPerEpisode * 60;
+    /// <summary>Primitive form, shared with callers (e.g. the series ranking
+    /// projection) that don't carry a full AnimeMetadata row — so nothing
+    /// restates the 24-minute assumed duration independently and risks
+    /// disagreeing with this one.</summary>
+    public static int EpisodeSeconds(int? averageEpisodeDurationSeconds) =>
+        averageEpisodeDurationSeconds ?? ProfileService.AssumedMinutesPerEpisode * 60;
+
+    public static int EpisodeSeconds(AnimeMetadata anime) => EpisodeSeconds(anime.AverageEpisodeDurationSeconds);
+
+    /// <summary>The episodes a rewatch alone represents: one further complete
+    /// run of the anime for every recorded rewatch, with no first viewing
+    /// counted. The rewatch baseline is the anime's <em>published total</em>,
+    /// not the current progress — a completed rewatch is a full run through
+    /// the anime regardless of where episodes-watched currently sits, so an
+    /// entry one episode into its third viewing of a 12-episode series counts
+    /// 2*12 = 24 rewatch episodes, not 2. Episodes-watched is the fallback
+    /// baseline only when no total is published, since that's the only
+    /// length the app knows for a still-airing or unpublished-length show.
+    /// Primitive form shared for the same reason as <see
+    /// cref="EpisodeSeconds(int?)"/>.</summary>
+    public static int RewatchOnlyEpisodes(int rewatchCount, int? totalEpisodes, int episodesWatched) =>
+        rewatchCount * (totalEpisodes ?? episodesWatched);
+
+    public static int RewatchOnlyEpisodes(UserAnimeEntry entry) =>
+        RewatchOnlyEpisodes(entry.RewatchCount, entry.Anime.TotalEpisodes, entry.EpisodesWatched);
 
     /// <summary>An entry's rewatch-inclusive episode count: its current
-    /// episodes watched, plus one further complete run of the anime for
-    /// every recorded rewatch. The rewatch baseline is the anime's
-    /// <em>published total</em>, not the entry's current progress — a
-    /// completed rewatch is a full run through the anime regardless of where
-    /// EpisodesWatched currently sits, so an entry one episode into its
-    /// third viewing of a 12-episode series reads 1 + 2*12 = 25, not 3.
-    /// EpisodesWatched is the fallback baseline only when no total is
-    /// published, since that's the only length the app knows for a
-    /// still-airing or unpublished-length show.</summary>
+    /// episodes watched, plus <see cref="RewatchOnlyEpisodes"/> — so an entry
+    /// one episode into its third viewing of a 12-episode series reads
+    /// 1 + 24 = 25, not 3.</summary>
     public static int RewatchInclusiveEpisodes(UserAnimeEntry entry) =>
-        entry.EpisodesWatched + entry.RewatchCount * (entry.Anime.TotalEpisodes ?? entry.EpisodesWatched);
+        entry.EpisodesWatched + RewatchOnlyEpisodes(entry);
 
     public static bool IsMovie(AnimeMetadata anime) =>
         string.Equals(anime.MediaType, MovieMediaType, StringComparison.OrdinalIgnoreCase);

@@ -37,7 +37,11 @@ public class SeriesRankingLookup(AnimeTrackerDbContext db)
                     member.Anime.MalScore,
                     member.Anime.UserEntry != null ? member.Anime.UserEntry.MyScore : null,
                     member.Anime.UserEntry != null ? member.Anime.UserEntry.Status : (WatchStatus?)null,
-                    member.Anime.AiringStatus))
+                    member.Anime.AiringStatus,
+                    member.Anime.UserEntry != null ? member.Anime.UserEntry.RewatchCount : (int?)null,
+                    member.Anime.UserEntry != null ? member.Anime.UserEntry.EpisodesWatched : (int?)null,
+                    member.Anime.TotalEpisodes,
+                    member.Anime.AverageEpisodeDurationSeconds))
             .ToListAsync(ct);
 
         return new SeriesRankingIndex(members);
@@ -46,8 +50,12 @@ public class SeriesRankingLookup(AnimeTrackerDbContext db)
 
 /// <summary>One series member row joined with its anime's title/picture,
 /// score, airing status, and my entry for it (if any) — the unit
-/// SeriesRankingIndex computes eligibility and averages over.</summary>
+/// SeriesRankingIndex computes eligibility, averages, and rewatch time over.
+/// RewatchCount/EpisodesWatched are null-guarded off UserEntry like
+/// MyScore/EntryStatus above; TotalEpisodes/AverageEpisodeDurationSeconds are
+/// the anime's own published fields, not tied to list membership.</summary>
 internal sealed record SeriesRankingMemberProjection(
     int SeriesId, int RootAnimeId, int AnimeId, bool IsMainLine,
     string Title, string? EnglishTitle, string? PictureUrl,
-    double? MalScore, int? MyScore, WatchStatus? EntryStatus, string? AiringStatus);
+    double? MalScore, int? MyScore, WatchStatus? EntryStatus, string? AiringStatus,
+    int? RewatchCount, int? EpisodesWatched, int? TotalEpisodes, int? AverageEpisodeDurationSeconds);

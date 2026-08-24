@@ -1,3 +1,5 @@
+using AnimeTracker.Api.Services.Watching;
+
 namespace AnimeTracker.Api.Services.Series;
 
 /// <summary>In-memory index of every series member, loaded once per Top
@@ -76,6 +78,52 @@ public sealed class SeriesRankingIndex
 
         return results;
     }
+
+    /// <summary>Every series with above-zero total rewatch time, ranked by
+    /// that total descending then title (design.md D9) — summed over
+    /// <em>every</em> member, main line and extras alike, since the question
+    /// is how much time the franchise as a whole has taken back. First
+    /// watches never count: a member with no recorded rewatch contributes
+    /// nothing. Deliberately does not apply EligibleSeries()'s
+    /// two-aired-main-line-entries coverage rule — that rule exists because
+    /// EligibleSeries() ranks by an average, which one entry would
+    /// misrepresent; a sum has no such problem, so a franchise where only
+    /// one entry has ever been rewatched is still listed with a total
+    /// that's exactly right.</summary>
+    public List<SeriesRewatchResult> RewatchedSeries()
+    {
+        var results = new List<SeriesRewatchResult>();
+
+        foreach (var group in _membersBySeriesId)
+        {
+            var members = group.ToList();
+            var totalSeconds = members.Sum(MemberRewatchSeconds);
+            if (totalSeconds <= 0)
+                continue;
+
+            var root = members.First(m => m.AnimeId == m.RootAnimeId);
+            results.Add(new SeriesRewatchResult(
+                group.Key, root.RootAnimeId, root.Title, root.EnglishTitle, root.PictureUrl, totalSeconds));
+        }
+
+        return results
+            .OrderByDescending(r => r.RewatchSeconds)
+            .ThenBy(r => r.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    // Kept in step with WatchMath rather than restating its fallbacks
+    // (RewatchOnlyEpisodes' published-total baseline, EpisodeSeconds' 24
+    // minutes) — task 9.3. A member not in my list (both fields null) or
+    // never rewatched contributes nothing.
+    private static long MemberRewatchSeconds(SeriesRankingMemberProjection m)
+    {
+        if (m.RewatchCount is not { } rewatchCount || rewatchCount <= 0)
+            return 0;
+
+        var rewatchEpisodes = WatchMath.RewatchOnlyEpisodes(rewatchCount, m.TotalEpisodes, m.EpisodesWatched ?? 0);
+        return (long)rewatchEpisodes * WatchMath.EpisodeSeconds(m.AverageEpisodeDurationSeconds);
+    }
 }
 
 /// <summary>One series' worth of Top series data: display fields from the
@@ -94,3 +142,14 @@ public sealed record SeriesRankingResult(
     SeriesAverageDto MalMain,
     SeriesAverageDto MineMain,
     bool MalRevealed);
+
+/// <summary>One series' worth of rewatch-time data: display fields from the
+/// root member and the total rewatch time summed across every member
+/// (design.md D9).</summary>
+public sealed record SeriesRewatchResult(
+    int SeriesId,
+    int RootAnimeId,
+    string Title,
+    string? EnglishTitle,
+    string? PictureUrl,
+    long RewatchSeconds);

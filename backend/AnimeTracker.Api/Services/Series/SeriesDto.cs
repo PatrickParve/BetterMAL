@@ -90,9 +90,12 @@ public record SeriesStatsDto(
     List<string> Genres);
 
 /// <summary>Full projection of a franchise for the series page. <c>Status</c>
-/// is one of "Ongoing", "Upcoming", or "Finished" (design.md/task 3.4) —
-/// computed server-side since it depends on every member's airing status, not
-/// just the root's. <c>Title</c>,
+/// is one of "Airing", "Ongoing", "Upcoming", or "Finished" (design.md/task
+/// 3.4) — computed server-side since it depends on every member's airing
+/// status, not just the root's. "Airing" is main-line-only: it is returned
+/// only when a main-line member is currently airing. "Ongoing" now covers
+/// everything else that isn't settled — an extra (not main-line) member
+/// currently airing, or a member of any kind still unaired. <c>Title</c>,
 /// <c>EnglishTitle</c> and <c>PictureUrl</c> come from the root entry
 /// (design.md decision 4). <c>RootAniListId</c> is the root's AniList id
 /// when a sync row exists for it, read the same way

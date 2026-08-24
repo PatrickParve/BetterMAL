@@ -172,6 +172,36 @@ export function formatRuntime(totalSeconds: number): string {
   return parts.join(' ')
 }
 
+// A separate formatter from formatRuntime, not an option on it (design.md
+// D11): the rewatch badge sits over a poster and needs something shorter,
+// in days and decimal hours rather than days/hours/minutes, so no existing
+// caller of formatRuntime is affected by adding this. e.g. 3d 7h 40min ->
+// "3d 7.7h", 23min -> "0.38h", 24min -> "0.4h" (trailing zero trimmed).
+export function formatRewatchTime(totalSeconds: number): string {
+  const totalHours = totalSeconds / 3600
+
+  if (totalHours < 1) {
+    // Two decimals rather than one below the hour mark, so a short rewatch
+    // is stated rather than rounded away.
+    const formatted = trimTrailingZeros(totalHours.toFixed(2))
+    return totalSeconds > 0 && formatted === '0' ? '<0.01h' : `${formatted}h`
+  }
+
+  // Rounded to a tenth of an hour *before* days are split off — this is what
+  // stops 47.96h from rendering "1d 24h": rounded first it's 48.0h, which
+  // splits cleanly to "2d 0h". The sub-hour branch above can never collide
+  // with this rounding, since it only runs when the total is under an hour.
+  const roundedTenths = Math.round(totalHours * 10) / 10
+  const days = Math.floor(roundedTenths / 24)
+  const hours = roundedTenths - days * 24
+  const hoursLabel = `${trimTrailingZeros(hours.toFixed(1))}h`
+  return days > 0 ? `${days}d ${hoursLabel}` : hoursLabel
+}
+
+function trimTrailingZeros(value: string): string {
+  return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value
+}
+
 // "Never" is settings-page phrasing for a field that's always present
 // elsewhere, so callers that don't want it pass a null value instead.
 export function formatTimestamp(value: string | null): string {

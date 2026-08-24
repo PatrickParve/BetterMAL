@@ -18,14 +18,32 @@ public class SeriesRankingLookupTests
             .Options);
 
     private static void AddAnime(
-        AnimeTrackerDbContext db, int id, double? malScore = null, string airingStatus = "finished_airing") =>
-        db.AnimeMetadata.Add(new AnimeMetadata { Id = id, Title = $"Anime {id}", MalScore = malScore, AiringStatus = airingStatus });
+        AnimeTrackerDbContext db, int id, double? malScore = null, string airingStatus = "finished_airing",
+        int? totalEpisodes = null, int? averageEpisodeDurationSeconds = null) =>
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = id,
+            Title = $"Anime {id}",
+            MalScore = malScore,
+            AiringStatus = airingStatus,
+            TotalEpisodes = totalEpisodes,
+            AverageEpisodeDurationSeconds = averageEpisodeDurationSeconds,
+        });
 
     private static void AddMember(AnimeTrackerDbContext db, int seriesId, int animeId, bool isMainLine, int order) =>
         db.SeriesMembers.Add(new SeriesMember { AnimeId = animeId, SeriesId = seriesId, IsMainLine = isMainLine, Order = order });
 
-    private static void AddEntry(AnimeTrackerDbContext db, int animeId, WatchStatus status, int? myScore) =>
-        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = animeId, Status = status, MyScore = myScore });
+    private static void AddEntry(
+        AnimeTrackerDbContext db, int animeId, WatchStatus status, int? myScore,
+        int rewatchCount = 0, int episodesWatched = 0) =>
+        db.UserAnimeEntries.Add(new UserAnimeEntry
+        {
+            AnimeId = animeId,
+            Status = status,
+            MyScore = myScore,
+            RewatchCount = rewatchCount,
+            EpisodesWatched = episodesWatched,
+        });
 
     [Fact]
     public async Task EmptyStore_ReturnsEmptyResultWithoutSeries()
@@ -148,6 +166,49 @@ public class SeriesRankingLookupTests
 
         Assert.Equal(2, series.EntryCount); // total membership still counts the not-yet-aired entry
         Assert.Equal(1, series.MainLineAiredCount); // but it doesn't count as an aired main-line entry
+    }
+
+    // The four columns added for the rewatched-series read (design.md
+    // D9/D10, task 9.1/11.5) aren't exposed on SeriesRankingResult directly,
+    // so their presence is observed through RewatchedSeries()'s output —
+    // a non-zero, correctly-computed total confirms RewatchCount,
+    // EpisodesWatched, TotalEpisodes, and AverageEpisodeDurationSeconds all
+    // flowed through the join.
+    [Fact]
+    public async Task RewatchProjection_PopulatesTheFourNewColumns()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, totalEpisodes: 12, averageEpisodeDurationSeconds: 1500);
+        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
+        AddEntry(db, 100, WatchStatus.Completed, myScore: 9, rewatchCount: 1, episodesWatched: 12);
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var rewatched = Assert.Single(index.RewatchedSeries());
+
+        Assert.Equal(12L * 1500, rewatched.RewatchSeconds);
+    }
+
+    // A member with no UserEntry at all has null RewatchCount/EpisodesWatched
+    // in the projection (the same null-guard MyScore/EntryStatus already
+    // use) — it must contribute nothing rather than throwing.
+    [Fact]
+    public async Task RewatchProjection_MemberWithNoUserEntryContributesNothing()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, totalEpisodes: 12, averageEpisodeDurationSeconds: 1500);
+        AddAnime(db, 101, totalEpisodes: 12, averageEpisodeDurationSeconds: 1500); // never in my list at all
+        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 1, animeId: 101, isMainLine: true, order: 1);
+        AddEntry(db, 100, WatchStatus.Completed, myScore: 9, rewatchCount: 1, episodesWatched: 12);
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var rewatched = Assert.Single(index.RewatchedSeries());
+
+        Assert.Equal(12L * 1500, rewatched.RewatchSeconds); // only anime 100's rewatch counts
     }
 
     [Fact]

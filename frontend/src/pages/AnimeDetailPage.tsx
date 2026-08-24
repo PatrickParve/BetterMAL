@@ -17,6 +17,7 @@ import {
 import { useLandscapePicture } from "../hooks/useLandscapePicture.ts";
 import { usePageData } from "../hooks/usePageData.ts";
 import {
+  formatRuntime,
   hasAiredEpisodes,
   isScoreRevealableStatus,
   mediaTypeLabel,
@@ -107,6 +108,14 @@ function formatDuration(seconds: number | null, totalEpisodes: number | null): s
   const value =
     minutes < 60 ? `${minutes} min` : remainder === 0 ? `${hours}h` : `${hours}h ${remainder}min`;
   return totalEpisodes === 1 ? value : `${value}/ep`;
+}
+
+// The show's full runtime — per-episode duration times the published episode
+// count — rather than the per-episode figure Duration states. Unknown
+// whenever either half is (a still-airing or otherwise uncounted show).
+function formatTotalTime(seconds: number | null, totalEpisodes: number | null): string {
+  if (!seconds || !totalEpisodes) return NO_INFO;
+  return formatRuntime(seconds * totalEpisodes);
 }
 
 // Single anime detail page: large picture + progress/edit on the left, a
@@ -475,12 +484,29 @@ export function AnimeDetailPage() {
                 <dd>{detail.studio ?? NO_INFO}</dd>
               </div>
               <div>
-                <dt>Aired</dt>
-                <dd>{formatAiredRange(detail.airedFrom, detail.airedTo)}</dd>
+                <dt>Total time</dt>
+                <dd>
+                  {formatTotalTime(
+                    detail.averageEpisodeDurationSeconds,
+                    detail.totalEpisodes,
+                  )}
+                </dd>
               </div>
               <div>
                 <dt>Rating</dt>
                 <dd>{formatRating(detail.rating)}</dd>
+              </div>
+              <div>
+                <dt>Aired</dt>
+                <dd>{formatAiredRange(detail.airedFrom, detail.airedTo)}</dd>
+              </div>
+              <div>
+                <dt>Genres</dt>
+                <dd>
+                  {detail.genres && detail.genres.length > 0
+                    ? detail.genres.join(", ")
+                    : NO_INFO}
+                </dd>
               </div>
               <div>
                 <dt>Season</dt>
@@ -495,14 +521,6 @@ export function AnimeDetailPage() {
                   ) : (
                     NO_INFO
                   )}
-                </dd>
-              </div>
-              <div>
-                <dt>Genres</dt>
-                <dd>
-                  {detail.genres && detail.genres.length > 0
-                    ? detail.genres.join(", ")
-                    : NO_INFO}
                 </dd>
               </div>
               <div className="anime-detail-page__links">

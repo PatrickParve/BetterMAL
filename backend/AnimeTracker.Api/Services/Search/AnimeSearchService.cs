@@ -41,7 +41,9 @@ public class AnimeSearchService(
 
         // A live-search hiccup (network blip, transient MAL error) shouldn't
         // take down the search box — degrade to "local results only" instead.
-        var malEdges = await SearchMalAsync(term, 25, ct);
+        // Failed is ignored here: the local index above is already merged in
+        // regardless, so a MAL failure silently degrades on its own.
+        var (malEdges, _) = await SearchMalAsync(term, 25, ct);
         var malCandidates = malEdges.Select(edge => new SearchCandidate(
             edge.Node.Id,
             edge.Node.Title,
@@ -107,30 +109,41 @@ public class AnimeSearchService(
     {
         var (term, exact) = ParseQuery(query);
         if (term.Length == 0)
-            return new SearchPageDto(query, [], offset, limit, 0, []);
+            return new SearchPageDto(query, [], offset, limit, 0, [], false);
 
         const int MaxResults = 100;
-        var edges = await SearchMalAsync(term, MaxResults, ct);
+        var (edges, malFailed) = await SearchMalAsync(term, MaxResults, ct);
 
-        var candidates = edges
-            .Select((edge, index) => new SearchPageCandidate(
-                edge.Node.Id,
-                edge.Node.Title,
-                NullIfWhitespace(edge.Node.AlternativeTitles?.En),
-                edge.Node.MainPicture?.Medium ?? edge.Node.MainPicture?.Large,
-                edge.Node.NumEpisodes is null or 0 ? null : edge.Node.NumEpisodes,
-                edge.Node.MediaType,
-                edge.Node.Mean,
-                edge.Node.Popularity,
-                index))
-            .AsEnumerable();
-
-        if (exact)
+        List<SearchPageCandidate> filtered;
+        if (malFailed)
         {
-            candidates = candidates.Where(c => SearchTextMatch.EqualsIgnoreCase(c.Title, term) || SearchTextMatch.EqualsIgnoreCase(c.EnglishTitle, term));
+            // The live search never ran, so — unlike the MAL path below —
+            // candidates must be filtered by term locally (design.md D7).
+            filtered = await BuildFallbackCandidatesAsync(term, exact, MaxResults, ct);
+        }
+        else
+        {
+            var candidates = edges
+                .Select((edge, index) => new SearchPageCandidate(
+                    edge.Node.Id,
+                    edge.Node.Title,
+                    NullIfWhitespace(edge.Node.AlternativeTitles?.En),
+                    edge.Node.MainPicture?.Medium ?? edge.Node.MainPicture?.Large,
+                    edge.Node.NumEpisodes is null or 0 ? null : edge.Node.NumEpisodes,
+                    edge.Node.MediaType,
+                    edge.Node.Mean,
+                    edge.Node.Popularity,
+                    index))
+                .AsEnumerable();
+
+            if (exact)
+            {
+                candidates = candidates.Where(c => SearchTextMatch.EqualsIgnoreCase(c.Title, term) || SearchTextMatch.EqualsIgnoreCase(c.EnglishTitle, term));
+            }
+
+            filtered = candidates.ToList();
         }
 
-        var filtered = candidates.ToList();
         // The frontend fetches this page once (offset 0) and reveals it client-side
         // in chunks, never re-fetching for more — so totalCount must reflect what
         // this single response can actually deliver, not MAL's full (up to
@@ -174,7 +187,47 @@ public class AnimeSearchService(
                 myScores.GetValueOrDefault(c.AnimeId), myScores.ContainsKey(c.AnimeId)))
             .ToList();
 
-        return new SearchPageDto(query, items, offset, limit, totalCount, seriesResults);
+        return new SearchPageDto(query, items, offset, limit, totalCount, seriesResults, malFailed);
+    }
+
+    /// <summary>Local-only substitute for a failed live MAL search (design.md
+    /// D7): the same rows the type-ahead's local stage reads, filtered by term
+    /// with the same predicates <see cref="SearchAsync"/> uses, capped to
+    /// <paramref name="maxResults"/> before ranking since there's no MAL
+    /// relevance order to defer to. RelevanceIndex is assigned by a local
+    /// three-band ranking — exact title matches, then prefix matches, then
+    /// the rest, each band ordered by popularity then title — so the
+    /// "relevance" sort in <see cref="SearchPageAsync"/> needs no special
+    /// case for where the candidates came from.</summary>
+    private async Task<List<SearchPageCandidate>> BuildFallbackCandidatesAsync(string term, bool exact, int maxResults, CancellationToken ct)
+    {
+        var index = await repository.GetSearchFallbackIndexAsync(ct);
+
+        var matching = exact
+            ? index.Where(a => SearchTextMatch.EqualsIgnoreCase(a.Title, term) || SearchTextMatch.EqualsIgnoreCase(a.EnglishTitle, term))
+            : index.Where(a => SearchTextMatch.ContainsIgnoreCase(a.Title, term) || SearchTextMatch.ContainsIgnoreCase(a.EnglishTitle, term));
+
+        var truncated = matching.Take(maxResults).ToList();
+
+        bool IsExactMatch(AnimeSearchFallbackProjection a) =>
+            SearchTextMatch.EqualsIgnoreCase(a.Title, term) || SearchTextMatch.EqualsIgnoreCase(a.EnglishTitle, term);
+        bool IsPrefixMatch(AnimeSearchFallbackProjection a) =>
+            SearchTextMatch.StartsWithIgnoreCase(a.Title, term) || SearchTextMatch.StartsWithIgnoreCase(a.EnglishTitle, term);
+
+        var exactBand = truncated.Where(IsExactMatch)
+            .OrderBy(a => SearchTextMatch.PopularityKey(a.PopularityRank))
+            .ThenBy(a => a.Title, StringComparer.OrdinalIgnoreCase);
+        var prefixBand = truncated.Where(a => !IsExactMatch(a) && IsPrefixMatch(a))
+            .OrderBy(a => SearchTextMatch.PopularityKey(a.PopularityRank))
+            .ThenBy(a => a.Title, StringComparer.OrdinalIgnoreCase);
+        var restBand = truncated.Where(a => !IsExactMatch(a) && !IsPrefixMatch(a))
+            .OrderBy(a => SearchTextMatch.PopularityKey(a.PopularityRank))
+            .ThenBy(a => a.Title, StringComparer.OrdinalIgnoreCase);
+
+        return exactBand.Concat(prefixBand).Concat(restBand)
+            .Select((a, index) => new SearchPageCandidate(
+                a.Id, a.Title, a.EnglishTitle, a.PictureUrl, a.TotalEpisodes, a.MediaType, a.MalScore, a.PopularityRank, index))
+            .ToList();
     }
 
     /// <summary>Trims the query and strips a surrounding pair of double quotes
@@ -189,19 +242,23 @@ public class AnimeSearchService(
         return (trimmed, false);
     }
 
-    /// <summary>Live MAL search, degraded to an empty list on failure — a MAL
-    /// hiccup (network blip, transient error) should never take down search.</summary>
-    private async Task<List<MalAnimeListEdge>> SearchMalAsync(string term, int limit, CancellationToken ct)
+    /// <summary>Live MAL search. Degrades to an empty list with <c>Failed</c>
+    /// true on failure, distinct from MAL legitimately answering with no
+    /// matches (design.md D7) — the type-ahead (<see cref="SearchAsync"/>)
+    /// ignores the flag since it already merges in the local index either
+    /// way, but the results page (<see cref="SearchPageAsync"/>) uses it to
+    /// fall back to a local-only search.</summary>
+    private async Task<(List<MalAnimeListEdge> Edges, bool Failed)> SearchMalAsync(string term, int limit, CancellationToken ct)
     {
         try
         {
             var response = await malClient.SearchAnimeAsync(term, limit, ct);
-            return response.Data;
+            return (response.Data, false);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Live MAL search failed for query {Query}.", term);
-            return [];
+            return ([], true);
         }
     }
 

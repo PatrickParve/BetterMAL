@@ -66,4 +66,19 @@ public class ProfileController(IProfileService profileService) : ControllerBase
         var section = await profileService.GetTopSeriesSectionAsync(ct);
         return Ok(section);
     }
+
+    /// <summary>"Most rewatched"'s Series scope: every franchise with
+    /// above-zero total rewatch time, ranked by that total descending
+    /// (design.md D9). Deliberately not embedded in <see cref="Get"/>, for
+    /// the same reason as <see cref="GetTopSeries"/> above: it runs its own
+    /// SeriesMembers ⋈ AnimeMetadata join, which shouldn't land on every
+    /// profile visit for a scope that may never be selected. Unlike
+    /// top-series it does not enqueue background series builds — the same
+    /// page's Top series read already does (design.md D10).</summary>
+    [HttpGet("api/profile/rewatched-series")]
+    public async Task<IActionResult> GetRewatchedSeries(CancellationToken ct)
+    {
+        var section = await profileService.GetRewatchedSeriesSectionAsync(ct);
+        return Ok(section);
+    }
 }

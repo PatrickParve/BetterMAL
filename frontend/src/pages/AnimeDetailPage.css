@@ -76,24 +76,35 @@
   flex-basis: var(--picture-w);
 }
 
+/* width is fixed, height is natural: for a loaded image the *intrinsic*
+   ratio wins over the specified one (that's what the `auto` keyword in
+   aspect-ratio does for a replaced element), so a portrait picture renders
+   at its own height instead of being cropped to a fixed box. Until the
+   image has loaded and reports a size, there's no intrinsic ratio yet, so
+   260/368 reserves the usual portrait box's height and the column doesn't
+   collapse. */
 .anime-detail-page__picture {
   width: 260px;
-  height: 368px;
-  object-fit: cover;
+  height: auto;
+  aspect-ratio: auto 260 / 368;
   border-radius: 12px;
   background: var(--code-bg);
 }
 
+/* No image, so no intrinsic ratio to adopt — fixed at the portrait box's
+   usual height, with aspect-ratio reset since nothing here should shrink it. */
 .anime-detail-page__picture--placeholder {
+  height: 368px;
+  aspect-ratio: auto;
   border: 1px solid var(--border);
 }
 
 /* Landscape art takes its own natural height instead of being cropped to
-   the portrait 368px box, and is shown wider than the portrait box at the
-   width the column above now reserves for it. */
+   the portrait box, and is shown wider than the portrait box at the width
+   the column above now reserves for it. Only width needs setting here: the
+   base rule's height: auto and natural ratio already carry the height. */
 .anime-detail-page__picture--landscape {
   width: var(--picture-w, clamp(320px, 27vw, 400px));
-  height: auto;
 }
 
 .anime-detail-page__progress-row {
@@ -154,13 +165,20 @@
   gap: 16px;
 }
 
+/* anime-detail "The two score boxes share one size" (design.md D7): a grid
+   under a max-content constraint (width: fit-content) gives every 1fr track
+   the largest track's max-content contribution, so both boxes come out at
+   whichever needs more room — equalising rather than stretching, which is
+   what flex: 1 1 0 would do instead. */
 .anime-detail-page__score-boxes {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  width: fit-content;
   gap: 16px;
 }
 
 .anime-detail-page__score-boxes .detail-box {
-  flex: 0 0 auto;
   padding: 12px 16px;
 }
 
@@ -238,6 +256,6 @@
   }
 
   .anime-detail-page__score-boxes {
-    flex-direction: column;
+    grid-auto-flow: row;
   }
 }
