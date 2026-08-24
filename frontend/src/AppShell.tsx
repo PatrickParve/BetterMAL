@@ -18,6 +18,7 @@ import { ProfilePage } from './pages/ProfilePage.tsx'
 import { SettingsPage } from './pages/SettingsPage.tsx'
 import { AnimeDetailPage } from './pages/AnimeDetailPage.tsx'
 import { SearchPage } from './pages/SearchPage.tsx'
+import { SeriesBrowserPage } from './pages/SeriesBrowserPage.tsx'
 import { SeriesPage } from './pages/SeriesPage.tsx'
 
 // Mounted once the "Connect to MAL" gate in App.tsx confirms a token is on
@@ -46,6 +47,7 @@ export function AppShell() {
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/anime/:id" element={<AnimeDetailPage />} />
                   <Route path="/search" element={<SearchPage />} />
+                  <Route path="/series" element={<SeriesBrowserPage />} />
                   <Route path="/series/:animeId" element={<SeriesPage />} />
                   <Route path="*" element={<HomePage />} />
                 </Routes>

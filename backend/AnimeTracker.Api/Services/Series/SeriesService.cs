@@ -257,23 +257,14 @@ public class SeriesService(
     // --- Status pill (3.4) ---
 
     // Internal (not private), like BuildStats above, so tests can exercise
-    // the precedence directly against plain in-memory models.
-    internal static string ComputeStatus(List<AnimeMetadata> mainLineMembers, List<AnimeMetadata> members)
-    {
-        if (mainLineMembers.Any(a => a.AiringStatus == "currently_airing"))
-            return "Airing";
-
-        if (members.Any(a => a.AiringStatus == "currently_airing"))
-            return "Ongoing";
-
-        var anyFinished = members.Any(a => a.AiringStatus == "finished_airing");
-        var anyUpcoming = members.Any(a => a.AiringStatus == "not_yet_aired");
-
-        if (!anyFinished && anyUpcoming)
-            return "Upcoming";
-
-        return anyUpcoming ? "Ongoing" : "Finished";
-    }
+    // the precedence directly against plain in-memory models. Delegates to
+    // SeriesStatusRules (design.md D5 of add-series-browser) so the series
+    // list projection can compute the same precedence without loading
+    // navigation-property-bearing entities.
+    internal static string ComputeStatus(List<AnimeMetadata> mainLineMembers, List<AnimeMetadata> members) =>
+        SeriesStatusRules.Compute(
+            mainLineMembers.Select(a => a.AiringStatus),
+            members.Select(a => a.AiringStatus));
 
     // The last year is the latest entry's *end* year (AiredTo), not the start
     // year of whichever entry started airing most recently — a multi-cour or

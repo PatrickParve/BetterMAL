@@ -1,4 +1,11 @@
-import { RECAP_SEASONS, type RecapSeasonName, type WatchStatus } from '../api/types.ts'
+import {
+  RECAP_SEASONS,
+  type RecapSeasonName,
+  type SeriesListItemDto,
+  type SeriesProgressBadge,
+  type SeriesStatus,
+  type WatchStatus,
+} from '../api/types.ts'
 
 // Prefer the English title wherever an anime title is displayed, falling
 // back to the default (usually romaji/native) title when MAL has none.
@@ -198,6 +205,25 @@ export function formatRewatchTime(totalSeconds: number): string {
   return days > 0 ? `${days}d ${hoursLabel}` : hoursLabel
 }
 
+// A 0 total alongside hasUnknown means every main-line entry's episode count
+// is unknown (e.g. the only main-line entry is still airing with no
+// published total) — "0+ ep" would read as a real zero padded with a
+// lower-bound marker, so it gets its own label instead. Shared by SeriesPage
+// (main-series episode total) and the Series page's cards (main-line episode
+// total, add-series-browser design.md D7) — the two must read identically.
+export function formatEpisodeTotal(total: number, hasUnknown: boolean): string {
+  if (total === 0 && hasUnknown) return 'Unknown'
+  return `${total}${hasUnknown ? '+' : ''} ep`
+}
+
+// "2013 – 2023", or the single year when a franchise's whole run fell in one
+// year. Shared by SeriesPage and the Series page's cards (add-series-browser
+// design.md), which must show the same span for the same series.
+export function formatYearSpan(firstYear: number | null, lastYear: number | null): string {
+  if (firstYear === null || lastYear === null) return '—'
+  return firstYear === lastYear ? String(firstYear) : `${firstYear} – ${lastYear}`
+}
+
 function trimTrailingZeros(value: string): string {
   return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value
 }
@@ -383,4 +409,118 @@ export function composeComparator(
     }
     return byTitle(a, b)
   }
+}
+
+// The Series page's seven sort orders (add-series-browser design.md D8).
+export type SeriesSortKey = 'alphabetical' | 'malScore' | 'myScore' | 'status' | 'newest' | 'oldest' | 'myProgress'
+
+const SERIES_STATUS_ORDER: Record<SeriesStatus, number> = { Airing: 0, Ongoing: 1, Upcoming: 2, Finished: 3 }
+
+// Watched ÷ aired over the main line, not watched ÷ total — being current on
+// a running series ranks alongside having finished a done one. A series with
+// nothing aired at all has no ratio (design.md D8) — represented as null so
+// it sorts after every series with a real ratio, including zero.
+function seriesProgressRatio(item: SeriesListItemDto): number | null {
+  if (item.mainLineAiredEpisodes <= 0) return null
+  return item.mainLineWatchedEpisodes / item.mainLineAiredEpisodes
+}
+
+function seriesDisplayTitleKey(item: SeriesListItemDto): string {
+  return pickDisplayTitle(item.title, item.englishTitle).toLowerCase()
+}
+
+// A series the key can't rank (no average, no known first-aired year) sorts
+// after every series the key can rank, rather than being dropped or sorted
+// as a zero (design.md D8) — nulls sort last regardless of direction.
+function seriesNullsLast(
+  get: (item: SeriesListItemDto) => number | null,
+  direction: 'ascending' | 'descending',
+): (a: SeriesListItemDto, b: SeriesListItemDto) => number {
+  return (a, b) => {
+    const va = get(a)
+    const vb = get(b)
+    if (va === null && vb === null) return 0
+    if (va === null) return 1
+    if (vb === null) return -1
+    return direction === 'ascending' ? va - vb : vb - va
+  }
+}
+
+const SERIES_SORT_COMPARATORS: Record<SeriesSortKey, (a: SeriesListItemDto, b: SeriesListItemDto) => number> = {
+  alphabetical: (a, b) => seriesDisplayTitleKey(a).localeCompare(seriesDisplayTitleKey(b)),
+  malScore: seriesNullsLast((item) => item.malMain.value, 'descending'),
+  myScore: seriesNullsLast((item) => item.mineMain.value, 'descending'),
+  status: (a, b) => SERIES_STATUS_ORDER[a.status] - SERIES_STATUS_ORDER[b.status],
+  // "Newest" puts the most recently started series first — descending.
+  newest: seriesNullsLast((item) => item.firstYear, 'descending'),
+  // "Oldest" puts the earliest started series first — ascending; unknown
+  // first-aired years still sort last, not first.
+  oldest: seriesNullsLast((item) => item.firstYear, 'ascending'),
+  myProgress: seriesNullsLast(seriesProgressRatio, 'descending'),
+}
+
+// Sorts the whole listed set at once (design.md D8) — every comparator's
+// final tie-break is display title ascending, so the order is total and
+// stable across re-sorts, matching what the card itself displays.
+export function sortSeries(items: SeriesListItemDto[], sort: SeriesSortKey): SeriesListItemDto[] {
+  const comparator = SERIES_SORT_COMPARATORS[sort]
+  return [...items].sort((a, b) => comparator(a, b) || seriesDisplayTitleKey(a).localeCompare(seriesDisplayTitleKey(b)))
+}
+
+// The Series page's two filter groups (polish-series-badges-and-filters
+// design.md D6). URL-friendly lowercase values, distinct from the wire
+// SeriesProgressBadge/SeriesStatus values they map to.
+export type SeriesProgressFilterValue = 'watched' | 'behind' | 'dropped' | 'unwatched'
+export type SeriesStatusFilterValue = 'airing' | 'ongoing' | 'upcoming' | 'finished'
+
+export const SERIES_PROGRESS_FILTER_OPTIONS: { value: SeriesProgressFilterValue; label: string }[] = [
+  { value: 'watched', label: 'Watched' },
+  { value: 'behind', label: 'Behind' },
+  { value: 'dropped', label: 'Dropped' },
+  { value: 'unwatched', label: 'Unwatched' },
+]
+
+export const SERIES_STATUS_FILTER_OPTIONS: { value: SeriesStatusFilterValue; label: string }[] = [
+  { value: 'airing', label: 'Airing' },
+  { value: 'ongoing', label: 'Ongoing' },
+  { value: 'upcoming', label: 'Upcoming' },
+  { value: 'finished', label: 'Finished' },
+]
+
+// "Watched" covers both Completed and Caught up — "everything from the main
+// series that has aired has been watched" is what both badges mean, just at
+// different points in the franchise's run.
+const PROGRESS_FILTER_BADGES: Record<SeriesProgressFilterValue, SeriesProgressBadge[]> = {
+  watched: ['Completed', 'CaughtUp'],
+  behind: ['Behind'],
+  dropped: ['Dropped'],
+  unwatched: ['Unwatched'],
+}
+
+const STATUS_FILTER_VALUES: Record<SeriesStatusFilterValue, SeriesStatus> = {
+  airing: 'Airing',
+  ongoing: 'Ongoing',
+  upcoming: 'Upcoming',
+  finished: 'Finished',
+}
+
+// Two independent multi-select filters over the whole listed set: buttons
+// within one group OR together, the two groups AND together. An empty
+// selection in a group applies no filter for that group. A series with no
+// progress badge ('None') matches no Progress button — selecting any
+// Progress filter hides it, same as any other non-matching value.
+export function filterSeries(
+  items: SeriesListItemDto[],
+  progressFilter: SeriesProgressFilterValue[],
+  statusFilter: SeriesStatusFilterValue[],
+): SeriesListItemDto[] {
+  const allowedBadges =
+    progressFilter.length > 0 ? new Set(progressFilter.flatMap((value) => PROGRESS_FILTER_BADGES[value])) : null
+  const allowedStatuses = statusFilter.length > 0 ? new Set(statusFilter.map((value) => STATUS_FILTER_VALUES[value])) : null
+
+  return items.filter((item) => {
+    if (allowedBadges && !allowedBadges.has(item.progressBadge)) return false
+    if (allowedStatuses && !allowedStatuses.has(item.status)) return false
+    return true
+  })
 }

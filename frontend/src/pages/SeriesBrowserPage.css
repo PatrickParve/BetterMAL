@@ -1,0 +1,170 @@
+.series-browser-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.series-browser-page__header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.series-browser-page__title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+
+.series-browser-page__controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.series-browser-page__filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Small caps label naming the group ("Status" vs "Progress") so it's clear
+   at a glance which buttons filter on the series' airing status and which
+   filter on where I stand watching it. */
+.series-browser-page__filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.6;
+}
+
+.series-browser-page__filter-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Same control-height family as the sort select beside it (page-header-design
+   filter/sort cluster rule). Each value's --tab-* triple matches its own
+   status pill/badge colour exactly (SeriesStatusPill/SeriesCompletionBadge)
+   so a selected or hovered button reads as that status's own colour, not a
+   generic highlight — mirrors MyListPage's status tabs. */
+.series-browser-page__filter-button {
+  font: inherit;
+  font-size: 13px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--tab-border, var(--border));
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.series-browser-page__filter-button--airing {
+  --tab-border: var(--airing-border);
+  --tab-color: var(--airing);
+  --tab-bg: var(--airing-bg);
+}
+.series-browser-page__filter-button--ongoing {
+  --tab-border: var(--status-onhold-border);
+  --tab-color: var(--status-onhold);
+  --tab-bg: var(--status-onhold-bg);
+}
+.series-browser-page__filter-button--upcoming {
+  --tab-border: var(--status-plantowatch-border);
+  --tab-color: var(--status-plantowatch);
+  --tab-bg: var(--status-plantowatch-bg);
+}
+.series-browser-page__filter-button--finished {
+  --tab-border: var(--status-completed-border);
+  --tab-color: var(--status-completed);
+  --tab-bg: var(--status-completed-bg);
+}
+/* Watched stands for two badges (Completed and Caught up) — it takes Caught
+   up's green, the more common day-to-day case. */
+.series-browser-page__filter-button--watched {
+  --tab-border: var(--status-watching-border);
+  --tab-color: var(--status-watching);
+  --tab-bg: var(--status-watching-bg);
+}
+.series-browser-page__filter-button--behind {
+  --tab-border: var(--status-onhold-border);
+  --tab-color: var(--status-onhold);
+  --tab-bg: var(--status-onhold-bg);
+}
+.series-browser-page__filter-button--dropped {
+  --tab-border: var(--status-dropped-border);
+  --tab-color: var(--status-dropped);
+  --tab-bg: var(--status-dropped-bg);
+}
+.series-browser-page__filter-button--unwatched {
+  --tab-border: var(--status-plantowatch-border);
+  --tab-color: var(--status-plantowatch);
+  --tab-bg: var(--status-plantowatch-bg);
+}
+
+.series-browser-page__filter-button:hover {
+  color: var(--text-h);
+  border-color: var(--tab-color, var(--accent-border));
+}
+
+.series-browser-page__filter-button--active {
+  color: var(--text-h);
+  background: var(--tab-bg, var(--accent-bg));
+  border-color: var(--tab-color, var(--accent-border));
+}
+
+.series-browser-page__sort {
+  font: inherit;
+  font-size: 14px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.series-browser-page__empty {
+  padding: 48px 0;
+  text-align: center;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+/* Matches .season-page__grid/.search-page__grid so every browse page's grid
+   looks identical. */
+.series-browser-page__grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 1024px) {
+  .series-browser-page__grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 16px;
+  }
+}
+
+.series-browser-page__sentinel {
+  height: 1px;
+}
+
+.series-browser-page__loading {
+  text-align: center;
+  color: var(--text);
+  opacity: 0.75;
+  font-size: 14px;
+  padding: 12px 0;
+}

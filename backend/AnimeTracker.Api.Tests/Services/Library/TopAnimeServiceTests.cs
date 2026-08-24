@@ -182,6 +182,8 @@ public class TopAnimeServiceTests
             throw new NotImplementedException();
         public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<AnimeMetadata> anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
             Task.FromResult(anime.Where(a => _airedSoFar.ContainsKey(a.Id)).ToDictionary(a => a.Id, a => _airedSoFar[a.Id]));
+        public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult(animeIds.Where(_airedSoFar.ContainsKey).ToDictionary(id => id, id => _airedSoFar[id]));
     }
 
     private sealed class FakeBroadcastLocalTimeConverter : IBroadcastLocalTimeConverter

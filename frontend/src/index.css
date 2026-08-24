@@ -74,15 +74,23 @@
      --status-completed/--accent later without touching every rule that
      means "MAL" or "mine" — --status-completed still means "Completed
      status" everywhere else, including SeriesEntryRow's left-border stripe
-     and its status pills. "On air now" green (--airing) stays scoped to
-     .series-page in SeriesPage.css — it names a series-timeline concept,
-     not a score. */
+     and its status pills. */
   --mal: var(--status-completed);
   --mal-bg: var(--status-completed-bg);
   --mal-border: var(--status-completed-border);
   --mine: var(--accent);
   --mine-bg: var(--accent-bg);
   --mine-border: var(--accent-border);
+
+  /* "On air now" green — a series-timeline/status-pill concept, not a score,
+     so it's its own alias rather than reusing --status-watching directly:
+     the two can diverge later without touching either. Shared by the series
+     page's header pill and the Series page's card pill (SeriesStatusPill),
+     which must always agree on this colour (add-series-browser design.md
+     D5) — it lived scoped to .series-page alone until the card needed it too. */
+  --airing: var(--status-watching);
+  --airing-bg: var(--status-watching-bg);
+  --airing-border: var(--status-watching-border);
 
   /* Section colour families (section-colour-language capability): a family
      names what a section is about, not a rank or a score, so each gets its

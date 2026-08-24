@@ -622,6 +622,50 @@ export type SeriesDto = {
 // generic "couldn't load" treatment).
 export type SeriesLookupResult = { found: true; series: SeriesDto } | { found: false }
 
+// The Series page card's progress badge (design.md D5 of add-series-browser;
+// six-state precedence widened by polish-series-badges-and-filters design.md
+// D1) — mirrors SeriesPage.tsx's own completionBadge precedence; the two
+// must be changed together. behindEpisodes is populated only when badge is
+// 'Behind'.
+export type SeriesProgressBadge = 'None' | 'Completed' | 'CaughtUp' | 'Behind' | 'Dropped' | 'Unwatched'
+
+// Mirrors backend Services/Series/SeriesListDto.cs (add-series-browser
+// design.md D2/D7). mainLineEpisodeTotal/hasUnknownEpisodeCounts are scoped
+// to the main line only, matching the series page's own episode-total stat
+// and this card's main-line averages, so every episode figure on the card
+// describes the same member set; entryCount is the opposite scope on
+// purpose — every member, extras included, matching SeriesBadge everywhere
+// else in the app. mainLineWatchedEpisodes/mainLineAiredEpisodes are the two
+// figures the My progress sort divides.
+export type SeriesListItemDto = {
+  seriesId: number
+  rootAnimeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  status: SeriesStatus
+  progressBadge: SeriesProgressBadge
+  behindEpisodes: number | null
+  malMain: SeriesAverageDto
+  mineMain: SeriesAverageDto
+  malRevealed: boolean
+  firstYear: number | null
+  lastYear: number | null
+  mainLineEpisodeTotal: number
+  hasUnknownEpisodeCounts: boolean
+  entryCount: number
+  mainLineWatchedEpisodes: number
+  mainLineAiredEpisodes: number
+}
+
+// Every series eligible for the Series page (add-series-browser design.md
+// D1), in the endpoint's deterministic default order — my main-line average
+// descending, nulls last, then raw title case-insensitively. The client
+// re-sorts this same array locally when the sort control changes.
+export type SeriesListDto = {
+  items: SeriesListItemDto[]
+}
+
 export type AnimeDetailDto = {
   animeId: number
   title: string

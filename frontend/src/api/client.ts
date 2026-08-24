@@ -23,6 +23,7 @@ import type {
   SeasonRefreshResultDto,
   SeriesBulkBuildStatusDto,
   SeriesDto,
+  SeriesListDto,
   SeriesLookupResult,
   SyncStatusDto,
   TopAnimeItemDto,
@@ -295,6 +296,13 @@ export async function getSeries(animeId: number): Promise<SeriesLookupResult> {
   if (res.status === 404) return { found: false }
   if (!res.ok) throw new Error(`${url} responded with ${res.status}`)
   return { found: true, series: (await res.json()) as SeriesDto }
+}
+
+// The Series page's whole-list read (design.md D1 of add-series-browser):
+// builds nothing, refreshes nothing, and makes no MAL call — the client
+// sorts this same array locally on every sort change rather than refetching.
+export function getSeriesList(): Promise<SeriesListDto> {
+  return fetchJson<SeriesListDto>('/api/series/list')
 }
 
 export function rebuildSeries(animeId: number): Promise<SeriesDto> {

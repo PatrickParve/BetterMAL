@@ -31,4 +31,13 @@ public interface IEpisodeScheduleService
     /// resolve every unknown-total entry's aired count without a query per
     /// entry.</summary>
     Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<AnimeMetadata> anime, DateTimeOffset nowUtc, CancellationToken ct = default);
+
+    /// <summary>The same batched aired-so-far read as the <c>AnimeMetadata</c>
+    /// overload above, taking anime ids directly rather than loaded entities
+    /// (add-series-browser design.md D6) — the honest signature for what this
+    /// does, since the implementation only ever reads the id. Backs the
+    /// series list projection's behind-count, which has ids from a
+    /// navigation-property-free projection and no reason to load entities
+    /// just to discard everything but their id.</summary>
+    Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset nowUtc, CancellationToken ct = default);
 }

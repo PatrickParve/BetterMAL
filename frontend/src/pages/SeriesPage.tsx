@@ -6,55 +6,42 @@ import type {
   SeriesDto,
   SeriesEntryDto,
   SeriesLookupResult,
-  SeriesStatus,
+  SeriesProgressBadge,
   UserAnimeEntryDto,
 } from '../api/types.ts'
 import { AiringProgressBar } from '../components/AiringProgressBar.tsx'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
+import { SeriesCompletionBadge } from '../components/SeriesCompletionBadge.tsx'
 import { SeriesExtraTile } from '../components/SeriesExtraTile.tsx'
+import { SeriesStatusPill } from '../components/SeriesStatusPill.tsx'
 import { SeriesTimeline } from '../components/SeriesTimeline.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useLandscapePicture } from '../hooks/useLandscapePicture.ts'
 import { usePageData } from '../hooks/usePageData.ts'
-import { formatRuntime, isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle } from '../utils/anime.ts'
+import {
+  formatEpisodeTotal,
+  formatRuntime,
+  formatYearSpan,
+  isScoreRevealableStatus,
+  mediaTypeLabel,
+  pickDisplayTitle,
+} from '../utils/anime.ts'
 import './SeriesPage.css'
 
-const NO_INFO = '—'
 const MAX_REBUILD_ROUNDS = 12
-
-const SERIES_STATUS_CLASS: Record<SeriesStatus, string> = {
-  Airing: 'airing',
-  Ongoing: 'ongoing',
-  Upcoming: 'upcoming',
-  Finished: 'finished',
-}
-
-// A 0 total alongside hasUnknown means every main-line entry's episode count
-// is unknown (e.g. the only main-line entry is still airing with no
-// published total) — "0+ ep" would read as a real zero padded with a
-// lower-bound marker, so it gets its own label instead.
-function formatEpisodeTotal(total: number, hasUnknown: boolean): string {
-  if (total === 0 && hasUnknown) return 'Unknown'
-  return `${total}${hasUnknown ? '+' : ''} ep`
-}
 
 function formatRuntimeTotal(seconds: number, hasUnknown: boolean): string {
   if (seconds === 0 && hasUnknown) return 'Unknown'
   return `${formatRuntime(seconds)}${hasUnknown ? '+' : ''}`
 }
 
-// Mirrors formatEpisodeTotal's lower-bound marker (design.md decision 3) but
-// worded for the progress readout rather than the episode-total stat.
+// Mirrors formatEpisodeTotal's lower-bound marker but worded for the
+// progress readout rather than the episode-total stat.
 function formatProgressTotal(total: number, hasUnknown: boolean): string {
   if (total === 0 && hasUnknown) return 'unknown total'
   return `${total}${hasUnknown ? '+' : ''} total`
-}
-
-function formatYearSpan(firstYear: number | null, lastYear: number | null): string {
-  if (firstYear === null || lastYear === null) return NO_INFO
-  return firstYear === lastYear ? String(firstYear) : `${firstYear} – ${lastYear}`
 }
 
 function formatAverage(average: SeriesAverageDto): string {
@@ -189,41 +176,67 @@ function malGroupRevealed(group: SeriesEntryDto[], series: SeriesDto): boolean {
   return isGroupCompleted(group) && !anySeriesAiring
 }
 
-type CompletionBadge = { label: string; className: string }
-
 // Computed client-side from series.mainLine rather than a server stat
 // (redesign-series-page design.md decision 1/2): it depends on episodesWatched
 // and status, both of which an in-place row edit changes, so deriving it from
-// the entry array the page already patches keeps it current for free.
-function completionBadge(series: SeriesDto): CompletionBadge | null {
-  const finishedAiring = series.mainLine.filter((e) => e.airingStatus === 'finished_airing')
-  const currentlyAiring = series.mainLine.filter((e) => e.airingStatus === 'currently_airing')
+// the entry array the page already patches keeps it current for free. Returns
+// the same { badge, behind } shape the Series page's cards get from the
+// server (add-series-browser design.md D5), so both render through the one
+// shared SeriesCompletionBadge component and can never visually disagree.
+//
+// Six-step precedence (polish-series-badges-and-filters design.md D1),
+// mirrored exactly by the backend's SeriesRankingIndex.ProgressBadge:
+// Completed, Dropped (D2 — the most recently aired Dropped entry with
+// nothing aired after it ever watched), Caught up/N behind (generalized
+// over the whole aired main line, not just a currently-airing entry),
+// Unwatched (D3 — nothing watched at all, decided before Dropped can be
+// ruled out by broadcast data it doesn't need), no badge as the fallback.
+function completionBadge(series: SeriesDto): { badge: SeriesProgressBadge; behind: number | null } {
+  const airedMembers = series.mainLine
+    .filter((e) => e.airingStatus === 'finished_airing' || e.airingStatus === 'currently_airing')
+    .slice()
+    .sort((a, b) => a.order - b.order)
+  const finishedAiring = airedMembers.filter((e) => e.airingStatus === 'finished_airing')
 
-  // A finished-airing entry I haven't completed rules out every badge state —
-  // "you haven't watched this series" isn't news the header needs to shout.
-  // Vacuously true when nothing has finished airing yet (e.g. a franchise
-  // whose main line is a single still-running entry, like One Piece), so it
-  // doesn't block the behind-count below.
-  if (!finishedAiring.every((e) => e.entry?.status === 'Completed')) return null
-  // Nothing in the main line has aired at all yet — there's nothing to be
-  // caught up on or behind on.
-  if (finishedAiring.length === 0 && currentlyAiring.length === 0) return null
-
-  if (series.status === 'Finished') {
-    return { label: 'Completed', className: 'completed' }
+  // 1. Completed: the whole series is done and every finished-airing
+  // main-line entry is marked Completed. Skipped (not vacuously true) when
+  // nothing has finished airing, since it also requires at least one such
+  // entry — a single still-running entry falls through to the rules below.
+  if (series.status === 'Finished' && finishedAiring.length > 0 && finishedAiring.every((e) => e.entry?.status === 'Completed')) {
+    return { badge: 'Completed', behind: null }
   }
 
-  // EpisodesAiredAsOfAsync does no estimation — an unknown broadcast count
-  // means the page can't tell whether I'm current, so it says nothing rather
-  // than claiming "Caught up" or inventing a behind count.
-  if (currentlyAiring.some((e) => e.airedEpisodes === null)) return null
+  // 2. Dropped: the most recently aired Dropped entry, with nothing aired
+  // after it ever watched — a drop later resumed and watched past doesn't
+  // count. Decided from watch status alone, never blocked by an unknown
+  // broadcast count.
+  const droppedEntries = airedMembers.filter((e) => e.entry?.status === 'Dropped')
+  if (droppedEntries.length > 0) {
+    const lastDroppedOrder = Math.max(...droppedEntries.map((e) => e.order))
+    const nothingWatchedAfter = airedMembers
+      .filter((e) => e.order > lastDroppedOrder)
+      .every((e) => (e.entry?.episodesWatched ?? 0) === 0)
+    if (nothingWatchedAfter) return { badge: 'Dropped', behind: null }
+  }
 
-  const behind = currentlyAiring.reduce(
-    (sum, e) => sum + Math.max(0, (e.airedEpisodes ?? 0) - (e.entry?.episodesWatched ?? 0)),
-    0,
-  )
+  const watchedTotal = series.mainLine.reduce((sum, e) => sum + (e.entry?.episodesWatched ?? 0), 0)
 
-  return behind === 0 ? { label: 'Caught up', className: 'caught-up' } : { label: `${behind} behind`, className: 'behind' }
+  // 5. Unwatched: something has aired but nothing has ever been watched,
+  // and (2) didn't already claim the case.
+  if (watchedTotal === 0) {
+    return airedMembers.length > 0 ? { badge: 'Unwatched', behind: null } : { badge: 'None', behind: null }
+  }
+
+  // 3/4. Caught up / N behind, generalized over every aired main-line entry
+  // rather than only a currently-airing one. AiredEpisodes does no
+  // estimation — an unknown broadcast count means this can't be computed
+  // reliably, so it shows nothing rather than inventing a figure.
+  if (airedMembers.some((e) => e.airedEpisodes === null)) return { badge: 'None', behind: null }
+
+  const airedTotal = airedMembers.reduce((sum, e) => sum + (e.airedEpisodes ?? 0), 0)
+  const behind = Math.max(0, airedTotal - watchedTotal)
+
+  return behind === 0 ? { badge: 'CaughtUp', behind: null } : { badge: 'Behind', behind }
 }
 
 function MalScoreChip({ label, average, completed }: { label: string; average: SeriesAverageDto; completed: boolean }) {
@@ -439,7 +452,7 @@ export function SeriesPage() {
   const series = data.series
   const { scores, stats } = series
   const displayTitle = pickDisplayTitle(series.title, series.englishTitle)
-  const badge = completionBadge(series)
+  const { badge, behind } = completionBadge(series)
   const isRunning = series.status === 'Airing' || series.status === 'Ongoing'
   // The bar and readout's own aired figure, summed straight from each
   // entry's airedEpisodes — distinct from stats.mainLineAiredEpisodes, which
@@ -564,14 +577,8 @@ export function SeriesPage() {
           <span className="series-page__label">Series</span>
           <h1>{displayTitle}</h1>
           <div className="series-page__header-meta">
-            <span className={`series-page__status-pill series-page__status-pill--${SERIES_STATUS_CLASS[series.status]}`}>
-              {series.status}
-            </span>
-            {badge && (
-              <span className={`series-page__completion-badge series-page__completion-badge--${badge.className}`}>
-                {badge.label}
-              </span>
-            )}
+            <SeriesStatusPill status={series.status} />
+            <SeriesCompletionBadge badge={badge} behindEpisodes={behind} />
             <span className="series-page__year-span">{formatYearSpan(series.firstYear, series.lastYear)}</span>
           </div>
           <div className="series-page__links">

@@ -3,17 +3,27 @@ import { SearchBar } from '../SearchBar.tsx'
 import { useScoreVisibility } from '../../context/ScoreVisibilityContext.tsx'
 import './Navbar.css'
 
-const NAV_LINKS_BEFORE_RECAP: { to: string; label: string; end?: boolean }[] = [
-  { to: '/', label: 'Home', end: true },
-  { to: '/my-list', label: 'My List' },
-]
+type NavLinkSpec = { to: string; label: string; end?: boolean }
 
-const NAV_LINKS_BETWEEN_RECAP_AND_SEASON: { to: string; label: string; end?: boolean }[] = [
-  { to: '/top', label: 'Top' },
-  { to: '/season', label: 'Season' },
-]
-
-const NAV_LINKS_AFTER_YEAR: { to: string; label: string; end?: boolean }[] = [{ to: '/airing', label: 'Airing' }]
+// One ordered list, so the left group's order (navigation-and-search: Home,
+// My List, Series, Recap, Top, Season, Year, Airing) reads directly from
+// this source rather than from where three separate constants happened to
+// sit around the two dynamically-linked entries (Recap, Year). Series and
+// Home both need `end` — NavLink's default prefix matching would otherwise
+// mark Series current on an individual series' page (/series/:animeId) too,
+// and Home current on every route.
+function leftNavLinks(recapLink: string, yearLink: string): NavLinkSpec[] {
+  return [
+    { to: '/', label: 'Home', end: true },
+    { to: '/my-list', label: 'My List' },
+    { to: '/series', label: 'Series', end: true },
+    { to: recapLink, label: 'Recap' },
+    { to: '/top', label: 'Top' },
+    { to: '/season', label: 'Season' },
+    { to: yearLink, label: 'Year' },
+    { to: '/airing', label: 'Airing' },
+  ]
+}
 
 function linkClassName({ isActive }: { isActive: boolean }) {
   return isActive ? 'navbar__link navbar__link--active' : 'navbar__link'
@@ -37,24 +47,8 @@ export function Navbar() {
   return (
     <header className="navbar">
       <nav className="navbar__links navbar__links--left" aria-label="Primary">
-        {NAV_LINKS_BEFORE_RECAP.map((link) => (
-          <NavLink key={link.to} to={link.to} end={link.end} className={linkClassName}>
-            {link.label}
-          </NavLink>
-        ))}
-        <NavLink to={recapLink} className={linkClassName}>
-          Recap
-        </NavLink>
-        {NAV_LINKS_BETWEEN_RECAP_AND_SEASON.map((link) => (
-          <NavLink key={link.to} to={link.to} end={link.end} className={linkClassName}>
-            {link.label}
-          </NavLink>
-        ))}
-        <NavLink to={yearLink} className={linkClassName}>
-          Year
-        </NavLink>
-        {NAV_LINKS_AFTER_YEAR.map((link) => (
-          <NavLink key={link.to} to={link.to} end={link.end} className={linkClassName}>
+        {leftNavLinks(recapLink, yearLink).map((link) => (
+          <NavLink key={link.label} to={link.to} end={link.end} className={linkClassName}>
             {link.label}
           </NavLink>
         ))}

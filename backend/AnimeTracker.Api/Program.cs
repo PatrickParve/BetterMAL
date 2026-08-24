@@ -105,6 +105,9 @@ builder.Services.AddScoped<IAnimeSearchService, AnimeSearchService>();
 // --- Series ranking (Top series) ---
 builder.Services.AddScoped<SeriesRankingLookup>();
 
+// --- Series list (Series page) ---
+builder.Services.AddScoped<SeriesListService>();
+
 // --- Main dashboard ---
 builder.Services.AddScoped<IMainDashboardService, MainDashboardService>();
 

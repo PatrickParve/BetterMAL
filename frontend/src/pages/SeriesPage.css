@@ -2,15 +2,9 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  /* --mal/--mine live on :root (index.css) — the score colour language is
-     app-wide. --airing stays scoped here: green means "on air right now",
-     a series-timeline concept, not a score, so it has no reason to spread
-     beyond the page that draws that timeline. Aliased rather than using
-     --status-watching directly so this page's own meaning of "airing" can
-     diverge from "Watching status" later without touching either. */
-  --airing: var(--status-watching);
-  --airing-bg: var(--status-watching-bg);
-  --airing-border: var(--status-watching-border);
+  /* --mal/--mine/--airing live on :root (index.css) — the score and status
+     colour language is app-wide, shared with the Series page's cards
+     (SeriesStatusPill/SeriesCompletionBadge). */
 }
 
 .series-page__header {
@@ -110,75 +104,10 @@
   gap: 10px;
 }
 
-.series-page__status-pill {
-  font-size: 13px;
-  font-weight: 500;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--text-h);
-}
-
-.series-page__status-pill--airing {
-  border-color: var(--airing-border);
-  background: var(--airing-bg);
-  color: var(--airing);
-}
-
-/* Ongoing no longer means "on air" — Airing owns that reading now, so this
-   pill takes the on-hold amber ("paused, more to come") instead of the
-   green Airing keeps (design.md D2). */
-.series-page__status-pill--ongoing {
-  border-color: var(--status-onhold-border);
-  background: var(--status-onhold-bg);
-  color: var(--status-onhold);
-}
-
-.series-page__status-pill--upcoming {
-  border-color: var(--status-plantowatch-border);
-  background: var(--status-plantowatch-bg);
-  color: var(--status-plantowatch);
-}
-
-.series-page__status-pill--finished {
-  border-color: var(--status-completed-border);
-  background: var(--status-completed-bg);
-  color: var(--status-completed);
-}
-
 .series-page__year-span {
   font-size: 14px;
   color: var(--text);
   opacity: 0.75;
-}
-
-.series-page__completion-badge {
-  font-size: 13px;
-  font-weight: 500;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-}
-
-.series-page__completion-badge--completed {
-  border-color: var(--accent-border);
-  background: var(--accent-bg);
-  color: var(--accent);
-}
-
-.series-page__completion-badge--caught-up {
-  border-color: var(--status-watching-border);
-  background: var(--status-watching-bg);
-  color: var(--status-watching);
-}
-
-/* Warning-toned rather than accent-toned, distinct from Caught up/Completed
-   (design.md decision 2 of redesign-series-page) — reuses the amber
-   on-hold tokens since there's no dedicated warning token yet. */
-.series-page__completion-badge--behind {
-  border-color: var(--status-onhold-border);
-  background: var(--status-onhold-bg);
-  color: var(--status-onhold);
 }
 
 .series-page__links {

@@ -224,5 +224,7 @@ public class UserAnimeEntryEditServiceResumeTests
             Task.FromResult(airedSoFar);
         public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<AnimeMetadata> anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
             throw new NotImplementedException();
+        public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 }

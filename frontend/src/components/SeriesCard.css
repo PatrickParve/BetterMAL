@@ -1,0 +1,37 @@
+.series-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.series-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Card-scale pill/badge — the header versions on the series page itself are
+   sized for a hero row, not a 160px-wide grid tile. Own (smaller) min-width
+   than the header scale so "Unwatched" and "3 behind" still render evenly
+   sized within the card's own width budget. */
+.series-card__badges .series-status-pill,
+.series-card__badges .series-completion-badge {
+  min-width: 64px;
+  font-size: 10px;
+  padding: 2px 7px;
+}
+
+.series-card__scores {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+}
+
+.series-card__line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.85;
+}

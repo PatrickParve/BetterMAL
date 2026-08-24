@@ -2,9 +2,7 @@
 
 ## Purpose
 TBD - created by applying change improve-profile-page-ux. Update Purpose after archive.
-
 ## Requirements
-
 ### Requirement: Back/forward navigation restores a page rather than rebuilding it
 The web client SHALL treat a page reached by back/forward navigation (the browser's back and forward buttons, keyboard shortcuts, or a trackpad swipe gesture) as a *restore* rather than a fresh visit. On a restore, the page SHALL render immediately from the data it held when the user navigated away, without an intermediate loading or empty state.
 
@@ -102,9 +100,11 @@ A fresh visit SHALL start at the top of the page. The client SHALL take over scr
 - **THEN** the new page starts at the top
 
 ### Requirement: Restoration applies to every routed page
-Every routed page in the application SHALL participate in restoration — Home, Season, Year, Top, Airing, My list, Profile, Settings, Search, and anime detail — so that navigating back from any page to any other page behaves the same way.
+Every routed page in the application SHALL participate in restoration — Home, Season, Year, Top, Airing, My list, Series, Profile, Settings, Search, and anime detail — so that navigating back from any page to any other page behaves the same way.
 
 A page whose content depends on a route parameter or query string SHALL key its restorable state by that parameter, so returning to one anime's detail page does not restore another anime's data.
+
+A page that renders only part of a loaded list, revealing more as it is scrolled, SHALL restore how much of that list had been revealed as well as the list itself — otherwise its recorded scroll position is unreachable on restore and is clamped back to the top.
 
 #### Scenario: Any pair of pages
 - **WHEN** I navigate from any page to any other page and then go back
@@ -121,6 +121,10 @@ A page whose content depends on a route parameter or query string SHALL key its 
 #### Scenario: Search results restore with their query
 - **WHEN** I run a search, open a result, and go back
 - **THEN** the query text and its results are both restored
+
+#### Scenario: The Series page restores how far it had been revealed
+- **WHEN** I scroll the Series page well past its first screen of cards, open a series, and go back
+- **THEN** the same number of cards is rendered again and the page is returned to the scroll position I left it at, rather than being clamped back to the top
 
 ### Requirement: Horizontally scrolling strips restore their scroll offset
 A horizontally scrollable strip on a restored page SHALL be returned to the horizontal offset it was left at, in the same way the page is returned to its vertical position. Restoration SHALL happen once the strip's restored contents have been laid out, so the recorded offset is reachable rather than clamped to a shorter strip.
@@ -146,3 +150,4 @@ On a fresh visit every strip SHALL start at its beginning.
 #### Scenario: A fresh visit starts every strip at the beginning
 - **WHEN** I reach the page by clicking its navbar link
 - **THEN** every strip starts at its first tile
+

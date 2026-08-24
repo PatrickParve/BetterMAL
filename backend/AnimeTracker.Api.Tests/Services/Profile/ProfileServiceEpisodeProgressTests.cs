@@ -290,5 +290,9 @@ public class ProfileServiceEpisodeProgressTests
             Task.FromResult(anime
                 .Where(a => airedCounts.ContainsKey(a.Id))
                 .ToDictionary(a => a.Id, a => airedCounts[a.Id]));
+        public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult(animeIds
+                .Where(airedCounts.ContainsKey)
+                .ToDictionary(id => id, id => airedCounts[id]));
     }
 }

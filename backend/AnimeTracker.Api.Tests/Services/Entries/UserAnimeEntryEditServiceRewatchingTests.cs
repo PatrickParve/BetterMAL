@@ -255,5 +255,7 @@ public class UserAnimeEntryEditServiceRewatchingTests
             Task.FromResult(airedSoFar);
         public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<AnimeMetadata> anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
             Task.FromResult(new Dictionary<int, int>());
+        public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult(new Dictionary<int, int>());
     }
 }

@@ -1,6 +1,9 @@
 using AnimeTracker.Api.Controllers;
+using AnimeTracker.Api.Data;
+using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Tests.Controllers;
 
@@ -15,7 +18,10 @@ public class SeriesControllerBulkBuildTests
     {
         var trigger = new SeriesBulkBuildTrigger();
         var tracker = new SeriesBulkBuildProgressTracker();
-        var controller = new SeriesController(new UnusedSeriesService(), trigger, tracker);
+        using var db = new AnimeTrackerDbContext(
+            new DbContextOptionsBuilder<AnimeTrackerDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        var listService = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService());
+        var controller = new SeriesController(new UnusedSeriesService(), listService, trigger, tracker);
 
         Assert.Equal(SeriesBulkBuildPhase.NotStarted, tracker.Snapshot.Phase);
 
@@ -33,6 +39,20 @@ public class SeriesControllerBulkBuildTests
         public Task<SeriesDto> RebuildSeriesAsync(int animeId, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task SetFavouriteOrderAsync(int seriesId, List<int> animeIds, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+    }
+
+    private sealed class UnusedEpisodeScheduleService : IEpisodeScheduleService
+    {
+        public Task<ResolvedEpisode?> ResolveOnLocalDateAsync(Models.AnimeMetadata anime, DateOnly localDate, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<DateTimeOffset?> NextAiringInstantAsync(Models.AnimeMetadata anime, DateTimeOffset afterUtc, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<int?> EpisodesAiredAsOfAsync(Models.AnimeMetadata anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<Models.AnimeMetadata> anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
             throw new NotImplementedException();
     }
 }

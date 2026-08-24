@@ -6,9 +6,18 @@ namespace AnimeTracker.Api.Controllers;
 [ApiController]
 public class SeriesController(
     ISeriesService seriesService,
+    SeriesListService seriesListService,
     ISeriesBulkBuildTrigger bulkBuildTrigger,
     ISeriesBulkBuildProgressTracker bulkBuildProgress) : ControllerBase
 {
+    /// <summary>The Series page's whole-list read (add-series-browser
+    /// design.md D1). Builds nothing, refreshes nothing, and makes no MAL
+    /// call — every figure is computed at read time from stored members, so
+    /// its cost is bounded by what is stored no matter how incomplete the
+    /// store is.</summary>
+    [HttpGet("api/series/list")]
+    public async Task<IActionResult> GetList(CancellationToken ct) => Ok(await seriesListService.GetSeriesListAsync(ct));
+
     /// <summary>Series page read, resolved from any member's anime id —
     /// builds or refreshes the series first when it's missing, partial, or
     /// stale (more than 30 days old).</summary>

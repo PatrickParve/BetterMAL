@@ -31,6 +31,7 @@ public class SeriesRankingLookup(AnimeTrackerDbContext db)
                     series.RootAnimeId,
                     member.AnimeId,
                     member.IsMainLine,
+                    member.Order,
                     member.Anime.Title,
                     member.Anime.EnglishTitle,
                     member.Anime.PictureUrl,
@@ -41,7 +42,9 @@ public class SeriesRankingLookup(AnimeTrackerDbContext db)
                     member.Anime.UserEntry != null ? member.Anime.UserEntry.RewatchCount : (int?)null,
                     member.Anime.UserEntry != null ? member.Anime.UserEntry.EpisodesWatched : (int?)null,
                     member.Anime.TotalEpisodes,
-                    member.Anime.AverageEpisodeDurationSeconds))
+                    member.Anime.AverageEpisodeDurationSeconds,
+                    member.Anime.AiredFrom,
+                    member.Anime.AiredTo))
             .ToListAsync(ct);
 
         return new SeriesRankingIndex(members);
@@ -50,12 +53,16 @@ public class SeriesRankingLookup(AnimeTrackerDbContext db)
 
 /// <summary>One series member row joined with its anime's title/picture,
 /// score, airing status, and my entry for it (if any) — the unit
-/// SeriesRankingIndex computes eligibility, averages, and rewatch time over.
-/// RewatchCount/EpisodesWatched are null-guarded off UserEntry like
-/// MyScore/EntryStatus above; TotalEpisodes/AverageEpisodeDurationSeconds are
-/// the anime's own published fields, not tied to list membership.</summary>
+/// SeriesRankingIndex computes eligibility, averages, rewatch time, and (via
+/// ListedSeries, add-series-browser design.md D2) the series list's per-card
+/// figures over. RewatchCount/EpisodesWatched are null-guarded off UserEntry
+/// like MyScore/EntryStatus above; TotalEpisodes/AverageEpisodeDurationSeconds/
+/// AiredFrom/AiredTo are the anime's own published fields, not tied to list
+/// membership; Order is the member's position within its main line or extras
+/// media-type group.</summary>
 internal sealed record SeriesRankingMemberProjection(
-    int SeriesId, int RootAnimeId, int AnimeId, bool IsMainLine,
+    int SeriesId, int RootAnimeId, int AnimeId, bool IsMainLine, int Order,
     string Title, string? EnglishTitle, string? PictureUrl,
     double? MalScore, int? MyScore, WatchStatus? EntryStatus, string? AiringStatus,
-    int? RewatchCount, int? EpisodesWatched, int? TotalEpisodes, int? AverageEpisodeDurationSeconds);
+    int? RewatchCount, int? EpisodesWatched, int? TotalEpisodes, int? AverageEpisodeDurationSeconds,
+    DateOnly? AiredFrom, DateOnly? AiredTo);
