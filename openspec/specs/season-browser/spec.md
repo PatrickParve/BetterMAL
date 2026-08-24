@@ -294,11 +294,11 @@ The system SHALL load season results with infinite scroll.
 - **THEN** more results load automatically
 
 ### Requirement: Hide-NSFW setting excludes hentai from the season browser
-The system SHALL provide a persisted user setting, presented on the Settings page as a "Hide NSFW" checkbox and **unchecked by default**, that excludes hentai from the season browser's results.
+The system SHALL provide a persisted user setting, presented on the Settings page as a "Hide NSFW" checkbox and **unchecked by default**, that excludes hentai from the season browser's results and from the year browser's results — the two pages read the same cached season listings, at a season's grain and at a year's, so the exclusion follows the data rather than the page.
 
 The filter SHALL exclude hentai and nothing else: an anime SHALL be treated as hentai when, and only when, MAL's own `rating` field for it is `rx`. Every other rating — including `r` and `r+` — SHALL remain visible with the setting enabled, so mature and ecchi titles are not swept up by it. An anime whose rating MAL has not yet reported (not yet cached) SHALL be treated as not hentai, so the filter never hides a title it cannot positively identify.
 
-The filter SHALL be applied server-side, before the season result count is computed, so the displayed count and infinite scroll stay correct. It SHALL apply to the season browser only: search results, my list, top anime, the airing schedule, the home dashboard, and anime detail pages SHALL be unaffected by it. The setting SHALL persist across reloads and new tabs, and SHALL take effect on the season page without requiring a MAL refetch of the season.
+The filter SHALL be applied server-side, before the result count is computed, so the displayed count and infinite scroll stay correct on both pages. It SHALL apply to the season and year browsers only: search results, my list, top anime, the airing schedule, the home dashboard, and anime detail pages SHALL be unaffected by it. The setting SHALL persist across reloads and new tabs, and SHALL take effect on either page without requiring a MAL refetch.
 
 #### Scenario: Default is off
 - **WHEN** I open the Settings page without ever having changed this setting
@@ -307,6 +307,10 @@ The filter SHALL be applied server-side, before the season result count is compu
 #### Scenario: Enabling the setting hides hentai from the season page
 - **WHEN** I enable "Hide NSFW" and open a season containing hentai
 - **THEN** every anime MAL rates `rx` is absent from the results, and the result count reflects the smaller set
+
+#### Scenario: Enabling the setting hides hentai from the year page
+- **WHEN** I enable "Hide NSFW" and open a year whose seasons contain hentai
+- **THEN** every anime MAL rates `rx` is absent from the year's combined results, and the result count reflects the smaller set
 
 #### Scenario: R and R+ titles stay visible
 - **WHEN** "Hide NSFW" is enabled and a season contains anime rated `r` or `r+`
@@ -317,12 +321,12 @@ The filter SHALL be applied server-side, before the season result count is compu
 - **THEN** it is still shown, rather than being hidden on suspicion
 
 #### Scenario: Filtering holds across infinite scroll
-- **WHEN** "Hide NSFW" is enabled and I scroll far enough to load additional pages of a season
+- **WHEN** "Hide NSFW" is enabled and I scroll far enough to load additional pages of a season or a year
 - **THEN** no hentai appears in any loaded page, because the exclusion is applied server-side rather than to each loaded page on the client
 
 #### Scenario: Toggling re-reads from cache only
-- **WHEN** I change the "Hide NSFW" setting while viewing a season
-- **THEN** the season results are re-read from the cache with the new filter applied and no MAL fetch is started
+- **WHEN** I change the "Hide NSFW" setting while viewing a season or a year
+- **THEN** the results are re-read from the cache with the new filter applied and no MAL fetch is started
 
 #### Scenario: Setting persists
 - **WHEN** I enable "Hide NSFW" and later reload the app or open it in a new tab

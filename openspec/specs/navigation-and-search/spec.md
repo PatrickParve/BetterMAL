@@ -6,7 +6,7 @@ TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after 
 ### Requirement: Navbar layout
 The system SHALL provide a navbar with two groups of controls: a left group of page links and a right group holding the search field and the account/preference controls. There SHALL be no third, centred group — the search field belongs to the right group.
 
-The left group's links SHALL be, in order: **Home, My List, Recap, Top, Season, Airing**. Recap SHALL sit directly to the right of My List, since a recap is a view of the same list.
+The left group's links SHALL be, in order: **Home, My List, Recap, Top, Season, Year, Airing**. Recap SHALL sit directly to the right of My List, since a recap is a view of the same list. Year SHALL sit directly to the right of Season, since the two browse the same listings at different grains.
 
 The right group's controls SHALL be, in order from left to right: **the search field, the hide/unhide MAL-score toggle, Profile, and the Settings (gear icon) button** — so Settings sits at the navbar's far right edge, Profile immediately to its left, then the score toggle, then the search field. Read right-to-left from the edge, the order is Settings, Profile, score toggle, search field.
 
@@ -16,11 +16,15 @@ At window widths too narrow for one row, the navbar MAY wrap the search field on
 
 #### Scenario: Navigating via the navbar
 - **WHEN** I click a navbar button
-- **THEN** I am taken to the corresponding page (Home, My List, Recap, Top, Season, Airing, Profile, or Settings)
+- **THEN** I am taken to the corresponding page (Home, My List, Recap, Top, Season, Year, Airing, Profile, or Settings)
 
 #### Scenario: Left group order
 - **WHEN** the navbar renders
-- **THEN** its left links read Home, My List, Recap, Top, Season, Airing from left to right, with Recap directly right of My List
+- **THEN** its left links read Home, My List, Recap, Top, Season, Year, Airing from left to right, with Recap directly right of My List and Year directly right of Season
+
+#### Scenario: Opening the year browser from the navbar
+- **WHEN** I click the navbar's Year link
+- **THEN** the year browser opens on the current year
 
 #### Scenario: Right group order
 - **WHEN** the navbar renders
@@ -534,7 +538,7 @@ Where the browser renders no clear control of its own, this requirement is satis
 
 ### Requirement: Navbar page controls and the search field share one height
 
-The navbar's page controls — the six left links (Home, My List, Recap, Top, Season, Airing), the Profile link, and the Settings gear — together with the navbar's search field SHALL all render at exactly the same height, with their tops and bottoms aligned.
+The navbar's page controls — the seven left links (Home, My List, Recap, Top, Season, Year, Airing), the Profile link, and the Settings gear — together with the navbar's search field SHALL all render at exactly the same height, with their tops and bottoms aligned.
 
 The shared height SHALL come from one shared definition rather than from per-control padding values that each happen to land near the same number, so a control added to the navbar later inherits the row's height instead of re-introducing a mismatch. The height SHALL hold across the full range of the app's fluid root font size, rather than agreeing only at one window width.
 
@@ -547,7 +551,7 @@ The search field the Settings page renders shares its component with the navbar'
 #### Scenario: The navbar row is flush
 
 - **WHEN** the navbar renders at a width wide enough for one row
-- **THEN** the six left links, Profile, the Settings gear, and the search field are all exactly the same height, with their tops and bottoms aligned
+- **THEN** the seven left links, Profile, the Settings gear, and the search field are all exactly the same height, with their tops and bottoms aligned
 
 #### Scenario: The gear is no longer a small square
 
@@ -581,7 +585,7 @@ The search field the Settings page renders shares its component with the navbar'
 
 ### Requirement: The navbar marks the current page with a border
 
-The navbar control for the page currently being viewed SHALL carry a visible border in addition to its tinted background, so that being on a page reads at least as strongly as hovering a link does. This SHALL apply to every navbar control that leads to a page: the six left links, Profile, and the Settings gear.
+The navbar control for the page currently being viewed SHALL carry a visible border in addition to its tinted background, so that being on a page reads at least as strongly as hovering a link does. This SHALL apply to every navbar control that leads to a page: the seven left links, Profile, and the Settings gear.
 
 The active border SHALL be visually stronger than the border a control shows on hover, so that an active control under the pointer still reads as the current page rather than as just another hovered link. Hovering the active control SHALL NOT replace or weaken its active border.
 
