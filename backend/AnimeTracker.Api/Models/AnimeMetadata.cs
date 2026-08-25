@@ -9,7 +9,19 @@ public class AnimeMetadata
 
     public required string Title { get; set; }
     public string? EnglishTitle { get; set; }
+
+    // The picture to display: MAL's main picture until one is chosen, the
+    // chosen one after. MalPictureUrl is what MAL says; the two differ
+    // exactly when a picture has been chosen (Services/Artwork/AnimePicture).
     public string? PictureUrl { get; set; }
+    public string? MalPictureUrl { get; set; }
+    public List<string>? PictureUrls { get; set; } // every picture MAL publishes, MAL's order, my-list anime only
+
+    // Null until PictureUrls has been fetched at least once. Kept apart from
+    // LastSyncedAt because "never asked for pictures" and "asked, MAL has
+    // one" both leave PictureUrls looking the same otherwise.
+    public DateTimeOffset? PicturesSyncedAt { get; set; }
+
     public double? MalScore { get; set; }
     public string? MediaType { get; set; } // tv, movie, ova, ona, special, music, unknown
     public string? AiringStatus { get; set; } // currently_airing, finished_airing, not_yet_aired

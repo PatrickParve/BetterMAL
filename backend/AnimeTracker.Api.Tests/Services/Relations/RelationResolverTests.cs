@@ -148,6 +148,48 @@ public class RelationResolverTests
         Assert.Equal(RelationConfidence.Unknown, entry.Confidence);
     }
 
+    // --- artwork-selection design D12: related tiles follow a chosen picture ---
+
+    [Fact]
+    public async Task GetEdgesAsync_PrefersCachedFarEndPictureOverRelationSnapshot()
+    {
+        using var db = CreateDb();
+        var a = Anime(1, lastSyncedAt: Fetched);
+        var b = Anime(2, lastSyncedAt: Fetched);
+        b.PictureUrl = "https://example.test/chosen.jpg"; // a picture chosen since the relation was fetched
+        Relate(a, b, "sequel");
+        a.RelatedAnime.Single().PictureUrl = "https://example.test/mal-snapshot.jpg";
+        db.AnimeMetadata.AddRange(a, b);
+        await db.SaveChangesAsync();
+
+        var edges = await new RelationResolver(db).GetEdgesAsync(a);
+
+        var entry = Assert.Single(edges);
+        Assert.Equal("https://example.test/chosen.jpg", entry.PictureUrl);
+    }
+
+    [Fact]
+    public async Task GetEdgesAsync_FallsBackToRelationSnapshotWhenFarEndHasNoMetadataRow()
+    {
+        using var db = CreateDb();
+        var a = Anime(1, lastSyncedAt: Fetched);
+        a.RelatedAnime.Add(new AnimeRelatedAnime
+        {
+            AnimeId = a.Id,
+            RelatedAnimeId = 999, // no AnimeMetadata row exists for this id
+            RelationType = "sequel",
+            Title = "Uncached Sequel",
+            PictureUrl = "https://example.test/mal-snapshot.jpg",
+        });
+        db.AnimeMetadata.Add(a);
+        await db.SaveChangesAsync();
+
+        var edges = await new RelationResolver(db).GetEdgesAsync(a);
+
+        var entry = Assert.Single(edges);
+        Assert.Equal("https://example.test/mal-snapshot.jpg", entry.PictureUrl);
+    }
+
     // --- 4.4/8.3: confidence matrix ---
 
     [Fact]

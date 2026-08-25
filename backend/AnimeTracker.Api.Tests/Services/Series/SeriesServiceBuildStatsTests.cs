@@ -234,4 +234,66 @@ public class SeriesServiceBuildStatsTests
 
         Assert.Equal([1, 2], stats.MostRewatchedAnimeIds);
     }
+
+    // --- MyRewatchedSeconds is orthogonal to MyWatchedSeconds (design.md D10, tasks.md 8.4) ---
+
+    [Fact]
+    public void CompletedSeasonWithRewatchesContributesTwoFullRuns()
+    {
+        var completed = Anime(1, totalEpisodes: 12, status: WatchStatus.Completed, episodesWatched: 12, rewatchCount: 2);
+        var members = new List<SeriesMember> { Member(completed, isMainLine: true, order: 0) };
+        var airedByAnimeId = new Dictionary<int, int?> { [1] = 12 };
+
+        var stats = SeriesService.BuildStats(members, [], [completed], mainLineAiredEpisodes: 12, airedByAnimeId);
+
+        // 2 completed rewatches of a 12-episode season = 24 rewatch episodes.
+        Assert.Equal(24, stats.MyRewatchedSeconds / EpisodeSeconds(completed));
+    }
+
+    [Fact]
+    public void RewatchInProgressAddsPartialRunOnTopOfCompletedRuns()
+    {
+        var rewatching = Anime(1, totalEpisodes: 12, status: WatchStatus.Rewatching, episodesWatched: 2, rewatchCount: 2);
+        var members = new List<SeriesMember> { Member(rewatching, isMainLine: true, order: 0) };
+        var airedByAnimeId = new Dictionary<int, int?> { [1] = 12 }; // fully aired
+
+        var stats = SeriesService.BuildStats(members, [], [rewatching], mainLineAiredEpisodes: 12, airedByAnimeId);
+
+        // 2 completed rewatches (24) + 2 episodes into a third (2) = 26 rewatch episodes.
+        Assert.Equal(26, stats.MyRewatchedSeconds / EpisodeSeconds(rewatching));
+        // effective watched = max(2 watched, 12 aired) = 12, unchanged by the rewatch count.
+        Assert.Equal(12, stats.MyWatchedEpisodes);
+        // 26 rewatch + 12 watched = 38 total episodes of time watched.
+        Assert.Equal(38, stats.MyRewatchedSeconds / EpisodeSeconds(rewatching) + stats.MyWatchedEpisodes);
+    }
+
+    [Fact]
+    public void ExtraRewatchCountContributesNothingToSeriesRewatchedTime()
+    {
+        var mainLine = Anime(1, totalEpisodes: 12, status: WatchStatus.Completed, episodesWatched: 12);
+        var extra = Anime(2, totalEpisodes: 1, status: WatchStatus.Completed, episodesWatched: 1, rewatchCount: 3);
+        var mainLineMembers = new List<SeriesMember> { Member(mainLine, isMainLine: true, order: 0) };
+        var extraMembers = new List<SeriesMember> { Member(extra, isMainLine: false, order: 0) };
+        var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 1 };
+
+        var stats = SeriesService.BuildStats(
+            mainLineMembers, extraMembers, [mainLine, extra], mainLineAiredEpisodes: 12, airedByAnimeId);
+
+        Assert.Equal(0L, stats.MyRewatchedSeconds);
+    }
+
+    [Fact]
+    public void MyWatchedSecondsAndEpisodesAreUnchangedByARewatch()
+    {
+        var completed = Anime(1, totalEpisodes: 12, averageEpisodeDurationSeconds: 1500, status: WatchStatus.Completed, episodesWatched: 12, rewatchCount: 2);
+        var members = new List<SeriesMember> { Member(completed, isMainLine: true, order: 0) };
+        var airedByAnimeId = new Dictionary<int, int?> { [1] = 12 };
+
+        var stats = SeriesService.BuildStats(members, [], [completed], mainLineAiredEpisodes: 12, airedByAnimeId);
+
+        Assert.Equal(12, stats.MyWatchedEpisodes);
+        Assert.Equal(12L * 1500, stats.MyWatchedSeconds);
+    }
+
+    private static int EpisodeSeconds(AnimeMetadata anime) => anime.AverageEpisodeDurationSeconds ?? 24 * 60;
 }

@@ -247,7 +247,69 @@ public class AnimeDetailServiceTests
         Assert.Equal(2, refresh.Calls.Count);
     }
 
-    private sealed class FakeMetadataRefreshService(AnimeTrackerDbContext db, bool throwOnRefresh = false) : IMetadataRefreshService
+    // --- 4.4: PicturesFetchPending ---
+
+    [Fact]
+    public async Task GetDetailAsync_MyListAnimeWithNoPictureSetAndFreshDetail_FlagsPicturesFetchPending()
+    {
+        using var db = CreateDb();
+        var anime = Anime(1, DateTimeOffset.UtcNow); // fresh enough to skip the live fetch
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
+        await db.SaveChangesAsync();
+        var refresh = new FakeMetadataRefreshService(db);
+
+        var detail = await CreateService(db, refresh).GetDetailAsync(1);
+
+        Assert.True(detail.PicturesFetchPending);
+        Assert.Empty(refresh.Calls);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_LiveFetchSuppliesPictures_ClearsPicturesFetchPending()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(Anime(1, default)); // never fetched -> triggers the live fetch
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
+        await db.SaveChangesAsync();
+        var refresh = new FakeMetadataRefreshService(db, setsPicturesSyncedAt: true);
+
+        var detail = await CreateService(db, refresh).GetDetailAsync(1);
+
+        Assert.False(detail.PicturesFetchPending);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_AnimeWithNoEntry_NeverFlagsPicturesFetchPending()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(Anime(1, DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
+        var refresh = new FakeMetadataRefreshService(db);
+
+        var detail = await CreateService(db, refresh).GetDetailAsync(1);
+
+        Assert.False(detail.PicturesFetchPending);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_DtoCarriesStoredPictureSetAndMalMainPicture()
+    {
+        using var db = CreateDb();
+        var anime = Anime(1, DateTimeOffset.UtcNow);
+        anime.MalPictureUrl = "https://mal/main.jpg";
+        anime.PictureUrls = ["https://mal/p1.jpg", "https://mal/p2.jpg"];
+        db.AnimeMetadata.Add(anime);
+        await db.SaveChangesAsync();
+        var refresh = new FakeMetadataRefreshService(db);
+
+        var detail = await CreateService(db, refresh).GetDetailAsync(1);
+
+        Assert.Equal("https://mal/main.jpg", detail.MalPictureUrl);
+        Assert.Equal(["https://mal/p1.jpg", "https://mal/p2.jpg"], detail.PictureUrls);
+    }
+
+    private sealed class FakeMetadataRefreshService(AnimeTrackerDbContext db, bool throwOnRefresh = false, bool setsPicturesSyncedAt = false) : IMetadataRefreshService
     {
         public List<int> Calls { get; } = [];
 
@@ -262,6 +324,8 @@ public class AnimeDetailServiceTests
 
             var anime = await db.AnimeMetadata.FirstAsync(a => a.Id == animeId, ct);
             anime.LastSyncedAt = DateTimeOffset.UtcNow;
+            if (setsPicturesSyncedAt)
+                anime.PicturesSyncedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
         }
     }

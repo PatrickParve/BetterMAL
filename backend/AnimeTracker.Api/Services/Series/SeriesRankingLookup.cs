@@ -44,7 +44,9 @@ public class SeriesRankingLookup(AnimeTrackerDbContext db)
                     member.Anime.TotalEpisodes,
                     member.Anime.AverageEpisodeDurationSeconds,
                     member.Anime.AiredFrom,
-                    member.Anime.AiredTo))
+                    member.Anime.AiredTo,
+                    series.SelectedTitle,
+                    series.SelectedPictureUrl))
             .ToListAsync(ct);
 
         return new SeriesRankingIndex(members);
@@ -59,10 +61,13 @@ public class SeriesRankingLookup(AnimeTrackerDbContext db)
 /// like MyScore/EntryStatus above; TotalEpisodes/AverageEpisodeDurationSeconds/
 /// AiredFrom/AiredTo are the anime's own published fields, not tied to list
 /// membership; Order is the member's position within its main line or extras
-/// media-type group.</summary>
+/// media-type group. SelectedTitle/SelectedPictureUrl are the series' own
+/// overrides (identical across every row of the same series), fed to
+/// SeriesIdentity.Resolve for display (design.md D7).</summary>
 internal sealed record SeriesRankingMemberProjection(
     int SeriesId, int RootAnimeId, int AnimeId, bool IsMainLine, int Order,
     string Title, string? EnglishTitle, string? PictureUrl,
     double? MalScore, int? MyScore, WatchStatus? EntryStatus, string? AiringStatus,
     int? RewatchCount, int? EpisodesWatched, int? TotalEpisodes, int? AverageEpisodeDurationSeconds,
-    DateOnly? AiredFrom, DateOnly? AiredTo);
+    DateOnly? AiredFrom, DateOnly? AiredTo,
+    string? SelectedTitle, string? SelectedPictureUrl);

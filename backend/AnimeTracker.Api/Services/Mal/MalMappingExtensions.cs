@@ -93,7 +93,16 @@ public static class MalMappingExtensions
     {
         target.Title = node.Title;
         target.EnglishTitle = string.IsNullOrWhiteSpace(node.AlternativeTitles?.En) ? null : node.AlternativeTitles.En;
-        target.PictureUrl = node.MainPicture?.Large ?? node.MainPicture?.Medium;
+
+        // The single guard for the whole app (design.md D2): read whether the
+        // row is overridden *before* writing either picture column. A second
+        // writer of PictureUrl outside this guard would defeat it.
+        var wasOverridden = target.PictureUrl != target.MalPictureUrl;
+        target.MalPictureUrl = node.MainPicture?.Large ?? node.MainPicture?.Medium;
+        if (!wasOverridden) target.PictureUrl = target.MalPictureUrl;
+
+        node.ApplyPictureSetTo(target, now);
+
         target.MalScore = node.Mean;
         target.MediaType = node.MediaType;
         target.AiringStatus = node.Status;
@@ -130,6 +139,24 @@ public static class MalMappingExtensions
         target.LastScoreSyncedAt = now;
     }
 
+    /// <summary>Writes the picture set only when <paramref name="node"/> asked
+    /// for `pictures` — an omitted field must not clear a stored set (spec
+    /// `mal-api-integration` "An omitted field does not clear a stored set").
+    /// Shared by <see cref="ApplyTo"/> and the single-anime picture backfill
+    /// (Services/Artwork/PictureRefreshService), which fetches with only this
+    /// field and must not touch anything else on the row.</summary>
+    public static void ApplyPictureSetTo(this MalAnimeNode node, AnimeMetadata target, DateTimeOffset now)
+    {
+        if (node.Pictures is null) return;
+
+        target.PictureUrls = node.Pictures
+            .Select(p => p.Large ?? p.Medium)
+            .Where(url => url is not null)
+            .Select(url => url!)
+            .ToList();
+        target.PicturesSyncedAt = now;
+    }
+
     /// <summary>Builds a new cached metadata row from a lean listing node
     /// (Season/Top-Anime browsing).</summary>
     public static AnimeMetadata ToLeanAnimeMetadata(this MalAnimeNode node, DateTimeOffset now)
@@ -151,7 +178,14 @@ public static class MalMappingExtensions
     {
         target.Title = node.Title;
         target.EnglishTitle = string.IsNullOrWhiteSpace(node.AlternativeTitles?.En) ? null : node.AlternativeTitles.En;
-        target.PictureUrl = node.MainPicture?.Large ?? node.MainPicture?.Medium;
+
+        // Same override guard as ApplyTo (design.md D2) — a Season/Year/Top/Search
+        // listing refresh must not revert a chosen picture either. Lean nodes
+        // never carry `pictures`, so PictureUrls/PicturesSyncedAt are untouched here.
+        var wasOverridden = target.PictureUrl != target.MalPictureUrl;
+        target.MalPictureUrl = node.MainPicture?.Large ?? node.MainPicture?.Medium;
+        if (!wasOverridden) target.PictureUrl = target.MalPictureUrl;
+
         target.MalScore = node.Mean;
         target.MediaType = node.MediaType;
         target.Rating = node.Rating;

@@ -83,9 +83,11 @@ public sealed class SeriesRankingIndex
             var mainLineSettledByMe = SeriesAverages.MainLineSettledByMe(
                 mainLine.Select(m => (m.AiringStatus, m.EntryStatus)));
             var malRevealed = mainLineSettledByMe && !mainLineAiring;
+            var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
+                root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.PictureUrl);
 
             results.Add(new SeriesRankingResult(
-                group.Key, root.RootAnimeId, root.Title, root.EnglishTitle, root.PictureUrl,
+                group.Key, root.RootAnimeId, title, englishTitle, pictureUrl,
                 members.Count, mainLineAiredCount, malAverage, mineAverage, malRevealed));
         }
 
@@ -136,9 +138,11 @@ public sealed class SeriesRankingIndex
             var (badge, behindEpisodes) = ProgressBadge(mainLine, status, airedEpisodesByAnimeId);
             var mainLineWatchedEpisodes = mainLine.Sum(m => MemberEffectiveWatchedEpisodes(m, airedEpisodesByAnimeId));
             var mainLineAiredEpisodes = ListedSeriesMainLineAiredEpisodes(mainLine, airedEpisodesByAnimeId);
+            var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
+                root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.PictureUrl);
 
             results.Add(new SeriesListItemDto(
-                group.Key, root.RootAnimeId, root.Title, root.EnglishTitle, root.PictureUrl,
+                group.Key, root.RootAnimeId, title, englishTitle, pictureUrl,
                 status, badge, behindEpisodes, malAverage, mineAverage, malRevealed,
                 firstYear, lastYear, episodeTotal, hasUnknown, members.Count,
                 mainLineWatchedEpisodes, mainLineAiredEpisodes));
@@ -311,8 +315,10 @@ public sealed class SeriesRankingIndex
                 continue;
 
             var root = members.First(m => m.AnimeId == m.RootAnimeId);
+            var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
+                root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.PictureUrl);
             results.Add(new SeriesRewatchResult(
-                group.Key, root.RootAnimeId, root.Title, root.EnglishTitle, root.PictureUrl, totalSeconds));
+                group.Key, root.RootAnimeId, title, englishTitle, pictureUrl, totalSeconds));
         }
 
         return results

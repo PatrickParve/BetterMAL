@@ -554,6 +554,20 @@ public class SeriesGraphBuilder(
             if (staleSeriesIds.Count > 0)
             {
                 var staleSeries = await db.Series.Where(s => staleSeriesIds.Contains(s.Id)).ToListAsync(ct);
+
+                // Adopt a title/picture from an absorbed row only when the
+                // survivor has none of its own — the survivor's own choice
+                // always wins, so adoption is strictly a fill-in for a value
+                // that would otherwise be lost when the row is deleted
+                // (design.md D9). Title and picture are adopted independently,
+                // each from whichever qualifying absorbed row has the largest
+                // member overlap (overlapCounts already ranks them).
+                var byOverlapDesc = staleSeries
+                    .OrderByDescending(s => overlapCounts.First(x => x.SeriesId == s.Id).Count)
+                    .ToList();
+                target.SelectedTitle ??= byOverlapDesc.FirstOrDefault(s => s.SelectedTitle is not null)?.SelectedTitle;
+                target.SelectedPictureUrl ??= byOverlapDesc.FirstOrDefault(s => s.SelectedPictureUrl is not null)?.SelectedPictureUrl;
+
                 db.Series.RemoveRange(staleSeries); // cascade-deletes their SeriesMember rows too
             }
 

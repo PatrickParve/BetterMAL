@@ -170,6 +170,9 @@ namespace AnimeTracker.Api.Migrations
                     b.Property<DateTimeOffset>("LastSyncedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("MalPictureUrl")
+                        .HasColumnType("text");
+
                     b.Property<double?>("MalScore")
                         .HasColumnType("double precision");
 
@@ -178,6 +181,12 @@ namespace AnimeTracker.Api.Migrations
 
                     b.Property<string>("PictureUrl")
                         .HasColumnType("text");
+
+                    b.PrimitiveCollection<List<string>>("PictureUrls")
+                        .HasColumnType("text[]");
+
+                    b.Property<DateTimeOffset?>("PicturesSyncedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int?>("PopularityRank")
                         .HasColumnType("integer");
@@ -462,6 +471,12 @@ namespace AnimeTracker.Api.Migrations
 
                     b.Property<int>("RootAnimeId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("SelectedPictureUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SelectedTitle")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 

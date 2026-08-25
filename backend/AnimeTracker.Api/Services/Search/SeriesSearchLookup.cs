@@ -30,7 +30,9 @@ public class SeriesSearchLookup(AnimeTrackerDbContext db)
                     member.Anime.PictureUrl,
                     member.IsMainLine,
                     member.Anime.PopularityRank,
-                    series.RootAnimeId))
+                    series.RootAnimeId,
+                    series.SelectedTitle,
+                    series.SelectedPictureUrl))
             .ToListAsync(ct);
 
         return new SeriesSearchIndex(members);
@@ -38,7 +40,11 @@ public class SeriesSearchLookup(AnimeTrackerDbContext db)
 }
 
 /// <summary>One series member row joined with its anime's title/picture and
-/// its series' root anime id — the unit SeriesSearchIndex matches over.</summary>
+/// its series' root anime id — the unit SeriesSearchIndex matches over.
+/// SelectedTitle/SelectedPictureUrl are the series' own overrides (identical
+/// across every row of the same series), fed to SeriesIdentity.Resolve for
+/// display (design.md D7).</summary>
 internal sealed record SeriesMemberProjection(
     int SeriesId, int AnimeId, string Title, string? EnglishTitle, string? PictureUrl,
-    bool IsMainLine, int? PopularityRank, int RootAnimeId);
+    bool IsMainLine, int? PopularityRank, int RootAnimeId,
+    string? SelectedTitle, string? SelectedPictureUrl);

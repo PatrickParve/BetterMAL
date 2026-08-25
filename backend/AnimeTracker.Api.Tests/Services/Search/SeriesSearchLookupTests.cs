@@ -10,8 +10,9 @@ public class SeriesSearchLookupTests
 {
     private static SeriesMemberProjection Member(
         int seriesId, int animeId, string title, int rootAnimeId,
-        string? englishTitle = null, string? pictureUrl = null, bool isMainLine = true, int? popularityRank = null) =>
-        new(seriesId, animeId, title, englishTitle, pictureUrl, isMainLine, popularityRank, rootAnimeId);
+        string? englishTitle = null, string? pictureUrl = null, bool isMainLine = true, int? popularityRank = null,
+        string? selectedTitle = null, string? selectedPictureUrl = null) =>
+        new(seriesId, animeId, title, englishTitle, pictureUrl, isMainLine, popularityRank, rootAnimeId, selectedTitle, selectedPictureUrl);
 
     [Fact]
     public void MatchesOnNonRootMembersTitle()
@@ -118,5 +119,49 @@ public class SeriesSearchLookupTests
     {
         Assert.Empty(SeriesSearchIndex.Empty.Match("anything", exact: false));
         Assert.False(SeriesSearchIndex.Empty.HasSeries(100));
+    }
+
+    // --- 5.5: series-identity spec "A renamed series is still found by its members' titles" ---
+
+    [Fact]
+    public void RenamedSeriesMatchesAMemberTitle()
+    {
+        var index = new SeriesSearchIndex(
+        [
+            Member(1, 100, "Beyblade: Metal Fusion", rootAnimeId: 100, selectedTitle: "Beyblade"),
+        ]);
+
+        var results = index.Match("Metal Fusion", exact: false);
+
+        var series = Assert.Single(results);
+        Assert.Equal("Beyblade", series.Title);
+    }
+
+    [Fact]
+    public void RenamedSeriesMatchesItsOwnChosenTitle()
+    {
+        var index = new SeriesSearchIndex(
+        [
+            Member(1, 100, "Beyblade: Metal Fusion", rootAnimeId: 100, selectedTitle: "Beyblade"),
+        ]);
+
+        var results = index.Match("Beyblade", exact: false);
+
+        Assert.Single(results);
+    }
+
+    [Fact]
+    public void RenamedSeriesIsDisplayedUnderItsChosenTitle()
+    {
+        var index = new SeriesSearchIndex(
+        [
+            Member(1, 100, "Beyblade: Metal Fusion", rootAnimeId: 100, englishTitle: "Beyblade: Metal Fusion", selectedTitle: "Beyblade"),
+        ]);
+
+        var results = index.Match("Metal Fusion", exact: false);
+
+        var series = Assert.Single(results);
+        Assert.Equal("Beyblade", series.Title);
+        Assert.Null(series.EnglishTitle);
     }
 }

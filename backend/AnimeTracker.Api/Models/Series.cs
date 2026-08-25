@@ -12,5 +12,11 @@ public class Series
     public DateTimeOffset BuiltAt { get; set; }
     public bool IsPartial { get; set; } // build hit its MAL-fetch budget
     public bool IsTruncated { get; set; } // build hit the 60-member cap
+
+    // Survive a rebuild the same way SeriesMember.FavouriteRank does: the
+    // rebuild keeps this row and simply never writes these fields.
+    public string? SelectedTitle { get; set; }
+    public string? SelectedPictureUrl { get; set; }
+
     public List<SeriesMember> Members { get; set; } = [];
 }

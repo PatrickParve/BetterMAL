@@ -1,3 +1,4 @@
+using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,7 +9,9 @@ public class SeriesController(
     ISeriesService seriesService,
     SeriesListService seriesListService,
     ISeriesBulkBuildTrigger bulkBuildTrigger,
-    ISeriesBulkBuildProgressTracker bulkBuildProgress) : ControllerBase
+    ISeriesBulkBuildProgressTracker bulkBuildProgress,
+    IArtworkSelectionService artworkSelectionService,
+    IPictureRefreshService pictureRefreshService) : ControllerBase
 {
     /// <summary>The Series page's whole-list read (add-series-browser
     /// design.md D1). Builds nothing, refreshes nothing, and makes no MAL
@@ -71,6 +74,86 @@ public class SeriesController(
         }
     }
 
+    [HttpPut("api/series/{seriesId:int}/title")]
+    public async Task<IActionResult> SetTitle(int seriesId, [FromBody] SetSeriesTitleRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var title = await artworkSelectionService.SetSeriesTitleAsync(seriesId, request.Title, ct);
+            return Ok(new { title });
+        }
+        catch (SeriesIdNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (ArtworkSelectionRejectedException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpDelete("api/series/{seriesId:int}/title")]
+    public async Task<IActionResult> ResetTitle(int seriesId, CancellationToken ct)
+    {
+        try
+        {
+            var title = await artworkSelectionService.ResetSeriesTitleAsync(seriesId, ct);
+            return Ok(new { title });
+        }
+        catch (SeriesIdNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
+    [HttpPut("api/series/{seriesId:int}/picture")]
+    public async Task<IActionResult> SetPicture(int seriesId, [FromBody] SetSeriesPictureRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var pictureUrl = await artworkSelectionService.SetSeriesPictureAsync(seriesId, request.PictureUrl, ct);
+            return Ok(new { pictureUrl });
+        }
+        catch (SeriesIdNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (ArtworkSelectionRejectedException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpDelete("api/series/{seriesId:int}/picture")]
+    public async Task<IActionResult> ResetPicture(int seriesId, CancellationToken ct)
+    {
+        try
+        {
+            var pictureUrl = await artworkSelectionService.ResetSeriesPictureAsync(seriesId, ct);
+            return Ok(new { pictureUrl });
+        }
+        catch (SeriesIdNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
+    /// <summary>Bounded pool backfill (design.md D6) — fetches picture sets
+    /// for up to <see cref="PictureRefreshService.SeriesPictureFetchBudget"/>
+    /// never-fetched, my-list main-line members of the series containing
+    /// <paramref name="animeId"/>. Reports how many eligible members remain.</summary>
+    [HttpPost("api/series/by-anime/{animeId:int}/pictures/refresh")]
+    public async Task<IActionResult> RefreshPictures(int animeId, CancellationToken ct)
+    {
+        var seriesId = await seriesService.FindSeriesIdAsync(animeId, ct);
+        if (seriesId is null)
+            return NotFound();
+
+        var remaining = await pictureRefreshService.RefreshSeriesMainLineAsync(
+            seriesId.Value, PictureRefreshService.SeriesPictureFetchBudget, ct);
+        return Ok(new { remaining });
+    }
+
     /// <summary>Kicks off the settings page's manual "build all series from my
     /// list" action: builds a series for every my-list anime that belongs to
     /// no stored series yet, or whose stored series predates the current
@@ -104,4 +187,14 @@ public class SeriesController(
 public class SeriesFavouriteOrderRequest
 {
     public List<int> AnimeIds { get; set; } = [];
+}
+
+public class SetSeriesTitleRequest
+{
+    public required string Title { get; set; }
+}
+
+public class SetSeriesPictureRequest
+{
+    public required string PictureUrl { get; set; }
 }

@@ -33,6 +33,14 @@ public class MalClient(HttpClient http) : IMalClient
     // with this fetch, with no separate backfill call needed.
     private const string FullDetailAnimeFields = DefaultAnimeFields + ",genres,synopsis,background,related_anime{node{media_type}},average_episode_duration,source";
 
+    // Same as FullDetailAnimeFields, plus the picture set — used only when the
+    // anime being fetched is in my list (Services/Metadata/MetadataRefreshService).
+    // MAL rate-limits per request rather than per field, so carrying pictures
+    // on a fetch that is happening anyway is free; FullDetailAnimeFields itself
+    // is untouched so a non-my-list fetch keeps asking for exactly what it did
+    // before.
+    public const string FullDetailWithPicturesAnimeFields = FullDetailAnimeFields + ",pictures";
+
     // list_status sub-fields for the user animelist — without these, MAL omits
     // list_status entirely and every imported entry looks like "plan to watch".
     private const string UserAnimeListFields = DefaultAnimeFields +

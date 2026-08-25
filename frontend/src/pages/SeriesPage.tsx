@@ -1,6 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getSeries, rebuildSeries, setSeriesFavouriteOrder } from '../api/client.ts'
+import {
+  getSeries,
+  rebuildSeries,
+  refreshSeriesPictures,
+  setSeriesFavouriteOrder,
+  setSeriesPicture,
+  setSeriesTitle,
+} from '../api/client.ts'
 import type {
   SeriesAverageDto,
   SeriesDto,
@@ -10,6 +17,7 @@ import type {
   UserAnimeEntryDto,
 } from '../api/types.ts'
 import { AiringProgressBar } from '../components/AiringProgressBar.tsx'
+import { PicturePickerOverlay } from '../components/PicturePickerOverlay.tsx'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
@@ -17,6 +25,7 @@ import { SeriesCompletionBadge } from '../components/SeriesCompletionBadge.tsx'
 import { SeriesExtraTile } from '../components/SeriesExtraTile.tsx'
 import { SeriesStatusPill } from '../components/SeriesStatusPill.tsx'
 import { SeriesTimeline } from '../components/SeriesTimeline.tsx'
+import { SeriesTitlePickerOverlay } from '../components/SeriesTitlePickerOverlay.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useLandscapePicture } from '../hooks/useLandscapePicture.ts'
 import { usePageData } from '../hooks/usePageData.ts'
@@ -330,6 +339,33 @@ export function SeriesPage() {
   const [rebuildCount, setRebuildCount] = useState<number | null>(null)
   const { openEditor } = useEntryEditor()
   const [pictureRef, isLandscapePicture] = useLandscapePicture(data?.found ? data.series.pictureUrl : null)
+  const [showPicturePicker, setShowPicturePicker] = useState(false)
+  const [showTitlePicker, setShowTitlePicker] = useState(false)
+
+  // Bounded pool backfill (design D6) — mirrors the anime detail page's
+  // picture backfill: fire once per series while members remain unfetched,
+  // then merge the server's fresh identity (pictureOptions/titleOptions/
+  // picturesPendingCount) into state without a reload.
+  const seriesPictureRefreshRequestedForRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!data?.found) return
+    const series = data.series
+    if (series.picturesPendingCount <= 0) return
+    if (seriesPictureRefreshRequestedForRef.current === series.seriesId) return
+    seriesPictureRefreshRequestedForRef.current = series.seriesId
+    refreshSeriesPictures(animeId)
+      .then(() => getSeries(animeId))
+      .then((result) => {
+        if (!result.found) return
+        setData((prev) =>
+          prev && prev.found && prev.series.seriesId === result.series.seriesId ? { found: true, series: result.series } : prev,
+        )
+      })
+      .catch(() => {
+        // Leave picturesPendingCount as the server last reported it — a
+        // later visit's read re-evaluates and retries.
+      })
+  }, [data, animeId, setData])
 
   // More-section view state (design.md decision 3): `mineOnly` is the "in my
   // list" filter, on by default; `collapsedGroups` is per-group collapse,
@@ -440,6 +476,29 @@ export function SeriesPage() {
     }
   }
 
+  // Both apply optimistically (spec "A chosen picture applies immediately")
+  // and affect only the series (spec "Choosing does not touch the members"):
+  // neither writes to any member anime's own pictureUrl/title.
+  function handlePickSeriesPicture(url: string) {
+    if (!data?.found) return
+    const seriesId = data.series.seriesId
+    patchSeries((series) => ({ ...series, pictureUrl: url, selectedPictureUrl: url }))
+    setSeriesPicture(seriesId, url).catch(() => {
+      // The picker already closed; a later refresh/reload re-syncs if the
+      // save failed server-side.
+    })
+  }
+
+  function handlePickSeriesTitle(title: string) {
+    if (!data?.found) return
+    const seriesId = data.series.seriesId
+    patchSeries((series) => ({ ...series, title, englishTitle: null, selectedTitle: title }))
+    setSeriesTitle(seriesId, title).catch(() => {
+      // The picker already closed; a later refresh/reload re-syncs if the
+      // save failed server-side.
+    })
+  }
+
   function handleEdit(entry: SeriesEntryDto) {
     openEditor({
       animeId: entry.animeId,
@@ -520,13 +579,17 @@ export function SeriesPage() {
   // pages, all showing the real count.
   const mainLineAiredEpisodes = series.mainLine.reduce((sum, e) => sum + (e.airedEpisodes ?? 0), 0)
 
-  // "Time watched"/"Time left" hide together once there's nothing left to
-  // watch (design.md decision 7) — except when the runtime total itself is
-  // unknown, in which case a zero time left reports missing data rather than
-  // a finished series, so both stats stay visible.
+  // Time watched and time left are now shown independently (design D11): with
+  // rewatches counted, a finished franchise that's been rewatched is exactly
+  // where "time watched" is interesting, so it no longer hides just because
+  // there's nothing left to watch. Time left keeps hiding at zero, except
+  // when the runtime total itself is unknown, in which case a zero time left
+  // reports missing data rather than a finished series.
+  const timeWatchedSeconds = stats.myWatchedSeconds + stats.myRewatchedSeconds
   const timeLeftSeconds = Math.max(0, stats.mainLineRuntimeSeconds - stats.myWatchedSeconds)
   const runtimeUnknown = stats.mainLineRuntimeSeconds === 0 && stats.hasUnknownEpisodeCounts
-  const showTimeStats = timeLeftSeconds > 0 || runtimeUnknown
+  const showTimeWatched = timeWatchedSeconds > 0
+  const showTimeLeft = timeLeftSeconds > 0 || runtimeUnknown
 
   const highestMalEntries = stats.highestMalScoreAnimeIds
     .map((id) => findEntry(series, id))
@@ -619,6 +682,30 @@ export function SeriesPage() {
 
   return (
     <div className="series-page">
+      {showPicturePicker && (
+        <PicturePickerOverlay
+          title="Choose picture"
+          options={series.pictureOptions}
+          current={series.pictureUrl}
+          onPick={handlePickSeriesPicture}
+          onClose={() => setShowPicturePicker(false)}
+          note={
+            series.picturesPendingCount > 0
+              ? `${series.picturesPendingCount} member${series.picturesPendingCount === 1 ? '' : 's'} not yet fetched — more pictures may appear on a later visit.`
+              : undefined
+          }
+        />
+      )}
+
+      {showTitlePicker && (
+        <SeriesTitlePickerOverlay
+          offeredTitles={series.titleOptions}
+          current={displayTitle}
+          onPick={handlePickSeriesTitle}
+          onClose={() => setShowTitlePicker(false)}
+        />
+      )}
+
       <div className={`series-page__header${isLandscapePicture ? ' series-page__header--landscape' : ''}`}>
         {series.pictureUrl ? (
           <img
@@ -667,6 +754,17 @@ export function SeriesPage() {
             >
               SeriesGraph
             </a>
+          </div>
+
+          <div className="series-page__artwork-controls">
+            {series.pictureOptions.length > 1 && (
+              <button type="button" className="series-page__related-link" onClick={() => setShowPicturePicker(true)}>
+                Choose picture
+              </button>
+            )}
+            <button type="button" className="series-page__related-link" onClick={() => setShowTitlePicker(true)}>
+              Choose title
+            </button>
           </div>
 
           {!isLandscapePicture && scoreAndProgress}
@@ -721,17 +819,17 @@ export function SeriesPage() {
               )}
             </dd>
           </div>
-          {showTimeStats && (
-            <>
-              <div>
-                <dt>Time watched</dt>
-                <dd>{formatRuntime(stats.myWatchedSeconds)}</dd>
-              </div>
-              <div>
-                <dt>Time left</dt>
-                <dd>{formatRuntime(timeLeftSeconds)}</dd>
-              </div>
-            </>
+          {showTimeWatched && (
+            <div>
+              <dt>Time watched</dt>
+              <dd>{formatRuntime(timeWatchedSeconds)}</dd>
+            </div>
+          )}
+          {showTimeLeft && (
+            <div>
+              <dt>Time left</dt>
+              <dd>{formatRuntime(timeLeftSeconds)}</dd>
+            </div>
           )}
           {highestMalEntries.length > 0 && (
             <div>

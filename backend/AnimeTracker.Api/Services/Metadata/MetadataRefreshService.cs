@@ -43,7 +43,11 @@ public class MetadataRefreshService(
                 // same one call. This is what lets relations, airing status,
                 // episode counts and ranks refresh on these tiers too,
                 // instead of freezing at whatever the anime's first fetch saw.
-                var details = await malClient.GetAnimeDetailsAsync(anime.Id, ct: ct);
+                // The query above is already my-list-only, so every anime
+                // here is by definition eligible for the with-pictures fetch
+                // (design.md D4a) — no re-check needed.
+                var details = await malClient.GetAnimeDetailsAsync(
+                    anime.Id, fields: [MalClient.FullDetailWithPicturesAnimeFields], ct: ct);
                 var before = SnapshotRelations(anime);
                 details.ApplyTo(anime, now);
                 RecordDiscoveries(anime, before, now);
@@ -67,10 +71,15 @@ public class MetadataRefreshService(
         // touch the DB, so we never insert a garbage row. Upsert so this also
         // caches an anime that has no row yet (a sequel link or an un-interacted
         // search result the detail page is opening for the first time).
+        // The row may not exist yet, so eligibility is checked against the
+        // list-entry table directly rather than the (possibly absent) cached row.
+        var isMyListAnime = await db.UserAnimeEntries.AnyAsync(e => e.AnimeId == animeId, ct);
+        var fields = isMyListAnime ? new[] { MalClient.FullDetailWithPicturesAnimeFields } : null;
+
         MalAnimeNode details;
         try
         {
-            details = await malClient.GetAnimeDetailsAsync(animeId, ct: ct);
+            details = await malClient.GetAnimeDetailsAsync(animeId, fields: fields, ct: ct);
         }
         catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {

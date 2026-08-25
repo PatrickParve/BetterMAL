@@ -138,6 +138,17 @@
   border-color: var(--accent-border);
 }
 
+.series-page__artwork-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.series-page__artwork-controls .series-page__related-link {
+  cursor: pointer;
+}
+
 .series-page__stats-header {
   display: flex;
   align-items: center;

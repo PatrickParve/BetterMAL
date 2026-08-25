@@ -1,3 +1,5 @@
+using AnimeTracker.Api.Services.Series;
+
 namespace AnimeTracker.Api.Services.Search;
 
 /// <summary>In-memory index of every series member's title/picture, loaded
@@ -59,30 +61,43 @@ public sealed class SeriesSearchIndex
     }
 
     // The root is always a member of its own series (SeriesGraphBuilder
-    // invariant), so display fields come from that row regardless of which
-    // member actually matched the query.
+    // invariant), so display fields come from that row (via SeriesIdentity,
+    // design.md D7) regardless of which member actually matched the query.
     private SeriesSearchResultDto ToResultDto(int seriesId)
     {
         var members = _membersBySeriesId[seriesId].ToList();
         var rootAnimeId = members[0].RootAnimeId; // same for every member of a series
         var root = members.First(m => m.AnimeId == rootAnimeId);
+        var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
+            root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.PictureUrl);
 
-        return new SeriesSearchResultDto(seriesId, rootAnimeId, root.Title, root.EnglishTitle, root.PictureUrl, members.Count);
+        return new SeriesSearchResultDto(seriesId, rootAnimeId, title, englishTitle, pictureUrl, members.Count);
     }
 
+    // A chosen title is added to the match set alongside every member's own
+    // title/English title (spec `series-identity` "A renamed series is still
+    // found by its members' titles") — it never *replaces* member matching,
+    // since a trimmed title no member title begins with must still be
+    // findable by its own text.
     private static MatchQuality? MatchQualityOf(SeriesMemberProjection member, string term, bool exact)
     {
         if (exact)
         {
-            return SearchTextMatch.EqualsIgnoreCase(member.Title, term) || SearchTextMatch.EqualsIgnoreCase(member.EnglishTitle, term)
+            return SearchTextMatch.EqualsIgnoreCase(member.Title, term)
+                || SearchTextMatch.EqualsIgnoreCase(member.EnglishTitle, term)
+                || SearchTextMatch.EqualsIgnoreCase(member.SelectedTitle, term)
                 ? MatchQuality.Exact
                 : null;
         }
 
-        if (SearchTextMatch.StartsWithIgnoreCase(member.Title, term) || SearchTextMatch.StartsWithIgnoreCase(member.EnglishTitle, term))
+        if (SearchTextMatch.StartsWithIgnoreCase(member.Title, term)
+            || SearchTextMatch.StartsWithIgnoreCase(member.EnglishTitle, term)
+            || SearchTextMatch.StartsWithIgnoreCase(member.SelectedTitle, term))
             return MatchQuality.Prefix;
 
-        if (SearchTextMatch.ContainsIgnoreCase(member.Title, term) || SearchTextMatch.ContainsIgnoreCase(member.EnglishTitle, term))
+        if (SearchTextMatch.ContainsIgnoreCase(member.Title, term)
+            || SearchTextMatch.ContainsIgnoreCase(member.EnglishTitle, term)
+            || SearchTextMatch.ContainsIgnoreCase(member.SelectedTitle, term))
             return MatchQuality.Contains;
 
         return null;

@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Controllers;
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -21,7 +22,8 @@ public class SeriesControllerBulkBuildTests
         using var db = new AnimeTrackerDbContext(
             new DbContextOptionsBuilder<AnimeTrackerDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
         var listService = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService());
-        var controller = new SeriesController(new UnusedSeriesService(), listService, trigger, tracker);
+        var controller = new SeriesController(
+            new UnusedSeriesService(), listService, trigger, tracker, new UnusedArtworkSelectionService(), new UnusedPictureRefreshService());
 
         Assert.Equal(SeriesBulkBuildPhase.NotStarted, tracker.Snapshot.Phase);
 
@@ -39,6 +41,32 @@ public class SeriesControllerBulkBuildTests
         public Task<SeriesDto> RebuildSeriesAsync(int animeId, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task SetFavouriteOrderAsync(int seriesId, List<int> animeIds, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<int?> FindSeriesIdAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+    }
+
+    private sealed class UnusedArtworkSelectionService : IArtworkSelectionService
+    {
+        public Task<string?> SetAnimePictureAsync(int animeId, string pictureUrl, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<string?> ResetAnimePictureAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<string> SetSeriesTitleAsync(int seriesId, string title, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<string?> ResetSeriesTitleAsync(int seriesId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<string?> SetSeriesPictureAsync(int seriesId, string pictureUrl, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<string?> ResetSeriesPictureAsync(int seriesId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+    }
+
+    private sealed class UnusedPictureRefreshService : IPictureRefreshService
+    {
+        public Task<bool> RefreshOneAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<int> RefreshSeriesMainLineAsync(int seriesId, int budget, CancellationToken ct = default) =>
             throw new NotImplementedException();
     }
 

@@ -1,0 +1,87 @@
+.picture-picker-overlay {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.picture-picker-overlay__title {
+  margin: 0;
+}
+
+.picture-picker-overlay__grid {
+  display: grid;
+  /* A capped max (not 1fr, which stretches to fill the row) keeps every
+     thumbnail at a normal poster size regardless of how few options there
+     are — two pictures in a wide modal shouldn't blow up to fill it. */
+  grid-template-columns: repeat(auto-fill, minmax(110px, 130px));
+  justify-content: center;
+  gap: 12px;
+  /* No max-height/overflow of its own: a large pool (a franchise's whole
+     picture pool can run past twenty) scrolls with the rest of the modal
+     instead of getting its own nested scrollbar, which on a short viewport
+     could otherwise clip most of the grid out of view. */
+}
+
+.picture-picker-overlay__option {
+  position: relative;
+  width: 100%;
+  padding: 0;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  cursor: pointer;
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+}
+
+.picture-picker-overlay__option:hover {
+  border-color: var(--accent-border);
+}
+
+.picture-picker-overlay__option--selected {
+  border-color: var(--accent);
+}
+
+.picture-picker-overlay__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.picture-picker-overlay__badge {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  right: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 11px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.picture-picker-overlay__note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.picture-picker-overlay__buttons {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.picture-picker-overlay__buttons button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}

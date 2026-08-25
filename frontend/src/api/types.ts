@@ -603,6 +603,10 @@ export type SeriesStatsDto = {
   extrasRuntimeSeconds: number
   myWatchedEpisodes: number
   myWatchedSeconds: number
+  // Orthogonal to myWatchedSeconds (design D10, add-artwork-and-title-selection):
+  // the completed-rewatch-runs-plus-in-progress-run figure. "Time watched"
+  // sums the two for display; myWatchedSeconds alone still feeds "time left".
+  myRewatchedSeconds: number
   entriesCompleted: number
   extrasCompleted: number
   mainLineCompletedByMe: boolean
@@ -637,6 +641,13 @@ export type SeriesDto = {
   stats: SeriesStatsDto
   mainLine: SeriesEntryDto[]
   extras: SeriesEntryDto[]
+  // The series' own overrides (null when unset) and the picker inputs
+  // derived from them (artwork-selection/series-identity capabilities).
+  selectedTitle: string | null
+  selectedPictureUrl: string | null
+  pictureOptions: string[]
+  titleOptions: string[]
+  picturesPendingCount: number
 }
 
 // getSeries resolves to this rather than throwing on a 404 — "not part of a
@@ -694,6 +705,12 @@ export type AnimeDetailDto = {
   title: string
   englishTitle: string | null
   pictureUrl: string | null
+  // MAL's own main picture (artwork-selection) — feeds the picker and is
+  // what "Reset" restores; pictureUrl is the picture actually displayed.
+  malPictureUrl: string | null
+  // Every picture MAL publishes for this anime, my-list only; null/empty
+  // when never fetched or MAL reports none.
+  pictureUrls: string[] | null
   malScore: number | null
   rank: number | null
   popularityRank: number | null
@@ -717,6 +734,9 @@ export type AnimeDetailDto = {
   relatedAnime: RelatedAnimeDto[]
   entry: UserAnimeEntryDto | null
   inSeries: boolean
+  // True when this is a my-list anime that has never had a picture set
+  // fetched — the client's cue to call refreshAnimePictures (design D4b).
+  picturesFetchPending: boolean
   // True when a visit-triggered live fetch was attempted and failed — the
   // rest of this record is served from cache, not confirmed fresh.
   refreshFailed: boolean

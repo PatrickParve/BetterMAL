@@ -35,8 +35,8 @@ The page SHALL NOT build or rebuild any series, and SHALL make no MyAnimeList re
 ### Requirement: Series card content
 Each listed series SHALL be shown as a card in a grid, in the same card and grid form the Season and Search results pages use, carrying:
 
-- the series' main picture — the root entry's picture, the same one the series page's header shows — or a placeholder when the root has none;
-- the series' display title, with the English title preferred exactly as it is elsewhere in the app;
+- the series' picture — the one the `series-identity` capability resolves, which is the series' chosen picture when it has one and its root entry's displayed picture otherwise, the same one the series page's header shows — or a placeholder when neither exists;
+- the series' display title — likewise the one `series-identity` resolves, which is the series' chosen title when it has one and the root entry's title otherwise, with the English title preferred exactly as it is elsewhere in the app when no title has been chosen;
 - the MAL average and my average across the **main line**, each rendered to two decimals, matching the series page's `MAL · main series` and `Mine · main series` chips in both computation and appearance;
 - the series' status pill, one of `Airing`, `Ongoing`, `Upcoming`, or `Finished`, computed by the precedence the `series-page` capability defines and carrying the same four distinct colours the series page uses;
 - my progress badge — one of `Completed`, `Caught up`, `N behind`, `Dropped`, or `Unwatched`, or no badge, by the precedence the next requirement defines, carrying the same colours the series page uses for those states;
@@ -54,7 +54,15 @@ The whole card SHALL link to that series' page, targeting the series' root anime
 
 #### Scenario: A card carries every figure
 - **WHEN** the Series page renders a card for a franchise of four main-line seasons and three extras spanning 2013 to 2023
-- **THEN** the card shows the root's picture, the series title, a MAL and a my average, a status pill, the year span "2013 – 2023", the main-line episode total, and an entry count of 7
+- **THEN** the card shows the series' resolved picture, the series' resolved title, a MAL and a my average, a status pill, the year span "2013 – 2023", the main-line episode total, and an entry count of 7
+
+#### Scenario: A card shows a chosen title and picture
+- **WHEN** a series has been given a chosen title and a chosen picture
+- **THEN** its card shows both, rather than the root entry's title and picture
+
+#### Scenario: A card without choices is unchanged
+- **WHEN** a series has neither a chosen title nor a chosen picture
+- **THEN** its card shows the root entry's title and displayed picture exactly as before
 
 #### Scenario: A single-year series shows one year
 - **WHEN** every entry of a series aired in 2019

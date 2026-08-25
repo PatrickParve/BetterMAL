@@ -524,3 +524,66 @@ export function filterSeries(
     return true
   })
 }
+
+// Mirrors backend Services/Series/SeriesTitleRule.cs (design D8) — a
+// mirror-only check so the series title picker can disable its confirm
+// button and explain a refusal before submitting. The server is the
+// authority; this must never be treated as validation on its own.
+const TITLE_BOUNDARY_PUNCTUATION = /^[:;,\-–—.!?"'“”‘’\s]+|[:;,\-–—.!?"'“”‘’\s]+$/g
+
+function collapseWhitespace(value: string): string {
+  return value.split(/\s+/).filter((part) => part.length > 0).join(' ')
+}
+
+export function normalizeSeriesTitleCandidate(candidate: string): string {
+  return collapseWhitespace(candidate).replace(TITLE_BOUNDARY_PUNCTUATION, '')
+}
+
+export function isSeriesTitleAcceptable(candidate: string, offeredTitles: string[]): boolean {
+  const normalized = normalizeSeriesTitleCandidate(candidate)
+  if (normalized.length === 0) return false
+
+  const needle = normalized.toLowerCase()
+  return offeredTitles.some((offered) => collapseWhitespace(offered).toLowerCase().includes(needle))
+}
+
+// Mirrors backend Services/Artwork/PictureIdentity.cs — MAL sometimes serves
+// the exact same photo under two different URLs that differ only by file
+// extension (main_picture returning the .webp rendition of a picture while
+// `pictures` lists the identical photo as .jpg, or vice versa). Byte-for-byte
+// URL equality treats those as two different pictures, which is what made a
+// picker occasionally show "the same" picture twice.
+const PICTURE_FILE_EXTENSIONS = ['.webp', '.jpg', '.jpeg', '.png', '.gif']
+
+export function pictureIdentityKey(url: string): string {
+  const lower = url.toLowerCase()
+  const extension = PICTURE_FILE_EXTENSIONS.find((ext) => lower.endsWith(ext))
+  return extension ? url.slice(0, url.length - extension.length) : url
+}
+
+// Dedupes a set of picture URLs by pictureIdentityKey rather than raw string
+// equality. `canonical` URLs (the anime/series' own current/MAL picture) win
+// their slot over a plain pictures-array entry sharing the same identity, so
+// the current selection is always present in the result by exact string —
+// which is how a picker's "Current" badge matches it.
+export function dedupePictureOptions(pictureUrls: (string | null | undefined)[], canonical: (string | null | undefined)[]): string[] {
+  const options: string[] = []
+  const indexByKey = new Map<string, number>()
+
+  function upsert(url: string | null | undefined, preferOverExisting: boolean) {
+    if (!url) return
+    const key = pictureIdentityKey(url)
+    const existingIndex = indexByKey.get(key)
+    if (existingIndex !== undefined) {
+      if (preferOverExisting) options[existingIndex] = url
+      return
+    }
+    indexByKey.set(key, options.length)
+    options.push(url)
+  }
+
+  for (const url of pictureUrls) upsert(url, false)
+  for (const url of canonical) upsert(url, true)
+
+  return options
+}

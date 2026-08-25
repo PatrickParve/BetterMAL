@@ -1,0 +1,85 @@
+.series-title-picker-overlay {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.series-title-picker-overlay__title {
+  margin: 0;
+}
+
+.series-title-picker-overlay__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.series-title-picker-overlay__option {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.series-title-picker-overlay__option:hover {
+  border-color: var(--accent-border);
+}
+
+.series-title-picker-overlay__option--selected {
+  border-color: var(--accent);
+}
+
+.series-title-picker-overlay__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.series-title-picker-overlay__field input {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.series-title-picker-overlay__error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger, #d64545);
+}
+
+.series-title-picker-overlay__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.series-title-picker-overlay__buttons button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.series-title-picker-overlay__confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

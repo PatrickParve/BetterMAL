@@ -79,7 +79,11 @@ public class InitialImportService(
 
     private async Task ImportOneAsync(int animeId, MalListStatus? listStatus, bool isBaselineRun, CancellationToken ct)
     {
-        var details = await malClient.GetAnimeDetailsAsync(animeId, ct: ct);
+        // Every anime this method imports is, by definition, a my-list entry
+        // (it's built from the user's own MAL list), so it always qualifies
+        // for the with-pictures field set (design.md D4a).
+        var details = await malClient.GetAnimeDetailsAsync(
+            animeId, fields: [MalClient.FullDetailWithPicturesAnimeFields], ct: ct);
         var now = DateTimeOffset.UtcNow;
 
         db.AnimeMetadata.Add(details.ToAnimeMetadata(now));

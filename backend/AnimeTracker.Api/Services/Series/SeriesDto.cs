@@ -49,7 +49,12 @@ public record SeriesScoresDto(
 /// the total is always a true lower bound rather than a guess. My
 /// progress (watched episodes/seconds, entries completed) is scoped to the
 /// main line only, matching "time left" being main-line runtime minus
-/// watched runtime. <c>MainLineAiredEpisodes</c> is summed over the same
+/// watched runtime. <c>MyWatchedSeconds</c> stays first-run-only — it is
+/// what "time left" subtracts and what the progress bar fills — while
+/// <c>MyRewatchedSeconds</c> is the orthogonal rewatch figure (design D10):
+/// the client sums the two for "time watched" display, but each is read
+/// separately, and only <c>MyWatchedSeconds</c> feeds anything else.
+/// <c>MainLineAiredEpisodes</c> is summed over the same
 /// known-total main-line set (design.md decision 4): finished entries
 /// contribute their full total, a currently-airing entry contributes its
 /// aired-so-far count, and an entry that hasn't aired yet contributes
@@ -75,6 +80,7 @@ public record SeriesStatsDto(
     long ExtrasRuntimeSeconds,
     int MyWatchedEpisodes,
     long MyWatchedSeconds,
+    long MyRewatchedSeconds,
     int EntriesCompleted,
     int ExtrasCompleted,
     bool MainLineCompletedByMe,
@@ -117,4 +123,17 @@ public record SeriesDto(
     SeriesScoresDto Scores,
     SeriesStatsDto Stats,
     List<SeriesEntryDto> MainLine,
-    List<SeriesEntryDto> Extras);
+    List<SeriesEntryDto> Extras,
+    // The series' own overrides (null when unset) and the picker inputs
+    // derived from them (artwork-selection/series-identity): PictureOptions
+    // is the main line's picture pool (Services/Artwork/SeriesPicturePool)
+    // plus the current selection when the pool doesn't already carry it;
+    // TitleOptions is every main-line member's title/English title
+    // (Services/Series/SeriesTitleRule.OfferedTitles); PicturesPendingCount
+    // is how many main-line members are in my list but have never had a
+    // picture fetch, for the client's bounded-backfill note (design.md D6).
+    string? SelectedTitle,
+    string? SelectedPictureUrl,
+    List<string> PictureOptions,
+    List<string> TitleOptions,
+    int PicturesPendingCount);

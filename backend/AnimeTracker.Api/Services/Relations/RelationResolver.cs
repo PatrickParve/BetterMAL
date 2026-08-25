@@ -85,8 +85,11 @@ public class RelationResolver(AnimeTrackerDbContext db) : IRelationResolver
                 : Adjudicate(anime.Id, edge.RelatedAnimeId, edge.RelationType, farEndFetched,
                     aniListEdges, viewedSync, syncByAnimeId.GetValueOrDefault(edge.RelatedAnimeId));
 
+            // Prefer a cached far-end row's own (possibly chosen) picture over
+            // the relation row's denormalized snapshot (design D12); fall back
+            // to the snapshot when the far end has no metadata row at all.
             edges.Add(new ResolvedRelationEdge(
-                edge.RelatedAnimeId, edge.RelationType, edge.Title, edge.PictureUrl, edge.MediaType,
+                edge.RelatedAnimeId, edge.RelationType, edge.Title, farAnime?.PictureUrl ?? edge.PictureUrl, edge.MediaType,
                 farAnime?.AiredFrom, IsReverseDerived: false, HasConfidentInverse: invertedType is not null, confidence));
         }
 

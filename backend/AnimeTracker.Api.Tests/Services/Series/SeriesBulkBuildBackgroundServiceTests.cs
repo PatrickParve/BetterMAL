@@ -275,6 +275,8 @@ public class SeriesBulkBuildBackgroundServiceTests
             throw new NotImplementedException();
         public Task SetFavouriteOrderAsync(int seriesId, List<int> animeIds, CancellationToken ct = default) =>
             throw new NotImplementedException();
+        public Task<int?> FindSeriesIdAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
 
         private static SeriesDto EmptySeriesDto(int animeId) => new(
             animeId, animeId, null, "Series", null, null, "Finished", null, null,
@@ -282,8 +284,9 @@ public class SeriesBulkBuildBackgroundServiceTests
             new SeriesScoresDto(
                 new SeriesAverageDto(null, 0, 0), new SeriesAverageDto(null, 0, 0),
                 new SeriesAverageDto(null, 0, 0), new SeriesAverageDto(null, 0, 0)),
-            new SeriesStatsDto(0, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, null, null, null, [], [], [], [], []),
-            [], []);
+            new SeriesStatsDto(0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, null, null, null, [], [], [], [], []),
+            [], [],
+            null, null, [], [], 0);
     }
 
     private sealed class FakeUserAnimeEntryRepository(List<UserAnimeEntry> entries) : IUserAnimeEntryRepository

@@ -28,6 +28,10 @@ public class MalAnimeNode
     public string? Source { get; set; } // e.g. manga, original, light_novel
     public List<MalRelatedAnimeEdge>? RelatedAnime { get; set; }
     public string? Rating { get; set; } // g, pg, pg_13, r, r+, rx — rx means Hentai
+
+    // Null means the request did not ask for `pictures` — not the same as an
+    // empty set, which would mean "asked, and MAL has none".
+    public List<MalMainPicture>? Pictures { get; set; }
 }
 
 public class MalAlternativeTitles

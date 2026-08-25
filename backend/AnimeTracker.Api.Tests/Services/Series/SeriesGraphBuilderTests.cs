@@ -575,6 +575,135 @@ public class SeriesGraphBuilderTests
         Assert.Equal([1, 2], ordered); // cycle remainder emitted in air-date order
     }
 
+    // --- 7.5: SelectedTitle/SelectedPictureUrl survive a rebuild and an absorption (design.md D9) ---
+
+    [Fact]
+    public async Task RebuildKeepsAChosenTitleAndPicture()
+    {
+        using var db = CreateDb();
+        var a = Anime(1, "tv", new DateOnly(2018, 1, 1));
+        var b = Anime(2, "tv", new DateOnly(2019, 1, 1));
+        Relate(a, b, "sequel");
+        db.AnimeMetadata.AddRange(a, b);
+        await db.SaveChangesAsync();
+
+        var series = await CreateBuilder(db).BuildAsync(a.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
+        var stored = await db.Series.FirstAsync(s => s.Id == series!.Id);
+        stored.SelectedTitle = "My Title";
+        stored.SelectedPictureUrl = "chosen.jpg";
+        await db.SaveChangesAsync();
+
+        await CreateBuilder(db).BuildAsync(a.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
+
+        var rebuilt = await db.Series.AsNoTracking().FirstAsync(s => s.Id == series!.Id);
+        Assert.Equal("My Title", rebuilt.SelectedTitle);
+        Assert.Equal("chosen.jpg", rebuilt.SelectedPictureUrl);
+    }
+
+    [Fact]
+    public async Task AChoiceOutlivesItsSourceMemberLeavingTheSeries()
+    {
+        using var db = CreateDb();
+        var a = Anime(1, "tv", new DateOnly(2018, 1, 1));
+        var b = Anime(2, "tv", new DateOnly(2019, 1, 1));
+        var c = Anime(3, "tv", new DateOnly(2020, 1, 1));
+        Relate(a, b, "sequel");
+        Relate(b, c, "sequel");
+        db.AnimeMetadata.AddRange(a, b, c);
+        await db.SaveChangesAsync();
+
+        var series = await CreateBuilder(db).BuildAsync(a.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
+        var stored = await db.Series.FirstAsync(s => s.Id == series!.Id);
+        stored.SelectedPictureUrl = "picked-from-c.jpg"; // stands in for a picture chosen from member C
+        await db.SaveChangesAsync();
+
+        // C leaves the component: remove its only connecting edge.
+        var edge = await db.AnimeRelatedAnime.FirstAsync(r => r.AnimeId == b.Id && r.RelatedAnimeId == c.Id);
+        db.AnimeRelatedAnime.Remove(edge);
+        await db.SaveChangesAsync();
+
+        var rebuiltSeries = await CreateBuilder(db).BuildAsync(a.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
+        var members = await db.SeriesMembers.Where(m => m.SeriesId == rebuiltSeries!.Id).ToListAsync();
+        var rebuilt = await db.Series.AsNoTracking().FirstAsync(s => s.Id == series!.Id);
+
+        Assert.DoesNotContain(members, m => m.AnimeId == c.Id); // C genuinely left
+        Assert.Equal("picked-from-c.jpg", rebuilt.SelectedPictureUrl); // choice is kept anyway
+    }
+
+    [Fact]
+    public async Task AbsorptionFillsInAMissingChoiceFromTheLargestOverlapAbsorbedSeries()
+    {
+        using var db = CreateDb();
+        var (a, bAnime, cAnime, dAnime, eAnime, fAnime) = SixMemberChain();
+        db.AnimeMetadata.AddRange(a, bAnime, cAnime, dAnime, eAnime, fAnime);
+
+        // Pre-existing stored series overlapping the new build's component
+        // differently: the eventual survivor (largest overlap), and two
+        // absorbed candidates with differing overlap counts.
+        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, RootAnimeId = a.Id, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 2, RootAnimeId = cAnime.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "FromTwo" });
+        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 3, RootAnimeId = eAnime.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "FromThree" });
+        db.SeriesMembers.AddRange(
+            new SeriesMember { AnimeId = a.Id, SeriesId = 1, IsMainLine = true, Order = 0 },
+            new SeriesMember { AnimeId = bAnime.Id, SeriesId = 1, IsMainLine = true, Order = 1 },
+            new SeriesMember { AnimeId = fAnime.Id, SeriesId = 1, IsMainLine = true, Order = 2 }, // overlap 3 -> survivor
+            new SeriesMember { AnimeId = cAnime.Id, SeriesId = 2, IsMainLine = true, Order = 0 },
+            new SeriesMember { AnimeId = dAnime.Id, SeriesId = 2, IsMainLine = true, Order = 1 }, // overlap 2
+            new SeriesMember { AnimeId = eAnime.Id, SeriesId = 3, IsMainLine = true, Order = 0 }); // overlap 1
+        await db.SaveChangesAsync();
+
+        var result = await CreateBuilder(db).BuildAsync(a.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
+
+        Assert.Equal(1, result!.Id); // largest-overlap series (3 members) survives
+        var survivor = await db.Series.AsNoTracking().FirstAsync(s => s.Id == 1);
+        Assert.Equal("FromTwo", survivor.SelectedTitle); // adopted from series 2 (overlap 2), not series 3 (overlap 1)
+        Assert.False(await db.Series.AsNoTracking().AnyAsync(s => s.Id == 2 || s.Id == 3)); // absorbed rows deleted
+    }
+
+    [Fact]
+    public async Task AbsorptionDoesNotOverwriteTheSurvivorsOwnChoice()
+    {
+        using var db = CreateDb();
+        var (a, bAnime, cAnime, dAnime, eAnime, fAnime) = SixMemberChain();
+        db.AnimeMetadata.AddRange(a, bAnime, cAnime, dAnime, eAnime, fAnime);
+
+        db.Series.Add(new AnimeTracker.Api.Models.Series
+        {
+            Id = 1, RootAnimeId = a.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "Survivor's Own",
+        });
+        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 2, RootAnimeId = cAnime.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "FromTwo" });
+        db.SeriesMembers.AddRange(
+            new SeriesMember { AnimeId = a.Id, SeriesId = 1, IsMainLine = true, Order = 0 },
+            new SeriesMember { AnimeId = bAnime.Id, SeriesId = 1, IsMainLine = true, Order = 1 },
+            new SeriesMember { AnimeId = fAnime.Id, SeriesId = 1, IsMainLine = true, Order = 2 },
+            new SeriesMember { AnimeId = cAnime.Id, SeriesId = 2, IsMainLine = true, Order = 0 },
+            new SeriesMember { AnimeId = dAnime.Id, SeriesId = 2, IsMainLine = true, Order = 1 });
+        await db.SaveChangesAsync();
+
+        await CreateBuilder(db).BuildAsync(a.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
+
+        var survivor = await db.Series.AsNoTracking().FirstAsync(s => s.Id == 1);
+        Assert.Equal("Survivor's Own", survivor.SelectedTitle);
+    }
+
+    // A straight sequel chain A-B-C-D-E-F, all tv, air-date ordered — one
+    // connected component so a single BuildAsync(a.Id) call reaches all six.
+    private static (AnimeMetadata A, AnimeMetadata B, AnimeMetadata C, AnimeMetadata D, AnimeMetadata E, AnimeMetadata F) SixMemberChain()
+    {
+        var a = Anime(1, "tv", new DateOnly(2015, 1, 1));
+        var b = Anime(2, "tv", new DateOnly(2016, 1, 1));
+        var c = Anime(3, "tv", new DateOnly(2017, 1, 1));
+        var d = Anime(4, "tv", new DateOnly(2018, 1, 1));
+        var e = Anime(5, "tv", new DateOnly(2019, 1, 1));
+        var f = Anime(6, "tv", new DateOnly(2020, 1, 1));
+        Relate(a, b, "sequel");
+        Relate(b, c, "sequel");
+        Relate(c, d, "sequel");
+        Relate(d, e, "sequel");
+        Relate(e, f, "sequel");
+        return (a, b, c, d, e, f);
+    }
+
     // `probeResults` simulates a live full-detail fetch: when configured for
     // an id, RefreshOneAsync inserts a cached row with that media type (as a
     // real fetch would populate one); when not configured, it throws

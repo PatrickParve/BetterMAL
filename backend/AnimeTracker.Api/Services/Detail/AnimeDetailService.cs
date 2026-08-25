@@ -88,7 +88,14 @@ public class AnimeDetailService(
         var inSeries = await db.SeriesMembers.AsNoTracking().AnyAsync(m => m.AnimeId == animeId, ct);
         var relations = await relationResolver.ResolveAsync(anime, ct);
 
-        return AnimeDetailDto.FromEntity(anime, episodesAired, nextEpisode, aniListId, relatedMediaTypeByAnimeId, inSeries, refreshFailed, relations);
+        // Evaluated after the live-fetch block above, so a fetch that just
+        // ran (and therefore just stamped PicturesSyncedAt) clears the flag
+        // in the same read rather than asking the client to backfill data
+        // that already arrived (spec anime-detail "A fresh fetch carries the
+        // pictures").
+        var picturesFetchPending = anime.UserEntry is not null && anime.PicturesSyncedAt is null;
+
+        return AnimeDetailDto.FromEntity(anime, episodesAired, nextEpisode, aniListId, relatedMediaTypeByAnimeId, inSeries, refreshFailed, relations, picturesFetchPending);
     }
 
     private static bool NeedsFullDetailFetch(AnimeMetadata? anime) =>

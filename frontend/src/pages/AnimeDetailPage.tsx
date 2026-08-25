@@ -1,11 +1,18 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getAnimeDetail, refreshAnime, updateEntry } from "../api/client.ts";
+import {
+  getAnimeDetail,
+  refreshAnime,
+  refreshAnimePictures,
+  setAnimePicture,
+  updateEntry,
+} from "../api/client.ts";
 import type {
   AnimeDetailDto,
   IncrementTarget,
   NextEpisodeEtaDto,
 } from "../api/types.ts";
+import { PicturePickerOverlay } from "../components/PicturePickerOverlay.tsx";
 import { ProgressBar } from "../components/ProgressBar.tsx";
 import { RelatedAnimeOverlay } from "../components/RelatedAnimeOverlay.tsx";
 import { ScoreValue } from "../components/ScoreValue.tsx";
@@ -17,6 +24,7 @@ import {
 import { useLandscapePicture } from "../hooks/useLandscapePicture.ts";
 import { usePageData } from "../hooks/usePageData.ts";
 import {
+  dedupePictureOptions,
   formatRuntime,
   hasAiredEpisodes,
   isScoreRevealableStatus,
@@ -118,6 +126,17 @@ function formatTotalTime(seconds: number | null, totalEpisodes: number | null): 
   return formatRuntime(seconds * totalEpisodes);
 }
 
+// Mirrors backend Services/Artwork/AnimePicture.Options: the fetched set
+// plus MAL's own main picture and the currently displayed one, deduplicated
+// by pictureIdentityKey (not raw URL equality — MAL sometimes serves one
+// photo as main_picture's .webp while also listing it as .jpg in `pictures`,
+// which would otherwise show as two tiles for one picture), MAL order
+// preserved — so the choice MAL has dropped stays visible and replaceable
+// (design D9) even before pictureUrls itself has ever loaded.
+function animePictureOptions(detail: AnimeDetailDto): string[] {
+  return dedupePictureOptions(detail.pictureUrls ?? [], [detail.malPictureUrl, detail.pictureUrl]);
+}
+
 // Single anime detail page: large picture + progress/edit on the left, a
 // rank/score box (plus a my-score/rewatches box only once a score's been
 // given), an info box, and a synopsis/background box on the right. The
@@ -139,10 +158,33 @@ export function AnimeDetailPage() {
   const [incrementPending, setIncrementPending] = useState(false);
   const [actionPending, setActionPending] = useState(false);
   const [showRelatedOverlay, setShowRelatedOverlay] = useState(false);
+  const [showPicturePicker, setShowPicturePicker] = useState(false);
   const { openEditor } = useEntryEditor();
   const increment = useEpisodeIncrement();
   const setEpisodesWatched = useSetEpisodesWatched();
   const [pictureRef, isLandscapePicture] = useLandscapePicture(detail?.pictureUrl);
+
+  // Visit-triggered picture backfill (design D4b) — mirrors the anime's own
+  // TTL detail fetch: fire once per anime, as soon as the server says it has
+  // never had a picture set fetched, and merge the result in without a
+  // reload. The ref (not state) guard is what survives StrictMode's
+  // double-mount without double-firing.
+  const pictureRefreshRequestedForRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!detail || !detail.picturesFetchPending) return;
+    if (pictureRefreshRequestedForRef.current === detail.animeId) return;
+    pictureRefreshRequestedForRef.current = detail.animeId;
+    refreshAnimePictures(detail.animeId)
+      .then(({ pictureUrl, pictureUrls }) => {
+        setDetail((prev) =>
+          prev && prev.animeId === detail.animeId ? { ...prev, pictureUrl, pictureUrls } : prev,
+        );
+      })
+      .catch(() => {
+        // Leave picturesFetchPending as the server last reported it — a
+        // later visit's read re-evaluates and retries.
+      });
+  }, [detail, setDetail]);
 
   async function handleRefresh() {
     if (refreshing) return;
@@ -197,6 +239,19 @@ export function AnimeDetailPage() {
 
   function handleOpenRelatedOverlay() {
     setShowRelatedOverlay(true);
+  }
+
+  // Optimistic: applies locally immediately (spec anime-detail "A chosen
+  // picture applies immediately"), then fires the save. useLandscapePicture
+  // re-derives isLandscapePicture on its own since detail.pictureUrl (its
+  // src argument) just changed.
+  function handlePickAnimePicture(url: string) {
+    if (!detail) return;
+    setDetail((prev) => (prev ? { ...prev, pictureUrl: url } : prev));
+    setAnimePicture(detail.animeId, url).catch(() => {
+      // The picker already closed; a later refresh/reload re-syncs if the
+      // save failed server-side.
+    });
   }
 
   function buildIncrementTarget(): IncrementTarget {
@@ -297,6 +352,8 @@ export function AnimeDetailPage() {
     detail.entry?.status === "Completed" ||
     detail.entry?.status === "Dropped" ||
     detail.entry?.status === "Rewatching";
+  const pictureOptions = animePictureOptions(detail);
+  const showPicturePickerButton = detail.entry != null && pictureOptions.length > 1;
 
   return (
     <div className="anime-detail-page">
@@ -376,6 +433,16 @@ export function AnimeDetailPage() {
         />
       )}
 
+      {showPicturePicker && (
+        <PicturePickerOverlay
+          title="Choose picture"
+          options={pictureOptions}
+          current={detail.pictureUrl}
+          onPick={handlePickAnimePicture}
+          onClose={() => setShowPicturePicker(false)}
+        />
+      )}
+
       <div className="anime-detail-page__body">
         <div className={`anime-detail-page__picture-col${isLandscapePicture ? " anime-detail-page__picture-col--landscape" : ""}`}>
           {detail.pictureUrl ? (
@@ -452,6 +519,15 @@ export function AnimeDetailPage() {
             >
               {refreshing ? "Refreshing…" : "Refresh data"}
             </button>
+            {showPicturePickerButton && (
+              <button
+                type="button"
+                className="anime-detail-page__action"
+                onClick={() => setShowPicturePicker(true)}
+              >
+                Choose picture
+              </button>
+            )}
           </div>
         </div>
 

@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Airing.AniList;
 using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Detail;
@@ -90,6 +91,8 @@ builder.Services.AddHostedService<ResyncBackgroundService>();
 // --- Metadata & score refresh ---
 builder.Services.AddScoped<IMetadataRefreshService, MetadataRefreshService>();
 builder.Services.AddHostedService<MetadataRefreshBackgroundService>();
+builder.Services.AddScoped<IPictureRefreshService, PictureRefreshService>();
+builder.Services.AddScoped<IArtworkSelectionService, ArtworkSelectionService>();
 
 // Single-flight lock shared by every visit-triggered live fetch (season,
 // top-anime ranking, anime detail) so concurrent requests for the same

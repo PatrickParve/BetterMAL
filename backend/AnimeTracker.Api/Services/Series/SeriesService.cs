@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Profile;
@@ -110,6 +111,12 @@ public class SeriesService(
         series is null || series.IsPartial || series.BuiltAt < DateTimeOffset.UtcNow - StaleAfter
         || series.BuiltAt < SeriesGraphBuilder.ClassificationRevisedAt;
 
+    public async Task<int?> FindSeriesIdAsync(int animeId, CancellationToken ct = default) =>
+        await db.SeriesMembers.AsNoTracking()
+            .Where(m => m.AnimeId == animeId)
+            .Select(m => (int?)m.SeriesId)
+            .FirstOrDefaultAsync(ct);
+
     private async Task<SeriesEntity?> FindSeriesAsync(int animeId, CancellationToken ct)
     {
         var seriesId = await db.SeriesMembers.AsNoTracking()
@@ -140,6 +147,8 @@ public class SeriesService(
         var allAnime = series.Members.Select(m => m.Anime).ToList();
 
         var root = allAnime.First(a => a.Id == series.RootAnimeId);
+        var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
+            series.SelectedTitle, series.SelectedPictureUrl, root.Title, root.EnglishTitle, root.PictureUrl);
         var (firstYear, lastYear) = YearSpan(allAnime);
         var rootAniListId = await db.AnimeAiringSyncs.AsNoTracking()
             .Where(s => s.AnimeId == series.RootAnimeId)
@@ -148,13 +157,19 @@ public class SeriesService(
         var airedEpisodesByAnimeId = await AiredEpisodesByAnimeIdAsync(allAnime, ct);
         var mainLineAiredEpisodes = MainLineAiredEpisodesFromMap(mainLineMembers, airedEpisodesByAnimeId);
 
+        var pictureOptions = SeriesPicturePool.Build(mainLineMembers);
+        if (series.SelectedPictureUrl is { } selectedPictureUrl && !pictureOptions.Contains(selectedPictureUrl))
+            pictureOptions.Add(selectedPictureUrl); // a stored choice is never re-validated away (design.md D9)
+        var titleOptions = SeriesTitleRule.OfferedTitles(mainLineMembers);
+        var picturesPendingCount = mainLineMembers.Count(m => m.Anime.UserEntry is not null && m.Anime.PicturesSyncedAt is null);
+
         return new SeriesDto(
             series.Id,
             series.RootAnimeId,
             rootAniListId,
-            root.Title,
-            root.EnglishTitle,
-            root.PictureUrl,
+            title,
+            englishTitle,
+            pictureUrl,
             ComputeStatus(mainLineMembers.Select(m => m.Anime).ToList(), allAnime),
             firstYear,
             lastYear,
@@ -164,7 +179,12 @@ public class SeriesService(
             BuildScores(mainLineMembers, series.Members),
             BuildStats(mainLineMembers, extraMembers, allAnime, mainLineAiredEpisodes, airedEpisodesByAnimeId),
             mainLineMembers.Select(m => ToEntryDto(m, memberAnimeIds, airedEpisodesByAnimeId)).ToList(),
-            extraMembers.Select(m => ToEntryDto(m, memberAnimeIds, airedEpisodesByAnimeId)).ToList());
+            extraMembers.Select(m => ToEntryDto(m, memberAnimeIds, airedEpisodesByAnimeId)).ToList(),
+            series.SelectedTitle,
+            series.SelectedPictureUrl,
+            pictureOptions,
+            titleOptions,
+            picturesPendingCount);
     }
 
     // Per-member AiredEpisodes (design.md decision 1) for every series member,
@@ -315,6 +335,14 @@ public class SeriesService(
         // above are untouched.
         var myWatchedEpisodes = mainLineAnime.Sum(a => EffectiveWatchedEpisodes(a, airedEpisodesByAnimeId));
         var myWatchedSeconds = mainLineAnime.Sum(a => (long)EffectiveWatchedEpisodes(a, airedEpisodesByAnimeId) * EpisodeSeconds(a));
+        // Orthogonal to the above (design D10): entering Rewatching zeroes
+        // episodes-watched and the rewatch count only increments once a run
+        // finishes, so EffectiveWatchedEpisodes above contributes exactly the
+        // original run while this contributes exactly the rewatches — the two
+        // provably can't double-count the same viewing.
+        var myRewatchedSeconds = mainLineAnime.Sum(a => (long)WatchMath.RewatchEpisodesIncludingCurrentRun(
+            a.UserEntry?.RewatchCount ?? 0, a.TotalEpisodes, a.UserEntry?.EpisodesWatched ?? 0, a.UserEntry?.Status)
+            * EpisodeSeconds(a));
         // A rewatch can only follow a completed run, so a Rewatching entry
         // counts as completed here too (polish-rewatch design.md D2) —
         // otherwise this stat would read "5 of 6" beside a "Completed" badge.
@@ -365,6 +393,7 @@ public class SeriesService(
             extraRuntimeSeconds,
             myWatchedEpisodes,
             myWatchedSeconds,
+            myRewatchedSeconds,
             entriesCompleted,
             extrasCompleted,
             mainLineSettledByMe,

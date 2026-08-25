@@ -287,6 +287,29 @@ export function refreshAnime(animeId: number): Promise<void> {
   return fetchVoid(`/api/anime/${animeId}/refresh`, { method: 'POST' })
 }
 
+// artwork-selection: choosing MAL's own main picture is accepted and *is*
+// the clear (server-side D2), so setAnimePicture/resetAnimePicture can both
+// land on the same pictureUrl.
+export function setAnimePicture(animeId: number, pictureUrl: string): Promise<{ pictureUrl: string | null }> {
+  return fetchJson<{ pictureUrl: string | null }>(`/api/anime/${animeId}/picture`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pictureUrl }),
+  })
+}
+
+export function resetAnimePicture(animeId: number): Promise<{ pictureUrl: string | null }> {
+  return fetchJson<{ pictureUrl: string | null }>(`/api/anime/${animeId}/picture`, { method: 'DELETE' })
+}
+
+// One-anime picture backfill (design D4b) — always returns the anime's
+// current option set and selection, whether or not a fetch actually ran.
+export function refreshAnimePictures(animeId: number): Promise<{ pictureUrl: string | null; pictureUrls: string[] }> {
+  return fetchJson<{ pictureUrl: string | null; pictureUrls: string[] }>(`/api/anime/${animeId}/pictures/refresh`, {
+    method: 'POST',
+  })
+}
+
 // 404 ("this anime isn't part of a series") resolves to { found: false }
 // rather than throwing, so the page can tell that apart from a transport
 // failure — which still rejects, same as every other fetchJson call.
@@ -315,6 +338,40 @@ export function setSeriesFavouriteOrder(seriesId: number, animeIds: number[]): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ animeIds }),
   })
+}
+
+// series-identity: the D8 contiguous-trim rule is enforced server-side and
+// returns 400 on violation — the picker mirrors it only to explain the
+// failure before submitting.
+export function setSeriesTitle(seriesId: number, title: string): Promise<{ title: string }> {
+  return fetchJson<{ title: string }>(`/api/series/${seriesId}/title`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  })
+}
+
+export function resetSeriesTitle(seriesId: number): Promise<{ title: string }> {
+  return fetchJson<{ title: string }>(`/api/series/${seriesId}/title`, { method: 'DELETE' })
+}
+
+export function setSeriesPicture(seriesId: number, pictureUrl: string): Promise<{ pictureUrl: string | null }> {
+  return fetchJson<{ pictureUrl: string | null }>(`/api/series/${seriesId}/picture`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pictureUrl }),
+  })
+}
+
+export function resetSeriesPicture(seriesId: number): Promise<{ pictureUrl: string | null }> {
+  return fetchJson<{ pictureUrl: string | null }>(`/api/series/${seriesId}/picture`, { method: 'DELETE' })
+}
+
+// Bounded pool backfill (design D6) — fetches up to the series build's own
+// live-fetch budget of never-fetched, my-list main-line members' picture
+// sets, and reports how many eligible members still remain unfetched.
+export function refreshSeriesPictures(animeId: number): Promise<{ remaining: number }> {
+  return fetchJson<{ remaining: number }>(`/api/series/by-anime/${animeId}/pictures/refresh`, { method: 'POST' })
 }
 
 export function getSyncStatus(): Promise<SyncStatusDto> {

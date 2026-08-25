@@ -20,4 +20,10 @@ public interface ISeriesService
     /// <see cref="UnknownSeriesMemberIdsException"/> when an id isn't a
     /// member of the series.</summary>
     Task SetFavouriteOrderAsync(int seriesId, List<int> animeIds, CancellationToken ct = default);
+
+    /// <summary>The id of the stored series containing <paramref name="animeId"/>,
+    /// or null when it belongs to none — the by-anime picture backfill
+    /// endpoint's lookup (design.md D13), without the build-or-refresh
+    /// <see cref="GetSeriesAsync"/> does.</summary>
+    Task<int?> FindSeriesIdAsync(int animeId, CancellationToken ct = default);
 }

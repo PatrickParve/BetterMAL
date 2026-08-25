@@ -15,6 +15,14 @@ public record AnimeDetailDto(
     string Title,
     string? EnglishTitle,
     string? PictureUrl,
+    // Feeds the picture picker (artwork-selection): MAL's own main picture,
+    // alongside the displayed PictureUrl above, plus the full picture set.
+    string? MalPictureUrl,
+    List<string>? PictureUrls,
+    // Handshake flag: true when this anime is in my list and its picture set
+    // has never been fetched, so the client should call the one-anime
+    // backfill endpoint (design.md D4b).
+    bool PicturesFetchPending,
     double? MalScore,
     int? Rank,
     int? PopularityRank,
@@ -68,7 +76,8 @@ public record AnimeDetailDto(
         IReadOnlyDictionary<int, string?> relatedMediaTypeByAnimeId,
         bool inSeries,
         bool refreshFailed,
-        RelationResolution relations)
+        RelationResolution relations,
+        bool picturesFetchPending)
     {
         (int Year, string Season)? season = anime.AiredFrom is { } airedFrom
             ? SeasonCalendar.GetSeasonFor(airedFrom)
@@ -79,6 +88,9 @@ public record AnimeDetailDto(
             anime.Title,
             anime.EnglishTitle,
             anime.PictureUrl,
+            anime.MalPictureUrl,
+            anime.PictureUrls,
+            picturesFetchPending,
             anime.MalScore,
             anime.Rank,
             anime.PopularityRank,
