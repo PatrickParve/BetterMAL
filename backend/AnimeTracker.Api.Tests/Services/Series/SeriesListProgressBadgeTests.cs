@@ -297,4 +297,93 @@ public class SeriesListProgressBadgeTests
 
         Assert.Equal(SeriesProgressBadge.Dropped, listed.ProgressBadge);
     }
+
+    // --- A Rewatching entry counts as fully watched (polish-rewatch design.md D2, tasks.md 3.7) ---
+
+    [Fact]
+    public async Task RewatchInProgress_DoesNotReadAsBehind()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
+        AddAnime(db, 101, "finished_airing", totalEpisodes: 12);
+        AddAnime(db, 102, "finished_airing", totalEpisodes: 12);
+        // A 4th, not-yet-aired member keeps the series' overall status off
+        // "Finished", so this exercises the Caught-up/Behind computation
+        // rather than shortcutting through rule (1)'s Completed clause.
+        AddAnime(db, 103, "not_yet_aired");
+        AddMember(db, 1, 100, order: 0);
+        AddMember(db, 1, 101, order: 1);
+        AddMember(db, 1, 102, order: 2);
+        AddMember(db, 1, 103, order: 3);
+        AddEntry(db, 100, WatchStatus.Rewatching, episodesWatched: 2); // resets to 2, but full run has aired
+        AddEntry(db, 101, WatchStatus.Completed, episodesWatched: 12);
+        AddEntry(db, 102, WatchStatus.Completed, episodesWatched: 12);
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var listed = Assert.Single(index.ListedSeries([]));
+
+        Assert.NotEqual(SeriesProgressBadge.Behind, listed.ProgressBadge);
+        Assert.Equal(SeriesProgressBadge.CaughtUp, listed.ProgressBadge);
+    }
+
+    [Fact]
+    public async Task RewatchInProgress_DoesNotReadAsUnwatched()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
+        // A 2nd, not-yet-aired member keeps the series' overall status off
+        // "Finished", so this exercises the Unwatched check itself rather
+        // than shortcutting through rule (1)'s Completed clause.
+        AddAnime(db, 101, "not_yet_aired");
+        AddMember(db, 1, 100, order: 0);
+        AddMember(db, 1, 101, order: 1);
+        AddEntry(db, 100, WatchStatus.Rewatching, episodesWatched: 0); // just started the rewatch
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var listed = Assert.Single(index.ListedSeries([]));
+
+        Assert.NotEqual(SeriesProgressBadge.Unwatched, listed.ProgressBadge);
+        Assert.Equal(SeriesProgressBadge.CaughtUp, listed.ProgressBadge);
+    }
+
+    [Fact]
+    public async Task RewatchAfterADrop_CountsAsWatchingPastIt()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
+        AddAnime(db, 101, "finished_airing", totalEpisodes: 12);
+        AddMember(db, 1, 100, order: 0);
+        AddMember(db, 1, 101, order: 1);
+        AddEntry(db, 100, WatchStatus.Dropped, episodesWatched: 3);
+        AddEntry(db, 101, WatchStatus.Rewatching, episodesWatched: 0); // reset, but has aired in full
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var listed = Assert.Single(index.ListedSeries([]));
+
+        Assert.NotEqual(SeriesProgressBadge.Dropped, listed.ProgressBadge);
+        Assert.Equal(SeriesProgressBadge.Behind, listed.ProgressBadge);
+        Assert.Equal(9, listed.BehindEpisodes); // (12 + 12) aired - (3 + 12) effectively watched
+    }
+
+    [Fact]
+    public async Task FinishedFranchiseBeingRewatched_KeepsCompleted()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
+        AddMember(db, 1, 100, order: 0);
+        AddEntry(db, 100, WatchStatus.Rewatching, episodesWatched: 2);
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var listed = Assert.Single(index.ListedSeries([]));
+
+        Assert.Equal(SeriesProgressBadge.Completed, listed.ProgressBadge);
+    }
 }

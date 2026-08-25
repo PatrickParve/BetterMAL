@@ -54,11 +54,27 @@ Choosing a month or a year SHALL navigate to the week containing the same day-of
 
 Both selectors SHALL display the month and year of the currently displayed week, and SHALL stay in sync when the `< current >` buttons move the view across a month or year boundary.
 
+Changing the displayed week — by either the `< current >` buttons or the selectors — SHALL **replace** the current browser history entry rather than adding a new one. Browsing several weeks SHALL therefore leave the history stack the same depth it was on arrival, and a single Back SHALL leave the Airing page for wherever the user came from, however many weeks were stepped through. The displayed week SHALL remain in the page's URL, so the view is still shareable and bookmarkable and still restored when returning to the page.
+
+Changing the displayed week SHALL NOT move the page's scroll position: the schedule SHALL stay where the user had scrolled it rather than jumping to the top, since only the contents of the same view have changed.
+
 The selected week SHALL survive back-navigation from an anime detail page, as it does today.
 
 #### Scenario: Navigating weeks
 - **WHEN** I navigate to a different week
 - **THEN** the view updates to show that week's airing slots
+
+#### Scenario: Back leaves the Airing page, not the week
+- **WHEN** I open the Airing page from the navbar, step forward five weeks, and press the browser's Back button once
+- **THEN** I leave the Airing page for the page I was on before it, rather than returning to the previous week
+
+#### Scenario: The week is still in the URL
+- **WHEN** I have navigated to a week several steps from the current one
+- **THEN** the page's URL names that week, and opening that URL shows that same week
+
+#### Scenario: Scroll position survives a week change
+- **WHEN** I scroll down the schedule and then press the next-week button
+- **THEN** the new week is shown at the scroll position I was at, rather than at the top of the page
 
 #### Scenario: Jumping to a different year
 - **WHEN** the view is showing a week in August 2026 and I select 2019 in the year selector

@@ -23,7 +23,11 @@ import {
 import type { AiringStatus, SortDirection, SortKey } from '../utils/anime.ts'
 import './MyListPage.css'
 
-type StatusFilter = 'All' | WatchStatus
+// Multi-select (polish-rewatch-more-and-filters design.md D6): any
+// combination of statuses can be selected at once; `[]` means All rather
+// than being a seventh member of the type, so there is no representable
+// contradiction (e.g. `['All', 'Watching']`) to guard against.
+type StatusFilter = WatchStatus[]
 // Widened (design.md decision 5) to carry a specific score value alongside
 // the three original options — stored as the plain number string ("8"), not
 // the `score-8` form the recap handoff's `focus` token uses; see parseFocus.
@@ -36,8 +40,9 @@ const SCORE_FILTER_VALUES = Array.from({ length: 10 }, (_, i) => 10 - i)
 // progress (library-views spec, "My list grouped and ordered by status").
 const GROUP_ORDER: WatchStatus[] = ['Watching', 'Rewatching', 'OnHold', 'PlanToWatch', 'Completed', 'Dropped']
 
-const FILTER_TABS: { value: StatusFilter; label: string }[] = [
-  { value: 'All', label: 'All' },
+// The All tab is rendered separately (it isn't a WatchStatus) — see the
+// tabs bar below.
+const STATUS_TABS: { value: WatchStatus; label: string }[] = [
   { value: 'Watching', label: 'Watching' },
   { value: 'Rewatching', label: 'Rewatching' },
   { value: 'Completed', label: 'Completed' },
@@ -70,7 +75,10 @@ const AIRING_STATUS_FIRST_OPTIONS: { value: AiringStatus; label: string }[] = [
 // `initial`, read once per fresh visit rather than an arrival effect (design.md
 // decision 2). An unknown or absent token maps to "no narrowing": every
 // control stays at its ordinary default. `movies` needs the Started flag
-// because the stat it mirrors is status-agnostic (tasks.md 5.1).
+// because the stat it mirrors is status-agnostic (tasks.md 5.1). `status` is
+// a one-element array (or `[]`) — every deep link still lands on exactly the
+// single status it names today (polish-rewatch-more-and-filters design.md
+// D6, tasks.md 5.2).
 type FocusSeed = {
   status: StatusFilter
   typeFilter: string[]
@@ -79,14 +87,14 @@ type FocusSeed = {
 }
 
 function parseFocus(token: string | null): FocusSeed {
-  const none: FocusSeed = { status: 'All', typeFilter: [], scoreFilter: 'any', startedFilter: false }
+  const none: FocusSeed = { status: [], typeFilter: [], scoreFilter: 'any', startedFilter: false }
   switch (token) {
     case 'completed':
-      return { ...none, status: 'Completed' }
+      return { ...none, status: ['Completed'] }
     case 'dropped':
-      return { ...none, status: 'Dropped' }
+      return { ...none, status: ['Dropped'] }
     case 'watching':
-      return { ...none, status: 'Watching' }
+      return { ...none, status: ['Watching'] }
     case 'movies':
       return { ...none, typeFilter: ['movie'], startedFilter: true }
     default: {
@@ -125,6 +133,15 @@ function buildIncrementTarget(
   }
 }
 
+// The flat (ungrouped) view's own section title (task 5.6): All when nothing
+// is selected, the single status's label for one selection, and every
+// selected label joined for several — read in selection order like the tabs
+// themselves, since this heading isn't reproducing the app's group order the
+// way GROUP_ORDER-driven grouping does.
+function statusFiltersLabel(statusFilters: StatusFilter): string {
+  return statusFilters.length === 0 ? 'All' : statusFilters.map((status) => STATUS_LABELS[status]).join(', ')
+}
+
 type Derivation =
   | { mode: 'grouped'; total: number; shown: number; groups: { status: WatchStatus; items: MyListItemDto[] }[] }
   | { mode: 'flat'; total: number; shown: number; items: MyListItemDto[] }
@@ -147,7 +164,11 @@ export function MyListPage() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const focusSeed = parseFocus(searchParams.get('focus'))
 
-  const [statusFilter, setStatusFilter] = useRestorableState<StatusFilter>('statusFilter', focusSeed.status)
+  // Renamed from `statusFilter` (design.md D6): the stored value's type
+  // changed from a string to an array, and a snapshot written before this
+  // change could otherwise feed a bare string into array code on a
+  // back-navigation within a live session. A new key makes that unreachable.
+  const [statusFilters, setStatusFilters] = useRestorableState<StatusFilter>('statusFilters', focusSeed.status)
   const [query, setQuery] = useRestorableState('query', '')
   const [typeFilter, setTypeFilter] = useRestorableState<string[]>('typeFilter', focusSeed.typeFilter)
   const [airingFilter, setAiringFilter] = useRestorableState<string[]>('airingFilter', [])
@@ -429,7 +450,7 @@ export function MyListPage() {
   // the whole list.
   const derived = useMemo<Derivation>(() => {
     const statusScoped =
-      statusFilter === 'All' ? scopedItems : scopedItems.filter((item) => item.entry.status === statusFilter)
+      statusFilters.length === 0 ? scopedItems : scopedItems.filter((item) => statusFilters.includes(item.entry.status))
     const needle = debouncedQuery.trim().toLowerCase()
 
     const matched = statusScoped.filter((item) => {
@@ -451,7 +472,9 @@ export function MyListPage() {
     const comparator = composeComparator(sort, sortDirection, sortThen, airingStatusFirst)
 
     if (groupByStatus) {
-      const groups = GROUP_ORDER.filter((status) => statusFilter === 'All' || statusFilter === status)
+      // The app's standard group order, not the order statuses were clicked
+      // in (design.md D6).
+      const groups = GROUP_ORDER.filter((status) => statusFilters.length === 0 || statusFilters.includes(status))
         .map((status) => ({
           status,
           items: matched.filter((item) => item.entry.status === status).sort(comparator),
@@ -463,7 +486,7 @@ export function MyListPage() {
     return { mode: 'flat', total: statusScoped.length, shown: matched.length, items: [...matched].sort(comparator) }
   }, [
     scopedItems,
-    statusFilter,
+    statusFilters,
     debouncedQuery,
     typeFilter,
     airingFilter,
@@ -487,6 +510,14 @@ export function MyListPage() {
     sortDirection !== 'natural' ||
     sortThen !== null ||
     !groupByStatus
+
+  // A status tab toggles its own membership; deselecting the last selected
+  // status naturally yields `[]` — i.e. it lands on All rather than an
+  // empty list, since filtering the last member out of a one-element array
+  // is `[]` with no special-casing needed (design.md D6).
+  function toggleStatusFilter(status: WatchStatus) {
+    setStatusFilters((prev) => (prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]))
+  }
 
   function clearFilters() {
     setQuery('')
@@ -676,7 +707,7 @@ export function MyListPage() {
     return (
       <section className="my-list-page__group">
         <div className="my-list-page__group-header">
-          <h2>{statusFilter === 'All' ? 'All' : STATUS_LABELS[statusFilter]}</h2>
+          <h2>{statusFiltersLabel(statusFilters)}</h2>
         </div>
         <ul className="my-list-page__list">
           {derived.items.map((item, index) => renderRow(item, showRanks ? index + 1 : undefined))}
@@ -691,19 +722,30 @@ export function MyListPage() {
         <h1>My list</h1>
       </div>
 
-      <div className="my-list-page__tabs" role="tablist" aria-label="Filter by status">
-        {FILTER_TABS.map((tab) => {
-          const classes = ['my-list-page__tab']
-          if (tab.value !== 'All') classes.push(`my-list-page__tab--${STATUS_CLASS[tab.value]}`)
-          if (statusFilter === tab.value) classes.push('my-list-page__tab--active')
+      {/* Plain toggle buttons, not role="tab"/aria-selected (design.md D6):
+          a tablist models exactly one selected tab, and several of these can
+          now be selected at once — keeping tablist markup while allowing
+          that would misreport the control to assistive technology. */}
+      <div className="my-list-page__tabs" aria-label="Filter by status (multi-select)">
+        <button
+          type="button"
+          aria-pressed={statusFilters.length === 0}
+          className={`my-list-page__tab${statusFilters.length === 0 ? ' my-list-page__tab--active' : ''}`}
+          onClick={() => setStatusFilters([])}
+        >
+          All
+        </button>
+        {STATUS_TABS.map((tab) => {
+          const active = statusFilters.includes(tab.value)
+          const classes = ['my-list-page__tab', `my-list-page__tab--${STATUS_CLASS[tab.value]}`]
+          if (active) classes.push('my-list-page__tab--active')
           return (
             <button
               key={tab.value}
               type="button"
-              role="tab"
-              aria-selected={statusFilter === tab.value}
+              aria-pressed={active}
               className={classes.join(' ')}
-              onClick={() => setStatusFilter(tab.value)}
+              onClick={() => toggleStatusFilter(tab.value)}
             >
               {tab.label}
             </button>

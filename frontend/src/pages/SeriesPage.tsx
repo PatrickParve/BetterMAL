@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getSeries, rebuildSeries, setSeriesFavouriteOrder } from '../api/client.ts'
 import type {
@@ -20,6 +20,7 @@ import { SeriesTimeline } from '../components/SeriesTimeline.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useLandscapePicture } from '../hooks/useLandscapePicture.ts'
 import { usePageData } from '../hooks/usePageData.ts'
+import { useRestorableState } from '../hooks/useRestorableState.ts'
 import {
   formatEpisodeTotal,
   formatRuntime,
@@ -176,6 +177,19 @@ function malGroupRevealed(group: SeriesEntryDto[], series: SeriesDto): boolean {
   return isGroupCompleted(group) && !anySeriesAiring
 }
 
+// An entry's effective watched-episode figure (polish-rewatch design.md D2):
+// a Rewatching entry counts as fully watched — the greater of its own
+// episodesWatched and its aired-so-far figure — since entering Rewatching
+// resets episodesWatched to 0. Every other status reads episodesWatched as
+// recorded. Mirrors the backend's WatchMath.EffectiveWatchedEpisodes exactly,
+// using this entry's own airedEpisodes (null-means-unknown, treated as "fall
+// back to episodesWatched") rather than restating that fallback here.
+function effectiveWatchedEpisodes(entry: SeriesEntryDto): number {
+  const watched = entry.entry?.episodesWatched ?? 0
+  if (entry.entry?.status !== 'Rewatching') return watched
+  return Math.max(watched, entry.airedEpisodes ?? watched)
+}
+
 // Computed client-side from series.mainLine rather than a server stat
 // (redesign-series-page design.md decision 1/2): it depends on episodesWatched
 // and status, both of which an in-place row edit changes, so deriving it from
@@ -191,6 +205,10 @@ function malGroupRevealed(group: SeriesEntryDto[], series: SeriesDto): boolean {
 // over the whole aired main line, not just a currently-airing entry),
 // Unwatched (D3 — nothing watched at all, decided before Dropped can be
 // ruled out by broadcast data it doesn't need), no badge as the fallback.
+// A Rewatching main-line entry counts as fully watched throughout (D2 of
+// polish-rewatch-more-and-filters) via effectiveWatchedEpisodes above, and
+// rule (1) additionally accepts Rewatching alongside Completed so starting a
+// rewatch of a finished franchise doesn't downgrade its badge.
 function completionBadge(series: SeriesDto): { badge: SeriesProgressBadge; behind: number | null } {
   const airedMembers = series.mainLine
     .filter((e) => e.airingStatus === 'finished_airing' || e.airingStatus === 'currently_airing')
@@ -199,27 +217,33 @@ function completionBadge(series: SeriesDto): { badge: SeriesProgressBadge; behin
   const finishedAiring = airedMembers.filter((e) => e.airingStatus === 'finished_airing')
 
   // 1. Completed: the whole series is done and every finished-airing
-  // main-line entry is marked Completed. Skipped (not vacuously true) when
-  // nothing has finished airing, since it also requires at least one such
-  // entry — a single still-running entry falls through to the rules below.
-  if (series.status === 'Finished' && finishedAiring.length > 0 && finishedAiring.every((e) => e.entry?.status === 'Completed')) {
+  // main-line entry is marked Completed or Rewatching. Skipped (not
+  // vacuously true) when nothing has finished airing, since it also requires
+  // at least one such entry — a single still-running entry falls through to
+  // the rules below.
+  if (
+    series.status === 'Finished' &&
+    finishedAiring.length > 0 &&
+    finishedAiring.every((e) => e.entry?.status === 'Completed' || e.entry?.status === 'Rewatching')
+  ) {
     return { badge: 'Completed', behind: null }
   }
 
   // 2. Dropped: the most recently aired Dropped entry, with nothing aired
   // after it ever watched — a drop later resumed and watched past doesn't
-  // count. Decided from watch status alone, never blocked by an unknown
-  // broadcast count.
+  // count (a later entry marked Rewatching counts as watched past it, via
+  // effectiveWatchedEpisodes). Decided from watch status alone, never
+  // blocked by an unknown broadcast count.
   const droppedEntries = airedMembers.filter((e) => e.entry?.status === 'Dropped')
   if (droppedEntries.length > 0) {
     const lastDroppedOrder = Math.max(...droppedEntries.map((e) => e.order))
     const nothingWatchedAfter = airedMembers
       .filter((e) => e.order > lastDroppedOrder)
-      .every((e) => (e.entry?.episodesWatched ?? 0) === 0)
+      .every((e) => effectiveWatchedEpisodes(e) === 0)
     if (nothingWatchedAfter) return { badge: 'Dropped', behind: null }
   }
 
-  const watchedTotal = series.mainLine.reduce((sum, e) => sum + (e.entry?.episodesWatched ?? 0), 0)
+  const watchedTotal = series.mainLine.reduce((sum, e) => sum + effectiveWatchedEpisodes(e), 0)
 
   // 5. Unwatched: something has aired but nothing has ever been watched,
   // and (2) didn't already claim the case.
@@ -311,16 +335,47 @@ export function SeriesPage() {
   // list" filter, on by default; `collapsedGroups` is per-group collapse,
   // all expanded by default; `unfilteredGroups` tracks groups where "+N
   // more" was used to see past the filter without disabling it everywhere.
-  // All three are per-mount, transient state like the rest of this page's
-  // view state — they reset on navigation rather than persisting.
-  const [mineOnly, setMineOnly] = useState(true)
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
-  const [unfilteredGroups, setUnfilteredGroups] = useState<Set<string>>(new Set())
+  // Restorable like the page's other view controls (polish-rewatch-more-
+  // and-filters design.md D3): the `pageStateStore` snapshot holds live
+  // object references and never serialises, so the `Set` and `Record`
+  // survive as-is, and keying by `location.key` already keeps two different
+  // series' pages from sharing this state. A fresh visit still seeds the
+  // documented defaults below, since useRestorableState falls back to
+  // `initial` whenever there's no snapshot to restore from.
+  const [mineOnly, setMineOnly] = useRestorableState('moreMineOnly', true)
+  const [collapsedGroups, setCollapsedGroups] = useRestorableState<Record<string, boolean>>('moreCollapsedGroups', {})
+  const [unfilteredGroups, setUnfilteredGroups] = useRestorableState<Set<string>>('moreUnfilteredGroups', new Set())
   // series-page "A More group's heading opens that group in full"
   // (design.md D2): the "in my list" control reports itself on only while
   // the filter is actually in force across every group — opening any one
   // group in full (via its heading) makes this read off.
   const filterActive = mineOnly && unfilteredGroups.size === 0
+
+  // Scroll-on-open (design.md D4, tasks.md 6.4-6.6): which group's heading
+  // was just opened, so a layout effect below can scroll it to the top of
+  // the viewport once its newly revealed tiles have been laid out. A plain
+  // ref/state pair, not restorable — this is a one-shot action consumed
+  // within the same render pass, not view state to bring back on return.
+  const groupHeadingRefs = useRef<Map<string, HTMLHeadingElement>>(new Map())
+  const [pendingScrollGroupKey, setPendingScrollGroupKey] = useState<string | null>(null)
+
+  // Runs after the group's tiles have committed — they're what makes the
+  // page tall enough to reach the target — and scrolls the window (not
+  // `scrollIntoView`, which would silently pick the nearest scrollable
+  // ancestor; the page's horizontally-scrolling timeline above the More
+  // section makes that ambiguous). No offset, since nothing on this page is
+  // sticky or fixed. When the target exceeds the maximum scroll offset,
+  // `window.scrollTo` clamps on its own — that clamp *is* "get as far down
+  // as possible" when the group is too near the end to reach the top.
+  useLayoutEffect(() => {
+    if (pendingScrollGroupKey === null) return
+    const heading = groupHeadingRefs.current.get(pendingScrollGroupKey)
+    if (heading) {
+      const target = heading.getBoundingClientRect().top + window.scrollY
+      window.scrollTo(0, target)
+    }
+    setPendingScrollGroupKey(null)
+  }, [pendingScrollGroupKey])
 
   // Stops an in-flight rebuild loop from issuing another round once the page
   // has navigated away (design.md decision 2) — a round already in flight is
@@ -403,7 +458,8 @@ export function SeriesPage() {
   // collapse as its off state. A group already showing everything
   // collapses; anything else expands, and, while the filter is on, is
   // exempted from it so the heading can show extras the filter would
-  // otherwise hide.
+  // otherwise hide. Only the opening branch schedules a scroll (design.md
+  // D4) — collapsing dismisses content, it doesn't move the page.
   function handleExtrasGroupHeadingClick(key: string, showsAll: boolean) {
     if (showsAll) {
       setCollapsedGroups((prev) => ({ ...prev, [key]: true }))
@@ -411,6 +467,7 @@ export function SeriesPage() {
     }
     setCollapsedGroups((prev) => ({ ...prev, [key]: false }))
     if (mineOnly) setUnfilteredGroups((prev) => new Set(prev).add(key))
+    setPendingScrollGroupKey(key)
   }
 
   // Reveals a group's remaining tiles from its "+N more" control, which is
@@ -820,7 +877,12 @@ export function SeriesPage() {
             const showHiddenCountControl = !isCollapsed && visibleItems.length > 0 && hiddenCount > 0
             return (
               <div key={key} className="series-page__extras-group">
-                <h3>
+                <h3
+                  ref={(el) => {
+                    if (el) groupHeadingRefs.current.set(key, el)
+                    else groupHeadingRefs.current.delete(key)
+                  }}
+                >
                   <button
                     type="button"
                     className="series-page__extras-group-toggle"

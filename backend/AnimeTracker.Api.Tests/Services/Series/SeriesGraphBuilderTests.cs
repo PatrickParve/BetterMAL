@@ -44,12 +44,13 @@ public class SeriesGraphBuilderTests
             Title = to.Title,
         });
 
-    private static SeriesGraphBuilder CreateBuilder(AnimeTrackerDbContext db) =>
-        new(db, new FakeMetadataRefreshService(), new RelationResolver(db), NullLogger<SeriesGraphBuilder>.Instance);
+    private static SeriesGraphBuilder CreateBuilder(AnimeTrackerDbContext db, IMetadataRefreshService? refreshService = null) =>
+        new(db, refreshService ?? new FakeMetadataRefreshService(db), new RelationResolver(db), NullLogger<SeriesGraphBuilder>.Instance);
 
-    private static async Task<List<SeriesMember>> BuildAndReadMembersAsync(AnimeTrackerDbContext db, int seedAnimeId)
+    private static async Task<List<SeriesMember>> BuildAndReadMembersAsync(
+        AnimeTrackerDbContext db, int seedAnimeId, int probeBudget = 0, IMetadataRefreshService? refreshService = null)
     {
-        var series = await CreateBuilder(db).BuildAsync(seedAnimeId, fetchBudget: 0, expandLeanMembers: false);
+        var series = await CreateBuilder(db, refreshService).BuildAsync(seedAnimeId, fetchBudget: 0, probeBudget, expandLeanMembers: false);
         Assert.NotNull(series);
         return await db.SeriesMembers.Where(m => m.SeriesId == series!.Id).ToListAsync();
     }
@@ -70,7 +71,7 @@ public class SeriesGraphBuilderTests
         db.AnimeMetadata.AddRange(show, concept, characterStory, characterConcept);
         await db.SaveChangesAsync();
 
-        var series = await CreateBuilder(db).BuildAsync(show.Id, fetchBudget: 0, expandLeanMembers: false);
+        var series = await CreateBuilder(db).BuildAsync(show.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
         var members = await db.SeriesMembers.Where(m => m.SeriesId == series!.Id).ToListAsync();
 
         Assert.Equal(show.Id, series!.RootAnimeId);
@@ -180,10 +181,12 @@ public class SeriesGraphBuilderTests
         Assert.True(members.Single(m => m.AnimeId == special2.Id).IsMainLine);
     }
 
-    // Music-aware `other` traversal (design.md decision 1/tasks 1.1-1.3): an
-    // `other` edge is traversed exactly when one end is a cached `music`
-    // entry, regardless of which end the seed build starts from, and never
-    // spends fetch budget probing an uncached neighbour to find out.
+    // Companion-media-aware `other` traversal (design.md decision 1/tasks
+    // 1.1-1.3, widened to `pv` by polish-rewatch-more-and-filters design.md
+    // D5a): an `other` edge is traversed exactly when one end is a cached
+    // `music`/`pv` entry, regardless of which end the seed build starts
+    // from. An uncached neighbour is resolved by a bounded probe rather than
+    // silently left untraversable — see the probe-pass tests below.
     [Fact]
     public async Task ShowOtherLinkedToMusicEntryAdmitsItAsAnExtra()
     {
@@ -263,28 +266,196 @@ public class SeriesGraphBuilderTests
         Assert.DoesNotContain(members, m => m.AnimeId == cover.Id);
     }
 
+    // --- pv extras (polish-rewatch-more-and-filters design.md D5) ---
+
     [Fact]
-    public async Task OtherNeighbourWithNoCachedRowIsSkippedWithoutFetchOrPartial()
+    public async Task ShowOtherLinkedToPvEntryAdmitsItAsAnExtra()
+    {
+        using var db = CreateDb();
+        var show = Anime(1, "tv", new DateOnly(2022, 4, 6));
+        var pv = Anime(2, "pv", new DateOnly(2022, 4, 6));
+
+        Relate(show, pv, "other");
+
+        db.AnimeMetadata.AddRange(show, pv);
+        await db.SaveChangesAsync();
+
+        var members = await BuildAndReadMembersAsync(db, show.Id);
+
+        Assert.True(members.Single(m => m.AnimeId == show.Id).IsMainLine);
+        Assert.False(members.Single(m => m.AnimeId == pv.Id).IsMainLine);
+    }
+
+    [Fact]
+    public async Task PvToPvOtherLinkIsNotTraversed()
+    {
+        using var db = CreateDb();
+        var show = Anime(1, "tv", new DateOnly(2022, 4, 6));
+        var pv1 = Anime(2, "pv", new DateOnly(2022, 4, 6));
+        var pv2 = Anime(3, "pv", new DateOnly(2022, 5, 1));
+
+        Relate(show, pv1, "other");
+        Relate(pv1, pv2, "other"); // both ends pv — must not chain
+
+        db.AnimeMetadata.AddRange(show, pv1, pv2);
+        await db.SaveChangesAsync();
+
+        var members = await BuildAndReadMembersAsync(db, show.Id);
+
+        Assert.Equal(2, members.Count);
+        Assert.DoesNotContain(members, m => m.AnimeId == pv2.Id);
+    }
+
+    [Fact]
+    public async Task PvToMusicOtherLinkIsNotTraversed()
+    {
+        using var db = CreateDb();
+        var pv = Anime(1, "pv", new DateOnly(2022, 4, 6));
+        var song = Anime(2, "music", new DateOnly(2022, 4, 6));
+
+        // A promo for a theme song — both ends are companion media, so this
+        // must not fuse the pv's franchise with the song's.
+        Relate(pv, song, "other");
+
+        db.AnimeMetadata.AddRange(pv, song);
+        await db.SaveChangesAsync();
+
+        var series = await CreateBuilder(db).BuildAsync(pv.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
+
+        Assert.Null(series); // pv's component has no other member at all
+    }
+
+    [Fact]
+    public async Task PvIsNeverMainLineEvenWhenSequelLinked()
+    {
+        using var db = CreateDb();
+        var show = Anime(1, "tv", new DateOnly(2022, 4, 6));
+        var pv = Anime(2, "pv", new DateOnly(2023, 4, 6));
+
+        // MAL occasionally relates a pv with sequel/prequel rather than
+        // other; pv must stay an extra regardless of how it's related.
+        Relate(show, pv, "sequel");
+
+        db.AnimeMetadata.AddRange(show, pv);
+        await db.SaveChangesAsync();
+
+        var members = await BuildAndReadMembersAsync(db, show.Id);
+
+        Assert.True(members.Single(m => m.AnimeId == show.Id).IsMainLine);
+        Assert.False(members.Single(m => m.AnimeId == pv.Id).IsMainLine);
+    }
+
+    // --- The `other`-edge probe pass (design.md D5c, tasks 4.3-4.5) ---
+
+    [Fact]
+    public async Task ZeroProbeBudgetSkipsAnUncachedOtherFarEndAndMarksPartial()
     {
         using var db = CreateDb();
         var show = Anime(1, "tv", new DateOnly(2022, 4, 6));
         var season2 = Anime(2, "tv", new DateOnly(2023, 4, 6));
 
         Relate(show, season2, "sequel");
-        // No AnimeMetadata row exists for id 99 at all, and
-        // FakeMetadataRefreshService throws if a fetch is attempted — this
-        // build must not try.
+        // No AnimeMetadata row exists for id 99 at all, and the fake refresh
+        // service has no configured result for it — this build must not try.
         Relate(show, new AnimeMetadata { Id = 99, Title = "Uncached" }, "other");
 
         db.AnimeMetadata.AddRange(show, season2);
         await db.SaveChangesAsync();
 
-        var series = await CreateBuilder(db).BuildAsync(show.Id, fetchBudget: 0, expandLeanMembers: false);
+        var refreshService = new FakeMetadataRefreshService(db);
+        var series = await CreateBuilder(db, refreshService).BuildAsync(show.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
         var members = await db.SeriesMembers.Where(m => m.SeriesId == series!.Id).ToListAsync();
 
         Assert.Equal(2, members.Count);
         Assert.DoesNotContain(members, m => m.AnimeId == 99);
-        Assert.False(series!.IsPartial);
+        Assert.Empty(refreshService.Calls); // a zero budget never attempts a fetch
+        Assert.True(series!.IsPartial); // an unprobed `other` far end remains
+    }
+
+    [Fact]
+    public async Task UncachedOtherFarEndIsProbedOnceAndTheVerdictIsCached()
+    {
+        using var db = CreateDb();
+        var show = Anime(1, "tv", new DateOnly(2022, 4, 6));
+        Relate(show, new AnimeMetadata { Id = 99, Title = "Uncached PV" }, "other");
+        db.AnimeMetadata.Add(show);
+        await db.SaveChangesAsync();
+
+        var refreshService = new FakeMetadataRefreshService(db, new Dictionary<int, string> { [99] = "pv" });
+        var members = await BuildAndReadMembersAsync(db, show.Id, probeBudget: 1, refreshService: refreshService);
+
+        Assert.Equal(2, members.Count);
+        Assert.False(members.Single(m => m.AnimeId == 99).IsMainLine);
+        Assert.Equal([99], refreshService.Calls); // probed exactly once
+        Assert.True(await db.AnimeMetadata.AnyAsync(a => a.Id == 99)); // now cached permanently
+    }
+
+    [Fact]
+    public async Task AProbedCommercialCostsNothingOnTheNextBuild()
+    {
+        using var db = CreateDb();
+        var show = Anime(1, "tv", new DateOnly(2022, 4, 6));
+        var season2 = Anime(2, "tv", new DateOnly(2023, 4, 6)); // keeps the series non-empty either way
+        Relate(show, season2, "sequel");
+        Relate(show, new AnimeMetadata { Id = 99, Title = "Uncached CM" }, "other");
+        db.AnimeMetadata.AddRange(show, season2);
+        await db.SaveChangesAsync();
+
+        var refreshService = new FakeMetadataRefreshService(db, new Dictionary<int, string> { [99] = "cm" });
+        var firstBuildMembers = await BuildAndReadMembersAsync(db, show.Id, probeBudget: 1, refreshService: refreshService);
+        Assert.DoesNotContain(firstBuildMembers, m => m.AnimeId == 99); // a commercial, not admitted
+
+        // Rebuilding with zero probe budget must still resolve the edge from
+        // the row the first build's probe already cached — no second probe.
+        var secondBuild = await CreateBuilder(db, refreshService)
+            .BuildAsync(show.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
+
+        Assert.Equal([99], refreshService.Calls); // still just the one probe, ever
+        Assert.False(secondBuild!.IsPartial);
+    }
+
+    [Fact]
+    public async Task ProbeBudgetExhaustedAcrossMultipleFarEndsMarksPartial()
+    {
+        using var db = CreateDb();
+        var show = Anime(1, "tv", new DateOnly(2022, 4, 6));
+        var season2 = Anime(2, "tv", new DateOnly(2023, 4, 6)); // keeps the series non-empty either way
+        Relate(show, season2, "sequel");
+        Relate(show, new AnimeMetadata { Id = 98, Title = "Uncached A" }, "other");
+        Relate(show, new AnimeMetadata { Id = 99, Title = "Uncached B" }, "other");
+        db.AnimeMetadata.AddRange(show, season2);
+        await db.SaveChangesAsync();
+
+        var refreshService = new FakeMetadataRefreshService(db, new Dictionary<int, string> { [98] = "cm", [99] = "cm" });
+        var series = await CreateBuilder(db, refreshService)
+            .BuildAsync(show.Id, fetchBudget: 0, probeBudget: 1, expandLeanMembers: false);
+
+        Assert.Single(refreshService.Calls); // only one of the two far ends was probed
+        Assert.True(series!.IsPartial);
+    }
+
+    [Fact]
+    public async Task ProbesNeverDrawOnTheMemberFetchBudget()
+    {
+        using var db = CreateDb();
+        var show = Anime(1, "tv", new DateOnly(2022, 4, 6));
+        // An uncached sequel (spends member fetch budget if fetched) and an
+        // uncached `other` far end (spends probe budget if fetched) — with
+        // one unit of each budget, both must resolve.
+        Relate(show, new AnimeMetadata { Id = 50, Title = "Uncached Sequel", MediaType = "tv" }, "sequel");
+        Relate(show, new AnimeMetadata { Id = 99, Title = "Uncached PV" }, "other");
+        db.AnimeMetadata.Add(show);
+        await db.SaveChangesAsync();
+
+        var refreshService = new FakeMetadataRefreshService(db, new Dictionary<int, string> { [50] = "tv", [99] = "pv" });
+        var series = await CreateBuilder(db, refreshService)
+            .BuildAsync(show.Id, fetchBudget: 1, probeBudget: 1, expandLeanMembers: false);
+        var members = await db.SeriesMembers.Where(m => m.SeriesId == series!.Id).ToListAsync();
+
+        Assert.Equal(3, members.Count); // both the sequel and the pv were resolved
+        Assert.Contains(members, m => m.AnimeId == 50);
+        Assert.Contains(members, m => m.AnimeId == 99);
+        Assert.False(series!.IsPartial); // one unit of each budget was enough for both
     }
 
     // --- 6.1/8.10: Contradicted edges are excluded from traversal ---
@@ -404,11 +575,28 @@ public class SeriesGraphBuilderTests
         Assert.Equal([1, 2], ordered); // cycle remainder emitted in air-date order
     }
 
-    private sealed class FakeMetadataRefreshService : IMetadataRefreshService
+    // `probeResults` simulates a live full-detail fetch: when configured for
+    // an id, RefreshOneAsync inserts a cached row with that media type (as a
+    // real fetch would populate one); when not configured, it throws
+    // AnimeMetadataNotFoundException, matching a MAL 404. Every call is
+    // recorded in `Calls` so probe tests can assert an edge was probed at
+    // most once.
+    private sealed class FakeMetadataRefreshService(AnimeTrackerDbContext db, Dictionary<int, string>? probeResults = null)
+        : IMetadataRefreshService
     {
+        public List<int> Calls { get; } = [];
+
         public Task<int> RefreshStaleBatchAsync(int batchSize, CancellationToken ct = default) =>
             throw new NotImplementedException();
-        public Task RefreshOneAsync(int animeId, CancellationToken ct = default) =>
-            throw new NotImplementedException();
+
+        public async Task RefreshOneAsync(int animeId, CancellationToken ct = default)
+        {
+            Calls.Add(animeId);
+            if (probeResults is null || !probeResults.TryGetValue(animeId, out var mediaType))
+                throw new AnimeMetadataNotFoundException(animeId);
+
+            db.AnimeMetadata.Add(new AnimeMetadata { Id = animeId, Title = $"Anime {animeId}", MediaType = mediaType });
+            await db.SaveChangesAsync(ct);
+        }
     }
 }

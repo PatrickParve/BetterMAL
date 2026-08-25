@@ -35,7 +35,7 @@ public class ProfileServiceRewatchedSeriesTests
     private static void AddMember(
         AnimeTrackerDbContext db, int seriesId, int animeId, bool isMainLine, int order, string title,
         int? totalEpisodes = null, int? averageEpisodeDurationSeconds = null,
-        int? rewatchCount = null, int? episodesWatched = null)
+        int? rewatchCount = null, int? episodesWatched = null, WatchStatus status = WatchStatus.Completed)
     {
         db.AnimeMetadata.Add(new AnimeMetadata
         {
@@ -51,7 +51,7 @@ public class ProfileServiceRewatchedSeriesTests
             db.UserAnimeEntries.Add(new UserAnimeEntry
             {
                 AnimeId = animeId,
-                Status = WatchStatus.Completed,
+                Status = status,
                 RewatchCount = rewatchCount ?? 0,
                 EpisodesWatched = episodesWatched ?? 0,
             });
@@ -145,6 +145,81 @@ public class ProfileServiceRewatchedSeriesTests
 
         var item = Assert.Single(section.Items);
         Assert.Equal(100, item.RootAnimeId);
+    }
+
+    // --- An in-progress rewatch (design.md D1, tasks.md 2.4) ---
+
+    [Fact]
+    public async Task AnInProgressRewatchAddsToASeriesTotal()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 1, 100);
+        // 12-episode season, rewatch count 2 (24 episodes' worth completed)
+        // plus 3 episodes watched of the run in progress -> 27 * 1500s.
+        AddMember(db, 1, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
+            averageEpisodeDurationSeconds: 1500, rewatchCount: 2, episodesWatched: 3,
+            status: WatchStatus.Rewatching);
+        await db.SaveChangesAsync();
+
+        var entries = await db.UserAnimeEntries.AsNoTracking().ToListAsync();
+        var section = await CreateService(db, entries).GetRewatchedSeriesSectionAsync();
+
+        var item = Assert.Single(section.Items);
+        Assert.Equal(27L * 1500, item.RewatchSeconds);
+    }
+
+    [Fact]
+    public async Task AFirstRewatchInProgressMakesASeriesEligible()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 1, 100);
+        // Rewatch count still 0 - previously contributed nothing at all.
+        AddMember(db, 1, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
+            averageEpisodeDurationSeconds: 1500, rewatchCount: 0, episodesWatched: 5,
+            status: WatchStatus.Rewatching);
+        await db.SaveChangesAsync();
+
+        var entries = await db.UserAnimeEntries.AsNoTracking().ToListAsync();
+        var section = await CreateService(db, entries).GetRewatchedSeriesSectionAsync();
+
+        var item = Assert.Single(section.Items);
+        Assert.Equal(5L * 1500, item.RewatchSeconds);
+    }
+
+    [Fact]
+    public async Task ACompletedMemberWithZeroRewatchesStillContributesNothing()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 1, 100);
+        AddMember(db, 1, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
+            averageEpisodeDurationSeconds: 1500, rewatchCount: 0, episodesWatched: 12,
+            status: WatchStatus.Completed);
+        await db.SaveChangesAsync();
+
+        var entries = await db.UserAnimeEntries.AsNoTracking().ToListAsync();
+        var section = await CreateService(db, entries).GetRewatchedSeriesSectionAsync();
+
+        Assert.Empty(section.Items);
+    }
+
+    [Fact]
+    public async Task TheAllScopesBadgeIsUnchangedByAnInProgressRewatch()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 1, 100);
+        AddMember(db, 1, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
+            averageEpisodeDurationSeconds: 1500, rewatchCount: 1, episodesWatched: 4,
+            status: WatchStatus.Rewatching);
+        await db.SaveChangesAsync();
+
+        // BuildRewatchedSection reads e.Anime.MediaType directly, unlike the
+        // Series-scope path (which goes through SeriesRankingLookup's own
+        // join) — needs the navigation included.
+        var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
+        var section = await CreateService(db, entries).GetRewatchedSectionAsync(TopAnimeMediaTypeScope.All);
+
+        var item = Assert.Single(section.Items);
+        Assert.Equal(1, item.RewatchCount); // the completed-runs count only, unaffected by the run in progress
     }
 
     [Fact]

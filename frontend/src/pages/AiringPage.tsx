@@ -81,12 +81,29 @@ export function AiringPage() {
 
   const { data: week } = usePageData<AiringWeekDto>(`airing:${referenceDate}`, () => getAiringWeek(referenceDate))
 
+  // Replaces rather than pushes (polish-rewatch-more-and-filters design.md
+  // D7): stepping through weeks must never grow the history stack, so one
+  // Back leaves the Airing page for wherever the user came from regardless
+  // of how many weeks were stepped through. The week stays in `?week=`, so
+  // the URL is still shareable and still survives back-navigation from an
+  // anime's detail page (that navigation is a push away from here and a pop
+  // back to it, untouched by this).
+  //
+  // `keepScroll` is required, not incidental: a replace mints a fresh
+  // `location.key`, which `useScrollRestoration` would otherwise read as a
+  // fresh visit and answer with `scrollTo(0, 0)` — jerking the page to the
+  // top on every week change. The flag also seeds the new entry's snapshot
+  // with the current scroll position, so navigating away and back returns
+  // here rather than to the top.
   function goToWeek(date: string) {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev)
-      params.set('week', date)
-      return params
-    })
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev)
+        params.set('week', date)
+        return params
+      },
+      { replace: true, state: { keepScroll: true } },
+    )
   }
 
   const isCurrentWeek = weekStartIso(referenceDate) === weekStartIso(todayIso())

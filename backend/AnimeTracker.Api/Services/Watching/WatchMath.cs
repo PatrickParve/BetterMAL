@@ -38,12 +38,56 @@ internal static class WatchMath
     public static int RewatchOnlyEpisodes(UserAnimeEntry entry) =>
         RewatchOnlyEpisodes(entry.RewatchCount, entry.Anime.TotalEpisodes, entry.EpisodesWatched);
 
+    /// <summary>Rewatch time for a member that may currently be mid-rewatch:
+    /// <see cref="RewatchOnlyEpisodes(int, int?, int)"/> — the completed runs
+    /// — plus, when the entry is marked <see cref="WatchStatus.Rewatching"/>,
+    /// the episodes watched so far in the run that hasn't finished yet
+    /// (design.md D1). The two terms cannot double-count: entering Rewatching
+    /// resets episodes-watched to 0, and the rewatch count only increases once
+    /// a run finishes, so episodes-watched is never simultaneously "progress
+    /// on the current run" and "part of a run <see cref="RewatchOnlyEpisodes(int, int?, int)"/>
+    /// already counted".
+    ///
+    /// <para>Known fallback gap: when no total is published,
+    /// <see cref="RewatchOnlyEpisodes(int, int?, int)"/> falls back to
+    /// episodes-watched as the per-run baseline. For an entry with no
+    /// published total that is currently rewatching, that baseline is the
+    /// current run's partial progress, not a full run — e.g. a rewatch count
+    /// of 2 with 3 episodes watched of an unpublished-length show yields
+    /// 2*3 + 3 = 9, understating the true figure. This is the pre-existing
+    /// fallback being wrong in a new way rather than a new bug (it yielded
+    /// 2*3 = 6 before this method existed); it only affects entries with no
+    /// published episode count, both figures are lower bounds, and it is not
+    /// fixed here.</para></summary>
+    public static int RewatchEpisodesIncludingCurrentRun(
+        int rewatchCount, int? totalEpisodes, int episodesWatched, WatchStatus? status) =>
+        RewatchOnlyEpisodes(rewatchCount, totalEpisodes, episodesWatched)
+        + (status == WatchStatus.Rewatching ? episodesWatched : 0);
+
     /// <summary>An entry's rewatch-inclusive episode count: its current
     /// episodes watched, plus <see cref="RewatchOnlyEpisodes"/> — so an entry
     /// one episode into its third viewing of a 12-episode series reads
     /// 1 + 24 = 25, not 3.</summary>
     public static int RewatchInclusiveEpisodes(UserAnimeEntry entry) =>
         entry.EpisodesWatched + RewatchOnlyEpisodes(entry);
+
+    /// <summary>The episodes an entry counts as watched for "how much of the
+    /// main line have I watched" purposes: the greater of its own
+    /// episodes-watched and its aired-so-far figure when the entry is marked
+    /// <see cref="WatchStatus.Rewatching"/>, else episodes-watched as-is
+    /// (design.md D2). Entering Rewatching resets episodes-watched to 0, so
+    /// without this a franchise seen in full and now being rewatched would
+    /// read as unwatched wherever this figure is used — the personal badge,
+    /// the progress bar, and time watched/left. <c>max</c> rather than a bare
+    /// aired figure: a rewatch already run past what the app believes has
+    /// aired shouldn't be counted down. Falls back to episodesWatched when
+    /// airedEpisodes is unknown. Governs only the watched side of a pair —
+    /// never the episode total or the aired figure themselves, which describe
+    /// the anime rather than the viewer.</summary>
+    public static int EffectiveWatchedEpisodes(int episodesWatched, int? airedEpisodes, WatchStatus? status) =>
+        status == WatchStatus.Rewatching
+            ? Math.Max(episodesWatched, airedEpisodes ?? episodesWatched)
+            : episodesWatched;
 
     public static bool IsMovie(AnimeMetadata anime) =>
         string.Equals(anime.MediaType, MovieMediaType, StringComparison.OrdinalIgnoreCase);

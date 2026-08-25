@@ -23,11 +23,11 @@ public class SeriesServiceClassificationRebuildTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    private static AnimeMetadata Anime(int id, DateOnly airedFrom) => new()
+    private static AnimeMetadata Anime(int id, DateOnly airedFrom, string mediaType = "tv") => new()
     {
         Id = id,
         Title = $"Anime {id}",
-        MediaType = "tv",
+        MediaType = mediaType,
         AiredFrom = airedFrom,
     };
 
@@ -57,6 +57,33 @@ public class SeriesServiceClassificationRebuildTests
 
         var rebuilt = await db.Series.AsNoTracking().SingleAsync(s => s.Id == 1);
         Assert.True(rebuilt.BuiltAt >= SeriesGraphBuilder.ClassificationRevisedAt);
+    }
+
+    // polish-rewatch-more-and-filters design.md D5b/D5e: a series stored
+    // before this revision could have a `pv` member sitting main-line (no
+    // ineligibility clause existed for it yet). The revision bump rebuilds
+    // it on next read and excludes that member, per tasks.md 4.10.
+    [Fact]
+    public async Task SeriesBuiltBeforeClassificationRevisionExcludesPvFromMainLineOnRebuild()
+    {
+        using var db = CreateDb();
+        var show = Anime(1, new DateOnly(2018, 1, 1));
+        var pv = Anime(2, new DateOnly(2019, 1, 1), mediaType: "pv");
+        show.RelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel", Title = "PV" });
+        db.AnimeMetadata.AddRange(show, pv);
+
+        var staleBuiltAt = SeriesGraphBuilder.ClassificationRevisedAt - TimeSpan.FromDays(1);
+        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 1, BuiltAt = staleBuiltAt });
+        // Stored main-line under the pre-revision rules, which had no `pv`
+        // exclusion at all.
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 1 });
+        await db.SaveChangesAsync();
+
+        await CreateService(db).GetSeriesAsync(1);
+
+        var rebuilt = await db.SeriesMembers.AsNoTracking().Where(m => m.SeriesId == 1).ToListAsync();
+        Assert.False(rebuilt.Single(m => m.AnimeId == 2).IsMainLine);
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Profile;
+using AnimeTracker.Api.Services.Watching;
 using Microsoft.EntityFrameworkCore;
 // Alias needed because this namespace's last segment ("Series") shadows the
 // Models.Series type name.
@@ -69,6 +70,7 @@ public class SeriesService(
                 if (forceRebuild || NeedsBuild(series))
                 {
                     var fetchBudget = forceRebuild ? SeriesGraphBuilder.RebuildFetchBudget : SeriesGraphBuilder.VisitFetchBudget;
+                    var probeBudget = forceRebuild ? SeriesGraphBuilder.RebuildProbeBudget : SeriesGraphBuilder.VisitProbeBudget;
                     // BuildAsync returns null when the seed's component has
                     // no other member. That's not necessarily "no series at
                     // all" if one was already stored (relations can thin out
@@ -84,7 +86,7 @@ public class SeriesService(
                     // be full-fetched. Spending part of the visit budget here
                     // is what lets a first visit self-heal instead of always
                     // depending on the user clicking Rebuild.
-                    series = await graphBuilder.BuildAsync(animeId, fetchBudget, expandLeanMembers: true, ct) ?? series;
+                    series = await graphBuilder.BuildAsync(animeId, fetchBudget, probeBudget, expandLeanMembers: true, ct) ?? series;
                 }
             }
         }
@@ -304,9 +306,19 @@ public class SeriesService(
         var (mainEpisodes, mainRuntimeSeconds, hasUnknown) = EpisodesAndRuntime(mainLineAnime, airedEpisodesByAnimeId);
         var (extraEpisodes, extraRuntimeSeconds, _) = EpisodesAndRuntime(extraAnime, airedEpisodesByAnimeId);
 
-        var myWatchedEpisodes = mainLineAnime.Sum(a => a.UserEntry?.EpisodesWatched ?? 0);
-        var myWatchedSeconds = mainLineAnime.Sum(a => (long)(a.UserEntry?.EpisodesWatched ?? 0) * EpisodeSeconds(a));
-        var entriesCompleted = mainLineAnime.Count(a => a.UserEntry?.Status == WatchStatus.Completed);
+        // A Rewatching main-line entry counts as fully watched (polish-rewatch
+        // design.md D2), as the greater of its own episodes-watched and its
+        // aired-so-far figure — the same rule SeriesRankingIndex applies to
+        // the card's badge and My-progress sort, so the badge and these
+        // figures beside it can never disagree about the same entry. Governs
+        // only the watched side: the episode total, aired figure, and runtime
+        // above are untouched.
+        var myWatchedEpisodes = mainLineAnime.Sum(a => EffectiveWatchedEpisodes(a, airedEpisodesByAnimeId));
+        var myWatchedSeconds = mainLineAnime.Sum(a => (long)EffectiveWatchedEpisodes(a, airedEpisodesByAnimeId) * EpisodeSeconds(a));
+        // A rewatch can only follow a completed run, so a Rewatching entry
+        // counts as completed here too (polish-rewatch design.md D2) —
+        // otherwise this stat would read "5 of 6" beside a "Completed" badge.
+        var entriesCompleted = mainLineAnime.Count(a => a.UserEntry?.Status is WatchStatus.Completed or WatchStatus.Rewatching);
         var extrasCompleted = extraAnime.Count(a => a.UserEntry?.Status == WatchStatus.Completed);
         var mainLineSettledByMe = SeriesAverages.MainLineSettledByMe(
             mainLineAnime.Select(a => (a.AiringStatus, a.UserEntry?.Status)));
@@ -418,6 +430,15 @@ public class SeriesService(
 
     private static int EpisodeSeconds(AnimeMetadata anime) =>
         anime.AverageEpisodeDurationSeconds ?? ProfileService.AssumedMinutesPerEpisode * 60;
+
+    // Wraps WatchMath.EffectiveWatchedEpisodes (task 3.1/3.4) with this
+    // service's own per-anime aired-episodes map, which already carries
+    // exactly the figure that helper wants (null = unknown).
+    private static int EffectiveWatchedEpisodes(AnimeMetadata anime, Dictionary<int, int?> airedEpisodesByAnimeId) =>
+        WatchMath.EffectiveWatchedEpisodes(
+            anime.UserEntry?.EpisodesWatched ?? 0,
+            airedEpisodesByAnimeId.GetValueOrDefault(anime.Id),
+            anime.UserEntry?.Status);
 
     // mainLineAnime is already in release order (the caller selects it from
     // members ordered by Order), so the longest gap is the largest jump

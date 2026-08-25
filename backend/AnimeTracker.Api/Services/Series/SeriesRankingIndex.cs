@@ -134,7 +134,7 @@ public sealed class SeriesRankingIndex
             var (firstYear, lastYear) = ListedSeriesYearSpan(members);
             var (episodeTotal, hasUnknown) = MainLineEpisodeTotal(mainLine, airedEpisodesByAnimeId);
             var (badge, behindEpisodes) = ProgressBadge(mainLine, status, airedEpisodesByAnimeId);
-            var mainLineWatchedEpisodes = mainLine.Sum(m => m.EpisodesWatched ?? 0);
+            var mainLineWatchedEpisodes = mainLine.Sum(m => MemberEffectiveWatchedEpisodes(m, airedEpisodesByAnimeId));
             var mainLineAiredEpisodes = ListedSeriesMainLineAiredEpisodes(mainLine, airedEpisodesByAnimeId);
 
             results.Add(new SeriesListItemDto(
@@ -223,29 +223,38 @@ public sealed class SeriesRankingIndex
         var finishedAiring = airedMembers.Where(m => m.AiringStatus == "finished_airing").ToList();
 
         // 1. Completed: the whole series is done and every finished-airing
-        // main-line entry is marked Completed. Vacuously skipped (not
-        // vacuously true) when nothing has finished airing, since it also
-        // requires at least one such entry — a single still-running entry
-        // falls through to the rules below instead.
-        if (status == "Finished" && finishedAiring.Count > 0 && finishedAiring.All(m => m.EntryStatus == WatchStatus.Completed))
+        // main-line entry is marked Completed or Rewatching (polish-rewatch
+        // design.md D2 — starting a rewatch of a finished franchise mustn't
+        // downgrade its badge). Vacuously skipped (not vacuously true) when
+        // nothing has finished airing, since it also requires at least one
+        // such entry — a single still-running entry falls through to the
+        // rules below instead.
+        if (status == "Finished" && finishedAiring.Count > 0
+            && finishedAiring.All(m => m.EntryStatus is WatchStatus.Completed or WatchStatus.Rewatching))
             return (SeriesProgressBadge.Completed, null);
 
         // 2. Dropped: the most recently *aired* Dropped entry, with nothing
         // aired after it ever watched (design.md D2) — a drop later resumed
-        // and watched past doesn't count. Decided from watch status alone,
-        // never blocked by an unknown broadcast count (design.md D4).
+        // and watched past doesn't count. A later entry marked Rewatching
+        // counts as watched past the drop (polish-rewatch design.md D2), via
+        // the same effective-watched figure rule (3) below uses. Decided from
+        // watch status alone, never blocked by an unknown broadcast count
+        // (design.md D4).
         var droppedEntries = airedMembers.Where(m => m.EntryStatus == WatchStatus.Dropped).ToList();
         if (droppedEntries.Count > 0)
         {
             var lastDroppedOrder = droppedEntries.Max(m => m.Order);
             var nothingWatchedAfter = airedMembers
                 .Where(m => m.Order > lastDroppedOrder)
-                .All(m => (m.EpisodesWatched ?? 0) == 0);
+                .All(m => MemberEffectiveWatchedEpisodes(m, airedEpisodesByAnimeId) == 0);
             if (nothingWatchedAfter)
                 return (SeriesProgressBadge.Dropped, null);
         }
 
-        var watchedTotal = mainLine.Sum(m => m.EpisodesWatched ?? 0);
+        // A Rewatching main-line entry counts as fully watched throughout the
+        // rules below (polish-rewatch design.md D2), as the greater of its
+        // own episodes-watched and its aired-so-far figure.
+        var watchedTotal = mainLine.Sum(m => MemberEffectiveWatchedEpisodes(m, airedEpisodesByAnimeId));
 
         // 5. Unwatched: something has aired but nothing has ever been
         // watched, and (2) didn't already claim the case (design.md D3).
@@ -312,16 +321,42 @@ public sealed class SeriesRankingIndex
             .ToList();
     }
 
+    // A member's aired-so-far figure for WatchMath.EffectiveWatchedEpisodes
+    // (polish-rewatch design.md D2, task 3.1): a finished-airing member has
+    // aired its full published total (null when that total itself is
+    // unknown, which EffectiveWatchedEpisodes then treats as "unknown" too);
+    // a currently-airing member's aired count comes from the caller's
+    // per-currently-airing-main-line-member map; any other member — not yet
+    // aired — has aired nothing.
+    private static int? MemberAiredEpisodes(SeriesRankingMemberProjection m, Dictionary<int, int> airedEpisodesByAnimeId) =>
+        m.AiringStatus switch
+        {
+            "finished_airing" => m.TotalEpisodes,
+            "currently_airing" => airedEpisodesByAnimeId.TryGetValue(m.AnimeId, out var aired) ? aired : null,
+            _ => 0,
+        };
+
+    // A Rewatching member counts as fully watched (polish-rewatch design.md
+    // D2): used everywhere this index sums my watched main-line episodes, so
+    // the badge and the browser's My-progress sort read a rewatch the same
+    // way the series page does.
+    private static int MemberEffectiveWatchedEpisodes(SeriesRankingMemberProjection m, Dictionary<int, int> airedEpisodesByAnimeId) =>
+        WatchMath.EffectiveWatchedEpisodes(m.EpisodesWatched ?? 0, MemberAiredEpisodes(m, airedEpisodesByAnimeId), m.EntryStatus);
+
     // Kept in step with WatchMath rather than restating its fallbacks
     // (RewatchOnlyEpisodes' published-total baseline, EpisodeSeconds' 24
-    // minutes) — task 9.3. A member not in my list (both fields null) or
-    // never rewatched contributes nothing.
+    // minutes) — task 9.3. Also folds in an in-progress rewatch's episodes
+    // (design.md D1, tasks.md 2.1): a member never in my list (RewatchCount
+    // and EpisodesWatched both null, EntryStatus null) or never rewatched and
+    // not currently rewatching both still resolve to a zero episode figure
+    // and so still contribute nothing.
     private static long MemberRewatchSeconds(SeriesRankingMemberProjection m)
     {
-        if (m.RewatchCount is not { } rewatchCount || rewatchCount <= 0)
+        var rewatchEpisodes = WatchMath.RewatchEpisodesIncludingCurrentRun(
+            m.RewatchCount ?? 0, m.TotalEpisodes, m.EpisodesWatched ?? 0, m.EntryStatus);
+        if (rewatchEpisodes == 0)
             return 0;
 
-        var rewatchEpisodes = WatchMath.RewatchOnlyEpisodes(rewatchCount, m.TotalEpisodes, m.EpisodesWatched ?? 0);
         return (long)rewatchEpisodes * WatchMath.EpisodeSeconds(m.AverageEpisodeDurationSeconds);
     }
 }

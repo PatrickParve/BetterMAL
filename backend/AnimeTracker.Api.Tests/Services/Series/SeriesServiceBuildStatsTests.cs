@@ -7,14 +7,14 @@ public class SeriesServiceBuildStatsTests
 {
     private static AnimeMetadata Anime(
         int id, int? totalEpisodes, int? averageEpisodeDurationSeconds = null, int? rewatchCount = null,
-        double? myScore = null, WatchStatus? status = null) =>
+        double? myScore = null, WatchStatus? status = null, int? episodesWatched = null) =>
         new()
         {
             Id = id,
             Title = $"Anime {id}",
             TotalEpisodes = totalEpisodes,
             AverageEpisodeDurationSeconds = averageEpisodeDurationSeconds,
-            UserEntry = rewatchCount is null && myScore is null && status is null
+            UserEntry = rewatchCount is null && myScore is null && status is null && episodesWatched is null
                 ? null
                 : new UserAnimeEntry
                 {
@@ -22,6 +22,7 @@ public class SeriesServiceBuildStatsTests
                     RewatchCount = rewatchCount ?? 0,
                     MyScore = myScore is { } s ? (int)s : null,
                     Status = status ?? WatchStatus.Watching,
+                    EpisodesWatched = episodesWatched ?? 0,
                 },
         };
 
@@ -172,6 +173,53 @@ public class SeriesServiceBuildStatsTests
             mainLineMembers, [], [completed, dropped], mainLineAiredEpisodes: 24, airedByAnimeId);
 
         Assert.Equal(1, stats.EntriesCompleted);
+    }
+
+    // --- A Rewatching entry counts as fully watched (polish-rewatch design.md D2, tasks.md 3.7) ---
+
+    [Fact]
+    public void RewatchingEntryKeepsTheProgressBarFull()
+    {
+        var finished = Anime(1, totalEpisodes: 50, status: WatchStatus.Completed, episodesWatched: 50);
+        var rewatching = Anime(2, totalEpisodes: 12, status: WatchStatus.Rewatching, episodesWatched: 2);
+        var members = new List<SeriesMember> { Member(finished, isMainLine: true, order: 0), Member(rewatching, isMainLine: true, order: 1) };
+        var airedByAnimeId = new Dictionary<int, int?> { [1] = 50, [2] = 12 }; // both fully aired
+
+        var stats = SeriesService.BuildStats(members, [], [finished, rewatching], mainLineAiredEpisodes: 62, airedByAnimeId);
+
+        // 50 (Completed) + 12 (Rewatching, effective = max(2 watched, 12 aired)) = 62, not 52.
+        Assert.Equal(62, stats.MyWatchedEpisodes);
+    }
+
+    [Fact]
+    public void EntriesCompletedCountsARewatchingEntry()
+    {
+        var completed = Anime(1, totalEpisodes: 12, status: WatchStatus.Completed, episodesWatched: 12);
+        var rewatching = Anime(2, totalEpisodes: 12, status: WatchStatus.Rewatching, episodesWatched: 2);
+        var members = new List<SeriesMember> { Member(completed, isMainLine: true, order: 0), Member(rewatching, isMainLine: true, order: 1) };
+        var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 12 };
+
+        var stats = SeriesService.BuildStats(members, [], [completed, rewatching], mainLineAiredEpisodes: 24, airedByAnimeId);
+
+        Assert.Equal(2, stats.EntriesCompleted);
+        Assert.Equal(2, stats.MainLineCount);
+    }
+
+    [Fact]
+    public void EpisodeTotalIsUnmovedByARewatch()
+    {
+        // Rewatching, watched reset to 2, but 5 episodes have aired so far —
+        // the episode total/runtime describe the anime and must stay at 12,
+        // independent of the watched figure (which reads 5, not 2 or 12).
+        var rewatching = Anime(1, totalEpisodes: 12, averageEpisodeDurationSeconds: 1500, status: WatchStatus.Rewatching, episodesWatched: 2);
+        var members = new List<SeriesMember> { Member(rewatching, isMainLine: true, order: 0) };
+        var airedByAnimeId = new Dictionary<int, int?> { [1] = 5 };
+
+        var stats = SeriesService.BuildStats(members, [], [rewatching], mainLineAiredEpisodes: 5, airedByAnimeId);
+
+        Assert.Equal(12, stats.MainLineEpisodeTotal);
+        Assert.Equal(12L * 1500, stats.MainLineRuntimeSeconds);
+        Assert.Equal(5, stats.MyWatchedEpisodes);
     }
 
     [Fact]

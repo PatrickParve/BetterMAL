@@ -30,12 +30,20 @@ public class SeriesGraphBuilder(
     public const int VisitFetchBudget = 8;
     public const int RebuildFetchBudget = 20;
 
+    // A separate budget spent only on resolving the media type of an `other`
+    // edge's uncached far end (design.md D5c) — never shared with the member
+    // fetch budget above, so a franchise with many `other` edges to
+    // commercials can't starve the fetches real, story-related members need
+    // just to be displayed at all.
+    public const int VisitProbeBudget = 4;
+    public const int RebuildProbeBudget = 10;
+
     // Bump this to the ship date whenever ClassifyMainLineChain's rules
     // change: SeriesService.NeedsBuild treats every series built before this
     // timestamp as needing a rebuild, so a classification correction reaches
     // already-stored series on their next read instead of requiring the user
     // to find and rebuild each one by hand (design.md decision 3).
-    public static readonly DateTimeOffset ClassificationRevisedAt = new(2026, 8, 24, 0, 0, 0, TimeSpan.Zero);
+    public static readonly DateTimeOffset ClassificationRevisedAt = new(2026, 8, 25, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>Builds and persists the series reachable from
     /// <paramref name="seedAnimeId"/>, spending at most <paramref name="fetchBudget"/>
@@ -48,11 +56,13 @@ public class SeriesGraphBuilder(
     /// member with unfetched relations is exactly what fragments a franchise
     /// or hands the main line to the wrong chain (decision 2); the smaller
     /// visit-triggered budget just means it self-heals over a few visits
-    /// instead of all at once.</summary>
+    /// instead of all at once. <paramref name="probeBudget"/> is spent only
+    /// on resolving the media type of an `other` edge's uncached far end
+    /// (design.md D5c) — see <see cref="TraverseAsync"/>.</summary>
     public async Task<SeriesEntity?> BuildAsync(
-        int seedAnimeId, int fetchBudget, bool expandLeanMembers, CancellationToken ct = default)
+        int seedAnimeId, int fetchBudget, int probeBudget, bool expandLeanMembers, CancellationToken ct = default)
     {
-        var (members, isPartial, isTruncated) = await TraverseAsync(seedAnimeId, fetchBudget, expandLeanMembers, ct);
+        var (members, isPartial, isTruncated) = await TraverseAsync(seedAnimeId, fetchBudget, probeBudget, expandLeanMembers, ct);
 
         if (members.Count <= 1)
             return null;
@@ -65,7 +75,7 @@ public class SeriesGraphBuilder(
     // --- Traversal (2.2, 2.3, 2.4) ---
 
     private async Task<(List<AnimeMetadata> Members, bool IsPartial, bool IsTruncated)> TraverseAsync(
-        int seedAnimeId, int fetchBudget, bool expandLeanMembers, CancellationToken ct)
+        int seedAnimeId, int fetchBudget, int probeBudget, bool expandLeanMembers, CancellationToken ct)
     {
         var visited = new HashSet<int> { seedAnimeId };
         var queue = new Queue<int>();
@@ -73,6 +83,7 @@ public class SeriesGraphBuilder(
 
         var members = new List<AnimeMetadata>();
         var fetchesUsed = 0;
+        var probesUsed = 0;
         var isPartial = false;
         var isTruncated = false;
 
@@ -157,11 +168,14 @@ public class SeriesGraphBuilder(
                 .Where(r => SeriesRelations.IsTraversable(r.RelationType))
                 .Select(r => r.RelatedAnimeId);
 
-            // Music-aware `other` edges (design.md decision 1): one batched
-            // lookup of the cached MediaType of this node's `other`-relation
-            // neighbours, not a per-edge query. A neighbour with no cached
-            // row at all is left out of the dictionary and therefore treated
-            // as not traversable, spending no fetch budget on it.
+            // Companion-media `other` edges (design.md decision 1, widened to
+            // `pv` by polish-rewatch-more-and-filters design.md D5a): one
+            // batched lookup of the cached MediaType of this node's
+            // `other`-relation neighbours, not a per-edge query. A neighbour
+            // with no cached row at all falls to the probe pass below rather
+            // than being silently treated as not traversable — otherwise an
+            // uncached `music`/`pv` far end could never be recognised at all
+            // (design.md D5c).
             var otherRelationIds = metadata.RelatedAnime
                 .Where(r => r.RelationType == "other")
                 .Select(r => r.RelatedAnimeId)
@@ -175,16 +189,66 @@ public class SeriesGraphBuilder(
                     .ToDictionaryAsync(a => a.Id, a => a.MediaType, ct)
                 : [];
 
-            var musicOutgoingIds = otherRelationIds.Where(id =>
-                otherNeighbourMediaTypes.TryGetValue(id, out var neighbourMediaType) &&
-                SeriesRelations.IsTraversableMusicEdge(metadata.MediaType, neighbourMediaType));
+            var companionOutgoingIds = otherRelationIds
+                .Where(id => otherNeighbourMediaTypes.TryGetValue(id, out var neighbourMediaType) &&
+                    SeriesRelations.IsTraversableOtherEdge(metadata.MediaType, neighbourMediaType))
+                .ToList();
 
-            var outgoingIds = storyOutgoingIds.Concat(musicOutgoingIds);
+            // Probe pass (design.md D5c, tasks 4.3/4.4): an `other` far end
+            // with no cached row at all can never be recognised as companion
+            // media without a fetch, and never spending one leaves the rule
+            // permanently inert for a franchise whose promos/theme songs
+            // happen to be uncached — a closed loop. A probe caches the row
+            // regardless of the verdict, so an edge is probed at most once
+            // ever, across all builds — this is what makes a budget this
+            // small workable. Ids already visited are skipped: already a
+            // member (or already decided against) through some other path,
+            // so probing again would spend budget for no gain.
+            var uncachedOtherIds = otherRelationIds.Where(id => !otherNeighbourMediaTypes.ContainsKey(id) && !visited.Contains(id));
+            foreach (var farEndId in uncachedOtherIds)
+            {
+                if (probesUsed >= probeBudget)
+                {
+                    // Unprobed `other` far ends remain: the existing
+                    // "partial rebuilds on next visit" mechanism finishes the
+                    // job, a few probes at a time, without a background job.
+                    isPartial = true;
+                    continue;
+                }
+
+                try
+                {
+                    await refreshService.RefreshOneAsync(farEndId, ct);
+                    probesUsed++;
+                    var probedMediaType = await db.AnimeMetadata.AsNoTracking()
+                        .Where(a => a.Id == farEndId)
+                        .Select(a => a.MediaType)
+                        .FirstOrDefaultAsync(ct);
+                    if (SeriesRelations.IsTraversableOtherEdge(metadata.MediaType, probedMediaType))
+                        companionOutgoingIds.Add(farEndId); // admitted using the row the probe already produced
+                }
+                catch (AnimeMetadataNotFoundException)
+                {
+                    // Genuinely invalid/removed on MAL — retrying won't help,
+                    // so this doesn't mark the series partial (mirrors the
+                    // member fetch path above).
+                    logger.LogInformation("Series build: probed anime {AnimeId} was not found on MAL; skipping.", farEndId);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Series build: failed to probe anime {AnimeId}; will retry on next build.", farEndId);
+                    isPartial = true;
+                }
+            }
+
+            var outgoingIds = storyOutgoingIds.Concat(companionOutgoingIds);
 
             var incomingIds = await db.AnimeRelatedAnime.AsNoTracking()
                 .Where(r => r.RelatedAnimeId == animeId &&
                     (SeriesRelations.TraversalSet.Contains(r.RelationType) ||
-                        (r.RelationType == "other" && (r.Anime.MediaType == "music") != (metadata.MediaType == "music"))))
+                        (r.RelationType == "other" &&
+                            SeriesRelations.CompanionMediaTypes.Contains(r.Anime.MediaType ?? "") !=
+                            SeriesRelations.CompanionMediaTypes.Contains(metadata.MediaType ?? ""))))
                 .Select(r => r.AnimeId)
                 .ToListAsync(ct);
 
@@ -312,7 +376,12 @@ public class SeriesGraphBuilder(
         ineligibleIds.UnionWith(SeriesRelations.FindSideContentIds(ownEdges, candidateIds));
         foreach (var member in members)
         {
-            if (member.MediaType is "special" or "music")
+            // `pv` (promotional video) joins `special`/`music` here
+            // (polish-rewatch-more-and-filters design.md D5b): a promo is
+            // never a chapter of the story, however MAL relates it — even in
+            // a franchise whose real entries carry no sequel/prequel edges at
+            // all, where a chain of promos could otherwise out-rank the show.
+            if (member.MediaType is "special" or "music" or "pv")
                 ineligibleIds.Add(member.Id);
         }
         bool IsEligible(int id) => !ineligibleIds.Contains(id);

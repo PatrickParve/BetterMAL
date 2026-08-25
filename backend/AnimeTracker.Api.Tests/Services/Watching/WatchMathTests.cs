@@ -89,6 +89,46 @@ public class WatchMathTests
         Assert.Equal(episodesWatched + WatchMath.RewatchOnlyEpisodes(entry), WatchMath.RewatchInclusiveEpisodes(entry));
     }
 
+    // --- RewatchEpisodesIncludingCurrentRun (design.md D1, tasks.md 1.1-1.3) ---
+
+    [Fact]
+    public void RewatchEpisodesIncludingCurrentRun_CompletedRunsOnly()
+    {
+        // Not currently Rewatching: only the completed runs count.
+        Assert.Equal(24, WatchMath.RewatchEpisodesIncludingCurrentRun(
+            rewatchCount: 2, totalEpisodes: 12, episodesWatched: 12, status: WatchStatus.Completed));
+    }
+
+    [Fact]
+    public void RewatchEpisodesIncludingCurrentRun_CompletedRunsPlusAnInProgressRun()
+    {
+        Assert.Equal(27, WatchMath.RewatchEpisodesIncludingCurrentRun(
+            rewatchCount: 2, totalEpisodes: 12, episodesWatched: 3, status: WatchStatus.Rewatching));
+    }
+
+    [Fact]
+    public void RewatchEpisodesIncludingCurrentRun_AFirstRewatchInProgressWithZeroRewatchCount()
+    {
+        Assert.Equal(5, WatchMath.RewatchEpisodesIncludingCurrentRun(
+            rewatchCount: 0, totalEpisodes: 12, episodesWatched: 5, status: WatchStatus.Rewatching));
+    }
+
+    [Fact]
+    public void RewatchEpisodesIncludingCurrentRun_ANonRewatchingStatusIgnoresEpisodesWatched()
+    {
+        Assert.Equal(0, WatchMath.RewatchEpisodesIncludingCurrentRun(
+            rewatchCount: 0, totalEpisodes: 12, episodesWatched: 5, status: WatchStatus.Watching));
+    }
+
+    [Fact]
+    public void RewatchEpisodesIncludingCurrentRun_NoPublishedTotalFallsBackToEpisodesWatchedPerRun()
+    {
+        // Documented fallback gap: no total published, mid-rewatch.
+        // RewatchOnlyEpisodes(2, null, 3) = 6, plus the in-progress run's 3 = 9.
+        Assert.Equal(9, WatchMath.RewatchEpisodesIncludingCurrentRun(
+            rewatchCount: 2, totalEpisodes: null, episodesWatched: 3, status: WatchStatus.Rewatching));
+    }
+
     [Theory]
     [InlineData("movie", true)]
     [InlineData("Movie", true)]

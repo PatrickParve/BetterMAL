@@ -507,11 +507,15 @@ The system SHALL keep one persisted top-anime ordering that every media-type fil
 ### Requirement: Most rewatched by series
 The "Most rewatched" section SHALL offer a **Series** scope that re-reads the section by franchise instead of by single anime, ranking my series by the total time I have spent rewatching them.
 
-A series' total SHALL be the sum, over **every** member of that series — main line and extras alike — of that member's rewatch time, where a member's rewatch time is its recorded number of rewatches multiplied by its episode count multiplied by its episode duration. A member not in my list, or in my list with no rewatches, SHALL contribute nothing.
+A series' total SHALL be the sum, over **every** member of that series — main line and extras alike — of that member's rewatch time, where a member's rewatch time is its recorded number of rewatches multiplied by its episode count multiplied by its episode duration, **plus, when that member is marked Rewatching, the episodes it has watched so far in that in-progress run, valued at the same episode duration**. A member not in my list SHALL contribute nothing.
+
+An in-progress rewatch SHALL therefore contribute the time already spent on it, rather than nothing until the run finishes. Because entering Rewatching resets episodes-watched to zero and the rewatch count only increases once a run completes, the two figures never overlap: the rewatch count accounts for the runs already finished and episodes-watched accounts for the current one. A member marked Rewatching whose rewatch count is still zero — a first rewatch in progress — SHALL contribute the episodes it has watched so far and SHALL therefore make its series eligible for this scope, where previously it contributed nothing.
+
+A member in my list with no recorded rewatches and not marked Rewatching SHALL contribute nothing.
 
 A member's episode count for this purpose SHALL be its published total episode count, so a completed rewatch counts as a full run through that entry regardless of where its current progress sits. When no total is published, the entry's own episodes-watched figure SHALL be used, since that is the only length the app knows for it. A member's episode duration SHALL be its published average episode duration, falling back to the same assumed duration the profile's other time figures use when none is published. These are the same rules the profile's existing rewatch-inclusive episode and time figures use, so a franchise total and the profile's own stats can never disagree about what a rewatch is worth.
 
-First viewings SHALL NOT count. A member watched once and never rewatched SHALL contribute nothing to its series' total, however long it is.
+First viewings SHALL NOT count. A member watched once and never rewatched SHALL contribute nothing to its series' total, however long it is. The episodes of an in-progress rewatch are not a first viewing and SHALL count.
 
 A series SHALL be listed when its total is above zero, and SHALL be omitted otherwise. No further eligibility rule SHALL apply — in particular the coverage rule that governs **Top series** (requiring two aired main-line entries in my list) SHALL NOT apply here, because a total is a sum rather than an average and a franchise of which I have rewatched only one entry has a total that is exactly right.
 
@@ -521,6 +525,8 @@ The scope SHALL present the same strip form as the section's other scopes — th
 
 A rewatched anime that belongs to no stored series SHALL simply be absent from the Series scope; it SHALL continue to appear in every media-type scope.
 
+The section's per-media-type scopes SHALL be unaffected by this rule: they rank by the recorded rewatch count, which is an integer count of completed runs, and an in-progress run SHALL NOT change it.
+
 #### Scenario: Ranking franchises by rewatch time
 - **WHEN** I select the Series scope on "Most rewatched"
 - **THEN** the strip lists my series ordered by the total time I have spent rewatching each of them, longest first
@@ -528,6 +534,22 @@ A rewatched anime that belongs to no stored series SHALL simply be absent from t
 #### Scenario: Summing across a franchise's seasons
 - **WHEN** a series' first season of 12 episodes has been rewatched twice and its second season of 13 episodes once, each with 24-minute episodes
 - **THEN** the series' total is the time for 37 episodes — 24 from the first season's two rewatches and 13 from the second season's one — and not the time for its first viewings
+
+#### Scenario: An in-progress rewatch counts the episodes already rewatched
+- **WHEN** a series' 12-episode season has a rewatch count of two and is marked Rewatching with three episodes watched
+- **THEN** it contributes the time for 27 episodes — 24 from its two completed rewatches and 3 from the run in progress — rather than 24
+
+#### Scenario: A first rewatch in progress makes a series eligible
+- **WHEN** the only rewatched member of a series is marked Rewatching with a rewatch count of zero and five episodes watched
+- **THEN** the series appears in the Series scope with the time for those five episodes, rather than being omitted
+
+#### Scenario: A completed entry that is not being rewatched still counts nothing
+- **WHEN** a member is marked Completed with a rewatch count of zero
+- **THEN** it contributes nothing to its series' total
+
+#### Scenario: The media-type scopes ignore an in-progress rewatch
+- **WHEN** an anime is marked Rewatching with a rewatch count of one and four episodes watched, and I look at the All scope
+- **THEN** its badge still reads 1, because that scope counts completed rewatches
 
 #### Scenario: Extras count toward a franchise's total
 - **WHEN** a series' OVA, which is not on its main line, has been rewatched once

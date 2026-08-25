@@ -6,9 +6,11 @@ TBD - created by archiving change add-series-page. Update Purpose after archive.
 ### Requirement: Series composition from the relation graph
 The system SHALL derive a series as the connected component of the stored related-anime graph, traversing only story relations: `sequel`, `prequel`, `side_story`, `parent_story`, `summary`, `full_story`, `spin_off`, and `alternative_version`. Every other relation MAL reports — including `alternative_setting`, `character`, and any unrecognized relation string — SHALL be stored as it already is but SHALL NOT be traversed, so shows that merely share a universe or a cast never merge into one series.
 
-The `other` relation SHALL be traversed in exactly one case: when precisely one of its two ends is an anime whose media type is `music`. MAL links a franchise's opening/ending/image songs to the show they belong to with `other` and nothing else, so a franchise's music entries are otherwise unreachable — they either vanish from the series entirely or form their own music-only series. A music end SHALL be recognised only from an already-cached media type: an `other` relation whose far end has no cached metadata row SHALL NOT be traversed and SHALL NOT spend fetch budget, since the system cannot tell a song from a commercial without fetching, and `other` also links commercials, promos, and crossovers.
+The `other` relation SHALL be traversed in exactly one case: when precisely one of its two ends is an anime whose media type is one of a fixed **companion-media set** — `music` and `pv`. MAL links a franchise's opening/ending/image songs and its promotional videos to the show they belong to with `other` and nothing else, so a franchise's music and PV entries are otherwise unreachable — they either vanish from the series entirely or form their own companion-only series. `cm` (commercial) SHALL NOT be in the companion-media set.
 
-`other` relations where neither end is a music entry, and where both ends are music entries, SHALL NOT be traversed. Because the rule is stated over the relation's two ends rather than over the direction it is stored in, a series built from the song and a series built from the show SHALL produce the same component.
+`other` relations where neither end is in the companion-media set, and where both ends are in it, SHALL NOT be traversed — so a promo for a theme song never fuses two franchises, and one promotional video never chains to another. Because the rule is stated over the relation's two ends rather than over the direction it is stored in, a series built from the companion entry and a series built from the show SHALL produce the same component.
+
+Recognising an `other` edge's far end requires that end's media type, which MAL does not carry on the relation itself. When an `other` edge's far end has **no cached metadata row at all**, the system SHALL spend a bounded **probe** on it — a fetch made solely to learn its media type — within the probe budget the bounded-builds requirement defines. A probe SHALL cache that anime's row, so each `other` far end SHALL be probed at most once across all builds, and every later build SHALL decide that edge from cache at no cost. A far end whose probe reveals a media type in the companion-media set SHALL be admitted as a member using the row the probe already produced; any other media type SHALL leave the edge untraversed thereafter without further cost. An `other` edge whose far end is still unprobed because the budget is exhausted SHALL NOT be traversed on that build.
 
 Traversal SHALL be undirected: from a member the system SHALL follow both that anime's own relation rows and relation rows pointing at it, so a member whose own relations have never been fetched still connects the component.
 
@@ -16,7 +18,7 @@ A story relation an external source **contradicts** — one end asserts it, the 
 
 An anime SHALL belong to at most one series.
 
-Every series stored under the previous traversal or ordering rules SHALL be rebuilt once, on its next read, so both a franchise's music entries and this change's corrections reach an already-stored series without the user having to request a rebuild.
+Every series stored under the previous traversal or ordering rules SHALL be rebuilt once, on its next read, so a franchise's music entries, its promotional videos, and this change's corrections reach an already-stored series without the user having to request a rebuild.
 
 #### Scenario: Sequels and prequels form one series
 - **WHEN** a series is built from an anime whose relations chain through two sequels and one prequel
@@ -42,6 +44,10 @@ Every series stored under the previous traversal or ordering rules SHALL be rebu
 - **WHEN** a TV series stores an `other` relation to a `music` entry — its opening theme's music video — and that entry has a cached metadata row
 - **THEN** the music entry is a member of that series
 
+#### Scenario: A franchise's promotional video joins the franchise
+- **WHEN** a TV series stores an `other` relation to an entry whose media type is `pv`
+- **THEN** that promotional video is a member of that series
+
 #### Scenario: The song's own series is the show's series
 - **WHEN** a series is built starting from that music entry instead of from the show
 - **THEN** the same component is produced, with the show and its seasons as members, rather than a music-only series
@@ -50,13 +56,25 @@ Every series stored under the previous traversal or ordering rules SHALL be rebu
 - **WHEN** a music entry and its cover version are stored as their own two-member series, and the franchise the song belongs to is rebuilt under these rules
 - **THEN** both are members of the franchise's series and the music-only series no longer exists
 
-#### Scenario: Non-music `other` relations still do not merge series
-- **WHEN** a show stores an `other` relation to a commercial, a promotional video, or a crossover short
+#### Scenario: One promotional video does not chain to another
+- **WHEN** two `pv` entries store an `other` relation to each other
+- **THEN** that relation is not traversed, and neither pulls the other into its series
+
+#### Scenario: A promo for a theme song does not fuse two franchises
+- **WHEN** a `pv` entry stores an `other` relation to a `music` entry
+- **THEN** that relation is not traversed, since both of its ends are companion media
+
+#### Scenario: Commercials and crossovers still do not merge series
+- **WHEN** a show stores an `other` relation to a commercial or a crossover short
 - **THEN** that anime is not pulled into the show's series
 
-#### Scenario: An uncached `other` end costs nothing
-- **WHEN** a member stores an `other` relation to an anime with no cached metadata row
-- **THEN** the relation is not traversed, no MAL fetch is spent on it, and the build is not marked partial on its account
+#### Scenario: An uncached `other` end is probed once
+- **WHEN** a member stores an `other` relation to an anime with no cached metadata row, and probe budget remains
+- **THEN** that anime is fetched once, its media type decides whether the edge is traversed, and no later build spends a probe on that edge again
+
+#### Scenario: A probed commercial is remembered as untraversable
+- **WHEN** a probe reveals an `other` far end to be a commercial, and the series is built again later
+- **THEN** the edge is skipped from cache with no fetch, and the commercial is not a member
 
 #### Scenario: A stored series re-derives itself after a rules change
 - **WHEN** a series stored under the previous rules is next read
@@ -66,9 +84,11 @@ Every series stored under the previous traversal or ordering rules SHALL be rebu
 Within a series the system SHALL identify a main line: the connected chain over `sequel`/`prequel` relations among the members holding the most main-line-eligible members — ties broken in favour of the chain containing the earliest-aired eligible member — reduced to just its eligible members. Every other member of the series SHALL be an extra.
 
 A member SHALL be main-line-eligible unless it is any of:
-- a member whose media type is `special` or `music`;
+- a member whose media type is `special`, `music`, or `pv`;
 - a recap of another member — a `summary`/`full_story` relation to it;
 - side content of another member — an outgoing `parent_story` relation to another member, or an incoming `side_story` relation from another member.
+
+A promotional video is never a chapter of a story, so a `pv` member SHALL never be main line however MAL relates it — including in a franchise whose real entries carry no `sequel`/`prequel` relations at all, where a chain of promos could otherwise out-rank the show.
 
 Chains SHALL be formed over every member, eligible or not, and ranked afterwards by their eligible members only. Excluding an ineligible member from the ranking SHALL NOT split the chain it sits in, so a recap or side entry that bridges two seasons still keeps those seasons in one chain while never being main line itself.
 
@@ -80,15 +100,23 @@ A recap or side-content tag overrides a sequel/prequel edge on the same member: 
 
 Where no member of the series is eligible at all, the system SHALL fall back to the unreduced chain, so a specials-only or side-story-only franchise still has a main line to render.
 
-Extras SHALL be grouped by media type in the fixed display order Movie, OVA, ONA, Special, Music, TV, Other, and ordered by aired-from date within each group.
+Extras SHALL be grouped by media type in the fixed display order Movie, OVA, ONA, Special, Music, PV, TV, Other, and ordered by aired-from date within each group. `pv` SHALL therefore be its own group rather than falling into Other, placed with the other short-form non-story extras and ahead of the TV and Other catch-alls.
 
-#### Scenario: Seasons and story movies are main line
+#### Scenario: Sequels and story movies are main line
 - **WHEN** a series contains three TV seasons and a movie, all linked by sequel relations
 - **THEN** all four are main-line entries
 
 #### Scenario: Specials are extras even when MAL calls them sequels
 - **WHEN** a member whose media type is `special` is linked into the sequel chain
 - **THEN** it is an extra, not a main-line entry
+
+#### Scenario: A promotional video is never main line
+- **WHEN** a member whose media type is `pv` is linked into the sequel chain
+- **THEN** it is an extra, not a main-line entry
+
+#### Scenario: Promotional videos have their own More group
+- **WHEN** a series has two `pv` members
+- **THEN** they appear under a "PV" group in the More section, between the Music and TV groups, rather than under Other
 
 #### Scenario: Side stories and music videos are extras
 - **WHEN** a series contains a side story, an OVA run, and a music video
@@ -181,11 +209,15 @@ The system SHALL NOT store the series' score averages, computing them at read ti
 - **THEN** my series averages reflect the new score with no rebuild
 
 ### Requirement: Bounded series builds
-A series build SHALL be bounded by two limits: at most 400 members, and at most 8 live MAL full-detail fetches on a visit-triggered build or 20 on an explicitly requested rebuild. Fetches SHALL be spent first on members that have no cached metadata row at all, since those cannot be displayed otherwise; remaining budget SHALL be spent expanding members with a lean cached row (no relations of its own), since an unexpanded lean member can hide a real season from the series or from main-line classification.
+A series build SHALL be bounded by three limits: at most 400 members, at most 8 live MAL full-detail fetches on a visit-triggered build or 20 on an explicitly requested rebuild, and a separate **probe budget** of at most 4 fetches on a visit-triggered build or 10 on an explicitly requested rebuild. Fetches SHALL be spent first on members that have no cached metadata row at all, since those cannot be displayed otherwise; remaining budget SHALL be spent expanding members with a lean cached row (no relations of its own), since an unexpanded lean member can hide a real season from the series or from main-line classification.
+
+The probe budget SHALL be separate from the member fetch budget and SHALL be spent only on resolving the media type of an `other` edge's uncached far end, per the composition requirement. A probe SHALL NOT consume member fetch budget and member fetches SHALL NOT consume probe budget, so a franchise carrying many `other` edges to commercials can never starve the fetches that real, story-related members need in order to be displayed at all.
+
+Because a probe caches the row it fetches, no `other` far end is probed more than once across all builds, and the probe budget's steady-state cost for a franchise the user revisits SHALL be zero.
 
 The member limit SHALL be a safety ceiling against a runaway component rather than a working limit: it SHALL be set high enough that no real franchise reaches it, so that reaching it means the traversal has gone wrong and the truncation notice is meaningful.
 
-A build that exhausts its fetch budget SHALL mark the series partial; a build that reaches the member cap SHALL mark it truncated. A partial series SHALL be rebuilt on the next visit, so successive visits — each starting from more cached data than the last — complete it without any background job.
+A build that exhausts either its fetch budget or its probe budget SHALL mark the series partial; a build that reaches the member cap SHALL mark it truncated. A partial series SHALL be rebuilt on the next visit, so successive visits — each starting from more cached data than the last — complete it without any background job. Because probes never repeat, a series left partial by an exhausted probe budget SHALL converge over successive visits rather than re-probing indefinitely.
 
 A series stored as truncated SHALL NOT be rebuilt automatically on every visit, since a component genuinely over the cap would then re-traverse and spend fetch budget on every visit indefinitely. It SHALL pick up a raised cap on the next explicitly requested rebuild or the next staleness-triggered rebuild.
 
@@ -198,6 +230,18 @@ Concurrent builds of the same series SHALL collapse into one, matching the singl
 #### Scenario: Build stops at the fetch budget
 - **WHEN** I open the series page for a franchise with 20 members the app has never fetched
 - **THEN** the page returns after at most 8 live MAL fetches, and the series is marked partial
+
+#### Scenario: Probes do not eat the member fetch budget
+- **WHEN** a build probes four uncached `other` far ends and also fetches members with no cached row
+- **THEN** the member fetches available are still the full 8, unreduced by the probes
+
+#### Scenario: A build stops at the probe budget and is marked partial
+- **WHEN** I open a series whose members carry ten `other` edges to anime with no cached row
+- **THEN** at most four are probed on that visit and the series is marked partial
+
+#### Scenario: Probing converges over visits
+- **WHEN** I reopen that same series on later visits
+- **THEN** the remaining far ends are probed a few at a time, none is probed twice, and the series eventually stops being partial
 
 #### Scenario: A partial series completes over later visits
 - **WHEN** I reopen a series that was left partial
@@ -275,12 +319,14 @@ The progress bar and progress readout beneath the header SHALL treat `Airing` ex
 
 Beside the status pill the page SHALL show a personal badge describing where I stand in the main line, chosen by this precedence, evaluated over the series' aired main-line entries in release order:
 
-1. `Completed` — every member of the series has finished airing, at least one main-line entry has finished airing, and every main-line entry that has finished airing is marked Completed in my list.
+1. `Completed` — every member of the series has finished airing, at least one main-line entry has finished airing, and every main-line entry that has finished airing is marked **Completed or Rewatching** in my list.
 2. `Dropped` — among main-line entries that have aired (finished airing or currently airing), at least one is marked Dropped in my list, and no aired main-line entry released after the most recently aired such drop has ever been watched at all. A drop I later watched past — some later aired main-line entry has any watched episodes — does not count; the badge describes where I stand today, not history.
 3. `Caught up` — I have watched at least one main-line episode, and the total I have watched across the aired main line meets the total that has actually broadcast across it.
 4. `N behind` — I have watched at least one main-line episode, but fewer than have broadcast across the aired main line. N SHALL be the total broadcast main-line episodes minus the total I have watched, summed across every aired main-line entry — not only a currently-airing one.
 5. `Unwatched` — at least one main-line entry has aired, I have watched none of the main line at all, and rule (2) does not already apply.
 6. No badge — when nothing in the main line has aired yet, or when a currently-airing main-line entry's broadcast episode count is unknown and rules (3)/(4) cannot otherwise be resolved.
+
+A main-line entry marked **Rewatching** SHALL count as **fully watched** throughout this precedence — as the greater of its own episodes-watched figure and its aired-episode figure, rather than as its current in-progress count. Entering Rewatching resets episodes-watched to zero, so without this rule a franchise I have seen in full and am part-way through watching again would read `N behind`, `Unwatched`, or `Dropped` on the strength of a reset counter. `Rewatching` also satisfies rule (1) alongside `Completed`, so starting a rewatch of a finished franchise SHALL NOT downgrade its badge from `Completed`.
 
 Rules (2) and (5) SHALL be decided without needing any entry's broadcast episode count — only watch status and watched-episode counts — so a currently-airing entry's unknown broadcast count SHALL NOT block them; it SHALL only be able to produce no badge once evaluation reaches rules (3)/(4). An entry that has not aired at all SHALL NOT count toward any of these figures, and an entry that is not in my list SHALL count as zero episodes watched.
 
@@ -334,6 +380,18 @@ A main line consisting of a single still-running entry — a long-running show t
 - **WHEN** I have marked every main-line entry of a fully finished series as Completed
 - **THEN** the header shows a "Completed" badge next to the status pill, in the app's Completed-status colour
 
+#### Scenario: Rewatching a finished franchise does not lose the Completed badge
+- **WHEN** every member of a series has finished airing, I have completed every main-line entry, and I then mark its first season Rewatching with two episodes watched
+- **THEN** the header still shows "Completed", not "Caught up" and not a behind count
+
+#### Scenario: A rewatch in progress does not read as behind
+- **WHEN** a series' three finished main-line seasons total 36 broadcast episodes, I have completed the second and third, and the first is marked Rewatching with two of its twelve episodes watched
+- **THEN** the header does not show "10 behind"; the rewatching season counts as fully watched
+
+#### Scenario: A rewatch in progress does not read as unwatched
+- **WHEN** a series' only main-line entry has finished airing and is marked Rewatching with zero episodes watched
+- **THEN** the header does not show "Unwatched"
+
 #### Scenario: Caught up on an ongoing series
 - **WHEN** I have completed every main-line entry that has finished airing, and I have watched all 8 episodes the currently airing season has broadcast so far
 - **THEN** the header shows a "Caught up" badge rather than "Completed"
@@ -361,6 +419,10 @@ A main line consisting of a single still-running entry — a long-running show t
 #### Scenario: A dropped entry I later resumed
 - **WHEN** I marked an early main-line entry Dropped but have since watched episodes of a later main-line entry
 - **THEN** the header does not show "Dropped"; it shows whatever "Caught up"/"N behind" the combined watched-versus-aired figures produce
+
+#### Scenario: A rewatch after a drop counts as watching past it
+- **WHEN** I marked an early main-line entry Dropped and a later main-line entry is marked Rewatching with zero episodes watched
+- **THEN** the header does not show "Dropped", because the rewatching entry counts as watched
 
 #### Scenario: Nothing watched at all shows Unwatched
 - **WHEN** at least one main-line entry has finished or is currently airing and I have watched none of the main line, with no entry marked Dropped
@@ -461,7 +523,9 @@ A member of the series that is currently airing SHALL therefore suppress the rev
 ### Requirement: Series stats
 The series page SHALL show, for the main line: total episode count, total runtime, and my progress through it — episodes watched against total, entries completed against total, time watched, and time left to finish. Extras' episode count and runtime SHALL be reported separately rather than folded into the main-line totals.
 
-The entries-completed stat SHALL cover the extras as well as the main line, as two separately labelled figures within one stat: how many main-line entries I have completed out of the main-line total, and how many extras I have completed out of the extras total. The two SHALL NOT be summed into a single figure, so which half of the series is unfinished stays visible. When the series has no extras, the extras figure SHALL be omitted and the stat SHALL show the main-line figure alone rather than an "0 of 0".
+Wherever this page counts **my watched main-line episodes** — the progress bar's watched fill, the named watched figure beside it, time watched, and therefore time left — a main-line entry marked **Rewatching** SHALL count as fully watched, as the greater of its own episodes-watched figure and its aired-episode figure. This is the same rule the header's personal badge applies, so the badge and the progress figures directly beside it can never disagree about the same entry. It governs only the watched side of each pair: the episode total, the aired figure, and the runtime describe the anime rather than me, and SHALL be unchanged by a rewatch in progress. It does not multiply anything by a rewatch count — a rewatched entry still counts once.
+
+The entries-completed stat SHALL cover the extras as well as the main line, as two separately labelled figures within one stat: how many main-line entries I have completed out of the main-line total, and how many extras I have completed out of the extras total. The two SHALL NOT be summed into a single figure, so which half of the series is unfinished stays visible. When the series has no extras, the extras figure SHALL be omitted and the stat SHALL show the main-line figure alone rather than an "0 of 0". An entry marked Rewatching SHALL count as completed in this stat, since a rewatch can only follow a completed run.
 
 Time watched and time left SHALL be shown only while there is time left to watch. When time left computes to zero — I have watched at least as much of the main line as its runtime accounts for — neither stat SHALL be rendered, since "0min left" alongside a time watched that equals the runtime restates what the entries-completed and progress figures already say. Both SHALL be withheld together: the page SHALL NOT show time watched with time left hidden, or the reverse.
 
@@ -502,6 +566,18 @@ The highest MAL score SHALL be shown in full rather than blurred when the entry 
 #### Scenario: My progress through the series
 - **WHEN** I have watched 38 of a series' 62 main-line episodes and nothing is airing
 - **THEN** the page shows a progress bar with my 38 watched episodes and the 62 total each named, how many entries I have completed, my time watched, and the time left to finish
+
+#### Scenario: A rewatching entry keeps the progress bar full
+- **WHEN** a series' 62 main-line episodes are all watched and one 12-episode season is marked Rewatching with two episodes watched
+- **THEN** the progress bar still reads 62 of 62 watched, matching the "Completed" badge beside it, rather than dropping to 52
+
+#### Scenario: A rewatching entry counts as a completed entry
+- **WHEN** I have completed five of a series' six main-line entries and marked the sixth Rewatching
+- **THEN** the entries-completed stat reads "6 of 6"
+
+#### Scenario: The episode total is unmoved by a rewatch
+- **WHEN** a main-line entry is marked Rewatching
+- **THEN** the main-line episode total, the aired figure, and the runtime are exactly what they were before the rewatch began
 
 #### Scenario: Entries completed covers extras too
 - **WHEN** I open a series where I have completed 5 of 6 main-line entries and 2 of its 3 extras
@@ -723,6 +799,62 @@ An edit saved from a tile SHALL update it in place without reloading the page.
 #### Scenario: A rewatched extra shows its count
 - **WHEN** an extra has a rewatch count of 1
 - **THEN** its tile shows a rewatch indicator reading 1
+
+### Requirement: The More section's view state is restored with the page
+The More section's three view controls — the "in my list" filter, each group's collapsed state, and each group's exemption from the filter — SHALL be part of the series page's restorable state, restored on back/forward navigation exactly as every other page's view controls are, per the `page-state-restoration` capability.
+
+Returning to a series page by back/forward navigation SHALL therefore show the More section as it was left: a group opened in full is still open, a collapsed group is still collapsed, and the "in my list" control still reports the state it reported when the page was left.
+
+A fresh visit — a link, a typed URL, a reload — SHALL still open the section on its documented default: the filter on, every group expanded, and no group exempted. The state SHALL NOT be persisted beyond the browser tab's application session, and SHALL NOT be shared between two different series' pages.
+
+A group key held in restored state that matches no group the restored page renders — because the series' extras changed between the two renders — SHALL be ignored rather than treated as an error.
+
+#### Scenario: An opened group is still open on return
+- **WHEN** I open a More group in full, open one of its extras, and navigate back
+- **THEN** that group is still showing all of its tiles, and the "in my list" control still reads as off
+
+#### Scenario: The filter is not reset by a round trip
+- **WHEN** I turn the "in my list" filter off, open an entry, and navigate back
+- **THEN** the filter is still off and every extra is still shown
+
+#### Scenario: A collapsed group is still collapsed on return
+- **WHEN** I collapse a group, navigate away, and navigate back
+- **THEN** that group renders no tiles
+
+#### Scenario: A fresh visit still opens on the default
+- **WHEN** I reach a series page by following a link rather than by navigating back
+- **THEN** the "in my list" filter is on, every group is expanded, and no group is exempted
+
+#### Scenario: Two series do not share More-section state
+- **WHEN** I open one series and expand its More section, then open a different series
+- **THEN** the second series' More section opens on the default, unaffected by the first
+
+### Requirement: Opening a More group scrolls it to the top of the viewport
+When a More group is opened from its heading, the page SHALL scroll so that group's heading sits at the top of the viewport, so the tiles that were just revealed are what fills the screen rather than remaining below the fold.
+
+When the group is too near the end of the page for its heading to reach the top — the page cannot scroll that far — the page SHALL scroll as far as it can, leaving the heading as high as the page allows rather than not scrolling at all.
+
+The scroll SHALL happen after the revealed tiles have been laid out, since those tiles are what makes the page tall enough to reach the target.
+
+Collapsing a group from its heading SHALL NOT scroll the page: the user is dismissing content, not asking to be moved.
+
+The "in my list" control and the expand/collapse-all control SHALL NOT scroll the page either. They act on every group at once, so there is no single group to scroll to.
+
+#### Scenario: An opened group is brought to the top
+- **WHEN** I activate the heading of a group part-way down a long series page
+- **THEN** the page scrolls so that group's heading is at the top of the viewport, with its tiles below it
+
+#### Scenario: The last group scrolls as far as the page allows
+- **WHEN** I activate the heading of the final group, whose tiles do not fill a screen
+- **THEN** the page scrolls to its bottom, leaving that heading as high as it can go rather than staying where it was
+
+#### Scenario: Collapsing does not move the page
+- **WHEN** I activate the heading of a group that is showing all of its tiles
+- **THEN** the group collapses and the page does not scroll
+
+#### Scenario: The section-wide controls do not scroll
+- **WHEN** I activate "Expand all" or the "in my list" control
+- **THEN** every group updates and the page's scroll position is unchanged
 
 ### Requirement: Landscape artwork is shown whole on the series page
 An entry whose picture is landscape — its intrinsic width greater than its intrinsic height — SHALL have that picture shown whole wherever the series page renders it: the page header's picture, a main-line timeline card's picture, and a More tile's picture. No part of a landscape picture SHALL be cropped away to fill a portrait box.
