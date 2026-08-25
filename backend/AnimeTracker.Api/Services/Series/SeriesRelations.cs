@@ -47,4 +47,68 @@ public static class SeriesRelations
     /// produce the same component.</summary>
     public static bool IsTraversableMusicEdge(string? oneEndMediaType, string? otherEndMediaType) =>
         (oneEndMediaType == "music") != (otherEndMediaType == "music");
+
+    /// <summary>Ids within <paramref name="candidateIds"/> that another id in
+    /// the same set tags as a recap/condensed retelling of — the
+    /// <c>summary</c>/<c>full_story</c> pair (<c>A --summary--> B</c> means B
+    /// recaps A; <c>B --full_story--> A</c> says the same from B's side).
+    /// Shared by <c>SeriesGraphBuilder</c>'s main-line classification and the
+    /// relation-confidence ranked prequel/sequel pick — same rule, same
+    /// reason: MAL routinely also gives a recap a <c>sequel</c>/<c>prequel</c>
+    /// edge to the season it bridges into, which would otherwise pull it into
+    /// a sequel/prequel candidate set alongside the season it recaps. Only
+    /// edges between two ids already in <paramref name="candidateIds"/> count.
+    /// <paramref name="edges"/> need only include each candidate's own
+    /// outgoing relations — an edge stored the other way round is covered
+    /// because its owner is a candidate too.</summary>
+    public static HashSet<int> FindRecapIds(
+        IEnumerable<(int OwnerId, int RelatedAnimeId, string RelationType)> edges, HashSet<int> candidateIds)
+    {
+        var recapIds = new HashSet<int>();
+        foreach (var (ownerId, relatedAnimeId, relationType) in edges)
+        {
+            if (!candidateIds.Contains(relatedAnimeId))
+                continue;
+
+            switch (relationType)
+            {
+                case "full_story":
+                    recapIds.Add(ownerId); // this id is the recap of relatedAnimeId
+                    break;
+                case "summary":
+                    recapIds.Add(relatedAnimeId); // the related id is the recap of this one
+                    break;
+            }
+        }
+
+        return recapIds;
+    }
+
+    /// <summary>Ids within <paramref name="candidateIds"/> that another id in
+    /// the same set tags as side content of — the <c>side_story</c>/
+    /// <c>parent_story</c> pair (<c>A --side_story--> B</c> means B is a side
+    /// story of A; <c>B --parent_story--> A</c> says the same from B's side).
+    /// Mirrors <see cref="FindRecapIds"/> one-for-one.</summary>
+    public static HashSet<int> FindSideContentIds(
+        IEnumerable<(int OwnerId, int RelatedAnimeId, string RelationType)> edges, HashSet<int> candidateIds)
+    {
+        var sideContentIds = new HashSet<int>();
+        foreach (var (ownerId, relatedAnimeId, relationType) in edges)
+        {
+            if (!candidateIds.Contains(relatedAnimeId))
+                continue;
+
+            switch (relationType)
+            {
+                case "parent_story":
+                    sideContentIds.Add(ownerId); // this id is side content of relatedAnimeId
+                    break;
+                case "side_story":
+                    sideContentIds.Add(relatedAnimeId); // the related id is side content of this one
+                    break;
+            }
+        }
+
+        return sideContentIds;
+    }
 }

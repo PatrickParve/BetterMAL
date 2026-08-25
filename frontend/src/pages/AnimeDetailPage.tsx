@@ -122,8 +122,9 @@ function formatTotalTime(seconds: number | null, totalEpisodes: number | null): 
 // rank/score box (plus a my-score/rewatches box only once a score's been
 // given), an info box, and a synopsis/background box on the right. The
 // external links are plain URL templates (no API call); prequel/sequel/
-// main-series buttons only render when those relations exist on the cached
-// record, and a More button opens the overlay for everything else.
+// main-series buttons render the server-resolved ranked pick (relation-
+// confidence spec) rather than the first MAL reports, only when one exists,
+// and a More button opens the overlay for everything else.
 export function AnimeDetailPage() {
   const { id } = useParams();
   const animeId = Number(id);
@@ -134,6 +135,7 @@ export function AnimeDetailPage() {
     reload,
   } = usePageData<AnimeDetailDto>(`anime:${animeId}`, () => getAnimeDetail(animeId));
   const [refreshing, setRefreshing] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [incrementPending, setIncrementPending] = useState(false);
   const [actionPending, setActionPending] = useState(false);
   const [showRelatedOverlay, setShowRelatedOverlay] = useState(false);
@@ -152,6 +154,20 @@ export function AnimeDetailPage() {
       // Leave the page showing whatever was already cached.
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  // Distinct from handleRefresh: this re-reads the anime the same way a
+  // first visit does (the normal detail read, which retries the live fetch
+  // on its own since a failed fetch never marks the anime as fetched),
+  // rather than calling the explicit force-refresh endpoint.
+  async function handleRetry() {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      await reload();
+    } finally {
+      setRetrying(false);
     }
   }
 
@@ -255,18 +271,17 @@ export function AnimeDetailPage() {
     );
   }
 
-  // Only the first prequel/sequel/parent-story MAL reports gets a dedicated
-  // button (by reference, not by relation type — so a second prequel still
-  // ends up in `moreRelations` rather than being excluded outright).
-  const prequel =
-    detail.relatedAnime.find((r) => r.relationType === "prequel") ?? null;
-  const sequel =
-    detail.relatedAnime.find((r) => r.relationType === "sequel") ?? null;
-  const parentStory =
-    detail.relatedAnime.find((r) => r.relationType === "parent_story") ??
-    null;
+  // Server-resolved ranked pick (relation-confidence spec) rather than the
+  // first MAL reports — includes a prequel/sequel MAL stored only on the
+  // other anime's page. Matched into moreRelations by id, not by reference:
+  // the pick is a separate DTO shape (ResolvedRelationDto), not necessarily
+  // the same object as any entry in relatedAnime.
+  const { prequel, sequel, parentStory } = detail;
   const moreRelations = detail.relatedAnime.filter(
-    (r) => r !== prequel && r !== sequel && r !== parentStory,
+    (r) =>
+      r.animeId !== prequel?.animeId &&
+      r.animeId !== sequel?.animeId &&
+      r.animeId !== parentStory?.animeId,
   );
   // Zero-cost check on relation data already loaded — no probe request for a
   // series that might not exist (design.md decision 11). `detail.inSeries`
@@ -338,6 +353,20 @@ export function AnimeDetailPage() {
             </div>
           )}
         </div>
+
+        {detail.refreshFailed && (
+          <div className="anime-detail-page__refresh-notice">
+            <span>Couldn't refresh this anime's data — showing cached info.</span>
+            <button
+              type="button"
+              className="anime-detail-page__refresh-notice-retry"
+              onClick={handleRetry}
+              disabled={retrying}
+            >
+              {retrying ? "Retrying…" : "Retry"}
+            </button>
+          </div>
+        )}
       </div>
 
       {showRelatedOverlay && (

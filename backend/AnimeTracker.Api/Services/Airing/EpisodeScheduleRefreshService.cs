@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing.AniList;
+using AnimeTracker.Api.Services.Relations;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Airing;
@@ -11,6 +12,7 @@ public class EpisodeScheduleRefreshService(
     IUserAnimeEntryRepository entryRepository,
     IEpisodeAiringRepository episodeAiringRepository,
     IAniListClient aniList,
+    AniListRelationStore relationStore,
     ILogger<EpisodeScheduleRefreshService> logger) : IEpisodeScheduleRefreshService
 {
     public async Task<List<int>> GetTrackedAnimeIdsAsync(CancellationToken ct = default)
@@ -156,6 +158,11 @@ public class EpisodeScheduleRefreshService(
         int? aniListId = sync?.AniListId;
         string? status = null;
         DateTimeOffset? nextAiringAt = null;
+        // Preserved unless this call makes a fresh lookup below — a
+        // subsequent refresh that skips straight to the schedule fetch
+        // (aniListId already cached) didn't just re-ask about relations, so
+        // it shouldn't bump this timestamp forward.
+        var relationsFetchedAt = sync?.RelationsFetchedAt;
 
         // Resolve the AniList id once and cache it. A prior lookup that came
         // back "AniList doesn't know this anime" (AniListId null, LastFetchedAt
@@ -164,9 +171,10 @@ public class EpisodeScheduleRefreshService(
         if (sync is null || sync.LastFetchedAt is null)
         {
             var lookup = await aniList.LookupByMalIdAsync(animeId, ct);
+            relationsFetchedAt = now;
             if (lookup is null)
             {
-                await UpsertSyncAsync(sync, animeId, aniListId: null, now, nextAiringEpisodeAtUtc: null, hasCompleteData: false, nextRecheckAtUtc: null, ct);
+                await UpsertSyncAsync(sync, animeId, aniListId: null, now, nextAiringEpisodeAtUtc: null, hasCompleteData: false, nextRecheckAtUtc: null, relationsFetchedAt, ct);
                 logger.LogInformation("AniList has no entry for anime {AnimeId} ({Title}).", animeId, anime.Title);
                 return 0;
             }
@@ -174,6 +182,9 @@ public class EpisodeScheduleRefreshService(
             aniListId = lookup.AniListId;
             status = lookup.Status;
             nextAiringAt = lookup.NextAiringEpisodeAtUtc;
+            // Relations ride along on this same lookup (relation-confidence
+            // spec) — free, no extra AniList request.
+            await relationStore.ReplaceAsync(animeId, lookup.Relations, ct);
         }
 
         if (aniListId is null)
@@ -194,7 +205,7 @@ public class EpisodeScheduleRefreshService(
                 "Anime {AnimeId} ({Title}) has incomplete AniList airing data (AniList status: {Status}); next recheck at {NextRecheckAtUtc}.",
                 animeId, anime.Title, status ?? "unknown", nextRecheckAtUtc);
 
-        await UpsertSyncAsync(sync, animeId, aniListId, now, nextAiringAt, hasCompleteData, nextRecheckAtUtc, ct);
+        await UpsertSyncAsync(sync, animeId, aniListId, now, nextAiringAt, hasCompleteData, nextRecheckAtUtc, relationsFetchedAt, ct);
 
         return schedule.Episodes.Count;
     }
@@ -218,7 +229,8 @@ public class EpisodeScheduleRefreshService(
 
     private async Task UpsertSyncAsync(
         AnimeAiringSync? sync, int animeId, int? aniListId, DateTimeOffset fetchedAt,
-        DateTimeOffset? nextAiringEpisodeAtUtc, bool hasCompleteData, DateTimeOffset? nextRecheckAtUtc, CancellationToken ct)
+        DateTimeOffset? nextAiringEpisodeAtUtc, bool hasCompleteData, DateTimeOffset? nextRecheckAtUtc,
+        DateTimeOffset? relationsFetchedAt, CancellationToken ct)
     {
         if (sync is null)
         {
@@ -231,6 +243,7 @@ public class EpisodeScheduleRefreshService(
         sync.NextAiringEpisodeAtUtc = nextAiringEpisodeAtUtc;
         sync.HasCompleteData = hasCompleteData;
         sync.NextRecheckAtUtc = nextRecheckAtUtc;
+        sync.RelationsFetchedAt = relationsFetchedAt;
 
         await db.SaveChangesAsync(ct);
     }

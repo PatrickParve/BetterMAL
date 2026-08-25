@@ -14,6 +14,12 @@ public class AnimeAiringSync
 
     public DateTimeOffset? LastFetchedAt { get; set; }
 
+    /// <summary>When this anime's relation edges were last fetched from
+    /// AniList, nullable. Null means never fetched — distinct from fetched-
+    /// and-empty — which is what stops an unlooked-up anime from silently
+    /// contradicting every MAL relation edge that points at it.</summary>
+    public DateTimeOffset? RelationsFetchedAt { get; set; }
+
     /// <summary>AniList's most recently reported nextAiringEpisode.airingAt.</summary>
     public DateTimeOffset? NextAiringEpisodeAtUtc { get; set; }
 

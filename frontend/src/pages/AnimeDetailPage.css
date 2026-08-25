@@ -54,6 +54,38 @@
   border-color: var(--accent-border);
 }
 
+/* Refresh failed but the page still rendered from cache (anime-detail spec:
+   "A failed data refresh is shown as a failure, not as an empty page") — kept
+   visibly distinct from ordinary hint text via the shared danger color. */
+.anime-detail-page__refresh-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--danger, #d64545);
+}
+
+.anime-detail-page__refresh-notice-retry {
+  font: inherit;
+  font-size: 13px;
+  color: var(--danger, #d64545);
+  background: none;
+  border: 1px solid var(--danger, #d64545);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.anime-detail-page__refresh-notice-retry:hover {
+  opacity: 0.85;
+}
+
+.anime-detail-page__refresh-notice-retry:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .anime-detail-page__body {
   display: flex;
   gap: 24px;

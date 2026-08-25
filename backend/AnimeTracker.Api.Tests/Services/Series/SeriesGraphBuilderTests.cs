@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,6 +18,10 @@ namespace AnimeTracker.Api.Tests.Services.Series;
 // promotional short happens to have aired first.
 public class SeriesGraphBuilderTests
 {
+    // Standing for "this anime has been full-detail fetched" — only ever
+    // compared against `default`, never against wall-clock time.
+    private static readonly DateTimeOffset Fetched = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
     private static AnimeTrackerDbContext CreateDb() =>
         new(new DbContextOptionsBuilder<AnimeTrackerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -40,7 +45,7 @@ public class SeriesGraphBuilderTests
         });
 
     private static SeriesGraphBuilder CreateBuilder(AnimeTrackerDbContext db) =>
-        new(db, new FakeMetadataRefreshService(), NullLogger<SeriesGraphBuilder>.Instance);
+        new(db, new FakeMetadataRefreshService(), new RelationResolver(db), NullLogger<SeriesGraphBuilder>.Instance);
 
     private static async Task<List<SeriesMember>> BuildAndReadMembersAsync(AnimeTrackerDbContext db, int seedAnimeId)
     {
@@ -280,6 +285,123 @@ public class SeriesGraphBuilderTests
         Assert.Equal(2, members.Count);
         Assert.DoesNotContain(members, m => m.AnimeId == 99);
         Assert.False(series!.IsPartial);
+    }
+
+    // --- 6.1/8.10: Contradicted edges are excluded from traversal ---
+
+    [Fact]
+    public async Task ContradictedEdgeExcludesTheMemberButKeepsTheRestOfTheSeries()
+    {
+        using var db = CreateDb();
+        var root = Anime(17965, "movie", new DateOnly(1999, 1, 1));
+        var contradicted = Anime(39360, "movie", new DateOnly(1999, 6, 1));
+        var realMember = Anime(3044, "tv", new DateOnly(1980, 1, 1));
+        root.LastSyncedAt = Fetched;
+        contradicted.LastSyncedAt = Fetched;
+        realMember.LastSyncedAt = Fetched;
+
+        Relate(root, contradicted, "sequel"); // one-sided; 39360 stores nothing back
+        Relate(root, realMember, "sequel");
+
+        db.AnimeMetadata.AddRange(root, contradicted, realMember);
+        db.AnimeAiringSyncs.AddRange(
+            new AnimeAiringSync { AnimeId = 17965, AniListId = 1, RelationsFetchedAt = Fetched },
+            new AnimeAiringSync { AnimeId = 39360, AniListId = 2, RelationsFetchedAt = Fetched });
+        // No AniListRelation row between 17965 and 39360 at all: AniList
+        // knows both and reports no edge -> Contradicted.
+        await db.SaveChangesAsync();
+
+        var members = await BuildAndReadMembersAsync(db, 17965);
+
+        Assert.DoesNotContain(members, m => m.AnimeId == 39360);
+        Assert.Contains(members, m => m.AnimeId == 17965);
+        Assert.Contains(members, m => m.AnimeId == 3044);
+    }
+
+    [Fact]
+    public async Task UnconfirmedUnadjudicatedEdgeStillTraverses()
+    {
+        // Same one-sided edge as above, but AniList has never been asked
+        // about either anime — Unconfirmed, not Contradicted, so it must
+        // still traverse (design.md decision 4's guard).
+        using var db = CreateDb();
+        var root = Anime(1, "movie", new DateOnly(1999, 1, 1));
+        var oneSided = Anime(2, "movie", new DateOnly(1999, 6, 1));
+        root.LastSyncedAt = Fetched;
+        oneSided.LastSyncedAt = Fetched;
+
+        Relate(root, oneSided, "sequel");
+
+        db.AnimeMetadata.AddRange(root, oneSided);
+        await db.SaveChangesAsync();
+
+        var members = await BuildAndReadMembersAsync(db, 1);
+
+        Assert.Contains(members, m => m.AnimeId == 2);
+    }
+
+    // --- 6.2/6.3/8.11: topological main-line ordering ---
+
+    [Fact]
+    public async Task ChainEdgeOverridesAirDateOrdering()
+    {
+        // Mirrors the live Jujutsu Kaisen case: the movie (0) airs after the
+        // TV season but is the story's prequel, and MAL stores that mutually
+        // (0 --sequel--> TV, TV --prequel--> 0).
+        using var db = CreateDb();
+        var jjk0 = Anime(48561, "movie", new DateOnly(2021, 12, 24));
+        var jjkTv = Anime(40748, "tv", new DateOnly(2020, 10, 3));
+        Relate(jjk0, jjkTv, "sequel");
+        Relate(jjkTv, jjk0, "prequel");
+
+        db.AnimeMetadata.AddRange(jjk0, jjkTv);
+        await db.SaveChangesAsync();
+
+        var members = await BuildAndReadMembersAsync(db, 48561);
+        var ordered = members.Where(m => m.IsMainLine).OrderBy(m => m.Order).Select(m => m.AnimeId).ToList();
+
+        Assert.Equal([48561, 40748], ordered);
+    }
+
+    [Fact]
+    public async Task UnconstrainedSiblingsFallBackToAirDate()
+    {
+        // root has two sequels with no chain edge to each other — a "fork" —
+        // so their relative order is unconstrained and must fall back to air
+        // date rather than to id order.
+        using var db = CreateDb();
+        var root = Anime(1, "tv", new DateOnly(2015, 1, 1));
+        var earlierAiredHigherId = Anime(20, "tv", new DateOnly(2017, 1, 1));
+        var laterAiredLowerId = Anime(10, "tv", new DateOnly(2018, 1, 1));
+        Relate(root, earlierAiredHigherId, "sequel");
+        Relate(root, laterAiredLowerId, "sequel");
+
+        db.AnimeMetadata.AddRange(root, earlierAiredHigherId, laterAiredLowerId);
+        await db.SaveChangesAsync();
+
+        var members = await BuildAndReadMembersAsync(db, 1);
+        var ordered = members.Where(m => m.IsMainLine).OrderBy(m => m.Order).Select(m => m.AnimeId).ToList();
+
+        Assert.Equal([1, 20, 10], ordered);
+    }
+
+    [Fact]
+    public async Task CyclicChainDoesNotThrowAndFallsBackToAirDateOrder()
+    {
+        using var db = CreateDb();
+        var a = Anime(1, "tv", new DateOnly(2018, 1, 1));
+        var b = Anime(2, "tv", new DateOnly(2019, 1, 1));
+        // A 2-cycle: each claims to be the other's sequel.
+        Relate(a, b, "sequel");
+        Relate(b, a, "sequel");
+
+        db.AnimeMetadata.AddRange(a, b);
+        await db.SaveChangesAsync();
+
+        var members = await BuildAndReadMembersAsync(db, 1); // must not throw
+        var ordered = members.Where(m => m.IsMainLine).OrderBy(m => m.Order).Select(m => m.AnimeId).ToList();
+
+        Assert.Equal([1, 2], ordered); // cycle remainder emitted in air-date order
     }
 
     private sealed class FakeMetadataRefreshService : IMetadataRefreshService

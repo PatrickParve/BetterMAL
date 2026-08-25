@@ -3,6 +3,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -33,7 +34,7 @@ public class SeriesServiceClassificationRebuildTests
     private static SeriesService CreateService(AnimeTrackerDbContext db) =>
         new(
             db,
-            new SeriesGraphBuilder(db, new FakeMetadataRefreshService(), NullLogger<SeriesGraphBuilder>.Instance),
+            new SeriesGraphBuilder(db, new FakeMetadataRefreshService(), new RelationResolver(db), NullLogger<SeriesGraphBuilder>.Instance),
             new RefreshGate(),
             new FakeEpisodeScheduleService());
 

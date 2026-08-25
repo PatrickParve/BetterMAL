@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Entries;
+using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Season;
 
 namespace AnimeTracker.Api.Services.Detail;
@@ -44,7 +45,20 @@ public record AnimeDetailDto(
     // belongs to a built series. InSeries covers that gap for free; the
     // relation-based check (SERIES_TRAVERSAL_RELATIONS on the client) still
     // covers a series that hasn't been built yet at all.
-    bool InSeries)
+    bool InSeries,
+    // True when a visit-triggered live fetch was attempted and failed, so
+    // whatever is returned here is served from cache rather than confirmed
+    // fresh. Otherwise a failed refresh is indistinguishable from a correct
+    // empty relation set (design.md D11) — the client renders a retry
+    // affordance instead of treating this as "genuinely no relations".
+    bool RefreshFailed,
+    // Server-resolved ranked pick for each button — replaces the client's old
+    // first-by-array-order logic and includes edges MAL stored only on the
+    // other side. Null when no candidate (direct or series-neighbour
+    // fallback) exists. RelatedAnime above is unaffected by this.
+    ResolvedRelationDto? Prequel,
+    ResolvedRelationDto? Sequel,
+    ResolvedRelationDto? ParentStory)
 {
     public static AnimeDetailDto FromEntity(
         AnimeMetadata anime,
@@ -52,7 +66,9 @@ public record AnimeDetailDto(
         NextEpisodeEtaDto? nextEpisode,
         int? aniListId,
         IReadOnlyDictionary<int, string?> relatedMediaTypeByAnimeId,
-        bool inSeries)
+        bool inSeries,
+        bool refreshFailed,
+        RelationResolution relations)
     {
         (int Year, string Season)? season = anime.AiredFrom is { } airedFrom
             ? SeasonCalendar.GetSeasonFor(airedFrom)
@@ -85,6 +101,10 @@ public record AnimeDetailDto(
             aniListId,
             anime.RelatedAnime.Select(r => RelatedAnimeDto.FromEntity(r, relatedMediaTypeByAnimeId)).ToList(),
             anime.UserEntry is null ? null : UserAnimeEntryDto.FromEntity(anime.UserEntry),
-            inSeries);
+            inSeries,
+            refreshFailed,
+            ResolvedRelationDto.FromResolved(relations.Prequel),
+            ResolvedRelationDto.FromResolved(relations.Sequel),
+            ResolvedRelationDto.FromResolved(relations.ParentStory));
     }
 }

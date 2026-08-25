@@ -6,6 +6,7 @@ using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Services.Relations;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Detail;
@@ -15,47 +16,24 @@ public class AnimeDetailService(
     IMetadataRefreshService refreshService,
     IEpisodeScheduleService scheduleService,
     ICompletedEntryReopenService reopenService,
+    IRelationResolver relationResolver,
     AnimeTrackerDbContext db,
     RefreshGate refreshGate,
     ILogger<AnimeDetailService> logger) : IAnimeDetailService
 {
-    // Migration cutoff for AddAnimeRelatedAnime: rows last synced before this
-    // predate related-anime storage entirely, so the live-fetch trigger below
-    // treats them as detail-incomplete even when Genres is already populated.
-    private static readonly DateTimeOffset RelatedAnimeMigrationCutoff = new(2026, 8, 8, 0, 0, 0, TimeSpan.Zero);
-
-    // Migration cutoff for AddRelatedAnimeMediaType: relation rows written
-    // before this predate the MediaType column (and the related_anime{node{
-    // media_type}} field selection that populates it), so they're stuck
-    // showing "Unknown" in the More overlay for any related anime we haven't
-    // separately cached — which MAL's own relation data would have resolved
-    // directly, for free, had this anime been fetched after the column existed.
-    private static readonly DateTimeOffset RelatedAnimeMediaTypeMigrationCutoff = new(2026, 8, 9, 0, 0, 0, TimeSpan.Zero);
-
     public async Task<AnimeDetailDto> GetDetailAsync(int animeId, CancellationToken ct = default)
     {
         var anime = await metadataRepository.GetByIdAsync(animeId, ct);
+        var refreshFailed = false;
 
-        // Live-fetch full detail from MAL (RefreshOneAsync upserts) whenever the
-        // row isn't detail-complete. Genres is the marker: a full-detail fetch
-        // always populates it, and every row that lacks it never had one —
-        //  - missing row: a sequel/prequel link or an un-interacted search
-        //    result opened for the first time (a 404 before this fix);
-        //  - lean row: only ever browsed via Season/Top-Anime;
-        //  - reconciliation-added row: built from the fields-limited my-list
-        //    payload, which omits genres/synopsis/background/related — so it can
-        //    carry a LastSyncedAt yet still be missing every detail-only field.
-        // A row with no related-anime entries and a LastSyncedAt predating the
-        // related-anime migration also refetches, so relations repopulate on
-        // the first visit after deploy even for rows that already had genres.
-        // Same idea for a row whose relations exist but predate the
-        // MediaType column: one more refetch backfills every relation's media
-        // type directly from MAL, rather than leaving it to the (weaker)
-        // per-related-anime cache-lookup fallback.
-        // After the fetch Genres and RelatedAnime are set, so later visits are
-        // plain cache hits. Single-flight via RefreshGate: a waiter re-checks
-        // this same predicate after acquiring the gate, so it sees the
-        // winner's fetch and skips a second MAL fetch instead of racing it.
+        // Live-fetch full detail from MAL (RefreshOneAsync upserts) whenever
+        // the row is missing or past its own staleness tier — the same TTL
+        // check the nightly job uses (RefreshTiers), so the two paths cannot
+        // disagree about what counts as fresh. After the fetch, later visits
+        // within the tier are plain cache hits. Single-flight via
+        // RefreshGate: a waiter re-checks this same predicate after acquiring
+        // the gate, so it sees the winner's fetch and skips a second MAL
+        // fetch instead of racing it.
         if (NeedsFullDetailFetch(anime))
         {
             using (await refreshGate.LockAsync($"anime:{animeId}", ct))
@@ -70,7 +48,11 @@ public class AnimeDetailService(
                     }
                     catch (Exception ex)
                     {
+                        // Cached data (if any) is still served below; LastSyncedAt
+                        // is untouched by a fetch that threw, so NeedsFullDetailFetch
+                        // is true again on the next visit and this retries naturally.
                         logger.LogWarning(ex, "Failed to live-fetch full detail for anime {AnimeId}; serving cached data if any.", animeId);
+                        refreshFailed = true;
                     }
                 }
             }
@@ -104,17 +86,15 @@ public class AnimeDetailService(
         // before that column existed.
         var relatedMediaTypeByAnimeId = await GetMediaTypesAsync(anime.RelatedAnime.Select(r => r.RelatedAnimeId), ct);
         var inSeries = await db.SeriesMembers.AsNoTracking().AnyAsync(m => m.AnimeId == animeId, ct);
+        var relations = await relationResolver.ResolveAsync(anime, ct);
 
-        return AnimeDetailDto.FromEntity(anime, episodesAired, nextEpisode, aniListId, relatedMediaTypeByAnimeId, inSeries);
+        return AnimeDetailDto.FromEntity(anime, episodesAired, nextEpisode, aniListId, relatedMediaTypeByAnimeId, inSeries, refreshFailed, relations);
     }
 
     private static bool NeedsFullDetailFetch(AnimeMetadata? anime) =>
         anime is null
-        || anime.Genres is not { Count: > 0 }
-        || (anime.RelatedAnime.Count == 0 && anime.LastSyncedAt < RelatedAnimeMigrationCutoff)
-        || (anime.RelatedAnime.Count > 0
-            && anime.LastSyncedAt < RelatedAnimeMediaTypeMigrationCutoff
-            && anime.RelatedAnime.Any(r => r.MediaType is null));
+        || anime.LastSyncedAt == default
+        || DateTimeOffset.UtcNow - anime.LastSyncedAt > RefreshTiers.TtlFor(anime);
 
     private async Task<Dictionary<int, string?>> GetMediaTypesAsync(IEnumerable<int> animeIds, CancellationToken ct)
     {

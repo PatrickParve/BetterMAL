@@ -13,6 +13,7 @@ using AnimeTracker.Api.Services.Mal.Auth;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Profile;
 using AnimeTracker.Api.Services.Recap;
+using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Season;
@@ -123,10 +124,18 @@ builder.Services.AddHttpClient<IAniListClient, AniListClient>(client =>
     client.BaseAddress = new Uri("https://graphql.anilist.co/");
 });
 builder.Services.AddScoped<IEpisodeScheduleService, EpisodeScheduleService>();
+builder.Services.AddScoped<AniListRelationStore>();
 builder.Services.AddScoped<IEpisodeScheduleRefreshService, EpisodeScheduleRefreshService>();
 builder.Services.AddHostedService<EpisodeScheduleRefreshBackgroundService>();
 builder.Services.AddSingleton<IAiringRefreshTrigger, AiringRefreshTrigger>();
 builder.Services.AddHostedService<AiringRefreshTriggerBackgroundService>();
+
+// Relation confidence: resolves prequel/sequel/parent-story references and
+// classifies edge confidence; adjudication fetches AniList relations for
+// anime that would otherwise never get an AniList lookup at all.
+builder.Services.AddScoped<IRelationResolver, RelationResolver>();
+builder.Services.AddScoped<IRelationAdjudicationService, RelationAdjudicationService>();
+builder.Services.AddHostedService<RelationAdjudicationBackgroundService>();
 
 // Background series build, scheduled from search when a top match has no
 // stored series yet (design.md decision 6) — same trigger shape as above.

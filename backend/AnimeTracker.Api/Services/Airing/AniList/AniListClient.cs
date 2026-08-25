@@ -8,7 +8,15 @@ public class AniListClient(HttpClient http, AniListRequestPacer pacer, ILogger<A
 {
     private const string LookupQuery =
         "query ($idMal: Int) { Media(idMal: $idMal, type: ANIME) { " +
-        "id status nextAiringEpisode { episode airingAt } } }";
+        "id status nextAiringEpisode { episode airingAt } " +
+        "relations { edges { relationType node { idMal } } } } }";
+
+    // idMal_in restricts Media to exactly the requested batch, so one page
+    // always holds every result — no hasNextPage loop needed here, unlike
+    // ScheduleQuery. perPage matches the caller's batch size.
+    private const string RelationsBatchQuery =
+        "query ($idMalIn: [Int], $perPage: Int) { Page(page: 1, perPage: $perPage) { " +
+        "media(idMal_in: $idMalIn, type: ANIME) { id idMal relations { edges { relationType node { idMal } } } } } }";
 
     // The top-level airingSchedules query (unlike the nested Media.airingSchedule
     // field) filters by mediaId and isn't capped at 500 entries, so it returns a
@@ -28,8 +36,34 @@ public class AniListClient(HttpClient http, AniListRequestPacer pacer, ILogger<A
         var response = await PostAsync<LookupResponse>(new { query = LookupQuery, variables = new { idMal = malId } }, ct);
         return response?.Data?.Media is not { } media
             ? null
-            : new AniListMediaLookup(media.Id, media.Status, ToInstant(media.NextAiringEpisode));
+            : new AniListMediaLookup(media.Id, media.Status, ToInstant(media.NextAiringEpisode), ToRelationEdges(media.Relations));
     }
+
+    public async Task<IReadOnlyDictionary<int, AniListRelationsLookup>> GetRelationsBatchAsync(
+        IReadOnlyList<int> malIds, CancellationToken ct = default)
+    {
+        var result = new Dictionary<int, AniListRelationsLookup>();
+        if (malIds.Count == 0)
+            return result;
+
+        var response = await PostAsync<RelationsBatchResponse>(
+            new { query = RelationsBatchQuery, variables = new { idMalIn = malIds, perPage = malIds.Count } }, ct);
+
+        foreach (var media in response?.Data?.Page?.Media ?? [])
+        {
+            if (media.IdMal is not { } idMal)
+                continue;
+            result[idMal] = new AniListRelationsLookup(media.Id, ToRelationEdges(media.Relations));
+        }
+
+        return result;
+    }
+
+    private static List<AniListRelationEdge> ToRelationEdges(RelationsWrapper? relations) =>
+        relations?.Edges?
+            .Where(e => e.RelationType is not null)
+            .Select(e => new AniListRelationEdge(e.RelationType!, e.Node?.IdMal))
+            .ToList() ?? [];
 
     public async Task<AniListScheduleResult> GetAiringScheduleAsync(int aniListId, CancellationToken ct = default)
     {
@@ -94,7 +128,15 @@ public class AniListClient(HttpClient http, AniListRequestPacer pacer, ILogger<A
 
     private sealed record LookupResponse(LookupData? Data);
     private sealed record LookupData(LookupMedia? Media);
-    private sealed record LookupMedia(int Id, string? Status, NextAiringEpisodeNode? NextAiringEpisode);
+    private sealed record LookupMedia(int Id, string? Status, NextAiringEpisodeNode? NextAiringEpisode, RelationsWrapper? Relations);
+
+    private sealed record RelationsBatchResponse(RelationsBatchData? Data);
+    private sealed record RelationsBatchData(RelationsBatchPage? Page);
+    private sealed record RelationsBatchPage(List<RelationsBatchMedia>? Media);
+    private sealed record RelationsBatchMedia(int Id, int? IdMal, RelationsWrapper? Relations);
+    private sealed record RelationsWrapper(List<RelationsEdge>? Edges);
+    private sealed record RelationsEdge(string? RelationType, RelationsNode? Node);
+    private sealed record RelationsNode(int? IdMal);
 
     private sealed record ScheduleResponse(ScheduleData? Data);
     private sealed record ScheduleData(ScheduleMedia? Media, SchedulePage? Page);

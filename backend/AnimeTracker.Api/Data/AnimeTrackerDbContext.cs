@@ -24,6 +24,8 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<AnimeRelatedAnime> AnimeRelatedAnime => Set<AnimeRelatedAnime>();
     public DbSet<Series> Series => Set<Series>();
     public DbSet<SeriesMember> SeriesMembers => Set<SeriesMember>();
+    public DbSet<AniListRelation> AniListRelations => Set<AniListRelation>();
+    public DbSet<RelationDiscovery> RelationDiscoveries => Set<RelationDiscovery>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -150,6 +152,30 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
                 .HasForeignKey(e => e.AnimeId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => e.AnimeId);
+            // Reverse lookup: relations that point *at* a given anime. Every
+            // detail-page read needs this direction now (relation-confidence
+            // union of outgoing/incoming edges), not just rare series builds.
+            entity.HasIndex(e => e.RelatedAnimeId);
+        });
+
+        modelBuilder.Entity<AniListRelation>(entity =>
+        {
+            entity.HasKey(e => new { e.AnimeId, e.RelatedAnimeId, e.RelationType });
+            entity.HasOne<AnimeMetadata>()
+                .WithMany()
+                .HasForeignKey(e => e.AnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.AnimeId);
+            entity.HasIndex(e => e.RelatedAnimeId);
+        });
+
+        modelBuilder.Entity<RelationDiscovery>(entity =>
+        {
+            entity.HasOne(e => e.Anime)
+                .WithMany()
+                .HasForeignKey(e => e.AnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.DiscoveredAt);
         });
 
         modelBuilder.Entity<Series>(entity =>

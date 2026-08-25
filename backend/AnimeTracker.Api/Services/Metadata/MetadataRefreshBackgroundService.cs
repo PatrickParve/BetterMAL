@@ -1,6 +1,6 @@
 namespace AnimeTracker.Api.Services.Metadata;
 
-/// <summary>Spreads tiered score refresh across small batches on a steady
+/// <summary>Spreads tiered full-detail refresh across small batches on a steady
 /// interval instead of one nightly burst (design.md risk: "Refresh job
 /// hammering the API on a large library"). Each pass is cheap when nothing is
 /// due — RefreshStaleBatchAsync just returns 0. A fixed nightly cap limits the
@@ -40,7 +40,7 @@ public class MetadataRefreshBackgroundService(
                     _callsThisWindow += refreshed;
                     if (refreshed > 0)
                         logger.LogInformation(
-                            "Metadata refresh pass updated {Count} anime score(s) ({Used}/{Cap} today).",
+                            "Metadata refresh pass fully refreshed {Count} anime ({Used}/{Cap} today).",
                             refreshed, _callsThisWindow, NightlyCap);
                 }
             }

@@ -22,7 +22,14 @@ public class AnimeMetadata
     public TimeOnly? BroadcastTime { get; set; } // JST
     public int? PopularityRank { get; set; }
     public int? Rank { get; set; }
-    public DateTimeOffset LastSyncedAt { get; set; }
+    public DateTimeOffset LastSyncedAt { get; set; } // last full-detail fetch; drives RefreshTiers
+
+    // Write-only marker of the last *lean listing* refresh (Season/Top-Anime
+    // browsing) — nothing reads it since the tier ladder moved onto
+    // LastSyncedAt. Deliberately not collapsed into LastSyncedAt: doing so
+    // would make a lean browse stamp the full-detail timestamp and thereby
+    // suppress both the tiered refresh and the detail page's TTL fetch for
+    // every anime a season/top-anime page happens to touch.
     public DateTimeOffset? LastScoreSyncedAt { get; set; }
 
     // Detail-page fields (rich/full detail only — never touched by a lean upsert).

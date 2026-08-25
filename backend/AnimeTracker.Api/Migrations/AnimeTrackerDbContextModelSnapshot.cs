@@ -78,6 +78,26 @@ namespace AnimeTracker.Api.Migrations
                     b.ToTable("AiringRefreshStates");
                 });
 
+            modelBuilder.Entity("AnimeTracker.Api.Models.AniListRelation", b =>
+                {
+                    b.Property<int>("AnimeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RelatedAnimeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RelationType")
+                        .HasColumnType("text");
+
+                    b.HasKey("AnimeId", "RelatedAnimeId", "RelationType");
+
+                    b.HasIndex("AnimeId");
+
+                    b.HasIndex("RelatedAnimeId");
+
+                    b.ToTable("AniListRelations");
+                });
+
             modelBuilder.Entity("AnimeTracker.Api.Models.AnimeAiringSync", b =>
                 {
                     b.Property<int>("AnimeId")
@@ -96,6 +116,9 @@ namespace AnimeTracker.Api.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTimeOffset?>("NextRecheckAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("RelationsFetchedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("AnimeId");
@@ -207,6 +230,8 @@ namespace AnimeTracker.Api.Migrations
                     b.HasKey("AnimeId", "RelatedAnimeId", "RelationType");
 
                     b.HasIndex("AnimeId");
+
+                    b.HasIndex("RelatedAnimeId");
 
                     b.ToTable("AnimeRelatedAnime");
                 });
@@ -346,6 +371,36 @@ namespace AnimeTracker.Api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("ReconciliationRunLogs");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.RelationDiscovery", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AnimeId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("DiscoveredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RelatedAnimeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RelationType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnimeId");
+
+                    b.HasIndex("DiscoveredAt");
+
+                    b.ToTable("RelationDiscoveries");
                 });
 
             modelBuilder.Entity("AnimeTracker.Api.Models.SeasonAnimeListing", b =>
@@ -533,6 +588,15 @@ namespace AnimeTracker.Api.Migrations
                     b.Navigation("Anime");
                 });
 
+            modelBuilder.Entity("AnimeTracker.Api.Models.AniListRelation", b =>
+                {
+                    b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", null)
+                        .WithMany()
+                        .HasForeignKey("AnimeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AnimeTracker.Api.Models.AnimeAiringSync", b =>
                 {
                     b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", null)
@@ -582,6 +646,17 @@ namespace AnimeTracker.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Diff");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.RelationDiscovery", b =>
+                {
+                    b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", "Anime")
+                        .WithMany()
+                        .HasForeignKey("AnimeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Anime");
                 });
 
             modelBuilder.Entity("AnimeTracker.Api.Models.SeasonAnimeListing", b =>

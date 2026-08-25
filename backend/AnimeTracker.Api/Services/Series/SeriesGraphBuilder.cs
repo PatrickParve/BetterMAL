@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Services.Relations;
 using Microsoft.EntityFrameworkCore;
 // Alias needed because this namespace's last segment ("Series") shadows the
 // Models.Series type name.
@@ -18,6 +19,7 @@ namespace AnimeTracker.Api.Services.Series;
 public class SeriesGraphBuilder(
     AnimeTrackerDbContext db,
     IMetadataRefreshService refreshService,
+    IRelationResolver relationResolver,
     ILogger<SeriesGraphBuilder> logger)
 {
     // A runaway-component safety ceiling, not a working limit: set high
@@ -33,7 +35,7 @@ public class SeriesGraphBuilder(
     // timestamp as needing a rebuild, so a classification correction reaches
     // already-stored series on their next read instead of requiring the user
     // to find and rebuild each one by hand (design.md decision 3).
-    public static readonly DateTimeOffset ClassificationRevisedAt = new(2026, 8, 20, 0, 0, 0, TimeSpan.Zero);
+    public static readonly DateTimeOffset ClassificationRevisedAt = new(2026, 8, 24, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>Builds and persists the series reachable from
     /// <paramref name="seedAnimeId"/>, spending at most <paramref name="fetchBudget"/>
@@ -186,8 +188,21 @@ public class SeriesGraphBuilder(
                 .Select(r => r.AnimeId)
                 .ToListAsync(ct);
 
+            // AniList adjudication can contradict an edge MAL stores one-sided
+            // (relation-confidence spec) — that edge stays stored and visible
+            // in the More overlay, but is never traversed into a series. Uses
+            // the same resolver the detail page ranks over, so the "Series"
+            // link can never disagree with the page it leads to.
+            var contradictedFarEndIds = (await relationResolver.GetEdgesAsync(metadata, ct))
+                .Where(e => e.Confidence == RelationConfidence.Contradicted)
+                .Select(e => e.AnimeId)
+                .ToHashSet();
+
             foreach (var neighbourId in outgoingIds.Concat(incomingIds).Distinct())
             {
+                if (contradictedFarEndIds.Contains(neighbourId))
+                    continue;
+
                 if (visited.Contains(neighbourId))
                     continue;
 
@@ -216,7 +231,8 @@ public class SeriesGraphBuilder(
         var memberById = members.ToDictionary(m => m.Id);
         var mainLineIds = ClassifyMainLineChain(members, memberById);
 
-        var mainLineOrdered = members.Where(m => mainLineIds.Contains(m.Id)).OrderBy(OrderKey).ToList();
+        var mainLineMembers = members.Where(m => mainLineIds.Contains(m.Id)).ToList();
+        var mainLineOrdered = TopologicalMainLineOrder(mainLineMembers, mainLineIds, memberById);
         var orderByAnimeId = new Dictionary<int, int>();
         for (var i = 0; i < mainLineOrdered.Count; i++)
             orderByAnimeId[mainLineOrdered[i].Id] = i;
@@ -241,8 +257,8 @@ public class SeriesGraphBuilder(
     /// eligible member, falling back to its earliest member of any kind when
     /// it has none — reduced to just those eligible members. A member is
     /// ineligible when its media type is `special`/`music`, it's a recap
-    /// (<see cref="FindRecapIds"/>), or it's side content of another member
-    /// (<see cref="FindSideContentIds"/>). The chain graph itself still
+    /// (<see cref="SeriesRelations.FindRecapIds"/>), or it's side content of
+    /// another member (<see cref="SeriesRelations.FindSideContentIds"/>). The chain graph itself still
     /// includes every member regardless of eligibility, so an ineligible
     /// entry that bridges two seasons keeps them in one chain without ever
     /// being main line itself (design.md decision 2). Falls back to the
@@ -288,8 +304,12 @@ public class SeriesGraphBuilder(
             }
         }
 
-        var ineligibleIds = FindRecapIds(members, memberById);
-        ineligibleIds.UnionWith(FindSideContentIds(members, memberById));
+        var candidateIds = memberById.Keys.ToHashSet();
+        var ownEdges = members
+            .SelectMany(m => m.RelatedAnime.Select(r => (OwnerId: m.Id, r.RelatedAnimeId, r.RelationType)))
+            .ToList();
+        var ineligibleIds = SeriesRelations.FindRecapIds(ownEdges, candidateIds);
+        ineligibleIds.UnionWith(SeriesRelations.FindSideContentIds(ownEdges, candidateIds));
         foreach (var member in members)
         {
             if (member.MediaType is "special" or "music")
@@ -315,73 +335,6 @@ public class SeriesGraphBuilder(
         var eligibleIds = chain.Where(isEligible).ToList();
         var candidateIds = eligibleIds.Count > 0 ? eligibleIds : chain;
         return candidateIds.Min(id => OrderKey(memberById[id]));
-    }
-
-    /// <summary>Members MAL tags as a recap/condensed retelling of another
-    /// member — the `summary`/`full_story` pair (`A --summary--> B` means B
-    /// recaps A; `B --full_story--> A` says the same from B's side). MAL
-    /// routinely also gives these a `sequel`/`prequel` edge to the season
-    /// they bridge into (e.g. a "commemorative special" recapping season 1
-    /// that itself carries `sequel: season 2`), which would otherwise pull it
-    /// into <see cref="ClassifyMainLineChain"/>'s sequel/prequel subgraph and
-    /// — since it's typically typed `tv_special`, not `special` — survive the
-    /// media-type filter. The explicit summary/full_story tag is a stronger,
-    /// more direct signal than media type that this entry is not new story
-    /// content, so it's excluded regardless of what else links it in.</summary>
-    private static HashSet<int> FindRecapIds(List<AnimeMetadata> members, Dictionary<int, AnimeMetadata> memberById)
-    {
-        var recapIds = new HashSet<int>();
-        foreach (var member in members)
-        {
-            foreach (var relation in member.RelatedAnime)
-            {
-                if (!memberById.ContainsKey(relation.RelatedAnimeId))
-                    continue;
-
-                switch (relation.RelationType)
-                {
-                    case "full_story":
-                        recapIds.Add(member.Id); // this member is the recap of relation.RelatedAnimeId
-                        break;
-                    case "summary":
-                        recapIds.Add(relation.RelatedAnimeId); // the related member is the recap of this one
-                        break;
-                }
-            }
-        }
-
-        return recapIds;
-    }
-
-    /// <summary>Members MAL tags as side content of another member — the
-    /// `side_story`/`parent_story` pair (`A --side_story--> B` means B is a
-    /// side story of A; `B --parent_story--> A` says the same from B's side).
-    /// Mirrors <see cref="FindRecapIds"/> one-for-one. Only edges between two
-    /// members count: a member whose parent story was never traversed into
-    /// this series is not demoted by a relation this build never saw.</summary>
-    private static HashSet<int> FindSideContentIds(List<AnimeMetadata> members, Dictionary<int, AnimeMetadata> memberById)
-    {
-        var sideContentIds = new HashSet<int>();
-        foreach (var member in members)
-        {
-            foreach (var relation in member.RelatedAnime)
-            {
-                if (!memberById.ContainsKey(relation.RelatedAnimeId))
-                    continue;
-
-                switch (relation.RelationType)
-                {
-                    case "parent_story":
-                        sideContentIds.Add(member.Id); // this member is side content of relation.RelatedAnimeId
-                        break;
-                    case "side_story":
-                        sideContentIds.Add(relation.RelatedAnimeId); // the related member is side content of this one
-                        break;
-                }
-            }
-        }
-
-        return sideContentIds;
     }
 
     private static List<List<int>> FindConnectedComponents(IEnumerable<int> nodeIds, Dictionary<int, HashSet<int>> adjacency)
@@ -419,6 +372,84 @@ public class SeriesGraphBuilder(
     // Aired-from ascending, nulls last, MAL id as tiebreak (design.md decision 3).
     private static (int HasNoAiredDate, int AiredDayNumber, int AnimeId) OrderKey(AnimeMetadata anime) =>
         anime.AiredFrom is { } date ? (0, date.DayNumber, anime.Id) : (1, 0, anime.Id);
+
+    /// <summary>Main-line order as a stable topological sort (Kahn's
+    /// algorithm) over `sequel`/`prequel` edges among main-line members,
+    /// rather than a plain air-date sort — the main line is story order, not
+    /// release order (design.md decision 9). The ready set is a priority
+    /// queue keyed by <see cref="OrderKey"/>, so: a chain edge constrains
+    /// order absolutely; members unconstrained relative to each other fall
+    /// back to air date; a member with no chain edge at all is placed purely
+    /// by air date, interleaved rather than appended. `sequel`/`prequel` are
+    /// each other's mirror, so `A --sequel--> B` and `B --prequel--> A` are
+    /// the same constraint counted once, not two.
+    ///
+    /// MAL relation data can contain a `sequel`/`prequel` cycle; this must
+    /// not throw on one. When the queue empties with nodes remaining (a
+    /// cycle), the remainder is emitted in <see cref="OrderKey"/> order.</summary>
+    private static List<AnimeMetadata> TopologicalMainLineOrder(
+        List<AnimeMetadata> mainLineMembers, HashSet<int> mainLineIds, Dictionary<int, AnimeMetadata> memberById)
+    {
+        var successors = mainLineIds.ToDictionary(id => id, _ => new HashSet<int>());
+        var inDegree = mainLineIds.ToDictionary(id => id, _ => 0);
+
+        foreach (var member in mainLineMembers)
+        {
+            foreach (var relation in member.RelatedAnime)
+            {
+                if (!mainLineIds.Contains(relation.RelatedAnimeId))
+                    continue;
+
+                int predecessorId, successorId;
+                switch (relation.RelationType)
+                {
+                    case "sequel": // member --sequel--> related: related follows member
+                        predecessorId = member.Id;
+                        successorId = relation.RelatedAnimeId;
+                        break;
+                    case "prequel": // member --prequel--> related: related precedes member
+                        predecessorId = relation.RelatedAnimeId;
+                        successorId = member.Id;
+                        break;
+                    default:
+                        continue;
+                }
+
+                if (successors[predecessorId].Add(successorId))
+                    inDegree[successorId]++;
+            }
+        }
+
+        var remainingInDegree = new Dictionary<int, int>(inDegree);
+        var ready = new PriorityQueue<int, (int, int, int)>();
+        foreach (var id in mainLineIds)
+        {
+            if (remainingInDegree[id] == 0)
+                ready.Enqueue(id, OrderKey(memberById[id]));
+        }
+
+        var order = new List<int>();
+        while (ready.Count > 0)
+        {
+            var id = ready.Dequeue();
+            order.Add(id);
+
+            foreach (var successorId in successors[id])
+            {
+                if (--remainingInDegree[successorId] == 0)
+                    ready.Enqueue(successorId, OrderKey(memberById[successorId]));
+            }
+        }
+
+        if (order.Count < mainLineIds.Count)
+        {
+            var emitted = order.ToHashSet();
+            var remainder = mainLineIds.Where(id => !emitted.Contains(id)).OrderBy(id => OrderKey(memberById[id]));
+            order.AddRange(remainder);
+        }
+
+        return order.Select(id => memberById[id]).ToList();
+    }
 
     // --- Persistence (2.8) ---
 

@@ -12,49 +12,23 @@ public class MetadataRefreshService(
     IMalClient malClient,
     ILogger<MetadataRefreshService> logger) : IMetadataRefreshService
 {
-    private static readonly string[] ScoreOnlyFields = ["mean"];
-
-    // Four fixed staleness tiers (design.md decision, finalized): currently
-    // airing refreshes daily; finished within the last 60 days refreshes every
-    // 3 days; finished 60 days-1 year ago (or not yet aired) refreshes weekly;
-    // finished 1+ years ago refreshes monthly.
-    private static readonly TimeSpan AiringThreshold = TimeSpan.FromDays(1);
-    private static readonly TimeSpan RecentlyFinishedThreshold = TimeSpan.FromDays(3);
-    private static readonly TimeSpan WeeklyThreshold = TimeSpan.FromDays(7);
-    private static readonly TimeSpan MonthlyThreshold = TimeSpan.FromDays(30);
-    private const int RecentlyFinishedWindowDays = 60;
-    private const int OneYearWindowDays = 365;
-
     public async Task<int> RefreshStaleBatchAsync(int batchSize, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
-        var today = DateOnly.FromDateTime(now.UtcDateTime);
-        var recentlyFinishedWindowStart = today.AddDays(-RecentlyFinishedWindowDays);
-        var oneYearWindowStart = today.AddDays(-OneYearWindowDays);
-        var airingCutoff = now - AiringThreshold;
-        var recentlyFinishedCutoff = now - RecentlyFinishedThreshold;
-        var weeklyCutoff = now - WeeklyThreshold;
-        var monthlyCutoff = now - MonthlyThreshold;
 
         // My-list only: Season/Top-Anime browsing populates AnimeMetadata too,
         // but those rows are refreshed solely via the lean, visit-triggered
-        // path (never this nightly job). The staleness check (mirrors
-        // IsStale's four tiers) is pushed into the query itself rather than
-        // loading every my-list row into memory to filter client-side.
+        // path (never this nightly job). RelatedAnime must be Included before
+        // ApplyTo replaces it below — same tracked-snapshot requirement as
+        // RefreshOneAsync, or EF has nothing to diff against and re-inserts
+        // rows that already exist instead of deleting stale ones. Ordering by
+        // LastSyncedAt ascending naturally puts never-fetched rows (default,
+        // i.e. the earliest possible value) first.
         var due = await db.AnimeMetadata
+            .Include(a => a.RelatedAnime)
             .Where(a => a.UserEntry != null)
-            .Where(a =>
-                a.LastScoreSyncedAt == null ||
-                (a.AiringStatus == "currently_airing" && a.LastScoreSyncedAt <= airingCutoff) ||
-                (a.AiringStatus == "not_yet_aired" && a.LastScoreSyncedAt <= weeklyCutoff) ||
-                (a.AiringStatus == "finished_airing" && a.AiredTo != null && a.AiredTo >= recentlyFinishedWindowStart &&
-                    a.LastScoreSyncedAt <= recentlyFinishedCutoff) ||
-                (a.AiringStatus == "finished_airing" && a.AiredTo != null && a.AiredTo < recentlyFinishedWindowStart &&
-                    a.AiredTo >= oneYearWindowStart && a.LastScoreSyncedAt <= weeklyCutoff) ||
-                (a.AiringStatus != "currently_airing" && a.AiringStatus != "not_yet_aired" &&
-                    !(a.AiringStatus == "finished_airing" && a.AiredTo != null && a.AiredTo >= oneYearWindowStart) &&
-                    a.LastScoreSyncedAt <= monthlyCutoff))
-            .OrderBy(a => a.LastScoreSyncedAt ?? DateTimeOffset.MinValue)
+            .Where(RefreshTiers.IsDue(now))
+            .OrderBy(a => a.LastSyncedAt)
             .Take(batchSize)
             .ToListAsync(ct);
 
@@ -64,14 +38,20 @@ public class MetadataRefreshService(
             ct.ThrowIfCancellationRequested();
             try
             {
-                var details = await malClient.GetAnimeDetailsAsync(anime.Id, ScoreOnlyFields, ct);
-                anime.MalScore = details.Mean;
-                anime.LastScoreSyncedAt = now;
+                // Full-detail fetch, not score-only: MAL rate-limits per
+                // request, so a single field and the full record cost the
+                // same one call. This is what lets relations, airing status,
+                // episode counts and ranks refresh on these tiers too,
+                // instead of freezing at whatever the anime's first fetch saw.
+                var details = await malClient.GetAnimeDetailsAsync(anime.Id, ct: ct);
+                var before = SnapshotRelations(anime);
+                details.ApplyTo(anime, now);
+                RecordDiscoveries(anime, before, now);
                 refreshed++;
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to refresh score for anime {AnimeId}; will retry next pass.", anime.Id);
+                logger.LogWarning(ex, "Failed to refresh anime {AnimeId}; will retry next pass.", anime.Id);
             }
         }
 
@@ -103,10 +83,45 @@ public class MetadataRefreshService(
         // try to re-insert rows that already exist instead of deleting stale ones.
         var anime = await db.AnimeMetadata.Include(a => a.RelatedAnime).FirstOrDefaultAsync(a => a.Id == animeId, ct);
         if (anime is null)
+        {
+            // No cached row at all: the whole relation set is new to us, not
+            // news — an initial import (or a sequel link opened for the first
+            // time) never emits discovery events.
             db.AnimeMetadata.Add(details.ToAnimeMetadata(now));
+        }
         else
+        {
+            var before = SnapshotRelations(anime);
             details.ApplyTo(anime, now);
+            RecordDiscoveries(anime, before, now);
+        }
 
         await db.SaveChangesAsync(ct);
+    }
+
+    private static HashSet<(int RelatedAnimeId, string RelationType)> SnapshotRelations(AnimeMetadata anime) =>
+        anime.RelatedAnime.Select(r => (r.RelatedAnimeId, r.RelationType)).ToHashSet();
+
+    /// <summary>Writes one <see cref="RelationDiscovery"/> per edge present in
+    /// <paramref name="anime"/>'s relation set after <c>ApplyTo</c> that wasn't
+    /// in <paramref name="before"/> — the snapshot taken from the tracked
+    /// collection just before <c>ApplyTo</c> replaced it. Removed and
+    /// unchanged edges are deliberately not events (design.md decision 10).</summary>
+    private void RecordDiscoveries(
+        AnimeMetadata anime, HashSet<(int RelatedAnimeId, string RelationType)> before, DateTimeOffset now)
+    {
+        foreach (var edge in anime.RelatedAnime)
+        {
+            if (before.Contains((edge.RelatedAnimeId, edge.RelationType)))
+                continue;
+
+            db.RelationDiscoveries.Add(new RelationDiscovery
+            {
+                AnimeId = anime.Id,
+                RelatedAnimeId = edge.RelatedAnimeId,
+                RelationType = edge.RelationType,
+                DiscoveredAt = now,
+            });
+        }
     }
 }

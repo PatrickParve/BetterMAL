@@ -534,6 +534,21 @@ export type RelatedAnimeDto = {
   relationType: string
 }
 
+// Mirrors backend Services/Relations/RelationConfidence.cs.
+export type RelationConfidence = 'Confirmed' | 'Corroborated' | 'Unconfirmed' | 'Contradicted' | 'Unknown'
+
+// Mirrors backend Services/Detail/ResolvedRelationDto.cs — the server-ranked
+// pick for a prequel/sequel/parent-story button, replacing the old
+// first-by-array-order pick over relatedAnime.
+export type ResolvedRelationDto = {
+  animeId: number
+  title: string
+  pictureUrl: string | null
+  mediaType: string | null
+  confidence: RelationConfidence
+  isReverseDerived: boolean
+}
+
 // Mirrors backend Services/Series/SeriesDto.cs (tasks 3.1-3.3). airedEpisodes
 // is null-means-unknown (design.md decision 1 of redesign-series-page):
 // finished -> total, airing -> schedule reader clamped to total (null when
@@ -694,6 +709,15 @@ export type AnimeDetailDto = {
   relatedAnime: RelatedAnimeDto[]
   entry: UserAnimeEntryDto | null
   inSeries: boolean
+  // True when a visit-triggered live fetch was attempted and failed — the
+  // rest of this record is served from cache, not confirmed fresh.
+  refreshFailed: boolean
+  // Server-resolved ranked pick for each button (relation-confidence spec) —
+  // includes edges MAL stored only on the other side. relatedAnime above is
+  // unaffected by this and still drives the More overlay.
+  prequel: ResolvedRelationDto | null
+  sequel: ResolvedRelationDto | null
+  parentStory: ResolvedRelationDto | null
 }
 
 // Mirrors backend Services/Recap/RecapPeriod.cs / RecapEntrySelector.cs.
