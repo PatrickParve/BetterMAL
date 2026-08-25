@@ -62,6 +62,7 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
                 .HasForeignKey(e => e.AnimeId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.Property(e => e.ChangeType).HasConversion<string>();
+            entity.Property(e => e.Source).HasConversion<string>().HasDefaultValue(ActivityChangeSource.BetterMal);
             entity.HasIndex(e => e.Timestamp);
         });
 

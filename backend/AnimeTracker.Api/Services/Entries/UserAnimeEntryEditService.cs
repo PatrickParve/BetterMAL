@@ -68,7 +68,7 @@ public class UserAnimeEntryEditService(
                 AnimeId = animeId,
                 Timestamp = now,
                 ChangeType = ActivityChangeType.Added,
-                ChangeDetail = $"Added as {entry.Status}",
+                ChangeDetail = ActivityDetail.Added(entry.Status),
             });
         }
         else
@@ -113,7 +113,7 @@ public class UserAnimeEntryEditService(
             AnimeId = animeId,
             Timestamp = DateTimeOffset.UtcNow,
             ChangeType = ActivityChangeType.Removed,
-            ChangeDetail = "Removed from list",
+            ChangeDetail = ActivityDetail.Removed,
         });
         db.PendingEntryDeletions.Add(new PendingEntryDeletion { AnimeId = animeId, RequestedAt = DateTimeOffset.UtcNow });
 
@@ -175,7 +175,7 @@ public class UserAnimeEntryEditService(
             entry.StartedAt = today;
 
         entry.EpisodesWatched = newEpisodes;
-        changes.Add((ActivityChangeType.EpisodeIncremented, $"Episode {newEpisodes}", previousEpisodesWatched));
+        changes.Add((ActivityChangeType.EpisodeIncremented, ActivityDetail.Episode(newEpisodes), previousEpisodesWatched));
 
         // Unless this same request is already setting a different status explicitly:
         // For a currently-airing anime "every episode watched" means every
@@ -203,7 +203,7 @@ public class UserAnimeEntryEditService(
                     entry.CompletedAt ??= today; // never overwrites an existing finish date — see ApplyStatus
                 if (originalStatus == WatchStatus.Rewatching)
                     entry.RewatchCount++;
-                changes.Add((ActivityChangeType.Completed, "Completed", null));
+                changes.Add((ActivityChangeType.Completed, ActivityDetail.Completed, null));
             }
             // The strict Completed rule (design.md D3): a count drop moves the
             // entry out of Completed — into Rewatching where a rewatch is
@@ -215,7 +215,7 @@ public class UserAnimeEntryEditService(
             else if (originalStatus == WatchStatus.Completed && newEpisodes < target)
             {
                 entry.Status = RewatchingEligibility.IsEligible(anime, entry) ? WatchStatus.Rewatching : WatchStatus.Watching;
-                changes.Add((ActivityChangeType.StatusChanged, $"{originalStatus} -> {entry.Status}", null));
+                changes.Add((ActivityChangeType.StatusChanged, ActivityDetail.StatusChange(originalStatus, entry.Status), null));
             }
         }
 
@@ -233,7 +233,7 @@ public class UserAnimeEntryEditService(
             && !request.HasStatus)
         {
             entry.Status = WatchStatus.Watching;
-            changes.Add((ActivityChangeType.StatusChanged, $"{originalStatus} -> {entry.Status}", null));
+            changes.Add((ActivityChangeType.StatusChanged, ActivityDetail.StatusChange(originalStatus, entry.Status), null));
         }
     }
 
@@ -289,7 +289,7 @@ public class UserAnimeEntryEditService(
             if (originalStatus == WatchStatus.Rewatching && request.CountsAsRewatch == true)
                 entry.RewatchCount++;
 
-            changes.Add((ActivityChangeType.Completed, "Completed", null));
+            changes.Add((ActivityChangeType.Completed, ActivityDetail.Completed, null));
         }
         else if (newStatus == WatchStatus.Rewatching)
         {
@@ -297,11 +297,11 @@ public class UserAnimeEntryEditService(
                 throw new RewatchingNotEligibleException(animeId, RewatchingEligibility.IneligibilityReason(anime, entry));
 
             entry.EpisodesWatched = 0; // entering Rewatching restarts progress (design.md D1); dates/score/rewatch count are left alone
-            changes.Add((ActivityChangeType.StatusChanged, $"{entry.Status} -> {newStatus}", null));
+            changes.Add((ActivityChangeType.StatusChanged, ActivityDetail.StatusChange(entry.Status, newStatus), null));
         }
         else
         {
-            changes.Add((ActivityChangeType.StatusChanged, $"{entry.Status} -> {newStatus}", null));
+            changes.Add((ActivityChangeType.StatusChanged, ActivityDetail.StatusChange(entry.Status, newStatus), null));
         }
 
         entry.Status = newStatus;
@@ -319,15 +319,13 @@ public class UserAnimeEntryEditService(
         if (request.HasStartedAt && request.StartedAt != entry.StartedAt)
         {
             entry.StartedAt = request.StartedAt;
-            changes.Add((ActivityChangeType.StartDateChanged,
-                entry.StartedAt is { } started ? $"Start date {started:yyyy-MM-dd}" : "Start date cleared", null));
+            changes.Add((ActivityChangeType.StartDateChanged, ActivityDetail.StartDate(entry.StartedAt), null));
         }
 
         if (request.HasCompletedAt && request.CompletedAt != entry.CompletedAt)
         {
             entry.CompletedAt = request.CompletedAt;
-            changes.Add((ActivityChangeType.FinishDateChanged,
-                entry.CompletedAt is { } finished ? $"Finish date {finished:yyyy-MM-dd}" : "Finish date cleared", null));
+            changes.Add((ActivityChangeType.FinishDateChanged, ActivityDetail.FinishDate(entry.CompletedAt), null));
         }
 
         // Compares the resulting (post-edit) values, not the stored ones, so
@@ -353,7 +351,7 @@ public class UserAnimeEntryEditService(
             throw new ScoreRequiresAiredEpisodeException(animeId);
 
         entry.MyScore = newScore == 0 ? null : newScore; // MAL convention: 0 means "no score"
-        changes.Add((ActivityChangeType.ScoreChanged, $"Score {entry.MyScore?.ToString() ?? "cleared"}", null));
+        changes.Add((ActivityChangeType.ScoreChanged, ActivityDetail.Score(entry.MyScore), null));
     }
 
     private static void ApplyRewatchCount(
@@ -372,6 +370,6 @@ public class UserAnimeEntryEditService(
             throw new RewatchCountRequiresAiredEpisodeException(animeId);
 
         entry.RewatchCount = newRewatchCount;
-        changes.Add((ActivityChangeType.RewatchCountChanged, $"Rewatch count {newRewatchCount}", null));
+        changes.Add((ActivityChangeType.RewatchCountChanged, ActivityDetail.RewatchCount(newRewatchCount), null));
     }
 }

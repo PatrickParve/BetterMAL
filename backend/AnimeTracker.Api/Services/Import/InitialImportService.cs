@@ -1,4 +1,6 @@
 using AnimeTracker.Api.Data;
+using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +29,13 @@ public class InitialImportService(
 
         var existingAnimeIds = (await db.AnimeMetadata.Select(a => a.Id).ToListAsync(ct)).ToHashSet();
         var existingEntryIds = (await db.UserAnimeEntries.Select(e => e.AnimeId).ToListAsync(ct)).ToHashSet();
+        // "No history yet" rather than "first run" (design D8): the import is
+        // resumable, so an interrupted first run must still resume unrecorded
+        // rather than flooding the log with the remainder. Judged once, from
+        // the state at this run's start, so an edit made mid-import — which
+        // writes the first row — doesn't make this same run start recording
+        // halfway through.
+        var isBaselineRun = !await db.ActivityLogs.AnyAsync(ct);
         var synced = 0;
 
         foreach (var edge in edges)
@@ -38,7 +47,7 @@ public class InitialImportService(
             {
                 try
                 {
-                    await ImportOneAsync(animeId, edge.ListStatus, ct);
+                    await ImportOneAsync(animeId, edge.ListStatus, isBaselineRun, ct);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -52,7 +61,11 @@ public class InitialImportService(
                 // Metadata was already cached (e.g. from browsing a season before ever
                 // connecting MAL) but the list entry itself was never created for it —
                 // add just that, without re-fetching anime details.
-                db.UserAnimeEntries.Add(MalMappingExtensions.ToUserAnimeEntry(animeId, edge.ListStatus, DateTimeOffset.UtcNow));
+                var now = DateTimeOffset.UtcNow;
+                var entry = MalMappingExtensions.ToUserAnimeEntry(animeId, edge.ListStatus, now);
+                db.UserAnimeEntries.Add(entry);
+                if (!isBaselineRun)
+                    db.ActivityLogs.Add(EntryActivityRecorder.Added(animeId, entry.Status, ActivityChangeSource.MalStartupImport, now));
                 await db.SaveChangesAsync(ct);
             }
 
@@ -64,13 +77,16 @@ public class InitialImportService(
         logger.LogInformation("MAL list import complete: {Synced}/{Total} anime synced.", synced, edges.Count);
     }
 
-    private async Task ImportOneAsync(int animeId, MalListStatus? listStatus, CancellationToken ct)
+    private async Task ImportOneAsync(int animeId, MalListStatus? listStatus, bool isBaselineRun, CancellationToken ct)
     {
         var details = await malClient.GetAnimeDetailsAsync(animeId, ct: ct);
         var now = DateTimeOffset.UtcNow;
 
         db.AnimeMetadata.Add(details.ToAnimeMetadata(now));
-        db.UserAnimeEntries.Add(MalMappingExtensions.ToUserAnimeEntry(animeId, listStatus, now));
+        var entry = MalMappingExtensions.ToUserAnimeEntry(animeId, listStatus, now);
+        db.UserAnimeEntries.Add(entry);
+        if (!isBaselineRun)
+            db.ActivityLogs.Add(EntryActivityRecorder.Added(animeId, entry.Status, ActivityChangeSource.MalStartupImport, now));
 
         await db.SaveChangesAsync(ct);
     }

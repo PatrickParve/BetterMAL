@@ -1,0 +1,18 @@
+/* Quiet secondary tag, not a status colour (record-mal-origin-activity
+   design D7/tasks 9.4) — smaller and muted relative to the row's meta/detail
+   text it sits beside, using the same pill shape SeriesBadge/SeriesStatusPill
+   share rather than introducing a new visual language. */
+.mal-origin-tag {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  line-height: 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  color: var(--text);
+  opacity: 0.75;
+  white-space: nowrap;
+}

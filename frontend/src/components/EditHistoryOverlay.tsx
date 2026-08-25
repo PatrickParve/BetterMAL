@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { MalOriginTag } from './MalOriginTag.tsx'
 import { Modal } from './Modal.tsx'
 import { TruncatedTitle } from './TruncatedTitle.tsx'
 import { getActivityHistory } from '../api/client.ts'
@@ -134,7 +135,10 @@ export function EditHistoryOverlay({ onClose }: EditHistoryOverlayProps) {
                         lines={2}
                         className="edit-history__row-title"
                       />
-                      <span className="edit-history__detail">{item.summary}</span>
+                      <span className="edit-history__detail">
+                        <span className="edit-history__detail-text">{item.summary}</span>
+                        <MalOriginTag source={item.source} />
+                      </span>
                     </span>
                   </Link>
                   <span className="edit-history__timestamp">{formatTimestamp(item.timestamp)}</span>

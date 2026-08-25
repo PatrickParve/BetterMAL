@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Mal;
 using Microsoft.EntityFrameworkCore;
 
@@ -134,17 +135,20 @@ public class ReconciliationService(
         var now = DateTimeOffset.UtcNow;
         foreach (var entry in diff.Entries)
         {
+            EntrySnapshot? before;
             if (localEntries.TryGetValue(entry.AnimeId, out var local))
             {
                 // Mirror the compute-time guard: don't let a stale diff overwrite a
                 // local edit made (and not yet pushed) after this diff was computed.
                 if (local.PendingSync)
                     continue;
+                before = EntrySnapshot.Of(local);
             }
             else
             {
                 local = new UserAnimeEntry { AnimeId = entry.AnimeId };
                 db.UserAnimeEntries.Add(local);
+                before = null;
             }
 
             local.Status = entry.Status;
@@ -155,6 +159,11 @@ public class ReconciliationService(
             local.RewatchCount = entry.RewatchCount;
             local.PendingSync = false;
             local.LastSyncedAt = now;
+
+            if (before is { } snapshot)
+                db.ActivityLogs.AddRange(EntryActivityRecorder.Diff(entry.AnimeId, snapshot, local, ActivityChangeSource.MalReconciliation, now));
+            else
+                db.ActivityLogs.Add(EntryActivityRecorder.Added(entry.AnimeId, local.Status, ActivityChangeSource.MalReconciliation, now));
         }
 
         db.PendingReconciliationDiffs.Remove(diff);

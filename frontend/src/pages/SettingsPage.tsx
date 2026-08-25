@@ -368,20 +368,35 @@ export function SettingsPage() {
         ) : (
           <p className="settings-box__empty">Couldn't load sync status.</p>
         )}
-        <div className="settings-box__buttons">
-          <button type="button" onClick={handleResyncNow} disabled={resyncing}>
-            {resyncing ? 'Resyncing…' : 'Resync now'}
-          </button>
-          <button type="button" onClick={handleReconcileNow} disabled={reconciling}>
-            {reconciling ? 'Reconciling…' : 'Run full reconciliation'}
-          </button>
-        </div>
+
+        <SettingsAction
+          title="Sync now"
+          hint="Pushes your own unsent edits to MyAnimeList right away instead of waiting for the next scheduled sync. Sends nothing else, and changes nothing on your list locally."
+          button={
+            <button type="button" onClick={handleResyncNow} disabled={resyncing}>
+              {resyncing ? 'Resyncing…' : 'Resync now'}
+            </button>
+          }
+        />
+
+        <SettingsAction
+          title="Run full reconciliation"
+          hint="Fetches your current MyAnimeList list, compares it against what's stored locally, and presents the differences below for you to accept or decline — changes nothing on your list until you do."
+          button={
+            <button type="button" onClick={handleReconcileNow} disabled={reconciling}>
+              {reconciling ? 'Reconciling…' : 'Run full reconciliation'}
+            </button>
+          }
+        />
 
         {diff && (
           <div className="settings-subsection">
             <h3 className="settings-subsection__title">Pending reconciliation diff</h3>
             <p className="settings-subsection__hint">
-              Computed {formatTimestamp(diff.computedAt)} — review before applying.
+              Computed {formatTimestamp(diff.computedAt)} — review before applying. Accepting applies exactly
+              the differences listed below and touches nothing else on your list; declining discards them and
+              applies none of them. Anything you accept appears in Latest updates and the full edit history,
+              marked as coming from MyAnimeList.
             </p>
             <ul className="settings-diff-list">
               {diff.entries.map((entry) => (
@@ -420,7 +435,7 @@ export function SettingsPage() {
       <SettingsGroup title="Data tools" hint="Long-running corrective and backfill jobs.">
         <SettingsAction
           title="Correct imported data"
-          hint="One-time corrective re-sync: re-fetches your full MyAnimeList and corrects status, score, and episode counts, and backfills English title, duration, and source. Takes several minutes; entries with unsynced local edits are left untouched."
+          hint="One-time corrective re-sync: re-fetches your full MyAnimeList and full anime details, then immediately overwrites the local status, episode count, score, and dates for every anime — with no review step — and creates entries for anime not yet tracked locally. Also backfills English title, duration, and source. Takes several minutes; entries with unsynced local edits are left untouched. Anything it applies appears in Latest updates and the full edit history, marked as coming from MyAnimeList."
           state={
             <JobProgress
               phase={resyncStatus ? jobPhase(resyncStatus.phase) : 'not-started'}

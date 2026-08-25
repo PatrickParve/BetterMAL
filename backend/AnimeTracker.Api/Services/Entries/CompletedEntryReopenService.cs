@@ -48,7 +48,7 @@ public class CompletedEntryReopenService(
             AnimeId = animeId,
             Timestamp = DateTimeOffset.UtcNow,
             ChangeType = ActivityChangeType.StatusChanged,
-            ChangeDetail = $"{WatchStatus.Completed} -> {WatchStatus.Watching}",
+            ChangeDetail = ActivityDetail.StatusChange(WatchStatus.Completed, WatchStatus.Watching),
         };
         db.ActivityLogs.Add(activityLog);
 
