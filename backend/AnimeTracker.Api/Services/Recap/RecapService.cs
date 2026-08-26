@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Scheduling;
 
 namespace AnimeTracker.Api.Services.Recap;
@@ -7,11 +8,18 @@ namespace AnimeTracker.Api.Services.Recap;
 public class RecapService(
     IUserAnimeEntryRepository entryRepository,
     IActivityLogRepository activityLogRepository,
+    ITopAnimeSelectionRepository topAnimeSelectionRepository,
     IBroadcastLocalTimeConverter localTimeConverter) : IRecapService
 {
     public async Task<RecapDto> GetRecapAsync(RecapPeriod period, string filter, CancellationToken ct = default)
     {
         var wholeList = await entryRepository.GetAllAsync(ct);
+
+        // MyRank is the anime's overall rank in the whole app-wide ranking
+        // (anime-ranking capability), not scoped to this recap's period, so
+        // the snapshot is built from the whole list rather than `included`.
+        var storedOrder = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
+        var rankingSnapshot = AnimeRankingSnapshot.Build(wholeList, storedOrder);
 
         // A season recap has no toggle — it always selects on what aired
         // that season, whatever filter (if any) the caller sent.
@@ -40,7 +48,7 @@ public class RecapService(
 
         var stats = RecapStatsBuilder.Build(included, wholeList, airedIncluded, watchLog, effectiveFilter);
         var items = included
-            .Select(ToRow)
+            .Select(e => ToRow(e, rankingSnapshot))
             .OrderBy(r => r.Title, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -84,7 +92,7 @@ public class RecapService(
         return (seasonRanking, yearRanking, seasonTimeRanking, yearTimeRanking);
     }
 
-    private static RecapRowDto ToRow(UserAnimeEntry e) =>
+    private static RecapRowDto ToRow(UserAnimeEntry e, AnimeRankingSnapshot rankingSnapshot) =>
         new(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.Anime.MediaType,
-            e.MyScore, e.Anime.MalScore, e.Status.IsScoreRevealable());
+            e.MyScore, e.Anime.MalScore, e.Status.IsScoreRevealable(), rankingSnapshot.RankOf(e.AnimeId));
 }

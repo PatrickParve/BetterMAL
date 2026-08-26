@@ -1,3 +1,4 @@
+using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Season;
 using Microsoft.EntityFrameworkCore;
 
@@ -124,8 +125,10 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
             l.Anime.MediaType,
             l.Anime.MalScore,
             l.Anime.PopularityRank,
+            l.Anime.AiringStatus,
             MyScore = l.Anime.UserEntry != null ? l.Anime.UserEntry.MyScore : null,
             InMyList = l.Anime.UserEntry != null,
+            Status = l.Anime.UserEntry != null ? (WatchStatus?)l.Anime.UserEntry.Status : null,
         });
 
         var totalCount = await projected.CountAsync(ct);
@@ -136,13 +139,39 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
             // Scored anime first (highest score down), then every unscored anime
             // falls through to the same unranked-last popularity ordering as the
             // popularity sort (the client renders the "Unwatched" divider between
-            // the two groups).
-            SeasonSortKey.MyScore => projected
-                .OrderBy(a => a.MyScore == null ? 1 : 0)
-                .ThenByDescending(a => a.MyScore)
-                .ThenBy(a => a.PopularityRank == null || a.PopularityRank == 0 ? 1 : 0)
-                .ThenBy(a => a.PopularityRank)
-                .ThenBy(a => a.Title),
+            // the two groups). Equal scores are broken by the anime-ranking
+            // capability's ordering rule (design.md D3): band ascending, then
+            // stored position ascending within the hand-ordered band, then —
+            // for anime the ranking doesn't cover (band 3: dropped's
+            // hand-ordered peers rank above it, but a still-scored plan-to-
+            // watch or unaired anime lands in band 3 here) — the same
+            // unranked-last popularity fallback the plain popularity sort
+            // uses, per the season-browser capability. This inlines
+            // Services/Ranking/AnimeRankingKey's rule rather than calling it,
+            // since EF cannot translate a call into shared C# logic and this
+            // query's shape isn't IQueryable<UserAnimeEntry> to begin with —
+            // the two must move together.
+            SeasonSortKey.MyScore =>
+                (from a in projected
+                 join p in db.TopAnimeSelections.AsNoTracking() on a.Id equals p.AnimeId into positionJoin
+                 from p in positionJoin.DefaultIfEmpty()
+                 select new
+                 {
+                     a,
+                     Position = (int?)p.Position,
+                     Band = a.MyScore == null || a.Status == WatchStatus.PlanToWatch || a.AiringStatus == "not_yet_aired" ? 3
+                         : a.Status == WatchStatus.Dropped ? 2
+                         : (a.MediaType == "music" || a.MediaType == "cm" || a.MediaType == "pv") ? 1
+                         : 0,
+                 })
+                .OrderBy(x => x.a.MyScore == null ? 1 : 0)
+                .ThenByDescending(x => x.a.MyScore)
+                .ThenBy(x => x.Band)
+                .ThenBy(x => x.Band == 0 ? (x.Position ?? int.MaxValue) : int.MaxValue)
+                .ThenBy(x => x.Band == 3 ? (x.a.PopularityRank == null || x.a.PopularityRank == 0 ? 1 : 0) : 0)
+                .ThenBy(x => x.Band == 3 ? x.a.PopularityRank : null)
+                .ThenBy(x => x.a.Title)
+                .Select(x => x.a),
             SeasonSortKey.Alphabetical => projected.OrderBy(a => a.Title),
             // PopularityRank 0/null means "unranked" on MAL — sort those last, then
             // by ascending rank (1 = most popular), then title.

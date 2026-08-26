@@ -34,3 +34,14 @@
 .modal--board {
   max-width: min(1080px, 100%);
 }
+
+/* The ranking editor (AnimeRankOverlay): wide enough that a full score
+   selector (up to ten scores, each with its count) fits on one line, and
+   laid out as a column so only its own anime list scrolls — the box itself
+   never does (add-anime-ranking follow-up). */
+.modal--rank {
+  max-width: min(920px, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}

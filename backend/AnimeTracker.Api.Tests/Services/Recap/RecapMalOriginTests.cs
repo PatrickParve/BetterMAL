@@ -49,7 +49,7 @@ public class RecapMalOriginTests
         var entryRepository = new FakeUserAnimeEntryRepository([WatchingEntry(1)]);
         var timeConverter = new FakeBroadcastLocalTimeConverter();
 
-        var recap = await new RecapService(entryRepository, repository, timeConverter)
+        var recap = await new RecapService(entryRepository, repository, new TopAnimeSelectionRepository(db), timeConverter)
             .GetRecapAsync(RecapPeriod.Yearly(2026), RecapTimeFilter.Watched, CancellationToken.None);
         Assert.Equal(0, recap.WatchedCount);
         Assert.Equal(0, recap.Stats.EpisodesWatched);
@@ -71,7 +71,7 @@ public class RecapMalOriginTests
         var entryRepository = new FakeUserAnimeEntryRepository([WatchingEntry(1)]);
         var timeConverter = new FakeBroadcastLocalTimeConverter();
 
-        var recap = await new RecapService(entryRepository, repository, timeConverter)
+        var recap = await new RecapService(entryRepository, repository, new TopAnimeSelectionRepository(db), timeConverter)
             .GetRecapAsync(RecapPeriod.Yearly(2026), RecapTimeFilter.Watched, CancellationToken.None);
         Assert.Equal(1, recap.WatchedCount);
         // RecapWatchLog sums each row's positive increase (new - previous),

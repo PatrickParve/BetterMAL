@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Recap;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Watching;
@@ -148,61 +149,6 @@ public class ProfileService(
 
         foreach (var animeId in missingIds)
             seriesBuildTrigger.Enqueue(animeId);
-    }
-
-    public async Task ApplyTopAnimeOrderAsync(List<TopAnimeTierOrderRequest> tiers, CancellationToken ct = default)
-    {
-        var entries = await entryRepository.GetAllAsync(ct);
-        var existingOrder = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
-        var positionByAnimeId = TopAnimeOrdering.ToPositionMap(existingOrder);
-
-        var membersByScore = entries
-            .Where(e => e.MyScore is not null)
-            .GroupBy(e => e.MyScore!.Value)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        var mismatchedIds = tiers
-            .SelectMany(tier =>
-            {
-                var tierMemberIds = (membersByScore.GetValueOrDefault(tier.Score) ?? [])
-                    .Select(e => e.AnimeId)
-                    .ToHashSet();
-                return tier.AnimeIds.Where(id => !tierMemberIds.Contains(id));
-            })
-            .ToList();
-        if (mismatchedIds.Count > 0)
-            throw new TopAnimeTierScoreMismatchException(mismatchedIds);
-
-        var editedIds = new HashSet<int>();
-        var editedSegments = new List<int>();
-
-        foreach (var tier in tiers.OrderByDescending(t => t.Score))
-        {
-            var tierMembers = membersByScore.GetValueOrDefault(tier.Score) ?? [];
-            var effectiveOrder = TopAnimeOrdering.OrderTierMembers(tierMembers, positionByAnimeId)
-                .Select(e => e.AnimeId)
-                .ToList();
-
-            var visibleIds = tier.AnimeIds;
-            var visibleIndexes = effectiveOrder
-                .Select((animeId, index) => (animeId, index))
-                .Where(x => visibleIds.Contains(x.animeId))
-                .Select(x => x.index)
-                .OrderBy(index => index)
-                .ToList();
-
-            var merged = effectiveOrder.ToList();
-            for (var i = 0; i < visibleIndexes.Count; i++)
-                merged[visibleIndexes[i]] = visibleIds[i];
-
-            editedSegments.AddRange(merged);
-            foreach (var animeId in merged) editedIds.Add(animeId);
-        }
-
-        var remaining = existingOrder.Where(id => !editedIds.Contains(id));
-        var finalOrder = editedSegments.Concat(remaining).ToList();
-
-        await topAnimeSelectionRepository.ReplaceOrderAsync(finalOrder, ct);
     }
 
     private static ActivityFeedItemDto ToActivityFeedItem(ActivityLog log, int? mergedScore = null, EpisodeRun? episodeRun = null) =>
@@ -442,22 +388,26 @@ public class ProfileService(
 
     // All score-10 anime are shown uncapped; if that's fewer than 10, fill the
     // remainder with the next-highest score tiers, in descending order, each
-    // ordered by the user's persisted preference (falling back to
-    // alphabetical). The tier that doesn't fully fit is truncated — its full
-    // membership is still returned (via Tiers) so the overlay can render a
-    // cut line and let the user move members across it. Tiers that can never
-    // reach the list (score dominance) are omitted entirely.
+    // banded and ordered by the anime-ranking capability's shared rule
+    // (design.md D1/D2 via task 3.1) rather than a section-local ordering, so
+    // dropped and short-form members sink to the bottom of their tier here
+    // exactly as they do everywhere else the ranking is read. The tier that
+    // doesn't fully fit is truncated — its full hand-orderable membership is
+    // still returned (via Tiers) so the overlay can render a cut line and let
+    // the user move members across it; short-form and dropped members are
+    // never listed there, since the ranking places them by band and title
+    // alone (design.md D8). Tiers that can never reach the list (score
+    // dominance) are omitted entirely. An anime the ranking excludes
+    // outright — unscored, plan-to-watch, or unaired — never appears here.
     private static TopAnimeSectionDto BuildTopAnimeSection(List<UserAnimeEntry> entries, List<int> orderedAnimeIds, string mediaType)
     {
-        var positionByAnimeId = TopAnimeOrdering.ToPositionMap(orderedAnimeIds);
+        var snapshot = AnimeRankingSnapshot.Build(entries, orderedAnimeIds);
 
-        var tierGroups = entries
-            .Where(e => e.MyScore is not null && TopAnimeMediaTypeScope.Matches(mediaType, e.Anime.MediaType))
+        var tierGroups = snapshot.RankedEntries
+            .Where(e => TopAnimeMediaTypeScope.Matches(mediaType, e.Anime.MediaType))
             .GroupBy(e => e.MyScore!.Value)
             .OrderByDescending(g => g.Key)
-            .Select(g => (
-                Score: g.Key,
-                Members: TopAnimeOrdering.OrderTierMembers(g, positionByAnimeId).Select(ToTopAnimeEntry).ToList()));
+            .Select(g => (Score: g.Key, Members: g.ToList()));
 
         var items = new List<TopAnimeEntryDto>();
         var tiers = new List<TopAnimeTierDto>();
@@ -478,15 +428,23 @@ public class ProfileService(
                 slotsRemaining -= includedCount;
             }
 
-            items.AddRange(members.Take(includedCount));
-            tiers.Add(new TopAnimeTierDto(score, members, includedCount));
+            items.AddRange(members.Take(includedCount).Select(e => ToTopAnimeEntry(e, snapshot)));
+
+            // design.md D8: the editor never lists short-form/dropped
+            // members, so IncludedCount is capped to the listed (hand-
+            // orderable) count — once the raw cut reaches past every listed
+            // member and into the pinned ones, every listed row is included
+            // and the frontend draws no cut line for this tier.
+            var listedMembers = members.Where(e => RankBandResolver.Resolve(e) == RankBand.HandOrdered).ToList();
+            var listedIncludedCount = Math.Min(includedCount, listedMembers.Count);
+            tiers.Add(new TopAnimeTierDto(score, listedMembers.Select(e => ToTopAnimeEntry(e, snapshot)).ToList(), listedIncludedCount));
         }
 
         return new TopAnimeSectionDto(items, tiers, mediaType);
     }
 
-    private static TopAnimeEntryDto ToTopAnimeEntry(UserAnimeEntry e) =>
-        new(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.MyScore!.Value);
+    private static TopAnimeEntryDto ToTopAnimeEntry(UserAnimeEntry e, AnimeRankingSnapshot snapshot) =>
+        new(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.MyScore!.Value, snapshot.RankOf(e.AnimeId)!.Value);
 
     // No tiers, no cut line, no cap: every entry with a rewatch count above
     // zero, most-rewatched first. Ties break by title alone — the same

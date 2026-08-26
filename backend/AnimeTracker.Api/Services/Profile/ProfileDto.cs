@@ -35,13 +35,18 @@ public record TopAnimeEntryDto(
     string Title,
     string? EnglishTitle,
     string? PictureUrl,
-    int MyScore);
+    int MyScore,
+    int MyRank);
 
-/// <summary>One score tier of the ordered preference list. Members is every
-/// scored anime in this tier for the current scope, in tier order (explicitly
-/// ordered members first, then alphabetical); IncludedCount is how many of
-/// them made it into the resolved top list — the rest sit below the overlay's
-/// cut line.</summary>
+/// <summary>One score tier of the ordered preference list. Members is this
+/// tier's hand-orderable anime only, in ranking order (explicitly ordered
+/// members first, then alphabetical) — short-form and dropped members are
+/// never listed, since the anime-ranking capability places them by band and
+/// title alone (design.md D8). IncludedCount is how many of the listed
+/// members made it into the resolved top list; once the tier's cut falls
+/// among its unlisted (short-form/dropped) members, IncludedCount equals
+/// Members.Count, signalling that every listed row is included and no cut
+/// line should be drawn.</summary>
 public record TopAnimeTierDto(int Score, List<TopAnimeEntryDto> Members, int IncludedCount);
 
 /// <summary>Items is the resolved "My top anime" list (score-10s plus the

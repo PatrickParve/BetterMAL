@@ -76,6 +76,12 @@ export type EntryEditorTarget = {
   // airingStatus so the overlay can compute hasAiredEpisodes() itself
   // (gate-editing-on-aired-episodes design.md D7).
   episodesAired: number | null
+  // The anime's raw media type — needed to decide whether the Rank action is
+  // offered (anime-ranking capability: short-form entries are never
+  // hand-orderable). null covers callers that don't have this plumbed
+  // through (add-anime-ranking tasks.md 6.3), same convention as
+  // airingStatus above.
+  mediaType: string | null
   entry: UserAnimeEntryDto | null
   onSaved?: (entry: UserAnimeEntryDto) => void
   onDeleted?: () => void
@@ -90,6 +96,11 @@ export type IncrementTarget = {
   episodesWatched: number
   previousStatus: WatchStatus
   currentScore: number | null
+  // The anime's raw media type — carried into the completion prompt so it
+  // can decide whether save-and-rank is offered for the chosen score
+  // (anime-ranking capability: short-form entries are never hand-orderable;
+  // add-anime-ranking tasks.md 6.5).
+  mediaType: string | null
   onSaved: (entry: UserAnimeEntryDto) => void
   // Carries the completion-score prompt's saved entry (null if the user
   // skipped without scoring), so a caller showing only that one anime can
@@ -251,6 +262,10 @@ export type MyListItemDto = {
   airingStatus: string | null
   episodesAired: number | null
   entry: UserAnimeEntryDto
+  // anime-ranking: this entry's overall rank, null when it isn't in the
+  // ranking (unscored, Plan to watch, unaired) — feeds the my-score sort's
+  // rank tiebreak (utils/anime.ts composeComparator).
+  myRank: number | null
 }
 
 export type TopAnimeItemDto = {
@@ -334,6 +349,9 @@ export type TopAnimeEntryDto = {
   englishTitle: string | null
   pictureUrl: string | null
   myScore: number
+  // anime-ranking: this anime's overall rank — always present, since every
+  // member of a TopAnimeTierDto is in the ranking by construction.
+  myRank: number
 }
 
 export type TopAnimeMediaType = 'all' | 'tv' | 'movie' | 'ova' | 'ona' | 'special'
@@ -803,6 +821,41 @@ export type RecapRowDto = {
   myScore: number | null
   malScore: number | null
   malRevealed: boolean
+  // anime-ranking: this entry's overall rank, null when it isn't in the
+  // ranking — breaks ties in the recap's top 10 and score board when the
+  // ranking basis is my score.
+  myRank: number | null
+}
+
+// The ranking editor's one score's full hand-orderable membership, in
+// ranking order — mirrors backend Services/Ranking/IAnimeRankingService.cs
+// AnimeRankingMemberDto/AnimeRankingTierDto (add-anime-ranking design.md D7).
+export type AnimeRankingMemberDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  rank: number
+}
+
+export type AnimeRankingTierDto = {
+  score: number
+  members: AnimeRankingMemberDto[]
+}
+
+// One entry of the ranking editor's score selector — every non-empty score
+// under the current scope, highest first, with its hand-orderable count.
+export type AnimeRankingScoreDto = {
+  score: number
+  count: number
+}
+
+// getRanking's response: the score selector's contents plus the selected
+// tier's full membership (null when the scope has nothing hand-orderable at
+// all, or — passing an explicit score — that score has nothing).
+export type AnimeRankingResponseDto = {
+  scores: AnimeRankingScoreDto[]
+  tier: AnimeRankingTierDto | null
 }
 
 export type RecapRankingPosterDto = {

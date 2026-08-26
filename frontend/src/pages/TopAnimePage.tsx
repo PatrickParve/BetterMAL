@@ -196,6 +196,9 @@ export function TopAnimePage() {
       totalEpisodes: item.totalEpisodes,
       airingStatus: item.airingStatus,
       episodesAired: item.episodesAired,
+      // TopAnimeItemDto (MAL's own ranking lists, unrelated to the
+      // anime-ranking capability) doesn't carry a media type yet.
+      mediaType: null,
       entry: item.entry,
       onSaved: (saved) => setEntry(item.animeId, saved),
       onDeleted: () => setEntry(item.animeId, null),

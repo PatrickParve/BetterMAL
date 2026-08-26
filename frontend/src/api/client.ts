@@ -3,6 +3,7 @@ import type {
   AiringFullRefreshStatusDto,
   AiringWeekDto,
   AnimeDetailDto,
+  AnimeRankingResponseDto,
   AnimeSearchResult,
   HealthStatus,
   MainDashboardDto,
@@ -268,11 +269,21 @@ export function getRewatchedSeriesSection(): Promise<RewatchedSeriesSectionDto> 
   return fetchJson<RewatchedSeriesSectionDto>('/api/profile/rewatched-series')
 }
 
+// The ranking editor's score selector plus one tier (design.md D7).
+// Omitting `score` selects the highest non-empty score under the scope.
+export function getRanking(mediaType: TopAnimeMediaType, score?: number): Promise<AnimeRankingResponseDto> {
+  const params = new URLSearchParams({ mediaType })
+  if (score !== undefined) params.set('score', String(score))
+  return fetchJson<AnimeRankingResponseDto>(`/api/rankings?${params.toString()}`)
+}
+
+// Supersedes the old `/api/top-anime/order` (add-anime-ranking design.md
+// D4/D7) — same payload and merge semantics, new home next to getRanking.
 export function putTopAnimeOrder(
   mediaType: TopAnimeMediaType,
   tiers: { score: number; animeIds: number[] }[],
 ): Promise<void> {
-  return fetchVoid('/api/top-anime/order', {
+  return fetchVoid('/api/rankings/order', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ mediaType, tiers }),

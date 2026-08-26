@@ -8,6 +8,11 @@ type PromptState = {
   animeTitle: string
   pictureUrl: string | null
   currentScore: number | null
+  // anime-ranking: carried through so the prompt can decide whether
+  // save-and-rank is offered for the chosen score (add-anime-ranking
+  // tasks.md 6.5) — the entry's status is always Completed by the time this
+  // prompt opens, so only the media type needs to travel with it.
+  mediaType: string | null
   onClosed: (saved: UserAnimeEntryDto | null) => void
 }
 
@@ -57,6 +62,7 @@ export function CompletionPromptProvider({ children }: { children: ReactNode }) 
       animeTitle: target.animeTitle,
       pictureUrl: target.pictureUrl,
       currentScore: target.currentScore,
+      mediaType: target.mediaType,
       onClosed: (saved) => target.onCompleted?.(saved),
     })
   }, [])
@@ -84,6 +90,7 @@ export function CompletionPromptProvider({ children }: { children: ReactNode }) 
           animeTitle={prompt.animeTitle}
           pictureUrl={prompt.pictureUrl}
           currentScore={prompt.currentScore}
+          mediaType={prompt.mediaType}
           onClose={handleClose}
         />
       )}

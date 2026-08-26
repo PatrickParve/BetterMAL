@@ -19,15 +19,16 @@ import type {
 } from '../api/types.ts'
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
+import { AnimeRankOverlay } from '../components/AnimeRankOverlay.tsx'
 import { EditHistoryOverlay } from '../components/EditHistoryOverlay.tsx'
 import { MalOriginTag } from '../components/MalOriginTag.tsx'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
 import { describeSeasonRanking, describeYearRanking, RankingSection } from '../components/RankingSection.tsx'
 import { ScoreDistribution } from '../components/ScoreDistribution.tsx'
-import { TopAnimeSelectionOverlay } from '../components/TopAnimeSelectionOverlay.tsx'
 import { TruncatedTitle } from '../components/TruncatedTitle.tsx'
 import { UnresolvedEpisodesOverlay } from '../components/UnresolvedEpisodesOverlay.tsx'
+import { useAnimeRank } from '../context/AnimeRankContext.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { usePageState } from '../state/PageStateContext.tsx'
@@ -315,6 +316,7 @@ function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
 // from cached Postgres data.
 export function ProfilePage() {
   const { data: profile, loading } = usePageData<ProfileDto>('profile', getProfile)
+  const { openRanking } = useAnimeRank()
 
   // Each media-type tab is its own resource key, not just a view control on
   // top of one shared fetch — so restoring a page left on "TV" shows TV data
@@ -522,7 +524,7 @@ export function ProfilePage() {
           <h2>My top anime</h2>
           {displayedTopAnime && displayedTopAnime.tiers.some((tier) => tier.members.length > 1) && (
             <button type="button" className="profile-box__control" onClick={() => setShowTopAnimeSelect(true)}>
-              Edit order
+              Rank
             </button>
           )}
         </div>
@@ -840,14 +842,18 @@ export function ProfilePage() {
         />
       )}
       {showTopAnimeSelect && topAnime && (
-        <TopAnimeSelectionOverlay
+        <AnimeRankOverlay
+          mode="top"
           section={topAnime}
           mediaType={mediaType}
           mediaTypeLabel={MEDIA_TYPE_TABS.find((tab) => tab.value === mediaType)?.label ?? 'All'}
-          onClose={() => setShowTopAnimeSelect(false)}
           onSaved={() => {
             setShowTopAnimeSelect(false)
             reloadTopAnime()
+          }}
+          onRankWholeLibrary={() => {
+            setShowTopAnimeSelect(false)
+            openRanking({ mediaType, onSaved: reloadTopAnime })
           }}
         />
       )}

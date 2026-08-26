@@ -66,6 +66,16 @@ function describeTimeRanking(row: RecapTimeRankingDto): RankingOverlayRow {
 // score board's slots (add-recap-score-board-and-hold-scroll's design.md
 // decision 1) are both derived from this one selection rule and can never
 // disagree about how many anime carry a score.
+// anime-ranking: within a slot, anime are ordered by rank — best-ranked
+// first, unranked last (ordered by title among other unranked members) —
+// per list-recaps spec "The score board lays a period out by score".
+function compareByRankThenTitle(a: RecapRowDto, b: RecapRowDto): number {
+  if (a.myRank != null && b.myRank != null) return a.myRank - b.myRank
+  if (a.myRank != null) return -1
+  if (b.myRank != null) return 1
+  return a.title.localeCompare(b.title)
+}
+
 function scoreGroupsOf(items: RecapRowDto[]): ScoreBoardGroup[] {
   const byScore = new Map<number, RecapRowDto[]>()
   for (const item of items) {
@@ -76,7 +86,7 @@ function scoreGroupsOf(items: RecapRowDto[]): ScoreBoardGroup[] {
   }
   return Array.from({ length: 10 }, (_, i) => i + 1).map((score) => ({
     score,
-    items: (byScore.get(score) ?? []).sort((a, b) => a.title.localeCompare(b.title)),
+    items: (byScore.get(score) ?? []).sort(compareByRankThenTitle),
   }))
 }
 
@@ -692,7 +702,11 @@ export function RecapPage() {
       if (scoreA == null) return 1
       if (scoreB == null) return -1
       if (scoreB !== scoreA) return scoreB - scoreA
-      return a.title.localeCompare(b.title)
+      // anime-ranking: on the my-score basis, a tie at the same score is
+      // broken by rank rather than title; the MAL basis has no ranking
+      // opinion to draw on, so it keeps its title tiebreak (list-recaps
+      // spec, "Top 10 of the period").
+      return effectiveBasis === 'mine' ? compareByRankThenTitle(a, b) : a.title.localeCompare(b.title)
     })
     const topTen = ranked.slice(0, TOP_TEN_SIZE)
     const podium = topTen.slice(0, 5)

@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { Modal } from './Modal.tsx'
 import { deleteEntry, updateEntry } from '../api/client.ts'
 import type { EntryEditorTarget, UserAnimeEntryDto, UserAnimeEntryEditRequest, WatchStatus } from '../api/types.ts'
-import { hasAiredEpisodes } from '../utils/anime.ts'
+import { useAnimeRank } from '../context/AnimeRankContext.tsx'
+import { hasAiredEpisodes, isHandOrderable } from '../utils/anime.ts'
 import './EntryEditorOverlay.css'
 
 const STATUS_OPTIONS: { value: WatchStatus; label: string }[] = [
@@ -36,7 +37,8 @@ type EntryEditorOverlayProps = {
 // start/finish dates. Also offers Delete — removing the anime from my list
 // entirely — but only when editing an existing entry, not while adding one.
 export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps) {
-  const { animeId, animeTitle, totalEpisodes, airingStatus, episodesAired, entry, onSaved, onDeleted } = target
+  const { animeId, animeTitle, totalEpisodes, airingStatus, episodesAired, mediaType, entry, onSaved, onDeleted } = target
+  const { openRanking } = useAnimeRank()
   // Captured once (the parent remounts this component per target via `key`,
   // see EntryEditorContext) so the save handler can tell which fields the
   // user actually touched and send only those — a stale page open in another
@@ -89,18 +91,14 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
   // reaching the total) asks this question — never from any other status.
   const endingRewatchEarly = initialStatus === 'Rewatching' && status === 'Completed'
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setError(null)
+  // anime-ranking: whether the entry as currently shown in the form (not
+  // necessarily saved yet) would get a row in the ranking editor — gates the
+  // Rank action (list-editing spec, "Ranking an entry from its editor").
+  const rankScore = myScore === 0 ? null : myScore
+  const canRank = isHandOrderable(rankScore, status, mediaType, hasAired)
 
-    if (startedAt && completedAt && completedAt < startedAt) {
-      setError('Finish date cannot be earlier than start date.')
-      return
-    }
-
-    setSaving(true)
-
-    const request: UserAnimeEntryEditRequest = {
+  function buildRequest(): UserAnimeEntryEditRequest {
+    return {
       // Sent whenever the count is being raised, whatever `status` ends up
       // showing — not just when it differs from initialStatus — so that
       // re-picking the original status from the editor suppresses the
@@ -114,10 +112,56 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
       completedAt: completedAt !== initialCompletedAt ? completedAt || null : undefined,
       countsAsRewatch: endingRewatchEarly ? countsAsRewatch : undefined,
     }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError(null)
+
+    if (startedAt && completedAt && completedAt < startedAt) {
+      setError('Finish date cannot be earlier than start date.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const saved = await updateEntry(animeId, buildRequest())
+      onSaved?.(saved)
+      onClose()
+    } catch {
+      setError('Could not save changes. Please try again.')
+      setSaving(false)
+    }
+  }
+
+  // The Rank action (list-editing spec): saves any pending change first —
+  // so a score just picked in this form is what the ranking editor opens
+  // on, per "Ranking follows a score just changed" — then opens the ranking
+  // editor over this one rather than closing it.
+  async function handleRank() {
+    setError(null)
+
+    if (startedAt && completedAt && completedAt < startedAt) {
+      setError('Finish date cannot be earlier than start date.')
+      return
+    }
+
+    // Opens on the whole-library ('all') scope — the entry's own media type
+    // gates whether Rank is offered at all (canRank above), not which
+    // ranking-editor scope it opens to.
+    const request = buildRequest()
+    const isDirty = Object.values(request).some((value) => value !== undefined)
+    if (!isDirty) {
+      openRanking({ animeId, score: rankScore ?? undefined })
+      return
+    }
+
+    setSaving(true)
     try {
       const saved = await updateEntry(animeId, request)
       onSaved?.(saved)
-      onClose()
+      setSaving(false)
+      openRanking({ animeId, score: saved.myScore ?? undefined })
     } catch {
       setError('Could not save changes. Please try again.')
       setSaving(false)
@@ -273,6 +317,11 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
               disabled={saving}
             >
               Delete
+            </button>
+          )}
+          {canRank && (
+            <button type="button" className="entry-editor__rank" onClick={handleRank} disabled={saving}>
+              Rank
             </button>
           )}
           <button type="button" onClick={onClose} disabled={saving}>

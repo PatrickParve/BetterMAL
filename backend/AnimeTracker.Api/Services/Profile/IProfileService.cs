@@ -35,13 +35,4 @@ public interface IProfileService
     /// D10), and queueing the same ids twice only contends on one
     /// queue.</summary>
     Task<RewatchedSeriesSectionDto> GetRewatchedSeriesSectionAsync(CancellationToken ct = default);
-
-    /// <summary>Applies an edited tier order — as displayed under some scope,
-    /// which may omit tier members that scope's filter hides — via the
-    /// slot-preserving merge: every edited tier's full membership becomes
-    /// explicitly ordered, with hidden members kept in their existing
-    /// relative positions.</summary>
-    Task ApplyTopAnimeOrderAsync(List<TopAnimeTierOrderRequest> tiers, CancellationToken ct = default);
 }
-
-public record TopAnimeTierOrderRequest(int Score, List<int> AnimeIds);

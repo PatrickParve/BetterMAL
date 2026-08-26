@@ -76,6 +76,11 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
       // CurrentlyWatchingItemDto carries no score field; the carousel has
       // nothing to pre-fill the completion prompt with.
       currentScore: null,
+      // CurrentlyWatchingItemDto carries no media type either — the
+      // completion prompt's save-and-rank action stays hidden for a
+      // Music/CM/PV entry completed from here (same null-means-unavailable
+      // convention as currentScore above).
+      mediaType: null,
       onSaved: (saved) => onEpisodesWatchedChange(item.animeId, saved.episodesWatched),
       onCompleted,
     }

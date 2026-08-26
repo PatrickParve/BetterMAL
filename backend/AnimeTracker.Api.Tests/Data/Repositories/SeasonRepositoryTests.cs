@@ -158,6 +158,77 @@ public class SeasonRepositoryTests
         Assert.Equal([2, 1, 3, 4], items.Select(i => i.AnimeId));
     }
 
+    // anime-ranking capability read into the season/year my-score sort
+    // (design.md D3, tasks.md 3.6/3.7): equal scores broken by the ranking's
+    // stored position rather than popularity, dropped members banded below
+    // hand-ordered ones of the same score, and the grouping/order holding
+    // across paged loads.
+    [Fact]
+    public async Task MyScoreSortBreaksTiedScoresByStoredRankingPosition()
+    {
+        using var db = CreateDb();
+        var placedSecond = Seed(db, 1, "Placed second", popularityRank: 1);
+        var placedFirst = Seed(db, 2, "Placed first", popularityRank: 2);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Anime = placedSecond, MyScore = 7 });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 2, Anime = placedFirst, MyScore = 7 });
+        db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = 2, Anime = placedFirst, Position = 0, SelectedAt = DateTimeOffset.UtcNow });
+        db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = 1, Anime = placedSecond, Position = 1, SelectedAt = DateTimeOffset.UtcNow });
+        List(db, 1, 2020, "winter");
+        List(db, 2, 2020, "spring");
+        await db.SaveChangesAsync();
+        var repository = new SeasonRepository(db);
+
+        var (items, _) = await repository.GetPageAsync(
+            Year2020, SeasonSortKey.MyScore, includeMyList: true, hideHentai: false, types: null, offset: 0, limit: 100);
+
+        Assert.Equal([2, 1], items.Select(i => i.AnimeId));
+    }
+
+    [Fact]
+    public async Task MyScoreSortBandsADroppedMemberBelowAHandOrderedOneOfTheSameScore()
+    {
+        using var db = CreateDb();
+        var dropped = Seed(db, 1, "Aardvark dropped", popularityRank: 1);
+        var handOrdered = Seed(db, 2, "Zebra hand ordered", popularityRank: 2);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Anime = dropped, Status = WatchStatus.Dropped, MyScore = 7 });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 2, Anime = handOrdered, Status = WatchStatus.Completed, MyScore = 7 });
+        List(db, 1, 2020, "winter");
+        List(db, 2, 2020, "spring");
+        await db.SaveChangesAsync();
+        var repository = new SeasonRepository(db);
+
+        var (items, _) = await repository.GetPageAsync(
+            Year2020, SeasonSortKey.MyScore, includeMyList: true, hideHentai: false, types: null, offset: 0, limit: 100);
+
+        // The dropped anime's title would sort first alphabetically, but its
+        // band puts it after the hand-ordered one regardless.
+        Assert.Equal([2, 1], items.Select(i => i.AnimeId));
+    }
+
+    [Fact]
+    public async Task MyScoreSortHoldsItsOrderAcrossPagedLoads()
+    {
+        using var db = CreateDb();
+        for (var i = 1; i <= 4; i++)
+        {
+            var anime = Seed(db, i, $"Scored {i:00}", popularityRank: i);
+            db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = i, Anime = anime, MyScore = 10 - i }); // descending scores 9,8,7,6
+            db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = i, Anime = anime, Position = 4 - i, SelectedAt = DateTimeOffset.UtcNow });
+            List(db, i, 2020, "winter");
+        }
+        await db.SaveChangesAsync();
+        var repository = new SeasonRepository(db);
+
+        var (singlePage, _) = await repository.GetPageAsync(
+            Year2020, SeasonSortKey.MyScore, includeMyList: true, hideHentai: false, types: null, offset: 0, limit: 100);
+        var (firstPage, _) = await repository.GetPageAsync(
+            Year2020, SeasonSortKey.MyScore, includeMyList: true, hideHentai: false, types: null, offset: 0, limit: 2);
+        var (secondPage, _) = await repository.GetPageAsync(
+            Year2020, SeasonSortKey.MyScore, includeMyList: true, hideHentai: false, types: null, offset: 2, limit: 2);
+
+        Assert.Equal(singlePage.Select(i => i.AnimeId), firstPage.Select(i => i.AnimeId).Concat(secondPage.Select(i => i.AnimeId)));
+    }
+
     [Fact]
     public async Task TotalCountIsComputedAfterFilters()
     {

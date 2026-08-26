@@ -264,6 +264,7 @@ export function AnimeDetailPage() {
       episodesWatched: entry.episodesWatched,
       previousStatus: entry.status,
       currentScore: entry.myScore,
+      mediaType: detail!.mediaType,
       onSaved: (saved) =>
         setDetail((prev) => (prev ? { ...prev, entry: saved } : prev)),
       // The completion-score prompt's own save (a separate updateEntry call
@@ -304,6 +305,7 @@ export function AnimeDetailPage() {
       totalEpisodes: detail.totalEpisodes,
       airingStatus: detail.airingStatus,
       episodesAired: detail.episodesAired,
+      mediaType: detail.mediaType,
       entry: detail.entry,
       onSaved: (saved) =>
         setDetail((prev) => (prev ? { ...prev, entry: saved } : prev)),

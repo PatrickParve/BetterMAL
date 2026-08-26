@@ -15,4 +15,5 @@ public record MyListItemDto(
     double? MalScore,
     string? AiringStatus,
     int? EpisodesAired,
-    UserAnimeEntryDto Entry);
+    UserAnimeEntryDto Entry,
+    int? MyRank);

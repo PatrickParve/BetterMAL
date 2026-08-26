@@ -80,3 +80,8 @@
   border-color: var(--accent);
   color: #fff;
 }
+
+.completion-score__save-and-rank {
+  border-color: var(--accent-border);
+  color: var(--accent);
+}

@@ -432,9 +432,11 @@ Rows partly scrolled out of view while scrolling are not covered by this: the re
 ### Requirement: My top anime with minimum-of-ten fill and manual selection
 The system SHALL show my top anime, always showing at least 10 when I have scored at least 10 anime. The list SHALL be ordered by score descending and grouped into score tiers: a lower-scored anime SHALL NEVER appear above a higher-scored one. It SHALL include all anime I scored 10; if there are 10 or more such anime it shows all of them with no cap. If there are fewer than 10, it SHALL fill the remainder up to 10 from the next-highest score tiers in descending score order; the tier that does not fully fit SHALL be truncated so the list stops at 10.
 
-Within a single score tier the order SHALL be mine to control and SHALL be persisted. The default order for tier members I have never ordered SHALL be alphabetical by title, and those members SHALL appear after any members I have explicitly ordered. Membership of the truncated tier SHALL be expressed by that same tier order: the tier members that fit occupy the remaining slots, in tier order.
+The order within a single score tier SHALL be the order the `anime-ranking` capability gives that score — my hand-ordered anime first in the order I set (never-placed members following them alphabetically), then short-form entries, then dropped anime. The section SHALL NOT compute an order of its own, so an anime I place here is placed everywhere the ranking is read, and an anime I drop falls to the bottom of its tier here as it does everywhere else. Membership of the truncated tier SHALL be expressed by that same tier order: the tier members that fit occupy the remaining slots, in tier order.
 
-The system SHALL provide an edit control in the box's top-right corner whenever any tier has more than one member. The control SHALL open an editor listing every tier of the current list in full — including members of the truncated tier that do not fit — with a cut line marking how many of that tier's members are included. Reordering members within a tier SHALL change their order in the list; moving a member across the cut line SHALL change which members of that tier are included. Saving SHALL persist both, and the persisted order SHALL take precedence over the alphabetical default.
+The system SHALL provide a **Rank** control in the box's top-right corner whenever any tier has more than one member. The control SHALL open an editor listing the hand-orderable members of every tier of the current list in full — including members of the truncated tier that do not fit — with a cut line marking how many of that tier's listed members are included. Short-form and dropped members SHALL NOT be listed, since the ranking places them by band and title and no editing here could move them; when a tier's cut falls among those unlisted members, every listed member of that tier is included and no cut line SHALL be drawn for it. Reordering members within a tier SHALL change their order in the list; moving a member across the cut line SHALL change which members of that tier are included. Every reorder SHALL persist into the one ranking on its own, with no separate save step, and the persisted order SHALL take precedence over the alphabetical default.
+
+The editor SHALL additionally offer an action that leaves this top-list arrangement and opens the whole-library ranking editor described by the `anime-ranking` capability, so every scored anime can be arranged and not only those in contention for the top list.
 
 Each tier in the editor SHALL have a promote boundary equal to the smaller of that tier's included-member count and 10. A row positioned before that boundary SHALL offer single-step move-up and move-down controls, disabled at the ends of its tier. A row positioned at or after that boundary SHALL offer a single promote control instead of the two single-step controls; activating it SHALL move that row to the last position before the boundary and push every row from that position onward down by one, leaving the rest of the tier order intact. The promote boundary SHALL NOT move when a row is promoted, so in a truncated tier promoting an excluded member takes the last included slot and drops the displaced member below the cut line. Each of these controls SHALL render its glyph centered within the control.
 
@@ -450,6 +452,10 @@ While a drag is in progress the editor SHALL show a floating copy of the dragged
 - **WHEN** I have fewer than 10 anime scored 10 and have never ordered the lower tiers
 - **THEN** the list is filled up to 10 from the next-highest score tiers, each tier in alphabetical order
 
+#### Scenario: The edit control is named Rank
+- **WHEN** I look at the "My top anime" box with more than one member in some tier
+- **THEN** its top-right control reads **Rank**
+
 #### Scenario: Reordering a tier that exactly fills the list
 - **WHEN** I have exactly 10 anime scored 10 and I reorder them in the editor
 - **THEN** the top list shows those same 10 anime in my chosen order, and the order is still there after a reload
@@ -458,13 +464,29 @@ While a drag is in progress the editor SHALL show a floating copy of the dragged
 - **WHEN** I reorder anime across a list containing both 10s and 9s
 - **THEN** every anime scored 10 still appears above every anime scored 9, and my ordering only applies within each of those tiers
 
+#### Scenario: Dropped members sink within their tier
+- **WHEN** a tier of the top list holds anime I have completed and one I dropped
+- **THEN** the dropped one appears beneath every completed member of that tier, whatever its title
+
+#### Scenario: Pinned members are not in the editor
+- **WHEN** a tier shown in the editor holds a dropped anime and a Music entry
+- **THEN** neither is listed among that tier's rows, while both still occupy their places in the top list itself
+
+#### Scenario: The cut falls among unlisted members
+- **WHEN** a truncated tier's included members cover every one of its hand-orderable members and stop part-way through its dropped ones
+- **THEN** that tier's rows are all shown as included and no cut line is drawn for it
+
 #### Scenario: Swapping a member of a truncated tier
 - **WHEN** a tier has more members than the remaining slots and I move one of its excluded members above the cut line
 - **THEN** that anime takes a slot in the top list, the member it displaced drops below the cut line and out of the list, and the change is persisted
 
 #### Scenario: Newly scored anime joins an ordered tier
 - **WHEN** I score a new anime into a tier whose order I have already set
-- **THEN** it appears after the members I explicitly ordered, alphabetically among any other unordered members of that tier
+- **THEN** it appears last among that tier's hand-ordered members
+
+#### Scenario: Opening the whole-library ranking editor
+- **WHEN** I use the whole-library action in the top-anime editor
+- **THEN** the ranking editor opens over every anime I have scored, not only those in contention for the top list
 
 #### Scenario: Promoting a row from deep in a long tier
 - **WHEN** a tier has 40 members all included in the list and I activate the promote control on its 37th row
@@ -546,7 +568,7 @@ Switching the filter SHALL NOT visibly clear the box's contents while the new se
 - **THEN** the box keeps showing its previous list, without an empty flash, until the new type's list is ready
 
 ### Requirement: Top-anime ordering is shared across filters
-The system SHALL keep one persisted top-anime ordering that every media-type filter view draws from, so ordering an anime once affects both the unfiltered list and any filtered list containing it. Reordering within a filtered view SHALL preserve the relative positions of the same tier's members that the filter hides.
+The system SHALL draw every media-type filter view from the one persisted ranking, so ordering an anime once affects the unfiltered list, every filtered list containing it, and every other place in the app that orders by my score. Reordering within a filtered view SHALL preserve the relative positions of the same tier's hand-ordered members that the filter hides.
 
 #### Scenario: Order set under a filter shows in the unfiltered list
 - **WHEN** I reorder two anime of the same score while the Movie filter is active
@@ -555,6 +577,10 @@ The system SHALL keep one persisted top-anime ordering that every media-type fil
 #### Scenario: Hidden members keep their positions
 - **WHEN** I reorder a tier while a media-type filter hides some of that tier's members
 - **THEN** the hidden members keep their positions relative to the visible members that surrounded them
+
+#### Scenario: Order set here shows outside the profile
+- **WHEN** I reorder two anime of the same score in the "My top anime" editor
+- **THEN** my list sorted by my score, the recap top 10, and the score board all show them in that same relative order
 
 ### Requirement: Most rewatched by series
 The "Most rewatched" section SHALL offer a **Series** scope that re-reads the section by franchise instead of by single anime, ranking my series by the total time I have spent rewatching them.

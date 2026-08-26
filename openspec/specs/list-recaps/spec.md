@@ -559,7 +559,7 @@ The score board SHALL show ten slots, one per score from 10 down to 1 in that or
 
 The board SHALL cover exactly the set the rating distribution covers: every entry the selected period and time filter include that carries one of my scores, unnarrowed by the top 10's media-type control, and recomputed whenever the period or time filter changes. The number of posters in a slot and the count the matching distribution row reports SHALL always agree.
 
-Within a slot, anime SHALL be ordered by title so the order is stable across reloads and across a refresh of the same period. Anime with no score of mine SHALL NOT appear in any slot.
+Within a slot, anime SHALL be ordered by my ranking, best-ranked first, per the `anime-ranking` capability, so a slot reads left to right as my order of preference among the anime of that score. An anime with no rank SHALL be placed after every ranked anime of that slot, ordered by title among other unranked anime. The order SHALL be stable across reloads and across a refresh of the same period. Anime with no score of mine SHALL NOT appear in any slot.
 
 All ten slots SHALL be shown even when a slot holds nothing — an empty slot reports the same "nothing scored this" the distribution's empty track reports, and keeping the ten fixed makes two periods comparable. An empty slot SHALL be identifiable as empty rather than appearing to be still loading.
 
@@ -568,6 +568,14 @@ An anime with no poster art SHALL occupy a placeholder of the same size in its s
 #### Scenario: Seeing the tens of a period
 - **WHEN** I open the score board for a period in which I scored four anime 10
 - **THEN** the 10 slot shows those four anime's posters, and reports a count of four
+
+#### Scenario: A slot reads in my order
+- **WHEN** I open the score board for a period whose 9 slot holds anime I have ranked
+- **THEN** they are laid out best-ranked first rather than alphabetically
+
+#### Scenario: An unranked anime in a slot
+- **WHEN** a slot holds both ranked anime and a scored Plan-to-watch anime
+- **THEN** the ranked ones come first and the Plan-to-watch one follows them
 
 #### Scenario: The board and the distribution agree
 - **WHEN** a distribution row reports 12 anime scored 8
@@ -1078,7 +1086,7 @@ None of these states SHALL change the control's height or width, so the cluster 
 - **THEN** it reads as the current choice even though the three tabs carry three different colours
 
 ### Requirement: Top 10 of the period
-Every recap SHALL show the ten highest-ranked anime of the included set, ranked by the selected ranking basis, with ties broken by title case-insensitively so the order is stable across reloads. Entries with no score on the selected basis SHALL be ranked below every scored entry rather than treated as zero. When the included set holds fewer than ten entries, the recap SHALL show all of them.
+Every recap SHALL show the ten highest-ranked anime of the included set, ranked by the selected ranking basis. When the basis is **my score**, entries sharing a score SHALL be ordered by my ranking, best-ranked first, per the `anime-ranking` capability — a tied entry with no rank falling after every ranked entry of that score, and remaining ties broken by title case-insensitively. When the basis is **MAL's score**, ties SHALL be broken by title case-insensitively as before. Either way the order SHALL be stable across reloads. Entries with no score on the selected basis SHALL be ranked below every scored entry rather than treated as zero. When the included set holds fewer than ten entries, the recap SHALL show all of them.
 
 The ten SHALL be presented in two forms: the first five as the podium described in "The top five are presented as a podium", and the remaining ranks as rows below it. The split SHALL be presentational only — the same ten anime in the same order are shown either way — and the rows SHALL continue the podium's numbering rather than restarting, both in the rank each row shows and in the list semantics exposed to assistive technology.
 
@@ -1100,9 +1108,17 @@ The score a row shows SHALL carry the same score colour role the podium's cards 
 - **WHEN** the included set holds five or fewer anime
 - **THEN** they are all shown on the podium and no row list is shown
 
-#### Scenario: Stable tie order
-- **WHEN** several anime share the same score at the cut line
-- **THEN** they are ordered by title, and the same order is shown on every reload
+#### Scenario: My ranking decides a tie at the cut line
+- **WHEN** the top 10 is ranked by my score and several anime share the score at the cut line
+- **THEN** the one I rank highest takes the slot, and the same order is shown on every reload
+
+#### Scenario: MAL ties still break by title
+- **WHEN** the top 10 is ranked by MAL's score and several anime share that score
+- **THEN** they are ordered by title, as before, since my ranking says nothing about MAL's opinion
+
+#### Scenario: An unranked entry tied on my score
+- **WHEN** the top 10 is ranked by my score and a scored Plan-to-watch anime shares a score with ranked anime
+- **THEN** the ranked ones come first and the Plan-to-watch one follows them
 
 #### Scenario: Unscored entries rank last
 - **WHEN** the included set holds both scored and unscored anime on the selected basis

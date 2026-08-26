@@ -132,6 +132,25 @@ export function mediaTypeLabel(raw: string | null | undefined): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }
 
+// Mirrors backend Services/Ranking/RankBand.cs RankBandResolver.Resolve's
+// HandOrdered test (add-anime-ranking design.md D2): scored, aired, not Plan
+// to watch, not Dropped, not a Music/CM/PV entry. Used to gate the Rank
+// action (entry editor) and the save-and-rank action (completion prompt) —
+// both need "would this anime actually get a row in the ranking editor?"
+// before offering an action that opens one.
+const SHORT_FORM_MEDIA_TYPES = new Set(['music', 'cm', 'pv'])
+
+export function isHandOrderable(
+  myScore: number | null,
+  status: WatchStatus,
+  mediaType: string | null,
+  hasAired: boolean,
+): boolean {
+  if (myScore === null || !hasAired) return false
+  if (status === 'PlanToWatch' || status === 'Dropped') return false
+  return !(mediaType && SHORT_FORM_MEDIA_TYPES.has(mediaType.toLowerCase()))
+}
+
 // Capitalizes a season name for display — e.g. "fall" -> "Fall". Shared by
 // RecapPage (period label, ranking rows) and MyListPage (the scope
 // indicator), both of which name a recap's season the same way.
@@ -295,6 +314,10 @@ export type SortableListItem = {
   malScore: number | null
   airingStatus: string | null
   totalEpisodes: number | null
+  // anime-ranking: this item's overall rank, null when it isn't in the
+  // ranking — breaks a My-score tie wherever My score is the primary or the
+  // tiebreaker key (see composeComparator below).
+  myRank: number | null
   entry: {
     myScore: number | null
     episodesWatched: number
@@ -388,9 +411,18 @@ export function sortComparator(
   return SORT_KEY_FACTORIES[key](direction)
 }
 
-// Runs [primary, tiebreak, byTitle] in order and returns the first non-zero
-// result, with title order always appended so a full tie has one defined
-// order and Array.prototype.sort's stability is never load-bearing.
+// anime-ranking: wherever My score is the primary or the tiebreaker key,
+// entries left tied on it are separated by rank — best-ranked first, always
+// in its own natural direction, unranked last — before the alphabetical
+// fallback (library-views spec, "My list two-level sorting").
+const compareByRank = nullsLast<SortableListItem, number>(
+  (item) => item.myRank,
+  (a, b) => a - b,
+)('natural')
+
+// Runs [primary, tiebreak, rank, byTitle] in order and returns the first
+// non-zero result, with title order always appended so a full tie has one
+// defined order and Array.prototype.sort's stability is never load-bearing.
 export function composeComparator(
   primaryKey: SortKey,
   direction: SortDirection,
@@ -399,6 +431,7 @@ export function composeComparator(
 ): Comparator<SortableListItem> {
   const primary = sortComparator(primaryKey, direction, airingStatusFirst)
   const tiebreak = tiebreakKey ? sortComparator(tiebreakKey, 'natural', airingStatusFirst) : null
+  const rankBreaksTie = primaryKey === 'myScore' || tiebreakKey === 'myScore'
   const byTitle = SORT_KEY_FACTORIES.alphabetical('natural')
   return (a, b) => {
     const primaryResult = primary(a, b)
@@ -406,6 +439,10 @@ export function composeComparator(
     if (tiebreak) {
       const tiebreakResult = tiebreak(a, b)
       if (tiebreakResult !== 0) return tiebreakResult
+    }
+    if (rankBreaksTie) {
+      const rankResult = compareByRank(a, b)
+      if (rankResult !== 0) return rankResult
     }
     return byTitle(a, b)
   }

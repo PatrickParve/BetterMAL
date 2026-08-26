@@ -4,6 +4,7 @@ import { ConnectionStatusNotice } from './components/ConnectionStatusNotice.tsx'
 import { ScoreVisibilityProvider } from './context/ScoreVisibilityContext.tsx'
 import { EntryEditorProvider } from './context/EntryEditorContext.tsx'
 import { CompletionPromptProvider } from './context/CompletionPromptContext.tsx'
+import { AnimeRankProvider } from './context/AnimeRankContext.tsx'
 import { ContentFilterProvider } from './context/ContentFilterContext.tsx'
 import { PageStateProvider } from './state/PageStateContext.tsx'
 import { useScrollRestoration } from './hooks/useScrollRestoration.ts'
@@ -29,33 +30,35 @@ export function AppShell() {
   return (
     <ScoreVisibilityProvider>
       <ContentFilterProvider>
-        <EntryEditorProvider>
-          <CompletionPromptProvider>
-            <PageStateProvider>
-              <ScrollRestorationMount />
-              <Navbar />
-              <main className="page-content">
-                <Routes>
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/season" element={<SeasonPage />} />
-                  <Route path="/year" element={<YearPage />} />
-                  <Route path="/top" element={<TopAnimePage />} />
-                  <Route path="/airing" element={<AiringPage />} />
-                  <Route path="/my-list" element={<MyListPage />} />
-                  <Route path="/recap" element={<RecapPage />} />
-                  <Route path="/profile" element={<ProfilePage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="/anime/:id" element={<AnimeDetailPage />} />
-                  <Route path="/search" element={<SearchPage />} />
-                  <Route path="/series" element={<SeriesBrowserPage />} />
-                  <Route path="/series/:animeId" element={<SeriesPage />} />
-                  <Route path="*" element={<HomePage />} />
-                </Routes>
-              </main>
-              <ConnectionStatusNotice />
-            </PageStateProvider>
-          </CompletionPromptProvider>
-        </EntryEditorProvider>
+        <AnimeRankProvider>
+          <EntryEditorProvider>
+            <CompletionPromptProvider>
+              <PageStateProvider>
+                <ScrollRestorationMount />
+                <Navbar />
+                <main className="page-content">
+                  <Routes>
+                    <Route path="/" element={<HomePage />} />
+                    <Route path="/season" element={<SeasonPage />} />
+                    <Route path="/year" element={<YearPage />} />
+                    <Route path="/top" element={<TopAnimePage />} />
+                    <Route path="/airing" element={<AiringPage />} />
+                    <Route path="/my-list" element={<MyListPage />} />
+                    <Route path="/recap" element={<RecapPage />} />
+                    <Route path="/profile" element={<ProfilePage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
+                    <Route path="/anime/:id" element={<AnimeDetailPage />} />
+                    <Route path="/search" element={<SearchPage />} />
+                    <Route path="/series" element={<SeriesBrowserPage />} />
+                    <Route path="/series/:animeId" element={<SeriesPage />} />
+                    <Route path="*" element={<HomePage />} />
+                  </Routes>
+                </main>
+                <ConnectionStatusNotice />
+              </PageStateProvider>
+            </CompletionPromptProvider>
+          </EntryEditorProvider>
+        </AnimeRankProvider>
       </ContentFilterProvider>
     </ScoreVisibilityProvider>
   )

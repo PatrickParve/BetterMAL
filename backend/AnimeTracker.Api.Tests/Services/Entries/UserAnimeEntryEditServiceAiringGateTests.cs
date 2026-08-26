@@ -1,7 +1,9 @@
 using AnimeTracker.Api.Data;
+using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Entries;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Sync;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +27,7 @@ public class UserAnimeEntryEditServiceAiringGateTests
             new FakeEntrySyncScheduler(),
             new FakeEpisodeScheduleService(airedSoFar),
             new FakeAiringRefreshTrigger(),
+            new AnimeRankingService(new UserAnimeEntryRepository(db), new TopAnimeSelectionRepository(db)),
             new FakeServiceScopeFactory(),
             NullLogger<UserAnimeEntryEditService>.Instance);
 

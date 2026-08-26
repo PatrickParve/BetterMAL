@@ -36,12 +36,34 @@ public class RecapServiceTests
         {
             Entry(1, WatchStatus.Dropped, new DateOnly(2021, 6, 1), 7.5),
         };
-        var service = new RecapService(new FakeUserAnimeEntryRepository(entries), new FakeActivityLogRepository(), new FakeBroadcastLocalTimeConverter());
+        var service = new RecapService(new FakeUserAnimeEntryRepository(entries), new FakeActivityLogRepository(), new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter());
 
         var dto = await service.GetRecapAsync(RecapPeriod.Yearly(2021), RecapTimeFilter.Watched, CancellationToken.None);
 
         var row = Assert.Single(dto.Items);
         Assert.True(row.MalRevealed);
+    }
+
+    // anime-ranking capability read into the recap (design.md D11, tasks.md
+    // 3.5): MyRank carries the anime's overall rank in the whole-list
+    // ranking, null for a row the ranking doesn't cover.
+    [Fact]
+    public async Task RowsCarryTheAnimesOverallRank()
+    {
+        var ranked = Entry(1, WatchStatus.Completed, new DateOnly(2021, 6, 1), 7.5);
+        ranked.MyScore = 8;
+        ranked.Anime.AiredFrom = new DateOnly(2021, 6, 1);
+        var unranked = Entry(2, WatchStatus.Watching, new DateOnly(2021, 6, 1), 7.5);
+        unranked.Anime.AiredFrom = new DateOnly(2021, 6, 1);
+        var service = new RecapService(
+            new FakeUserAnimeEntryRepository([ranked, unranked]), new FakeActivityLogRepository(),
+            new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter());
+
+        var dto = await service.GetRecapAsync(RecapPeriod.Yearly(2021), RecapTimeFilter.Aired, CancellationToken.None);
+
+        Assert.Equal(2, dto.Items.Count);
+        Assert.Equal(1, dto.Items.Single(i => i.AnimeId == 1).MyRank);
+        Assert.Null(dto.Items.Single(i => i.AnimeId == 2).MyRank);
     }
 
     [Fact]
@@ -52,7 +74,7 @@ public class RecapServiceTests
         // flag itself from the filter's own status gate.
         var entry = Entry(1, WatchStatus.Watching, new DateOnly(2021, 6, 1), 7.5);
         entry.Anime.AiredFrom = new DateOnly(2021, 6, 1);
-        var service = new RecapService(new FakeUserAnimeEntryRepository([entry]), new FakeActivityLogRepository(), new FakeBroadcastLocalTimeConverter());
+        var service = new RecapService(new FakeUserAnimeEntryRepository([entry]), new FakeActivityLogRepository(), new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter());
 
         var dto = await service.GetRecapAsync(RecapPeriod.Yearly(2021), RecapTimeFilter.Aired, CancellationToken.None);
 
@@ -67,7 +89,7 @@ public class RecapServiceTests
         early.Anime.AiredFrom = new DateOnly(2020, 3, 1);
         var late = Entry(2, WatchStatus.Watching, new DateOnly(2024, 9, 1), 8.0);
         late.Anime.AiredFrom = new DateOnly(2024, 9, 1);
-        var service = new RecapService(new FakeUserAnimeEntryRepository([early, late]), new FakeActivityLogRepository(), new FakeBroadcastLocalTimeConverter());
+        var service = new RecapService(new FakeUserAnimeEntryRepository([early, late]), new FakeActivityLogRepository(), new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter());
 
         var dto = await service.GetRecapAsync(RecapPeriod.MultiYear(2020, 2024), RecapTimeFilter.Aired, CancellationToken.None);
 
@@ -88,7 +110,7 @@ public class RecapServiceTests
             LogRow(1, new DateTimeOffset(2024, 6, 1, 12, 0, 0, TimeSpan.Zero), previousEpisodesWatched: 0, newEpisodesWatched: 12),
         ];
         var service = new RecapService(
-            new FakeUserAnimeEntryRepository([entry]), new FakeActivityLogRepository(logRows), new FakeBroadcastLocalTimeConverter());
+            new FakeUserAnimeEntryRepository([entry]), new FakeActivityLogRepository(logRows), new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter());
 
         var dto = await service.GetRecapAsync(RecapPeriod.Yearly(2024), RecapTimeFilter.Watched, CancellationToken.None);
 
@@ -112,7 +134,7 @@ public class RecapServiceTests
             LogRow(1, new DateTimeOffset(2024, 1, 10, 12, 0, 0, TimeSpan.Zero), previousEpisodesWatched: 8, newEpisodesWatched: 15),
         ];
         var service = new RecapService(
-            new FakeUserAnimeEntryRepository([entry]), new FakeActivityLogRepository(logRows), new FakeBroadcastLocalTimeConverter());
+            new FakeUserAnimeEntryRepository([entry]), new FakeActivityLogRepository(logRows), new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter());
 
         var dto2023 = await service.GetRecapAsync(RecapPeriod.Yearly(2023), RecapTimeFilter.Watched, CancellationToken.None);
         var dto2024 = await service.GetRecapAsync(RecapPeriod.Yearly(2024), RecapTimeFilter.Watched, CancellationToken.None);
@@ -137,7 +159,7 @@ public class RecapServiceTests
             LogRow(1, new DateTimeOffset(2024, 3, 1, 12, 0, 0, TimeSpan.Zero), previousEpisodesWatched: 10, newEpisodesWatched: 3),
         ];
         var service = new RecapService(
-            new FakeUserAnimeEntryRepository([entry]), new FakeActivityLogRepository(logRows), new FakeBroadcastLocalTimeConverter());
+            new FakeUserAnimeEntryRepository([entry]), new FakeActivityLogRepository(logRows), new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter());
 
         var dto = await service.GetRecapAsync(RecapPeriod.Yearly(2024), RecapTimeFilter.Watched, CancellationToken.None);
 
@@ -156,7 +178,7 @@ public class RecapServiceTests
         List<ActivityLog> logRows =
             [LogRow(1, new DateTimeOffset(2024, 3, 1, 12, 0, 0, TimeSpan.Zero), previousEpisodesWatched: 0, newEpisodesWatched: 5)];
         var service = new RecapService(
-            new FakeUserAnimeEntryRepository([entry]), new FakeActivityLogRepository(logRows), new FakeBroadcastLocalTimeConverter());
+            new FakeUserAnimeEntryRepository([entry]), new FakeActivityLogRepository(logRows), new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter());
 
         var dto = await service.GetRecapAsync(RecapPeriod.Yearly(2024), RecapTimeFilter.Aired, CancellationToken.None);
 
@@ -172,6 +194,12 @@ public class RecapServiceTests
 
         public Task<(int PendingCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
             Task.FromResult((0, (DateTimeOffset?)null));
+    }
+
+    private sealed class FakeTopAnimeSelectionRepository : ITopAnimeSelectionRepository
+    {
+        public Task<List<int>> GetOrderedAnimeIdsAsync(CancellationToken ct = default) => Task.FromResult(new List<int>());
+        public Task ReplaceOrderAsync(IReadOnlyList<int> editedIds, CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     private sealed class FakeActivityLogRepository(List<ActivityLog>? rows = null) : IActivityLogRepository

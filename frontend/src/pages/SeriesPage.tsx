@@ -506,6 +506,7 @@ export function SeriesPage() {
       totalEpisodes: entry.totalEpisodes,
       airingStatus: entry.airingStatus,
       episodesAired: entry.airedEpisodes,
+      mediaType: entry.mediaType,
       entry: entry.entry,
       onSaved: (saved) => patchSeries((series) => patchSeriesEntry(series, entry.animeId, saved)),
       onDeleted: () => patchSeries((series) => patchSeriesEntry(series, entry.animeId, null)),

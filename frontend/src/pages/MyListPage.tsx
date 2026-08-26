@@ -126,6 +126,7 @@ function buildIncrementTarget(
     episodesWatched: item.entry.episodesWatched,
     previousStatus: item.entry.status,
     currentScore: item.entry.myScore,
+    mediaType: item.mediaType,
     onSaved: (saved) => patchItem(setItems, item.animeId, saved),
     // Reloads rather than patching: completing an anime moves it between
     // status groups, a server-computed regrouping no mutation response describes.
@@ -348,6 +349,7 @@ export function MyListPage() {
         totalEpisodes: item.totalEpisodes,
         airingStatus: item.airingStatus,
         episodesAired: item.episodesAired,
+        mediaType: item.mediaType,
         entry: item.entry,
         onSaved: (saved) => patchItem(setItems, item.animeId, saved),
         onDeleted: () => setItems((prev) => prev && prev.filter((i) => i.animeId !== item.animeId)),

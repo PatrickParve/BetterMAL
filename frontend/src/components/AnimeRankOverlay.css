@@ -1,0 +1,355 @@
+.anime-rank {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* Lets this shrink below its content's height once `.modal--rank` hits its
+     max-height cap, so `.anime-rank__tiers` below is the thing that scrolls
+     rather than the box itself. */
+  min-height: 0;
+}
+
+/* Lives inside `.anime-rank__tiers` itself (not a fixed sibling above it) so
+   that dragging a row can pull it out of view with a real scroll — see the
+   effect on `dragging` in AnimeRankOverlay.tsx — rather than a resize that
+   would reflow the list under the dragged row and make it jump. A bottom
+   border marks where it ends once it's scrolled to sit flush against the
+   list. flex-shrink:0 keeps it from ever being squeezed by its own
+   flex-grown sibling tier groups below. */
+.anime-rank__panel-header {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex-shrink: 0;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.anime-rank__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.anime-rank__header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.anime-rank__header-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.anime-rank__header-actions button {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.anime-rank__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+/* The "?" hint icon (replaces the old always-visible instructions line):
+   the how-to-reorder text now only shows in `.anime-rank__help-tooltip` on
+   hover/focus, so the header stays short regardless of mode. */
+.anime-rank__help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text);
+  cursor: help;
+  flex: 0 0 auto;
+}
+
+.anime-rank__help-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 15;
+  width: max-content;
+  max-width: min(320px, 70vw);
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+}
+
+.anime-rank__help:hover .anime-rank__help-tooltip,
+.anime-rank__help:focus-visible .anime-rank__help-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.anime-rank__whole-library {
+  align-self: flex-start;
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--accent-border);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.anime-rank__score-tabs {
+  display: flex;
+  /* Wraps rather than scrolling sideways (add-anime-ranking follow-up): a
+     horizontal scrollbar on a short tab strip reads as scores being cut off
+     rather than an obvious "scroll for more" affordance, so nothing is ever
+     hidden — the wider box (.modal--rank) just makes one line the common
+     case. */
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.anime-rank__score-tab {
+  font: inherit;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.anime-rank__score-tab-count {
+  opacity: 0.65;
+  font-size: 12px;
+}
+
+.anime-rank__score-tab--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.anime-rank__score-tab--active .anime-rank__score-tab-count {
+  opacity: 0.85;
+}
+
+.anime-rank__empty,
+.anime-rank__loading {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.anime-rank__tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  user-select: none;
+  /* Reserves the scrollbar's own gutter at the box's right edge (falls back
+     to the padding alone in browsers without support) so it never sits over
+     a row's controls. */
+  scrollbar-gutter: stable;
+  padding-right: 10px;
+}
+
+.anime-rank__tier {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.anime-rank__tier-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.anime-rank__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.anime-rank__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.anime-rank__row:hover {
+  background: var(--code-bg);
+  border-color: var(--border);
+}
+
+.anime-rank__row--dragging {
+  opacity: 0.35;
+  cursor: grabbing;
+}
+
+.anime-rank__row--focused {
+  border-color: var(--accent);
+  background: var(--code-bg);
+}
+
+.anime-rank__row-rank {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.65;
+  min-width: 2.5em;
+}
+
+.anime-rank__row-buttons {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  flex: 0 0 auto;
+  min-width: 52px;
+  justify-content: flex-end;
+}
+
+.anime-rank__row-buttons button {
+  font: inherit;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.anime-rank__row-buttons button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.anime-rank__row-buttons button:not(:disabled):hover {
+  border-color: var(--accent-border);
+}
+
+.anime-rank__promote {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.anime-rank__promote:hover {
+  filter: brightness(1.1);
+}
+
+.anime-rank__cut-line {
+  margin: 4px 6px;
+  border-top: 2px dashed var(--accent-border);
+}
+
+.anime-rank__insertion-line {
+  height: 2px;
+  margin: 3px 6px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.anime-rank__preview {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--accent-border);
+  box-shadow: var(--shadow);
+  transform: scale(1.03);
+  z-index: 20;
+  /* elementFromPoint hit-testing must see through to the row underneath */
+  pointer-events: none;
+}
+
+.anime-rank__picture {
+  width: 32px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--code-bg);
+  flex: 0 0 auto;
+}
+
+.anime-rank__picture--placeholder {
+  border: 1px solid var(--border);
+}
+
+.anime-rank__row-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.anime-rank__error {
+  color: #e5484d;
+  font-size: 14px;
+  margin: 0;
+}
+
+.anime-rank__retry {
+  font: inherit;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #e5484d;
+  background: transparent;
+  color: #e5484d;
+  cursor: pointer;
+}
+
+/* Reserves its own width from the widest state ("Saving…") so the Close
+   button beside it doesn't shift sideways as this text appears/disappears. */
+.anime-rank__save-status {
+  min-width: 5.5em;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.75;
+}

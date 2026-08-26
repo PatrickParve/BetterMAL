@@ -105,7 +105,7 @@ public class RecapControllerTests
     {
         var repository = new FakeUserAnimeEntryRepository([WatchedEntry(1, new DateOnly(2021, 4, 15), 12)]);
         var controller = new RecapController(
-            new RecapService(repository, new FakeActivityLogRepository(), new FakeBroadcastLocalTimeConverter()),
+            new RecapService(repository, new FakeActivityLogRepository(), new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter()),
             new RecordingAvailabilityService());
 
         var result = await controller.Get(RecapMode.MultiYear, 2020, 2022, null, null, RecapTimeFilter.Aired, CancellationToken.None);
@@ -121,7 +121,7 @@ public class RecapControllerTests
     {
         var repository = new FakeUserAnimeEntryRepository([WatchedEntry(1, new DateOnly(2021, 4, 15), 12)]);
         var controller = new RecapController(
-            new RecapService(repository, new FakeActivityLogRepository(), new FakeBroadcastLocalTimeConverter()),
+            new RecapService(repository, new FakeActivityLogRepository(), new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter()),
             new RecordingAvailabilityService());
 
         var result = await controller.Get(RecapMode.Season, null, null, 2021, "spring", RecapTimeFilter.Aired, CancellationToken.None);
@@ -137,7 +137,7 @@ public class RecapControllerTests
     {
         var repository = new FakeUserAnimeEntryRepository([WatchedEntry(1, new DateOnly(2021, 4, 15), 12)]);
         var controller = new RecapController(
-            new RecapService(repository, new FakeActivityLogRepository(), new FakeBroadcastLocalTimeConverter()),
+            new RecapService(repository, new FakeActivityLogRepository(), new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter()),
             new RecordingAvailabilityService());
 
         var result = await controller.Get(RecapMode.MultiYear, 2020, 2022, null, null, RecapTimeFilter.Watched, CancellationToken.None);
@@ -204,6 +204,12 @@ public class RecapControllerTests
         public Task<List<ActivityLog>> GetAllAsync(CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<ActivityLog>> GetEpisodeProgressInRangeAsync(DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
             Task.FromResult(new List<ActivityLog>());
+    }
+
+    private sealed class FakeTopAnimeSelectionRepository : ITopAnimeSelectionRepository
+    {
+        public Task<List<int>> GetOrderedAnimeIdsAsync(CancellationToken ct = default) => Task.FromResult(new List<int>());
+        public Task ReplaceOrderAsync(IReadOnlyList<int> editedIds, CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     private sealed class FakeBroadcastLocalTimeConverter : IBroadcastLocalTimeConverter

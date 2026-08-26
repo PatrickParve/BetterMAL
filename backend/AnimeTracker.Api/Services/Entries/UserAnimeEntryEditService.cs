@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Sync;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,6 +17,7 @@ public class UserAnimeEntryEditService(
     IEntrySyncScheduler syncScheduler,
     IEpisodeScheduleService scheduleService,
     IAiringRefreshTrigger airingRefreshTrigger,
+    IAnimeRankingService rankingService,
     IServiceScopeFactory scopeFactory,
     ILogger<UserAnimeEntryEditService> logger) : IUserAnimeEntryEditService
 {
@@ -89,6 +91,16 @@ public class UserAnimeEntryEditService(
             entry.PendingSync = true;
 
         await db.SaveChangesAsync(ct);
+
+        // list-editing "A saved score places the anime in the ranking"
+        // (design.md D6): runs once the score itself is durably saved, so a
+        // failure here never leaves a save half-applied from the caller's
+        // perspective — the whole UpdateEntryAsync call still fails and the
+        // client never sees success without both. Only a genuine score
+        // change places anything; re-saving the same score is a no-op here
+        // exactly as ApplyScore already made it one for the entry itself.
+        if (changes.Any(c => c.Type == ActivityChangeType.ScoreChanged) && entry.MyScore is { } placedScore)
+            await rankingService.PlaceLastInTierAsync(animeId, placedScore, ct);
 
         if (triggersSync)
             syncScheduler.ScheduleSync(animeId);

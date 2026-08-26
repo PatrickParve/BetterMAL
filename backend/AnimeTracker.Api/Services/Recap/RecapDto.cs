@@ -98,7 +98,8 @@ public record RecapRowDto(
     string? MediaType,
     int? MyScore,
     double? MalScore,
-    bool MalRevealed);
+    bool MalRevealed,
+    int? MyRank);
 
 /// <summary>Full recap payload for one period + time filter (design.md
 /// decision 1). <c>Filter</c> echoes what was actually used — always
