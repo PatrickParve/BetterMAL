@@ -1,0 +1,36 @@
+## 1. Picker options are shown whole
+
+- [x] 1.1 In `frontend/src/components/PicturePickerOverlay.css`, replace `.picture-picker-overlay__grid`'s fixed-cell grid (`display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 130px))`) with a wrapping flex row — `display: flex; flex-wrap: wrap; gap: 12px; justify-content: center` — and declare the shared option height on it as a custom property, `--picker-option-h: 140px` (D1, D3). Keep the existing comment's point that the grid takes no `max-height`/`overflow` of its own and scrolls with the modal.
+- [x] 1.2 Rewrite `.picture-picker-overlay__option` so it shrink-wraps its image instead of imposing a shape: drop `width: 100%` and `aspect-ratio: 2 / 3`, add `display: flex` (so the image leaves no inline descender gap under it) and `max-width: 100%`. Keep the border, radius, `overflow: hidden`, background, cursor, and the `:hover` / `--selected` border rules unchanged.
+- [x] 1.3 Rewrite `.picture-picker-overlay__image` to draw each option at its own proportions: `height: var(--picker-option-h); width: auto; aspect-ratio: auto 2 / 3; max-width: 100%; object-fit: contain;` replacing today's `width: 100%; height: 100%; object-fit: cover`. Comment why `aspect-ratio: auto 2 / 3` is written that way — the `auto` keyword defers to the image's natural ratio once it has decoded, so the stated `2 / 3` only reserves a portrait footprint while the image is still loading, with no JS measurement pass (D2).
+- [x] 1.4 Comment the `object-fit: contain` / `max-width: 100%` pair as the pathological-panorama guard it is (D3): it engages only when an option is too wide for the row at the common height, and otherwise never fires because the box is already the image's own shape.
+- [x] 1.5 Check `.picture-picker-overlay__badge` ("Current") still reads on the new tile shapes — it is pinned `bottom/left/right` inside the option, so it should follow a narrow portrait option and a wide landscape one alike. Adjust only if it does not.
+- [x] 1.6 Verify in the app on both callers, since they share the component: the anime detail page's picker and the series page's picker (a franchise whose pool mixes portrait posters and landscape key visuals is the case to look at) — every option whole, landscape drawn landscape and wider than its portrait neighbours, rows lined up to one height, and no sideways scroll in the overlay.
+
+## 2. Series page controls move beside Rebuild
+
+- [x] 2.1 In `frontend/src/pages/SeriesPage.tsx`, move the Choose picture and Choose title buttons out of `series-page__artwork-controls` in the header block and into `series-page__rebuild-row`, ordered Choose picture, Choose title, Rebuild — Rebuild last so the partial/truncated notices after it still read as qualifying it (D7). Keep the `series.pictureOptions.length > 1` guard on Choose picture and both `onClick` handlers exactly as they are.
+- [x] 2.2 Delete the now-empty `series-page__artwork-controls` wrapper from the header block, leaving `series-page__links` as the last thing in `series-page__header-info` before the score/progress block.
+- [x] 2.3 In `frontend/src/pages/SeriesPage.css`, rename `.series-page__rebuild` (and its `:hover` and `:disabled` rules) to `.series-page__stats-action`, and drop `.series-page__artwork-controls` and `.series-page__artwork-controls .series-page__related-link` entirely.
+- [x] 2.4 Apply `series-page__stats-action` to all three buttons in the row, replacing the `series-page__related-link` class the two artwork controls were using — that class exists to make the external-link anchors look like buttons, and the controls are being separated from those links (D7).
+- [x] 2.5 Check the narrow-screen media query at the bottom of `SeriesPage.css`: it centres `series-page__links` and friends and never referenced `artwork-controls`, so it should need no edit — confirm the Series stats row still wraps sensibly with three controls in it, and that `series-page__stats-header`'s `space-between` still reads well when the row is wider than before.
+- [x] 2.6 Verify on a series with several pictures and on one with exactly one picture: the first shows Choose picture, Choose title and Rebuild together in the Series stats row; the second shows Choose title and Rebuild with no gap left where Choose picture would be; the page header block below the title shows only MyAnimeList / AniList / SeriesGraph.
+
+## 3. Overlays close when the page is left
+
+- [x] 3.1 In `frontend/src/components/Modal.tsx`, import `useLocation` from `react-router-dom` and read `pathname` from it.
+- [x] 3.2 Hold the pathname the modal was mounted at in a ref, and hold the current `onClose` in a second ref updated on each render — several call sites pass a freshly-created arrow, so `onClose` must not be an effect dependency (D6).
+- [x] 3.3 Add an effect depending on `pathname` alone that calls the latest `onClose` when `pathname` differs from the mounted-at value, and does nothing otherwise — so it never fires on the initial render, nor on StrictMode's double-mount, and fires exactly once per page change.
+- [x] 3.4 Comment why this belongs in `Modal` rather than in each overlay or provider (D4): it is the one wrapper every overlay in the app passes through, so this covers the three app-root overlays, the page-local overlays that survive a same-route parameter change, and every overlay added later — and why it closes via `onClose` rather than by unmounting, so `AnimeRankOverlay`'s pending-save flush and `CompletionScoreOverlay`'s "dismissed, nothing saved" `null` both still run.
+- [x] 3.5 Comment why the effect keys on `pathname` and not the whole location (D5): filters, sort, scope, page number and the search query all live in the query string and are a page's own view state, not a different page.
+- [x] 3.6 Verify the reported case: open the entry editor from the anime detail page, press back, then forward — the editor is gone after the first navigation and does not reappear.
+- [x] 3.7 Verify the same-route case: open an overlay on `/anime/:id` (the picture picker, or the related-anime overlay) and follow a related-anime link to a different anime — the overlay closes over the new anime's page.
+- [x] 3.8 Verify the non-case: with the entry editor open on My List, confirm that a change to the page's filter/sort/page query parameters does not close it.
+- [x] 3.9 Verify the page behind is not left frozen: after an overlay closes by navigation, the page navigated to scrolls normally (the `useScrollLock` release runs on the same unmount path as any other close).
+- [x] 3.10 Verify dismissal semantics: change values in the entry editor and navigate away — nothing is saved and no confirmation appears; and open the ranking editor with a pending arrangement and navigate away — the flush still runs, exactly as on Escape.
+
+## 4. Build and check
+
+- [x] 4.1 Run `npm run lint` in `frontend/`.
+- [x] 4.2 Run `npm run build` in `frontend/` under nvm's node v22 — the default `node` on this machine is v16 and the Vite build fails on it.
+- [x] 4.3 Re-read the three delta specs against the implementation and confirm every scenario is satisfied, then run `openspec validate polish-image-picker-and-edit-modal --strict`.

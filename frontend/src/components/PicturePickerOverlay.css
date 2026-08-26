@@ -9,13 +9,14 @@
 }
 
 .picture-picker-overlay__grid {
-  display: grid;
-  /* A capped max (not 1fr, which stretches to fill the row) keeps every
-     thumbnail at a normal poster size regardless of how few options there
-     are — two pictures in a wide modal shouldn't blow up to fill it. */
-  grid-template-columns: repeat(auto-fill, minmax(110px, 130px));
+  display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 12px;
+  /* Shared by every option below so a mixed set of portrait and landscape
+     pictures still lines up in tidy rows (D1) — smaller than the picture the
+     page itself displays, so more of a large pool fits on screen at once. */
+  --picker-option-h: 140px;
   /* No max-height/overflow of its own: a large pool (a franchise's whole
      picture pool can run past twenty) scrolls with the rest of the modal
      instead of getting its own nested scrollbar, which on a short viewport
@@ -24,14 +25,14 @@
 
 .picture-picker-overlay__option {
   position: relative;
-  width: 100%;
+  display: flex;
+  max-width: 100%;
   padding: 0;
   border: 2px solid var(--border);
   border-radius: 8px;
   background: var(--code-bg);
   cursor: pointer;
   overflow: hidden;
-  aspect-ratio: 2 / 3;
 }
 
 .picture-picker-overlay__option:hover {
@@ -43,9 +44,18 @@
 }
 
 .picture-picker-overlay__image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: var(--picker-option-h);
+  width: auto;
+  /* `auto` defers to the image's natural ratio once it has decoded; the
+     stated 2/3 only reserves a portrait footprint while it hasn't, with no
+     JS measurement pass (D2) — most MAL artwork is portrait, so this is
+     right for the common case and only briefly wrong for a landscape one. */
+  aspect-ratio: auto 2 / 3;
+  max-width: 100%;
+  /* Engages only when an option is too wide for the row at the common
+     height — a pathological-panorama guard (D3) — and otherwise never fires
+     because the box is already the image's own shape. */
+  object-fit: contain;
   display: block;
 }
 

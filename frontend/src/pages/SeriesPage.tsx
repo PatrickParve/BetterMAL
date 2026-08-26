@@ -757,17 +757,6 @@ export function SeriesPage() {
             </a>
           </div>
 
-          <div className="series-page__artwork-controls">
-            {series.pictureOptions.length > 1 && (
-              <button type="button" className="series-page__related-link" onClick={() => setShowPicturePicker(true)}>
-                Choose picture
-              </button>
-            )}
-            <button type="button" className="series-page__related-link" onClick={() => setShowTitlePicker(true)}>
-              Choose title
-            </button>
-          </div>
-
           {!isLandscapePicture && scoreAndProgress}
         </div>
         {isLandscapePicture && <div className="series-page__header-below">{scoreAndProgress}</div>}
@@ -777,7 +766,15 @@ export function SeriesPage() {
         <div className="series-page__stats-header">
           <h2>Series stats</h2>
           <div className="series-page__rebuild-row">
-            <button type="button" className="series-page__rebuild" onClick={handleRebuild} disabled={rebuilding}>
+            {series.pictureOptions.length > 1 && (
+              <button type="button" className="series-page__stats-action" onClick={() => setShowPicturePicker(true)}>
+                Choose picture
+              </button>
+            )}
+            <button type="button" className="series-page__stats-action" onClick={() => setShowTitlePicker(true)}>
+              Choose title
+            </button>
+            <button type="button" className="series-page__stats-action" onClick={handleRebuild} disabled={rebuilding}>
               {rebuilding ? (rebuildCount !== null ? `Rebuilding… ${rebuildCount} entries` : 'Rebuilding…') : 'Rebuild'}
             </button>
             {series.isPartial && <span className="series-page__notice">Some entries couldn't be loaded yet.</span>}
