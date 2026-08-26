@@ -26,6 +26,7 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<SeriesMember> SeriesMembers => Set<SeriesMember>();
     public DbSet<AniListRelation> AniListRelations => Set<AniListRelation>();
     public DbSet<RelationDiscovery> RelationDiscoveries => Set<RelationDiscovery>();
+    public DbSet<AnimeUpdate> AnimeUpdates => Set<AnimeUpdate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -177,6 +178,17 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
                 .HasForeignKey(e => e.AnimeId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => e.DiscoveredAt);
+            entity.HasIndex(e => e.ProcessedAt); // the "still unprocessed" query
+        });
+
+        modelBuilder.Entity<AnimeUpdate>(entity =>
+        {
+            entity.HasOne(e => e.Anime)
+                .WithMany()
+                .HasForeignKey(e => e.AnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.DetectedAt);
+            entity.HasIndex(e => e.AnimeId);
         });
 
         modelBuilder.Entity<Series>(entity =>

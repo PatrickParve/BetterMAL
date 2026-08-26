@@ -28,4 +28,16 @@ public interface IBroadcastLocalTimeConverter
     /// grid, so a stored row range query stays in exact local-day bounds
     /// through a DST transition.</summary>
     DateTimeOffset LocalMidnightUtc(DateOnly localDate);
+
+    /// <summary>Converts a MAL-reported weekly broadcast slot — a day of week
+    /// and time of day, both JST, with no year/month/day of their own — to the
+    /// equivalent local day of week and time of day. Anchored to the nearest
+    /// occurrence on or after <paramref name="referenceUtc"/> purely to settle
+    /// which DST offset applies on the Helsinki side; JST itself has no DST,
+    /// so the choice of anchor never changes the answer by more than the
+    /// hour DST itself moves. Used by the anime-updates feed so a broadcast
+    /// slot (current or moved-from) reads in the same timezone as every other
+    /// broadcast time in the app.</summary>
+    (DayOfWeek LocalDayOfWeek, TimeOnly LocalTime) ConvertBroadcastSlot(
+        DayOfWeek jstDayOfWeek, TimeOnly jstTime, DateTimeOffset referenceUtc);
 }

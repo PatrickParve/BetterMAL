@@ -152,10 +152,46 @@ export type CurrentSeasonItemDto = {
   finishedAiring: boolean
 }
 
+export type AnimeUpdateKind =
+  | 'Announced'
+  | 'EpisodeCountReleased'
+  | 'StartDateReleased'
+  | 'StartDateChanged'
+  | 'BroadcastSlotChanged'
+  | 'EpisodesMoved'
+
+// One card of news about an anime (anime-updates spec) — every kind noticed
+// in a single detection pass merged into one row. totalEpisodes/airedFrom are
+// the anime's *current* values, read live, so a later correction shows up
+// here without the row itself changing; the previous* fields are the
+// exception, reported exactly as recorded since for those the news is the
+// movement itself.
+export type AnimeUpdateDto = {
+  id: number
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  kinds: AnimeUpdateKind[]
+  detectedAt: string
+  totalEpisodes: number | null
+  airedFrom: string | null
+  previousStartDate: string | null
+  previousBroadcastDayOfWeek: string | null
+  previousBroadcastTime: string | null
+  currentBroadcastDayOfWeek: string | null
+  currentBroadcastTime: string | null
+  movedEpisode: number | null
+  previousEpisodeDate: string | null
+  newEpisodeDate: string | null
+  reason: string
+}
+
 export type MainDashboardDto = {
   currentlyWatching: CurrentlyWatchingItemDto[]
   airingToday: AiringTodayItemDto[]
   currentSeason: CurrentSeasonItemDto[]
+  updates: AnimeUpdateDto[]
 }
 
 export type AiringSlotDto = {

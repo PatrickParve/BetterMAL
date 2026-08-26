@@ -4,6 +4,7 @@ using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Season;
+using AnimeTracker.Api.Services.Updates;
 
 namespace AnimeTracker.Api.Services.Dashboard;
 
@@ -11,8 +12,12 @@ public class MainDashboardService(
     IUserAnimeEntryRepository entryRepository,
     IEpisodeScheduleService scheduleService,
     ICompletedEntryReopenService reopenService,
-    IBroadcastLocalTimeConverter broadcastConverter) : IMainDashboardService
+    IBroadcastLocalTimeConverter broadcastConverter,
+    IAnimeUpdateService animeUpdateService) : IMainDashboardService
 {
+    // anime-updates spec, "The Updates section shows the last 30 days, newest first".
+    private static readonly TimeSpan UpdatesWindow = TimeSpan.FromDays(30);
+
     public async Task<MainDashboardDto> GetDashboardAsync(CancellationToken ct = default)
     {
         var entries = await entryRepository.GetAllAsync(ct);
@@ -97,7 +102,9 @@ public class MainDashboardService(
                 e.Anime.AiringStatus == "finished_airing"));
         }
 
-        return new MainDashboardDto(currentlyWatching, airingTodayDtos, currentSeason);
+        var updates = await animeUpdateService.GetRecentAsync(now - UpdatesWindow, ct);
+
+        return new MainDashboardDto(currentlyWatching, airingTodayDtos, currentSeason, updates);
     }
 
     // Internal so MainDashboardServiceOrderingTests can assert the rule

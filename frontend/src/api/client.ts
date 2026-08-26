@@ -5,6 +5,7 @@ import type {
   AnimeDetailDto,
   AnimeRankingResponseDto,
   AnimeSearchResult,
+  AnimeUpdateDto,
   HealthStatus,
   MainDashboardDto,
   MalAuthStatus,
@@ -139,6 +140,10 @@ export function deleteEntry(animeId: number): Promise<void> {
 
 export function getDashboard(): Promise<MainDashboardDto> {
   return fetchJson<MainDashboardDto>('/api/dashboard')
+}
+
+export function getUpdatesHistory(): Promise<AnimeUpdateDto[]> {
+  return fetchJson<AnimeUpdateDto[]>('/api/updates/history')
 }
 
 // `week` is any ISO date (yyyy-MM-dd) inside the desired week; omit for the

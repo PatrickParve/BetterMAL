@@ -3,6 +3,8 @@ using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing.AniList;
 using AnimeTracker.Api.Services.Relations;
+using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Airing;
@@ -13,6 +15,8 @@ public class EpisodeScheduleRefreshService(
     IEpisodeAiringRepository episodeAiringRepository,
     IAniListClient aniList,
     AniListRelationStore relationStore,
+    IBroadcastLocalTimeConverter localTimeConverter,
+    IAnimeUpdateRecorder updateRecorder,
     ILogger<EpisodeScheduleRefreshService> logger) : IEpisodeScheduleRefreshService
 {
     public async Task<List<int>> GetTrackedAnimeIdsAsync(CancellationToken ct = default)
@@ -197,7 +201,21 @@ public class EpisodeScheduleRefreshService(
         var rows = schedule.Episodes
             .Select(e => new EpisodeAiring { AnimeId = animeId, Episode = e.Episode, AirsAtUtc = e.AirsAtUtc, FetchedAt = now })
             .ToList();
-        await episodeAiringRepository.ReplaceForAnimeAsync(animeId, rows, ct);
+
+        // Read before replacing — ReplaceForAnimeAsync's delete+insert leaves
+        // nothing to diff against afterwards. A no-op replace (rows empty)
+        // leaves the stored set untouched, so there is nothing to compare either.
+        if (rows.Count > 0)
+        {
+            var existingRows = await db.EpisodeAirings.AsNoTracking()
+                .Where(e => e.AnimeId == animeId).ToListAsync(ct);
+            await episodeAiringRepository.ReplaceForAnimeAsync(animeId, rows, ct);
+            await RecordEpisodeMoves(anime, existingRows, rows, now, ct);
+        }
+        else
+        {
+            await episodeAiringRepository.ReplaceForAnimeAsync(animeId, rows, ct);
+        }
 
         var (hasCompleteData, nextRecheckAtUtc) = ComputeRecheckState(anime.AiringStatus, nextAiringAt, now);
         if (!hasCompleteData)
@@ -208,6 +226,58 @@ public class EpisodeScheduleRefreshService(
         await UpsertSyncAsync(sync, animeId, aniListId, now, nextAiringAt, hasCompleteData, nextRecheckAtUtc, relationsFetchedAt, ct);
 
         return schedule.Episodes.Count;
+    }
+
+    /// <summary>Diffs <paramref name="before"/> (the anime's stored rows just
+    /// before <c>ReplaceForAnimeAsync</c> replaced them) against
+    /// <paramref name="after"/> (the incoming set) and records one
+    /// EpisodesMoved update naming the earliest episode whose local calendar
+    /// air date moved (design.md D16). Skipped entirely when there were no
+    /// prior rows at all — a first fetch is not a move — or when the anime has
+    /// finished airing (spec "Schedule changes are recorded only while an
+    /// anime has not finished airing"). Only episodes that had not yet aired,
+    /// by the stored (pre-refresh) date, are considered: a past episode's date
+    /// changing is AniList correcting history, not a schedule moving.</summary>
+    private async Task RecordEpisodeMoves(
+        AnimeMetadata anime, List<EpisodeAiring> before, List<EpisodeAiring> after, DateTimeOffset now, CancellationToken ct)
+    {
+        if (before.Count == 0)
+            return;
+        if (anime.AiringStatus == "finished_airing")
+            return;
+
+        var previousAirsAtByEpisode = before.ToDictionary(e => e.Episode, e => e.AirsAtUtc);
+
+        int? earliestEpisode = null;
+        DateOnly earliestFrom = default, earliestTo = default;
+
+        foreach (var episode in after)
+        {
+            if (!previousAirsAtByEpisode.TryGetValue(episode.Episode, out var previousAirsAtUtc))
+                continue; // no prior row for this episode — nothing it moved from
+
+            if (previousAirsAtUtc <= now)
+                continue; // already aired as of the stored date — a history correction, not a move
+
+            var previousLocalDate = localTimeConverter.GetLocalDate(previousAirsAtUtc);
+            var newLocalDate = localTimeConverter.GetLocalDate(episode.AirsAtUtc);
+            if (previousLocalDate == newLocalDate)
+                continue; // same local calendar day — not a move (design.md D16)
+
+            if (earliestEpisode is null || episode.Episode < earliestEpisode)
+            {
+                earliestEpisode = episode.Episode;
+                earliestFrom = previousLocalDate;
+                earliestTo = newLocalDate;
+            }
+        }
+
+        if (earliestEpisode is not { } movedEpisode)
+            return;
+
+        var moves = new ScheduleMoveDetails(
+            MovedEpisode: movedEpisode, PreviousEpisodeDate: earliestFrom, NewEpisodeDate: earliestTo);
+        await updateRecorder.RecordAsync(anime, AnimeUpdateKinds.EpisodesMoved, moves, now, ct);
     }
 
     // Checkpoints at T-30d/T-7d/T for a known next episode; every 3 days once

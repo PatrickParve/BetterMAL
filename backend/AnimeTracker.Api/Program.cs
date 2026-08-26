@@ -21,6 +21,7 @@ using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Season;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Sync;
+using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
 
@@ -90,6 +91,10 @@ builder.Services.AddScoped<IResyncService, ResyncService>();
 builder.Services.AddHostedService<ResyncBackgroundService>();
 
 // --- Metadata & score refresh ---
+builder.Services.AddScoped<IAnimeUpdateRecorder, AnimeUpdateRecorder>();
+builder.Services.AddScoped<IAnimeMetadataChangeDetector, AnimeMetadataChangeDetector>();
+builder.Services.AddScoped<IAnnouncementResolutionService, AnnouncementResolutionService>();
+builder.Services.AddScoped<IAnimeUpdateService, AnimeUpdateService>();
 builder.Services.AddScoped<IMetadataRefreshService, MetadataRefreshService>();
 builder.Services.AddHostedService<MetadataRefreshBackgroundService>();
 builder.Services.AddScoped<IPictureRefreshService, PictureRefreshService>();

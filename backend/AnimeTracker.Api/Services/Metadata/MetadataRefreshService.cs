@@ -1,8 +1,10 @@
+using System.Linq.Expressions;
 using System.Net;
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
+using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Metadata;
@@ -10,23 +12,39 @@ namespace AnimeTracker.Api.Services.Metadata;
 public class MetadataRefreshService(
     AnimeTrackerDbContext db,
     IMalClient malClient,
+    IAnimeMetadataChangeDetector changeDetector,
     ILogger<MetadataRefreshService> logger) : IMetadataRefreshService
 {
     public async Task<int> RefreshStaleBatchAsync(int batchSize, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
 
-        // My-list only: Season/Top-Anime browsing populates AnimeMetadata too,
-        // but those rows are refreshed solely via the lean, visit-triggered
-        // path (never this nightly job). RelatedAnime must be Included before
-        // ApplyTo replaces it below — same tracked-snapshot requirement as
-        // RefreshOneAsync, or EF has nothing to diff against and re-inserts
-        // rows that already exist instead of deleting stale ones. Ordering by
-        // LastSyncedAt ascending naturally puts never-fetched rows (default,
-        // i.e. the earliest possible value) first.
+        // My-list, plus the narrow adjacent carve-out (design.md D10; spec
+        // "Scheduled refresh of unaired list-adjacent anime"): an unaired
+        // anime with no list entry of its own but a same-story relation to a
+        // non-Dropped one. Season/Top-Anime browsing populates AnimeMetadata
+        // too, but those rows are refreshed solely via the lean,
+        // visit-triggered path (never this nightly job). RelatedAnime must be
+        // Included before ApplyTo replaces it below — same tracked-snapshot
+        // requirement as RefreshOneAsync, or EF has nothing to diff against
+        // and re-inserts rows that already exist instead of deleting stale
+        // ones. Ordering by LastSyncedAt ascending naturally puts
+        // never-fetched rows (default, i.e. the earliest possible value)
+        // first. isAdjacent's own parameter becomes the combined predicate's
+        // parameter, so the two clauses share one `a` with no substitution
+        // needed.
+        var isAdjacent = AdjacentAnimeSet.IsAdjacent(db);
+        var candidateFilter = Expression.Lambda<Func<AnimeMetadata, bool>>(
+            Expression.OrElse(
+                Expression.NotEqual(
+                    Expression.Property(isAdjacent.Parameters[0], nameof(AnimeMetadata.UserEntry)),
+                    Expression.Constant(null, typeof(UserAnimeEntry))),
+                isAdjacent.Body),
+            isAdjacent.Parameters[0]);
+
         var due = await db.AnimeMetadata
             .Include(a => a.RelatedAnime)
-            .Where(a => a.UserEntry != null)
+            .Where(candidateFilter)
             .Where(RefreshTiers.IsDue(now))
             .OrderBy(a => a.LastSyncedAt)
             .Take(batchSize)
@@ -43,14 +61,15 @@ public class MetadataRefreshService(
                 // same one call. This is what lets relations, airing status,
                 // episode counts and ranks refresh on these tiers too,
                 // instead of freezing at whatever the anime's first fetch saw.
-                // The query above is already my-list-only, so every anime
-                // here is by definition eligible for the with-pictures fetch
-                // (design.md D4a) — no re-check needed.
-                var details = await malClient.GetAnimeDetailsAsync(
-                    anime.Id, fields: [MalClient.FullDetailWithPicturesAnimeFields], ct: ct);
-                var before = SnapshotRelations(anime);
+                // The with-pictures field set stays my-list-only (task 5.4):
+                // the candidate set now also includes adjacent anime (design.md
+                // D10), which have no list entry and so nothing that reads
+                // PictureUrls.
+                var fields = anime.UserEntry != null ? new[] { MalClient.FullDetailWithPicturesAnimeFields } : null;
+                var details = await malClient.GetAnimeDetailsAsync(anime.Id, fields: fields, ct: ct);
+                var before = changeDetector.Snapshot(anime);
                 details.ApplyTo(anime, now);
-                RecordDiscoveries(anime, before, now);
+                await changeDetector.RecordAsync(anime, before, now, ct);
                 refreshed++;
             }
             catch (Exception ex)
@@ -100,37 +119,11 @@ public class MetadataRefreshService(
         }
         else
         {
-            var before = SnapshotRelations(anime);
+            var before = changeDetector.Snapshot(anime);
             details.ApplyTo(anime, now);
-            RecordDiscoveries(anime, before, now);
+            await changeDetector.RecordAsync(anime, before, now, ct);
         }
 
         await db.SaveChangesAsync(ct);
-    }
-
-    private static HashSet<(int RelatedAnimeId, string RelationType)> SnapshotRelations(AnimeMetadata anime) =>
-        anime.RelatedAnime.Select(r => (r.RelatedAnimeId, r.RelationType)).ToHashSet();
-
-    /// <summary>Writes one <see cref="RelationDiscovery"/> per edge present in
-    /// <paramref name="anime"/>'s relation set after <c>ApplyTo</c> that wasn't
-    /// in <paramref name="before"/> — the snapshot taken from the tracked
-    /// collection just before <c>ApplyTo</c> replaced it. Removed and
-    /// unchanged edges are deliberately not events (design.md decision 10).</summary>
-    private void RecordDiscoveries(
-        AnimeMetadata anime, HashSet<(int RelatedAnimeId, string RelationType)> before, DateTimeOffset now)
-    {
-        foreach (var edge in anime.RelatedAnime)
-        {
-            if (before.Contains((edge.RelatedAnimeId, edge.RelationType)))
-                continue;
-
-            db.RelationDiscoveries.Add(new RelationDiscovery
-            {
-                AnimeId = anime.Id,
-                RelatedAnimeId = edge.RelatedAnimeId,
-                RelationType = edge.RelationType,
-                DiscoveredAt = now,
-            });
-        }
     }
 }

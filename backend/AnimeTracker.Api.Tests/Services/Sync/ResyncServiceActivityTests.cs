@@ -3,6 +3,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Sync;
+using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -11,6 +12,9 @@ namespace AnimeTracker.Api.Tests.Services.Sync;
 // record-mal-origin-activity design D9 (tasks.md 8.4): ResyncService.RunAsync
 // records what it applied per anime with MalResync, inside the same per-anime
 // try/save so a failure records nothing for that anime and doesn't stop the run.
+// Also anime-updates: a corrective re-sync is still a write to cached anime
+// metadata, so it goes through IAnimeMetadataChangeDetector like every other
+// refresh path.
 public class ResyncServiceActivityTests
 {
     private static AnimeTrackerDbContext CreateDb() =>
@@ -19,7 +23,7 @@ public class ResyncServiceActivityTests
             .Options);
 
     private static ResyncService CreateService(AnimeTrackerDbContext db, IMalClient malClient) =>
-        new(malClient, db, new ResyncProgressTracker(), NullLogger<ResyncService>.Instance);
+        new(malClient, db, new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db)), new ResyncProgressTracker(), NullLogger<ResyncService>.Instance);
 
     private static MalUserAnimeListEdge Edge(int animeId, string status = "watching", int episodesWatched = 0, int? score = null) => new()
     {
@@ -107,6 +111,39 @@ public class ResyncServiceActivityTests
 
         var row = Assert.Single(await db.ActivityLogs.Where(a => a.AnimeId == 2).ToListAsync());
         Assert.Equal(ActivityChangeType.Added, row.ChangeType);
+    }
+
+    [Fact]
+    public async Task AResyncThatRevealsAnUnknownEpisodeCountRecordsAnUpdate()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", TotalEpisodes = null };
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Anime = anime, Status = WatchStatus.Watching, EpisodesWatched = 3 });
+        await db.SaveChangesAsync();
+
+        var edge = Edge(1, "watching", 7);
+        edge.Node.NumEpisodes = 24;
+        var malClient = new FakeMalClient([edge]);
+
+        await CreateService(db, malClient).RunAsync(CancellationToken.None);
+
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal(1, update.AnimeId);
+        Assert.Equal(AnimeUpdateKinds.EpisodeCountReleased, update.Kinds);
+    }
+
+    [Fact]
+    public async Task AResyncOfANewlyImportedAnimeRecordsNoUpdate()
+    {
+        using var db = CreateDb();
+        var edge = Edge(1, "completed", 12);
+        edge.Node.NumEpisodes = 12;
+        var malClient = new FakeMalClient([edge]);
+
+        await CreateService(db, malClient).RunAsync(CancellationToken.None);
+
+        Assert.Empty(await db.AnimeUpdates.ToListAsync());
     }
 
     private sealed class FakeMalClient(List<MalUserAnimeListEdge> edges, int? failDetailsForAnimeId = null) : IMalClient
