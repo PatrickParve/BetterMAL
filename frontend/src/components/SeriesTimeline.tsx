@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import type { SeriesEntryDto } from '../api/types.ts'
+import type { SeriesEntryDto, SeriesSlotDto } from '../api/types.ts'
 import { useLandscapePicture } from '../hooks/useLandscapePicture.ts'
 import { isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_LABELS } from '../utils/anime.ts'
 import { ScoreChip } from './ScoreChip.tsx'
@@ -7,9 +7,25 @@ import { ScoreValue } from './ScoreValue.tsx'
 import { watchedFigureLabel } from './SeriesEntryRow.tsx'
 import './SeriesTimeline.css'
 
+// A slotted position's picker inputs (series-versions "Alternative versions on
+// a main line share one watch-order position"): options is every alternative
+// of the entry's own slot, resolved from allEntries since only the picked one
+// is ever present in the visible entries array itself.
+type SlotPicker = {
+  options: SeriesEntryDto[]
+  onPick: (animeId: number) => void
+}
+
 type SeriesTimelineProps = {
-  /** Main-line entries in watch order. */
+  /** Visible main-line entries in watch order — trunk plus, per slot, the
+   * picked alternative and its branch (series-versions capability). Numbered
+   * from 1 over exactly this array, so switching a pick never skips a number. */
   entries: SeriesEntryDto[]
+  /** Every main-line entry, every alternative included — resolves a slotted
+   * position's picker options, which aren't all present in `entries`. */
+  allEntries: SeriesEntryDto[]
+  slots: SeriesSlotDto[]
+  onPick: (slotKey: number, animeId: number) => void
   onEdit: (entry: SeriesEntryDto) => void
 }
 
@@ -52,22 +68,47 @@ function formatAirRange(entry: SeriesEntryDto): string {
 // in watch order — including an unreleased upcoming entry right where it
 // belongs. Each card states its own air range in place of the year ruler
 // that used to float above the row. This is the page's sole presentation of
-// the main line; there is no separate non-chronological list elsewhere.
-export function SeriesTimeline({ entries, onEdit }: SeriesTimelineProps) {
+// the main line; there is no separate non-chronological list elsewhere —
+// which is also why a version slot's picker lives here rather than in a
+// second, non-chronological rendering of the main line
+// (rebuild-series-by-story-component task 8.3).
+export function SeriesTimeline({ entries, allEntries, slots, onPick, onEdit }: SeriesTimelineProps) {
+  const slotByKey = new Map(slots.map((slot) => [slot.slotKey, slot]))
+  const entryById = new Map(allEntries.map((entry) => [entry.animeId, entry]))
+
   return (
     <div className="series-timeline">
       <div className="series-timeline__scroll">
         <div className="series-timeline__row">
-          {entries.map((entry) => (
-            <TimelineCard key={entry.animeId} entry={entry} onEdit={onEdit} />
-          ))}
+          {entries.map((entry, index) => {
+            const slot = entry.versionSlotKey !== null ? slotByKey.get(entry.versionSlotKey) : undefined
+            const picker: SlotPicker | undefined = slot && {
+              options: slot.alternativeAnimeIds
+                .map((id) => entryById.get(id))
+                .filter((option): option is SeriesEntryDto => option != null),
+              onPick: (animeId) => onPick(slot.slotKey, animeId),
+            }
+            return (
+              <TimelineCard key={entry.animeId} entry={entry} number={index + 1} picker={picker} onEdit={onEdit} />
+            )
+          })}
         </div>
       </div>
     </div>
   )
 }
 
-function TimelineCard({ entry, onEdit }: { entry: SeriesEntryDto; onEdit: (entry: SeriesEntryDto) => void }) {
+function TimelineCard({
+  entry,
+  number,
+  picker,
+  onEdit,
+}: {
+  entry: SeriesEntryDto
+  number: number
+  picker: SlotPicker | undefined
+  onEdit: (entry: SeriesEntryDto) => void
+}) {
   const displayTitle = pickDisplayTitle(entry.title, entry.englishTitle)
   const total = entry.totalEpisodes
   const watchedEpisodes = entry.entry?.episodesWatched ?? 0
@@ -84,6 +125,29 @@ function TimelineCard({ entry, onEdit }: { entry: SeriesEntryDto; onEdit: (entry
     <div
       className={`series-timeline__card${undated ? ' series-timeline__card--undated' : ''}${isLandscape ? ' series-timeline__card--landscape' : ''}`}
     >
+      <div className="series-timeline__card-header">
+        <span className="series-timeline__card-number">{number}</span>
+      </div>
+      {picker && (
+        <div className="series-page__slot-picker" role="group" aria-label={`Choose version for watch order position ${number}`}>
+          {picker.options.map((option) => {
+            const optionTitle = pickDisplayTitle(option.title, option.englishTitle)
+            const active = option.animeId === entry.animeId
+            return (
+              <button
+                key={option.animeId}
+                type="button"
+                className={`series-page__slot-picker-button${active ? ' series-page__slot-picker-button--active' : ''}`}
+                aria-pressed={active}
+                title={optionTitle}
+                onClick={() => picker.onPick(option.animeId)}
+              >
+                {optionTitle}
+              </button>
+            )
+          })}
+        </div>
+      )}
       <Link to={`/anime/${entry.animeId}`} className="series-timeline__card-link">
         {entry.pictureUrl ? (
           <img ref={pictureRef} src={entry.pictureUrl} alt="" className="series-timeline__card-picture" />

@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Series;
 
 namespace AnimeTracker.Api.Services.Updates;
 
@@ -42,7 +43,9 @@ public interface IAnimeMetadataChangeDetector
     Task RecordAsync(AnimeMetadata anime, AnimeMetadataSnapshot before, DateTimeOffset now, CancellationToken ct = default);
 }
 
-public class AnimeMetadataChangeDetector(AnimeTrackerDbContext db, IAnimeUpdateRecorder updateRecorder) : IAnimeMetadataChangeDetector
+public class AnimeMetadataChangeDetector(
+    AnimeTrackerDbContext db, IAnimeUpdateRecorder updateRecorder, ISeriesBuildTrigger seriesBuildTrigger)
+    : IAnimeMetadataChangeDetector
 {
     public AnimeMetadataSnapshot Snapshot(AnimeMetadata anime) => new(
         anime.RelatedAnime.Select(r => (r.RelatedAnimeId, r.RelationType)).ToHashSet(),
@@ -53,17 +56,32 @@ public class AnimeMetadataChangeDetector(AnimeTrackerDbContext db, IAnimeUpdateR
 
     public async Task RecordAsync(AnimeMetadata anime, AnimeMetadataSnapshot before, DateTimeOffset now, CancellationToken ct = default)
     {
-        RecordDiscoveries(anime, before.Relations, now);
+        var discoveredRelation = RecordDiscoveries(anime, before.Relations, now);
         await RecordFieldUpdates(anime, before, now, ct);
+
+        // split-series-by-version tasks 9.1/9.2: a newly discovered relation
+        // enqueues this anime's series for a background rebuild, so a new
+        // entry (or a newly discovered alternative_version that splits a
+        // franchise) reaches the series page without waiting for a visit or
+        // the 30-day staleness window. Enqueue is synchronous and
+        // non-blocking, and ISeriesBuildTrigger already dedupes against an id
+        // already queued, so one refresh pass discovering several edges on
+        // the same anime still enqueues it once.
+        if (discoveredRelation)
+            seriesBuildTrigger.Enqueue(anime.Id);
     }
 
     /// <summary>Writes one <see cref="RelationDiscovery"/> per edge present in
     /// <paramref name="anime"/>'s relation set after <c>ApplyTo</c> that wasn't
     /// in <paramref name="before"/>. Removed and unchanged edges are
-    /// deliberately not events (design.md decision 10).</summary>
-    private void RecordDiscoveries(
+    /// deliberately not events (design.md decision 10). Returns whether any
+    /// edge was newly discovered, so the caller knows whether to enqueue a
+    /// series build.</summary>
+    private bool RecordDiscoveries(
         AnimeMetadata anime, HashSet<(int RelatedAnimeId, string RelationType)> before, DateTimeOffset now)
     {
+        var discoveredAny = false;
+
         foreach (var edge in anime.RelatedAnime)
         {
             if (before.Contains((edge.RelatedAnimeId, edge.RelationType)))
@@ -76,7 +94,10 @@ public class AnimeMetadataChangeDetector(AnimeTrackerDbContext db, IAnimeUpdateR
                 RelationType = edge.RelationType,
                 DiscoveredAt = now,
             });
+            discoveredAny = true;
         }
+
+        return discoveredAny;
     }
 
     /// <summary>Records whichever of the becoming-known/schedule-change kinds

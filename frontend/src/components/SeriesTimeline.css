@@ -73,6 +73,31 @@
   opacity: 0.9;
 }
 
+/* Watch-order number (series-page spec "Watch order and series root":
+   numbered from 1, computed over exactly the entries shown) — normal flow
+   rather than absolutely positioned over the picture, so it never collides
+   with a slotted position's picker strip (.series-page__slot-picker, styled
+   in SeriesPage.css) directly below it. */
+.series-timeline__card-header {
+  display: flex;
+  padding: 6px 8px 0;
+}
+
+.series-timeline__card-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--text-h);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 .series-timeline__card-link {
   display: flex;
   flex-direction: column;

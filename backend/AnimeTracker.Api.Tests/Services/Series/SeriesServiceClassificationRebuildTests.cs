@@ -96,8 +96,8 @@ public class SeriesServiceClassificationRebuildTests
 
         var freshBuiltAt = SeriesGraphBuilder.ClassificationRevisedAt + TimeSpan.FromDays(1);
         db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 1, BuiltAt = freshBuiltAt });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0 });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = false, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0, IsPrimary = true });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = false, Order = 0, IsPrimary = true });
         await db.SaveChangesAsync();
 
         await CreateService(db).GetSeriesAsync(1);

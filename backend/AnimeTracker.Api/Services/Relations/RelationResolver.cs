@@ -259,11 +259,15 @@ public class RelationResolver(AnimeTrackerDbContext db) : IRelationResolver
     /// direction has no candidate edge at all, fall back to the anime's
     /// immediate main-line neighbour in its stored series. Never reached when
     /// a direct edge exists (<see cref="ResolveDirectionalAsync"/> only calls
-    /// this once the candidate pool is empty).</summary>
+    /// this once the candidate pool is empty). Resolves through the anime's
+    /// <b>primary</b> membership (split-series-by-version task 8.1) — an
+    /// anime shared between two tellings has a main-line row in at most one
+    /// of them, and the fallback must never cross into the telling it's only
+    /// a boundary or shared extra of.</summary>
     private async Task<ResolvedRelationEdge?> SeriesNeighbourFallbackAsync(AnimeMetadata anime, string relationType, CancellationToken ct)
     {
         var member = await db.SeriesMembers.AsNoTracking()
-            .FirstOrDefaultAsync(m => m.AnimeId == anime.Id, ct);
+            .FirstOrDefaultAsync(m => m.AnimeId == anime.Id && m.IsPrimary, ct);
         if (member is not { IsMainLine: true })
             return null;
 

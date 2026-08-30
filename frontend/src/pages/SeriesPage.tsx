@@ -14,6 +14,8 @@ import type {
   SeriesEntryDto,
   SeriesLookupResult,
   SeriesProgressBadge,
+  SeriesSlotDto,
+  SeriesStatsDto,
   UserAnimeEntryDto,
 } from '../api/types.ts'
 import { AiringProgressBar } from '../components/AiringProgressBar.tsx'
@@ -35,6 +37,7 @@ import {
   formatRuntime,
   formatYearSpan,
   isScoreRevealableStatus,
+  MEDIA_TYPE_ORDER,
   mediaTypeLabel,
   pickDisplayTitle,
 } from '../utils/anime.ts'
@@ -136,21 +139,91 @@ function findEntry(series: SeriesDto, animeId: number): SeriesEntryDto | undefin
   return series.mainLine.find((e) => e.animeId === animeId) ?? series.extras.find((e) => e.animeId === animeId)
 }
 
-// Extras arrive from the API pre-sorted by media-type group then aired date
-// (SeriesService.ProjectAsync), so grouping is just bucketing consecutive
-// same-mediaType runs rather than re-sorting.
-function groupExtras(extras: SeriesEntryDto[]): { mediaType: string | null; items: SeriesEntryDto[] }[] {
-  const groups: { mediaType: string | null; items: SeriesEntryDto[] }[] = []
+// Fills in each slot's default alternative for any slot the reader's own
+// restored pick doesn't name — including a pick naming an anime that is no
+// longer one of that slot's alternatives (series-page spec "A stale pick is
+// ignored"), which a rebuild can produce.
+function resolveSeriesPick(slots: SeriesSlotDto[], pick: Record<number, number>): Record<number, number> {
+  const resolved: Record<number, number> = {}
+  for (const slot of slots) {
+    const picked = pick[slot.slotKey]
+    resolved[slot.slotKey] = picked !== undefined && slot.alternativeAnimeIds.includes(picked) ? picked : slot.defaultBranchHeadAnimeId
+  }
+  return resolved
+}
+
+// Mirrors SeriesService.VisibleMainLineMembers exactly (design.md D4/D6): a
+// trunk entry (no branchHeadAnimeId at all) is always shown; a branch entry
+// is shown only under the slot combination that picked its own head.
+function visibleMainLine(mainLine: SeriesEntryDto[], resolvedPick: Record<number, number>): SeriesEntryDto[] {
+  const pickedHeadIds = new Set(Object.values(resolvedPick))
+  return mainLine.filter((e) => e.branchHeadAnimeId === null || pickedHeadIds.has(e.branchHeadAnimeId))
+}
+
+function isDefaultPick(slots: SeriesSlotDto[], resolvedPick: Record<number, number>): boolean {
+  return slots.every((slot) => resolvedPick[slot.slotKey] === slot.defaultBranchHeadAnimeId)
+}
+
+// Resolves the SeriesStatsDto for the reader's current pick (design.md D6,
+// task 8.4). Deliberately not a client-side re-derivation — the server
+// already computed one SeriesStatsDto per admissible combination
+// (statsByPick), so this just looks the matching one up. At the default pick
+// — no slots, or every slot still on its default — this returns series.stats
+// directly rather than the equal-but-distinct statsByPick entry, so an
+// in-place score/status edit (patchSeriesEntry) keeps showing live here
+// exactly as it did before this capability; only after the reader actively
+// switches a slot away from its default does this read from the server's
+// last-fetched statsByPick snapshot instead.
+function statsForPick(series: SeriesDto, resolvedPick: Record<number, number>): SeriesStatsDto {
+  if (isDefaultPick(series.slots, resolvedPick)) return series.stats
+  const wanted = series.slots.map((slot) => resolvedPick[slot.slotKey])
+  const match = series.statsByPick.find(
+    (byPick) => byPick.branchHeadAnimeIds.length === wanted.length && byPick.branchHeadAnimeIds.every((id, i) => id === wanted[i]),
+  )
+  return match?.stats ?? series.stats
+}
+
+// Display labels for RelationGroup's raw PascalCase enum names
+// (split-series-by-version design.md decision 4), in the fixed display order
+// SeriesRelationGroupOrder.cs defines — mirrored here since the extras array
+// already arrives in that order (see groupExtras below).
+const RELATION_GROUP_LABELS: Record<string, string> = {
+  AlternativeVersion: 'Alternative version',
+  AlternativeSetting: 'Alternative setting',
+  Prequel: 'Prequel',
+  Sequel: 'Sequel',
+  ParentStory: 'Parent story',
+  SideStory: 'Side story',
+  FullStory: 'Full story',
+  Summary: 'Summary',
+  SpinOff: 'Spin-off',
+  Character: 'Character',
+  Adaptation: 'Adaptation',
+  Other: 'Other',
+}
+
+function relationGroupLabel(relationGroup: string | null): string {
+  return (relationGroup && RELATION_GROUP_LABELS[relationGroup]) || 'Other'
+}
+
+// Both real extra members and related entries arrive from the API already
+// merged into one array, pre-sorted by relation group (in the fixed display
+// order) then aired date within it (SeriesService.BuildDisplayExtrasAsync),
+// so grouping is just bucketing consecutive same-relationGroup runs rather
+// than re-sorting (split-series-by-version tasks 7.2/10.2 — replaces the
+// former media-type grouping).
+function groupExtras(extras: SeriesEntryDto[]): { relationGroup: string | null; items: SeriesEntryDto[] }[] {
+  const groups: { relationGroup: string | null; items: SeriesEntryDto[] }[] = []
   for (const entry of extras) {
     const last = groups[groups.length - 1]
-    if (last && last.mediaType === entry.mediaType) last.items.push(entry)
-    else groups.push({ mediaType: entry.mediaType, items: [entry] })
+    if (last && last.relationGroup === entry.relationGroup) last.items.push(entry)
+    else groups.push({ relationGroup: entry.relationGroup, items: [entry] })
   }
   return groups
 }
 
-function extrasGroupKey(group: { mediaType: string | null }, index: number): string {
-  return `${group.mediaType}-${index}`
+function extrasGroupKey(group: { relationGroup: string | null }, index: number): string {
+  return `${group.relationGroup}-${index}`
 }
 
 // Mirrors ScoreValue's own per-row `completed` convention (only reveals when
@@ -199,8 +272,8 @@ function effectiveWatchedEpisodes(entry: SeriesEntryDto): number {
   return Math.max(watched, entry.airedEpisodes ?? watched)
 }
 
-// Computed client-side from series.mainLine rather than a server stat
-// (redesign-series-page design.md decision 1/2): it depends on episodesWatched
+// Computed client-side from the main-line entry array rather than a server
+// stat (redesign-series-page design.md decision 1/2): it depends on episodesWatched
 // and status, both of which an in-place row edit changes, so deriving it from
 // the entry array the page already patches keeps it current for free. Returns
 // the same { badge, behind } shape the Series page's cards get from the
@@ -218,8 +291,14 @@ function effectiveWatchedEpisodes(entry: SeriesEntryDto): number {
 // polish-rewatch-more-and-filters) via effectiveWatchedEpisodes above, and
 // rule (1) additionally accepts Rewatching alongside Completed so starting a
 // rewatch of a finished franchise doesn't downgrade its badge.
-function completionBadge(series: SeriesDto): { badge: SeriesProgressBadge; behind: number | null } {
-  const airedMembers = series.mainLine
+//
+// Takes the picked/visible main line, not series.mainLine (rebuild-series-
+// by-story-component design.md D6): an unpicked branch's episodes are no
+// more "mine to watch" than an unpicked route's runtime is "mine to watch"
+// in the time-left figure beside it, so the badge stays consistent with that
+// figure rather than freezing at whatever the default route showed.
+function completionBadge(series: SeriesDto, mainLine: SeriesEntryDto[]): { badge: SeriesProgressBadge; behind: number | null } {
+  const airedMembers = mainLine
     .filter((e) => e.airingStatus === 'finished_airing' || e.airingStatus === 'currently_airing')
     .slice()
     .sort((a, b) => a.order - b.order)
@@ -252,7 +331,7 @@ function completionBadge(series: SeriesDto): { badge: SeriesProgressBadge; behin
     if (nothingWatchedAfter) return { badge: 'Dropped', behind: null }
   }
 
-  const watchedTotal = series.mainLine.reduce((sum, e) => sum + effectiveWatchedEpisodes(e), 0)
+  const watchedTotal = mainLine.reduce((sum, e) => sum + effectiveWatchedEpisodes(e), 0)
 
   // 5. Unwatched: something has aired but nothing has ever been watched,
   // and (2) didn't already claim the case.
@@ -381,6 +460,20 @@ export function SeriesPage() {
   const [mineOnly, setMineOnly] = useRestorableState('moreMineOnly', true)
   const [collapsedGroups, setCollapsedGroups] = useRestorableState<Record<string, boolean>>('moreCollapsedGroups', {})
   const [unfilteredGroups, setUnfilteredGroups] = useRestorableState<Set<string>>('moreUnfilteredGroups', new Set())
+  // The media-type filter row above More (series-page spec "The More section
+  // offers media-type filter buttons", tasks 10.3-10.5): none selected by
+  // default, restorable beside the other view controls above. A restored type
+  // no extra of this render carries is ignored below rather than cleaned up
+  // here, the same graceful-staleness pattern collapsedGroups/unfilteredGroups
+  // already use for a group key that no longer exists.
+  const [selectedMediaTypes, setSelectedMediaTypes] = useRestorableState<Set<string>>('moreSelectedMediaTypes', new Set())
+  // The version-slot picker's own pick, per slot key (series-page spec "The
+  // More section's view state is restored with the page"), restorable beside
+  // the view controls above. Raw and possibly stale — resolveSeriesPick below
+  // fills in a slot's default for any key it doesn't name and ignores a pick
+  // naming an anime that is no longer one of that slot's alternatives (task
+  // 8.5), the same graceful-staleness pattern selectedMediaTypes above uses.
+  const [pick, setPick] = useRestorableState<Record<number, number>>('seriesPick', {})
   // series-page "A More group's heading opens that group in full"
   // (design.md D2): the "in my list" control reports itself on only while
   // the filter is actually in force across every group — opening any one
@@ -513,6 +606,14 @@ export function SeriesPage() {
     })
   }
 
+  // series-versions "Picking an alternative SHALL change only what the page
+  // shows and the figures... It SHALL NOT rebuild the series, SHALL NOT
+  // change any anime's membership, and SHALL NOT change the series' root,
+  // title or picture" — a plain local state write, no request.
+  function handlePickAlternative(slotKey: number, animeId: number) {
+    setPick((prev) => ({ ...prev, [slotKey]: animeId }))
+  }
+
   // series-page "A More group's heading opens that group in full"
   // (design.md D1): the heading has one job — open this group — with
   // collapse as its off state. A group already showing everything
@@ -528,6 +629,18 @@ export function SeriesPage() {
     setCollapsedGroups((prev) => ({ ...prev, [key]: false }))
     if (mineOnly) setUnfilteredGroups((prev) => new Set(prev).add(key))
     setPendingScrollGroupKey(key)
+  }
+
+  // Multi-select toggle for the media-type filter row (task 10.3): selecting
+  // narrows every group to that type, alongside whatever else is already
+  // selected; selecting none narrows nothing.
+  function toggleMediaType(mediaType: string) {
+    setSelectedMediaTypes((prev) => {
+      const next = new Set(prev)
+      if (next.has(mediaType)) next.delete(mediaType)
+      else next.add(mediaType)
+      return next
+    })
   }
 
   // Reveals a group's remaining tiles from its "+N more" control, which is
@@ -567,9 +680,18 @@ export function SeriesPage() {
   }
 
   const series = data.series
-  const { scores, stats } = series
+  const { scores } = series
+  // The reader's pick, resolved to a concrete alternative per slot (defaults
+  // filled in, a stale one ignored — series-page spec "A stale pick is
+  // ignored"), and the two things it drives: which main-line entries are
+  // shown (rebuild-series-by-story-component design.md D4) and which
+  // statsByPick combination describes them (design.md D6). Score averages
+  // deliberately keep reading `scores` above, untouched by any pick.
+  const resolvedPick = resolveSeriesPick(series.slots, pick)
+  const mainLineVisible = visibleMainLine(series.mainLine, resolvedPick)
+  const stats = statsForPick(series, resolvedPick)
   const displayTitle = pickDisplayTitle(series.title, series.englishTitle)
-  const { badge, behind } = completionBadge(series)
+  const { badge, behind } = completionBadge(series, mainLineVisible)
   const isRunning = series.status === 'Airing' || series.status === 'Ongoing'
   // The bar and readout's own aired figure, summed straight from each
   // entry's airedEpisodes — distinct from stats.mainLineAiredEpisodes, which
@@ -577,8 +699,10 @@ export function SeriesPage() {
   // undercounts what it claims to be exact. A show like One Piece (unknown
   // total, known aired count) would otherwise read "0 aired" and show no
   // blue fill at all, despite the row right below it, and the home/detail
-  // pages, all showing the real count.
-  const mainLineAiredEpisodes = series.mainLine.reduce((sum, e) => sum + (e.airedEpisodes ?? 0), 0)
+  // pages, all showing the real count. Scoped to the picked/visible main
+  // line, same as stats above, so it never counts an unpicked branch's aired
+  // episodes into this route's bar.
+  const mainLineAiredEpisodes = mainLineVisible.reduce((sum, e) => sum + (e.airedEpisodes ?? 0), 0)
 
   // Time watched and time left are now shown independently (design D11): with
   // rewatches counted, a finished franchise that's been rewatched is exactly
@@ -602,20 +726,52 @@ export function SeriesPage() {
     .map((id) => findEntry(series, id))
     .filter((e): e is SeriesEntryDto => e !== undefined)
 
+  // Media-type filter (series-page spec "The More section offers media-type
+  // filter buttons", tasks 10.3-10.5): one button per type actually present
+  // among the extras/related entries, in the app's fixed media-type order
+  // plus any exotic type that order doesn't name (alphabetical tail) and a
+  // trailing catch-all for an untyped entry. A restored selection naming a
+  // type nothing here carries is dropped rather than erroring (task 10.5).
+  const presentMediaTypes = new Set(series.extras.map((e) => e.mediaType ?? 'unknown'))
+  const availableMediaTypes = [
+    ...MEDIA_TYPE_ORDER.filter((type) => presentMediaTypes.has(type)),
+    ...[...presentMediaTypes].filter((type) => !MEDIA_TYPE_ORDER.includes(type) && type !== 'unknown').sort(),
+    ...(presentMediaTypes.has('unknown') ? ['unknown'] : []),
+  ]
+  const activeMediaTypes = new Set([...selectedMediaTypes].filter((type) => presentMediaTypes.has(type)))
+  const typeFilterActive = activeMediaTypes.size > 0
+  function typeAdmits(entry: SeriesEntryDto): boolean {
+    return !typeFilterActive || activeMediaTypes.has(entry.mediaType ?? 'unknown')
+  }
+
   const extrasGroups = groupExtras(series.extras)
-  // Membership, not status, per group's visible tiles (design.md decision 3):
-  // Dropped and Plan-to-watch entries count exactly like Completed ones.
-  const extrasGroupView = extrasGroups.map((group, index) => {
-    const key = extrasGroupKey(group, index)
-    const isCollapsed = collapsedGroups[key] ?? false
-    const isUnfiltered = unfilteredGroups.has(key)
-    // design.md D1: the group's heading opens it in full unless it's
-    // already showing everything, in which case the heading collapses it.
-    const showsAll = !isCollapsed && (!mineOnly || isUnfiltered)
-    const visibleItems = isCollapsed ? [] : mineOnly && !isUnfiltered ? group.items.filter((e) => e.entry != null) : group.items
-    return { group, key, isCollapsed, showsAll, visibleItems }
-  })
-  const nothingHidden = extrasGroupView.every(({ group, visibleItems }) => visibleItems.length === group.items.length)
+  // Membership, not status, per group's visible tiles (design.md decision 3);
+  // narrowed further by the type filter, which composes with it rather than
+  // replacing it (task 10.4). Dropped and Plan-to-watch entries count exactly
+  // like Completed ones.
+  const extrasGroupView = extrasGroups
+    .map((group, index) => {
+      const key = extrasGroupKey(group, index)
+      const isCollapsed = collapsedGroups[key] ?? false
+      const isUnfiltered = unfilteredGroups.has(key)
+      const typeAdmitted = group.items.filter(typeAdmits)
+      // design.md D1: the group's heading opens it in full unless it's
+      // already showing everything, in which case the heading collapses it.
+      const showsAll = !isCollapsed && (!mineOnly || isUnfiltered)
+      const visibleItems = isCollapsed
+        ? []
+        : mineOnly && !isUnfiltered
+          ? typeAdmitted.filter((e) => e.entry != null)
+          : typeAdmitted
+      return { group, key, isCollapsed, showsAll, visibleItems, typeAdmittedCount: typeAdmitted.length }
+    })
+    // While a type is selected, a group left with nothing the type filter
+    // admits isn't rendered at all — a column of empty headings would tell
+    // the reader nothing (task 10.4).
+    .filter(({ typeAdmittedCount }) => !typeFilterActive || typeAdmittedCount > 0)
+  const nothingHidden = extrasGroupView.every(
+    ({ visibleItems, typeAdmittedCount }) => visibleItems.length === typeAdmittedCount,
+  )
 
   function toggleAllExtrasGroups() {
     if (nothingHidden) {
@@ -932,10 +1088,16 @@ export function SeriesPage() {
         </dl>
       </section>
 
-      {series.mainLine.length > 0 && (
+      {mainLineVisible.length > 0 && (
         <section className="series-box">
           <h2>Main series</h2>
-          <SeriesTimeline entries={series.mainLine} onEdit={handleEdit} />
+          <SeriesTimeline
+            entries={mainLineVisible}
+            allEntries={series.mainLine}
+            slots={series.slots}
+            onPick={handlePickAlternative}
+            onEdit={handleEdit}
+          />
         </section>
       )}
 
@@ -963,9 +1125,27 @@ export function SeriesPage() {
               </button>
             </div>
           </div>
-          {extrasGroupView.map(({ group, key, isCollapsed, showsAll, visibleItems }) => {
+          {availableMediaTypes.length > 0 && (
+            <div className="series-page__type-filter" aria-label="Filter by media type (multi-select)">
+              {availableMediaTypes.map((type) => {
+                const active = activeMediaTypes.has(type)
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    aria-pressed={active}
+                    className={`series-page__type-filter-button${active ? ' series-page__type-filter-button--active' : ''}`}
+                    onClick={() => toggleMediaType(type)}
+                  >
+                    {mediaTypeLabel(type === 'unknown' ? null : type)}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {extrasGroupView.map(({ group, key, isCollapsed, showsAll, visibleItems, typeAdmittedCount }) => {
             const groupId = `series-extras-${key}`
-            const hiddenCount = group.items.length - visibleItems.length
+            const hiddenCount = typeAdmittedCount - visibleItems.length
             // design.md D3: the hidden-count control belongs only to a group
             // that is showing something and hiding the rest — a group
             // showing nothing (collapsed, or nothing of mine in it) offers
@@ -989,7 +1169,7 @@ export function SeriesPage() {
                     <span className="series-page__extras-group-caret" aria-hidden="true">
                       {isCollapsed ? '▸' : '▾'}
                     </span>
-                    {mediaTypeLabel(group.mediaType)} ({group.items.length})
+                    {relationGroupLabel(group.relationGroup)} ({typeAdmittedCount})
                   </button>
                 </h3>
                 {visibleItems.length > 0 && (

@@ -58,7 +58,7 @@ public class SeriesBulkBuildBackgroundServiceTests
     {
         using var db = CreateDb();
         db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 2, BuiltAt = DateTimeOffset.UtcNow });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 0, IsPrimary = true });
         await db.SaveChangesAsync();
 
         var seriesService = new FakeSeriesService();
@@ -84,8 +84,8 @@ public class SeriesBulkBuildBackgroundServiceTests
         seriesService.OnCall(1, () =>
         {
             db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 1, BuiltAt = DateTimeOffset.UtcNow });
-            db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0 });
-            db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 1 });
+            db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0, IsPrimary = true });
+            db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 1, IsPrimary = true });
             db.SaveChanges();
         });
 
@@ -145,7 +145,7 @@ public class SeriesBulkBuildBackgroundServiceTests
         using var db = CreateDb();
         var staleBuiltAt = SeriesGraphBuilder.ClassificationRevisedAt - TimeSpan.FromDays(1);
         db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 2, BuiltAt = staleBuiltAt });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 0, IsPrimary = true });
         await db.SaveChangesAsync();
 
         var seriesService = new FakeSeriesService();
@@ -162,14 +162,42 @@ public class SeriesBulkBuildBackgroundServiceTests
         Assert.Equal(1, tracker.Snapshot.Built);
     }
 
+    // split-series-by-version task 8.5/series-versions spec "A boundary-only
+    // membership does not count as covered", reconfirmed by
+    // rebuild-series-by-story-component task 7.5 now that IsPrimary is
+    // derived from MembershipKind rather than anchor distance: an anime held
+    // only as another series' NeighbourTelling (never primary, design.md D8)
+    // still needs its own series built, even though a SeriesMembers row for
+    // it already exists and is up to date.
+    [Fact]
+    public async Task ANeighbourTellingOnlyMembershipDoesNotCountAsCovered()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 2, BuiltAt = DateTimeOffset.UtcNow });
+        // Anime 1 is a NeighbourTelling of series 1 (another telling's own
+        // story component) — up to date, but never primary, so it isn't its
+        // series.
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = false, Order = 0, IsPrimary = false, MembershipKind = nameof(MembershipKind.NeighbourTelling) });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 0, IsPrimary = true });
+        await db.SaveChangesAsync();
+
+        var seriesService = new FakeSeriesService();
+        var trigger = new SeriesBulkBuildTrigger();
+        var tracker = new SeriesBulkBuildProgressTracker();
+
+        await RunOnceAsync(db, [Entry(1)], seriesService, trigger, tracker);
+
+        Assert.Equal([1], seriesService.CalledFor); // built its own series rather than skipped as covered
+    }
+
     [Fact]
     public async Task ASeriesRebuiltEarlierInTheRunShortCircuitsItsOtherMembers()
     {
         using var db = CreateDb();
         var staleBuiltAt = SeriesGraphBuilder.ClassificationRevisedAt - TimeSpan.FromDays(1);
         db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 1, BuiltAt = staleBuiltAt });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0 });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 1 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0, IsPrimary = true });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 1, IsPrimary = true });
         await db.SaveChangesAsync();
 
         // Building anime 1's franchise re-stamps the whole series — including
@@ -285,6 +313,7 @@ public class SeriesBulkBuildBackgroundServiceTests
                 new SeriesAverageDto(null, 0, 0), new SeriesAverageDto(null, 0, 0),
                 new SeriesAverageDto(null, 0, 0), new SeriesAverageDto(null, 0, 0)),
             new SeriesStatsDto(0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, null, null, null, [], [], [], [], []),
+            [], [],
             [], [],
             null, null, [], [], 0);
     }

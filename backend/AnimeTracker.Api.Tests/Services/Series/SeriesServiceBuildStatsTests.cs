@@ -36,7 +36,7 @@ public class SeriesServiceBuildStatsTests
         var members = new List<SeriesMember> { Member(airing, isMainLine: true, order: 0) };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = 1100 };
 
-        var stats = SeriesService.BuildStats(members, [], [airing], mainLineAiredEpisodes: 1100, airedByAnimeId);
+        var stats = SeriesService.BuildStats(members, members, [], [airing], airedByAnimeId);
 
         Assert.Equal(1100, stats.MainLineEpisodeTotal);
         Assert.Equal(1100L * 1500, stats.MainLineRuntimeSeconds);
@@ -50,7 +50,7 @@ public class SeriesServiceBuildStatsTests
         var members = new List<SeriesMember> { Member(notYetAired, isMainLine: true, order: 0) };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = null };
 
-        var stats = SeriesService.BuildStats(members, [], [notYetAired], mainLineAiredEpisodes: 0, airedByAnimeId);
+        var stats = SeriesService.BuildStats(members, members, [], [notYetAired], airedByAnimeId);
 
         Assert.Equal(0, stats.MainLineEpisodeTotal);
         Assert.Equal(0L, stats.MainLineRuntimeSeconds);
@@ -64,7 +64,7 @@ public class SeriesServiceBuildStatsTests
         var members = new List<SeriesMember> { Member(finished, isMainLine: true, order: 0) };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = 12 };
 
-        var stats = SeriesService.BuildStats(members, [], [finished], mainLineAiredEpisodes: 12, airedByAnimeId);
+        var stats = SeriesService.BuildStats(members, members, [], [finished], airedByAnimeId);
 
         Assert.Equal(12, stats.MainLineEpisodeTotal);
         Assert.False(stats.HasUnknownEpisodeCounts);
@@ -76,7 +76,7 @@ public class SeriesServiceBuildStatsTests
         var a = Anime(1, totalEpisodes: 12, rewatchCount: 0);
         var members = new List<SeriesMember> { Member(a, isMainLine: true, order: 0) };
 
-        var stats = SeriesService.BuildStats(members, [], [a], mainLineAiredEpisodes: 12, new Dictionary<int, int?> { [1] = 12 });
+        var stats = SeriesService.BuildStats(members, members, [], [a], new Dictionary<int, int?> { [1] = 12 });
 
         Assert.Empty(stats.MostRewatchedAnimeIds);
     }
@@ -89,7 +89,7 @@ public class SeriesServiceBuildStatsTests
         var members = new List<SeriesMember> { Member(a, isMainLine: true, order: 0), Member(b, isMainLine: true, order: 1) };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 12 };
 
-        var stats = SeriesService.BuildStats(members, [], [a, b], mainLineAiredEpisodes: 24, airedByAnimeId);
+        var stats = SeriesService.BuildStats(members, members, [], [a, b], airedByAnimeId);
 
         Assert.Equal([1], stats.MostRewatchedAnimeIds);
     }
@@ -108,9 +108,7 @@ public class SeriesServiceBuildStatsTests
         };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 1, [3] = 1 };
 
-        var stats = SeriesService.BuildStats(
-            mainLineMembers, extraMembers, [mainLine, completedExtra, watchingExtra],
-            mainLineAiredEpisodes: 12, airedByAnimeId);
+        var stats = SeriesService.BuildStats(mainLineMembers, mainLineMembers, extraMembers, [mainLine, completedExtra, watchingExtra], airedByAnimeId);
 
         Assert.Equal(1, stats.EntriesCompleted);
         Assert.Equal(1, stats.ExtrasCompleted);
@@ -122,8 +120,7 @@ public class SeriesServiceBuildStatsTests
         var mainLine = Anime(1, totalEpisodes: 12, status: WatchStatus.Completed);
         var mainLineMembers = new List<SeriesMember> { Member(mainLine, isMainLine: true, order: 0) };
 
-        var stats = SeriesService.BuildStats(
-            mainLineMembers, [], [mainLine], mainLineAiredEpisodes: 12, new Dictionary<int, int?> { [1] = 12 });
+        var stats = SeriesService.BuildStats(mainLineMembers, mainLineMembers, [], [mainLine], new Dictionary<int, int?> { [1] = 12 });
 
         Assert.Equal(1, stats.EntriesCompleted);
         Assert.Equal(0, stats.ExtrasCompleted);
@@ -149,8 +146,7 @@ public class SeriesServiceBuildStatsTests
         };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 12 };
 
-        var stats = SeriesService.BuildStats(
-            mainLineMembers, [], [completed, dropped], mainLineAiredEpisodes: 24, airedByAnimeId);
+        var stats = SeriesService.BuildStats(mainLineMembers, mainLineMembers, [], [completed, dropped], airedByAnimeId);
 
         Assert.True(stats.MainLineCompletedByMe);
     }
@@ -169,8 +165,7 @@ public class SeriesServiceBuildStatsTests
         };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 12 };
 
-        var stats = SeriesService.BuildStats(
-            mainLineMembers, [], [completed, dropped], mainLineAiredEpisodes: 24, airedByAnimeId);
+        var stats = SeriesService.BuildStats(mainLineMembers, mainLineMembers, [], [completed, dropped], airedByAnimeId);
 
         Assert.Equal(1, stats.EntriesCompleted);
     }
@@ -185,7 +180,7 @@ public class SeriesServiceBuildStatsTests
         var members = new List<SeriesMember> { Member(finished, isMainLine: true, order: 0), Member(rewatching, isMainLine: true, order: 1) };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = 50, [2] = 12 }; // both fully aired
 
-        var stats = SeriesService.BuildStats(members, [], [finished, rewatching], mainLineAiredEpisodes: 62, airedByAnimeId);
+        var stats = SeriesService.BuildStats(members, members, [], [finished, rewatching], airedByAnimeId);
 
         // 50 (Completed) + 12 (Rewatching, effective = max(2 watched, 12 aired)) = 62, not 52.
         Assert.Equal(62, stats.MyWatchedEpisodes);
@@ -199,7 +194,7 @@ public class SeriesServiceBuildStatsTests
         var members = new List<SeriesMember> { Member(completed, isMainLine: true, order: 0), Member(rewatching, isMainLine: true, order: 1) };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 12 };
 
-        var stats = SeriesService.BuildStats(members, [], [completed, rewatching], mainLineAiredEpisodes: 24, airedByAnimeId);
+        var stats = SeriesService.BuildStats(members, members, [], [completed, rewatching], airedByAnimeId);
 
         Assert.Equal(2, stats.EntriesCompleted);
         Assert.Equal(2, stats.MainLineCount);
@@ -215,7 +210,7 @@ public class SeriesServiceBuildStatsTests
         var members = new List<SeriesMember> { Member(rewatching, isMainLine: true, order: 0) };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = 5 };
 
-        var stats = SeriesService.BuildStats(members, [], [rewatching], mainLineAiredEpisodes: 5, airedByAnimeId);
+        var stats = SeriesService.BuildStats(members, members, [], [rewatching], airedByAnimeId);
 
         Assert.Equal(12, stats.MainLineEpisodeTotal);
         Assert.Equal(12L * 1500, stats.MainLineRuntimeSeconds);
@@ -230,7 +225,7 @@ public class SeriesServiceBuildStatsTests
         var members = new List<SeriesMember> { Member(a, isMainLine: true, order: 0), Member(b, isMainLine: true, order: 1) };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 12 };
 
-        var stats = SeriesService.BuildStats(members, [], [a, b], mainLineAiredEpisodes: 24, airedByAnimeId);
+        var stats = SeriesService.BuildStats(members, members, [], [a, b], airedByAnimeId);
 
         Assert.Equal([1, 2], stats.MostRewatchedAnimeIds);
     }
@@ -244,7 +239,7 @@ public class SeriesServiceBuildStatsTests
         var members = new List<SeriesMember> { Member(completed, isMainLine: true, order: 0) };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = 12 };
 
-        var stats = SeriesService.BuildStats(members, [], [completed], mainLineAiredEpisodes: 12, airedByAnimeId);
+        var stats = SeriesService.BuildStats(members, members, [], [completed], airedByAnimeId);
 
         // 2 completed rewatches of a 12-episode season = 24 rewatch episodes.
         Assert.Equal(24, stats.MyRewatchedSeconds / EpisodeSeconds(completed));
@@ -257,7 +252,7 @@ public class SeriesServiceBuildStatsTests
         var members = new List<SeriesMember> { Member(rewatching, isMainLine: true, order: 0) };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = 12 }; // fully aired
 
-        var stats = SeriesService.BuildStats(members, [], [rewatching], mainLineAiredEpisodes: 12, airedByAnimeId);
+        var stats = SeriesService.BuildStats(members, members, [], [rewatching], airedByAnimeId);
 
         // 2 completed rewatches (24) + 2 episodes into a third (2) = 26 rewatch episodes.
         Assert.Equal(26, stats.MyRewatchedSeconds / EpisodeSeconds(rewatching));
@@ -276,8 +271,7 @@ public class SeriesServiceBuildStatsTests
         var extraMembers = new List<SeriesMember> { Member(extra, isMainLine: false, order: 0) };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 1 };
 
-        var stats = SeriesService.BuildStats(
-            mainLineMembers, extraMembers, [mainLine, extra], mainLineAiredEpisodes: 12, airedByAnimeId);
+        var stats = SeriesService.BuildStats(mainLineMembers, mainLineMembers, extraMembers, [mainLine, extra], airedByAnimeId);
 
         Assert.Equal(0L, stats.MyRewatchedSeconds);
     }
@@ -289,7 +283,7 @@ public class SeriesServiceBuildStatsTests
         var members = new List<SeriesMember> { Member(completed, isMainLine: true, order: 0) };
         var airedByAnimeId = new Dictionary<int, int?> { [1] = 12 };
 
-        var stats = SeriesService.BuildStats(members, [], [completed], mainLineAiredEpisodes: 12, airedByAnimeId);
+        var stats = SeriesService.BuildStats(members, members, [], [completed], airedByAnimeId);
 
         Assert.Equal(12, stats.MyWatchedEpisodes);
         Assert.Equal(12L * 1500, stats.MyWatchedSeconds);

@@ -70,10 +70,15 @@ public class SeriesBulkBuildBackgroundService(
             // classification rules, so a franchise rebuilt earlier in this
             // same run short-circuits its other members while one that
             // predates the run and hasn't been touched yet still gets
-            // rebuilt (design.md decision 4).
+            // rebuilt (design.md decision 4). Filtered to the primary
+            // membership (split-series-by-version task 8.5) — an anime held
+            // only as a shared or boundary member of some other telling isn't
+            // covered by that telling being up to date; it still needs its
+            // own.
             var alreadyCovered = await db.SeriesMembers.AsNoTracking()
+                .Where(m => m.AnimeId == animeId && m.IsPrimary)
                 .Join(db.Series.AsNoTracking(), m => m.SeriesId, s => s.Id, (m, s) => new { m.AnimeId, s.BuiltAt })
-                .AnyAsync(x => x.AnimeId == animeId && x.BuiltAt >= SeriesGraphBuilder.ClassificationRevisedAt, ct);
+                .AnyAsync(x => x.BuiltAt >= SeriesGraphBuilder.ClassificationRevisedAt, ct);
             if (!alreadyCovered)
             {
                 try
@@ -99,11 +104,15 @@ public class SeriesBulkBuildBackgroundService(
         progress.Complete();
     }
 
-    // My-list anime with no SeriesMembers row yet, plus my-list anime whose
-    // stored series was built before the current classification rules took
-    // effect — so one press of the Settings button both fills in missing
-    // series and heals ones stored under superseded rules (design.md
-    // decision 4).
+    // My-list anime with no up-to-date *primary* membership — no
+    // SeriesMembers row at all, a stored series built before the current
+    // classification rules took effect, or (split-series-by-version task 8.5)
+    // held only as a shared or boundary member of some other telling — so one
+    // press of the Settings button fills in missing series, heals ones stored
+    // under superseded rules, and builds a telling's own series even when it
+    // already appears as another telling's boundary member (design.md
+    // decision 4; series-versions spec "A boundary-only membership does not
+    // count as covered").
     private static async Task<List<int>> GetTargetsAsync(
         AnimeTrackerDbContext db, IUserAnimeEntryRepository entryRepository, CancellationToken ct)
     {
@@ -111,7 +120,7 @@ public class SeriesBulkBuildBackgroundService(
         var animeIds = entries.Select(e => e.AnimeId).Distinct().ToList();
 
         var upToDateMembers = (await db.SeriesMembers.AsNoTracking()
-            .Where(m => animeIds.Contains(m.AnimeId))
+            .Where(m => animeIds.Contains(m.AnimeId) && m.IsPrimary)
             .Join(db.Series.AsNoTracking(), m => m.SeriesId, s => s.Id, (m, s) => new { m.AnimeId, s.BuiltAt })
             .Where(x => x.BuiltAt >= SeriesGraphBuilder.ClassificationRevisedAt)
             .Select(x => x.AnimeId)

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using AnimeTracker.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AnimeTracker.Api.Migrations
 {
     [DbContext(typeof(AnimeTrackerDbContext))]
-    partial class AnimeTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260826203519_SplitSeriesMemberByVersion")]
+    partial class SplitSeriesMemberByVersion
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -543,9 +546,6 @@ namespace AnimeTracker.Api.Migrations
                     b.Property<int>("AnimeId")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("BranchHeadAnimeId")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("FavouriteRank")
                         .HasColumnType("integer");
 
@@ -555,20 +555,11 @@ namespace AnimeTracker.Api.Migrations
                     b.Property<bool>("IsPrimary")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("MembershipKind")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
-                        .HasDefaultValue("Core");
-
                     b.Property<int>("Order")
                         .HasColumnType("integer");
 
                     b.Property<string>("RelationGroup")
                         .HasColumnType("text");
-
-                    b.Property<int?>("VersionSlotKey")
-                        .HasColumnType("integer");
 
                     b.HasKey("SeriesId", "AnimeId");
 

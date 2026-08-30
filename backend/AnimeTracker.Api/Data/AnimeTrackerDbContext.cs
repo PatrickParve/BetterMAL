@@ -198,7 +198,7 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
 
         modelBuilder.Entity<SeriesMember>(entity =>
         {
-            entity.HasKey(e => e.AnimeId);
+            entity.HasKey(e => new { e.SeriesId, e.AnimeId });
             entity.HasOne<Series>()
                 .WithMany(s => s.Members)
                 .HasForeignKey(e => e.SeriesId)
@@ -208,6 +208,17 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
                 .HasForeignKey(e => e.AnimeId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => e.SeriesId);
+            // Anime -> series lookups (FindSeriesAsync/IsPrimary resolution,
+            // RelationResolver, ArtworkSelectionService, ...) no longer hit the
+            // primary key now that it's composite (split-series-by-version
+            // tasks 1.2/8.*).
+            entity.HasIndex(e => e.AnimeId);
+            // Every membership recorded before this column existed was a
+            // core one (rebuild-series-by-story-component design.md decision
+            // D8) — VersionSlotKey/BranchHeadAnimeId need no default of their
+            // own, since null is already the correct "not an alternative"
+            // value for pre-existing rows.
+            entity.Property(e => e.MembershipKind).HasDefaultValue("Core");
         });
     }
 }

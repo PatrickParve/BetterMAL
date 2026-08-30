@@ -346,6 +346,36 @@
   cursor: default;
 }
 
+.series-page__type-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -4px 0 8px;
+}
+
+.series-page__type-filter-button {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.series-page__type-filter-button:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.series-page__type-filter-button--active {
+  color: var(--text-h);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
 .series-page__extras-group {
   display: flex;
   flex-direction: column;
@@ -463,6 +493,48 @@
 .series-page__extras-group-hint:hover {
   color: var(--text-h);
   opacity: 1;
+}
+
+/* A version slot's picker (series-versions "Alternative versions on a main
+   line share one watch-order position"), rendered inside SeriesTimeline's
+   own card markup (task 8.3) but styled here, in the page's other button-
+   group control language — mirrors .series-page__type-filter-button, sized
+   down to fit a 192px timeline card and allowed to wrap onto a second line
+   when a slot holds more than two or three alternatives. */
+.series-page__slot-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 8px 0;
+}
+
+.series-page__slot-picker-button {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.3;
+  padding: 3px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.series-page__slot-picker-button:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.series-page__slot-picker-button--active {
+  color: var(--text-h);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
 }
 
 .series-page__loading,

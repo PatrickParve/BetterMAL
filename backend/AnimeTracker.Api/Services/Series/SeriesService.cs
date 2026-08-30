@@ -111,16 +111,21 @@ public class SeriesService(
         series is null || series.IsPartial || series.BuiltAt < DateTimeOffset.UtcNow - StaleAfter
         || series.BuiltAt < SeriesGraphBuilder.ClassificationRevisedAt;
 
+    // Filtered to IsPrimary (split-series-by-version task 7.1): an anime can
+    // now hold more than one membership (its own telling, plus any other
+    // telling it's a shared or boundary member of), and every "the series for
+    // this anime" lookup resolves to the one series-versions capability marks
+    // primary.
     public async Task<int?> FindSeriesIdAsync(int animeId, CancellationToken ct = default) =>
         await db.SeriesMembers.AsNoTracking()
-            .Where(m => m.AnimeId == animeId)
+            .Where(m => m.AnimeId == animeId && m.IsPrimary)
             .Select(m => (int?)m.SeriesId)
             .FirstOrDefaultAsync(ct);
 
     private async Task<SeriesEntity?> FindSeriesAsync(int animeId, CancellationToken ct)
     {
         var seriesId = await db.SeriesMembers.AsNoTracking()
-            .Where(m => m.AnimeId == animeId)
+            .Where(m => m.AnimeId == animeId && m.IsPrimary)
             .Select(m => (int?)m.SeriesId)
             .FirstOrDefaultAsync(ct);
 
@@ -129,7 +134,8 @@ public class SeriesService(
             : await db.Series.AsNoTracking().FirstOrDefaultAsync(s => s.Id == seriesId, ct);
     }
 
-    // --- Projection (3.1-3.4) ---
+    // --- Projection (3.1-3.4; extras grouping and related entries by
+    // split-series-by-version tasks 7.2-7.4) ---
 
     private async Task<SeriesDto> ProjectAsync(int seriesId, CancellationToken ct)
     {
@@ -140,8 +146,12 @@ public class SeriesService(
 
         var memberAnimeIds = series.Members.Select(m => m.AnimeId).ToHashSet();
         var mainLineMembers = series.Members.Where(m => m.IsMainLine).OrderBy(m => m.Order).ToList();
+        // RelationGroup, not media type (design.md decision 4) — order-within-
+        // group here only feeds BuildStats' favourite-tie-break watch order
+        // below; the client-facing group ordering is recomputed fresh in
+        // BuildDisplayExtrasAsync so it can interleave with related entries.
         var extraMembers = series.Members.Where(m => !m.IsMainLine)
-            .OrderBy(m => SeriesMediaTypeOrder.GroupOf(m.Anime.MediaType))
+            .OrderBy(m => SeriesRelationGroupOrder.GroupOf(ParseRelationGroup(m.RelationGroup)))
             .ThenBy(m => m.Order)
             .ToList();
         var allAnime = series.Members.Select(m => m.Anime).ToList();
@@ -155,13 +165,28 @@ public class SeriesService(
             .Select(s => (int?)s.AniListId)
             .FirstOrDefaultAsync(ct);
         var airedEpisodesByAnimeId = await AiredEpisodesByAnimeIdAsync(allAnime, ct);
-        var mainLineAiredEpisodes = MainLineAiredEpisodesFromMap(mainLineMembers, airedEpisodesByAnimeId);
 
         var pictureOptions = SeriesPicturePool.Build(mainLineMembers);
         if (series.SelectedPictureUrl is { } selectedPictureUrl && !pictureOptions.Contains(selectedPictureUrl))
             pictureOptions.Add(selectedPictureUrl); // a stored choice is never re-validated away (design.md D9)
         var titleOptions = SeriesTitleRule.OfferedTitles(mainLineMembers);
         var picturesPendingCount = mainLineMembers.Count(m => m.Anime.UserEntry is not null && m.Anime.PicturesSyncedAt is null);
+
+        var displayExtras = await BuildDisplayExtrasAsync(mainLineMembers, extraMembers, memberAnimeIds, airedEpisodesByAnimeId, ct);
+
+        // Version slots and their per-combination stats (design.md D4/D6,
+        // tasks 7.2-7.3): read straight off the stored VersionSlotKey/
+        // BranchHeadAnimeId columns, no re-walk of the relation graph.
+        // Score averages (BuildScores above) deliberately keep reading the
+        // whole, unfiltered mainLineMembers regardless of any pick.
+        var slots = BuildSlots(mainLineMembers);
+        var defaultPick = slots.ToDictionary(s => s.SlotKey, s => s.DefaultBranchHeadAnimeId);
+        var stats = BuildStats(mainLineMembers, VisibleMainLineMembers(mainLineMembers, defaultPick), extraMembers, allAnime, airedEpisodesByAnimeId);
+        var statsByPick = EnumeratePickCombinations(slots)
+            .Select(combo => new SeriesStatsByPickDto(
+                slots.Select(s => combo[s.SlotKey]).ToList(),
+                BuildStats(mainLineMembers, VisibleMainLineMembers(mainLineMembers, combo), extraMembers, allAnime, airedEpisodesByAnimeId)))
+            .ToList();
 
         return new SeriesDto(
             series.Id,
@@ -177,14 +202,259 @@ public class SeriesService(
             series.IsPartial,
             series.IsTruncated,
             BuildScores(mainLineMembers, series.Members),
-            BuildStats(mainLineMembers, extraMembers, allAnime, mainLineAiredEpisodes, airedEpisodesByAnimeId),
+            stats,
+            slots,
+            statsByPick,
             mainLineMembers.Select(m => ToEntryDto(m, memberAnimeIds, airedEpisodesByAnimeId)).ToList(),
-            extraMembers.Select(m => ToEntryDto(m, memberAnimeIds, airedEpisodesByAnimeId)).ToList(),
+            displayExtras,
             series.SelectedTitle,
             series.SelectedPictureUrl,
             pictureOptions,
             titleOptions,
             picturesPendingCount);
+    }
+
+    // --- Version slots (design.md D4/D5/D6, tasks 7.2-7.3) ---
+
+    /// <summary>The main line's version slot descriptors, read straight off
+    /// each member's stored <see cref="SeriesMember.VersionSlotKey"/>/
+    /// <see cref="SeriesMember.BranchHeadAnimeId"/> rather than re-walking
+    /// the relation graph SeriesGraphBuilder already walked once at build
+    /// time (design.md D4: "the projection needs no re-walk"). Reconstructs
+    /// the <see cref="SeriesVersionSlots.VersionSlot"/> shape
+    /// <see cref="SeriesVersionSlots.DefaultAlternativeId"/> expects purely
+    /// so that rule (design.md D5) can be reused rather than restated here.
+    /// Empty when no two main-line members share a <c>VersionSlotKey</c>.</summary>
+    private static List<SeriesSlotDto> BuildSlots(List<SeriesMember> mainLineMembers)
+    {
+        var memberById = mainLineMembers.ToDictionary(m => m.AnimeId, m => m.Anime);
+
+        return mainLineMembers
+            .Where(m => m.VersionSlotKey is not null)
+            .GroupBy(m => m.VersionSlotKey!.Value)
+            .OrderBy(g => g.Key)
+            .Select(group =>
+            {
+                var alternativeIds = group.Select(m => m.AnimeId)
+                    .OrderBy(id => SeriesGraphBuilder.OrderKey(memberById[id]))
+                    .ToList();
+                var branchMemberIdsByAlternativeId = alternativeIds.ToDictionary(
+                    id => id,
+                    id => mainLineMembers.Where(m => m.BranchHeadAnimeId == id).Select(m => m.AnimeId).ToHashSet());
+
+                var slot = new SeriesVersionSlots.VersionSlot
+                {
+                    SlotKey = group.Key,
+                    AlternativeIds = alternativeIds,
+                    BranchMemberIdsByAlternativeId = branchMemberIdsByAlternativeId,
+                };
+
+                return new SeriesSlotDto(group.Key, alternativeIds, SeriesVersionSlots.DefaultAlternativeId(slot, memberById));
+            })
+            .ToList();
+    }
+
+    /// <summary>The main-line members visible under one combination of slot
+    /// picks (design.md D4/D6): trunk — no <see cref="SeriesMember.BranchHeadAnimeId"/>
+    /// at all — plus, per slot, the picked alternative's branch.
+    /// <paramref name="pick"/> maps each slot's key to the alternative anime
+    /// id chosen for it.</summary>
+    private static List<SeriesMember> VisibleMainLineMembers(List<SeriesMember> mainLineMembers, IReadOnlyDictionary<int, int> pick)
+    {
+        var pickedBranchHeadIds = pick.Values.ToHashSet();
+        return mainLineMembers.Where(m => m.BranchHeadAnimeId is null || pickedBranchHeadIds.Contains(m.BranchHeadAnimeId.Value)).ToList();
+    }
+
+    // A defensive ceiling, not a working limit: no series observed today has
+    // more than one slot, so EnumeratePickCombinations's cap logic below is
+    // exercised only by a hypothetical multi-slot main line (design.md D6).
+    internal const int MaxStatsCombinations = 24;
+
+    /// <summary>Every admissible combination of slot picks (design.md D6,
+    /// task 7.3): built slot by slot in <c>SlotKey</c> order, expanding the
+    /// running set of combinations across a slot's alternatives while doing
+    /// so would stay within <see cref="MaxStatsCombinations"/>; once it would
+    /// not, that slot and every slot after it are pinned to their own
+    /// default instead of varied, so a hypothetical multi-slot main line
+    /// degrades gracefully rather than combinatorially exploding. The
+    /// all-defaults combination is always among the results, since a varied
+    /// slot's alternatives always include its own default and a pinned slot
+    /// is set to its default directly — so <c>SeriesDto.Stats</c> is always
+    /// equal to some entry of <c>StatsByPick</c>.</summary>
+    internal static List<Dictionary<int, int>> EnumeratePickCombinations(List<SeriesSlotDto> slots)
+    {
+        var combinations = new List<Dictionary<int, int>> { new() };
+
+        foreach (var slot in slots.OrderBy(s => s.SlotKey))
+        {
+            if (combinations.Count * slot.AlternativeAnimeIds.Count <= MaxStatsCombinations)
+            {
+                combinations = combinations
+                    .SelectMany(combo => slot.AlternativeAnimeIds.Select(altId =>
+                        new Dictionary<int, int>(combo) { [slot.SlotKey] = altId }))
+                    .ToList();
+            }
+            else
+            {
+                foreach (var combo in combinations)
+                    combo[slot.SlotKey] = slot.DefaultBranchHeadAnimeId;
+            }
+        }
+
+        return combinations;
+    }
+
+    // --- More section: extras + related entries, merged (7.2-7.4) ---
+
+    /// <summary>The More section's full tile list: real extra members plus
+    /// related entries — anime a main-line member relates to by a relation
+    /// the series traversal doesn't follow (design.md D5) — merged into the
+    /// same relation groups and interleaved by the same aired-from/MAL-id
+    /// order extras use (<see cref="SeriesGraphBuilder.OrderKey"/>), since a
+    /// real extra's stored <c>Order</c> alone has no way to interleave with a
+    /// related entry computed only at read time. Related entries never enter
+    /// any average, stat, or the member cap (task 7.4) — they're excluded
+    /// from every stats input above and only ever joined into this display
+    /// list.</summary>
+    private async Task<List<SeriesEntryDto>> BuildDisplayExtrasAsync(
+        List<SeriesMember> mainLineMembers,
+        List<SeriesMember> extraMembers,
+        HashSet<int> memberAnimeIds,
+        Dictionary<int, int?> airedEpisodesByAnimeId,
+        CancellationToken ct)
+    {
+        var relatedEntries = await ProjectRelatedEntriesAsync(mainLineMembers, memberAnimeIds, ct);
+        var relatedAiredEpisodes = relatedEntries.Count > 0
+            ? await AiredEpisodesByAnimeIdAsync(relatedEntries.Select(r => r.Anime).ToList(), ct)
+            : new Dictionary<int, int?>();
+
+        return extraMembers
+            .Select(m => (Group: ParseRelationGroup(m.RelationGroup), Sort: SeriesGraphBuilder.OrderKey(m.Anime),
+                Dto: ToEntryDto(m, memberAnimeIds, airedEpisodesByAnimeId)))
+            .Concat(relatedEntries.Select(r => (Group: r.Group, Sort: SeriesGraphBuilder.OrderKey(r.Anime),
+                Dto: ToRelatedEntryDto(r, relatedAiredEpisodes))))
+            .OrderBy(x => SeriesRelationGroupOrder.GroupOf(x.Group))
+            .ThenBy(x => x.Sort)
+            .GroupBy(x => x.Group)
+            .SelectMany(g => g.Select((x, i) => x.Dto with { Order = i }))
+            .ToList();
+    }
+
+    private static RelationGroup ParseRelationGroup(string? relationGroup) =>
+        relationGroup is not null && Enum.TryParse<RelationGroup>(relationGroup, out var parsed) ? parsed : RelationGroup.Other;
+
+    private sealed record RelatedEntryCandidate(AnimeMetadata Anime, RelationGroup Group, string RelationType);
+
+    /// <summary>Every anime a main-line member relates to by a relation the
+    /// series traversal doesn't follow — <c>character</c>, <c>adaptation</c>,
+    /// a non-companion <c>other</c>, any unrecognized relation string, and,
+    /// since <see cref="SeriesRelations.TraversalSet"/> narrowed back to story
+    /// relations alone, <c>alternative_version</c>/<c>alternative_setting</c>
+    /// to a version neighbour that isn't (yet, or ever going to be) a member
+    /// of this series (rebuild-series-by-story-component design.md decision
+    /// D2) — read in both directions, exactly as
+    /// <see cref="Services.Relations.RelationResolver.GetEdgesAsync"/>
+    /// reads an anime's own relation set (design.md D5, task 7.3). An
+    /// outgoing edge (a main-line member's own row) already carries the far
+    /// end's title/picture/media type as MAL reported them; an incoming edge
+    /// (another anime's row pointing at a main-line member) instead reads the
+    /// *owner's* own cached metadata, since that row describes the main-line
+    /// member, not its owner — and the owner always has a cached row, because
+    /// a relation row can only exist because its owner was once full-detail
+    /// fetched. Never requires a fetch: an outgoing far end with no cache row
+    /// renders from the relation row's own snapshot. Excludes anything
+    /// already a member of this series (task 7.4's "shown once, as a
+    /// member").</summary>
+    private async Task<List<RelatedEntryCandidate>> ProjectRelatedEntriesAsync(
+        List<SeriesMember> mainLineMembers, HashSet<int> memberAnimeIds, CancellationToken ct)
+    {
+        var mainLineIds = mainLineMembers.Select(m => m.AnimeId).ToHashSet();
+
+        var outgoing = mainLineMembers
+            .SelectMany(m => m.Anime.RelatedAnime
+                .Where(r => !SeriesRelations.TraversalSet.Contains(r.RelationType) && !memberAnimeIds.Contains(r.RelatedAnimeId))
+                .Select(r => (FarEndId: r.RelatedAnimeId, r.RelationType, r.Title, r.PictureUrl, r.MediaType)))
+            .ToList();
+
+        var incoming = await db.AnimeRelatedAnime.AsNoTracking()
+            .Where(r => mainLineIds.Contains(r.RelatedAnimeId) &&
+                !SeriesRelations.TraversalSet.Contains(r.RelationType) &&
+                !memberAnimeIds.Contains(r.AnimeId))
+            .Select(r => new { r.AnimeId, r.RelationType })
+            .ToListAsync(ct);
+
+        var farEndIds = outgoing.Select(o => o.FarEndId).Concat(incoming.Select(r => r.AnimeId)).Distinct().ToList();
+        if (farEndIds.Count == 0)
+            return [];
+
+        var cachedFarEnds = await db.AnimeMetadata.AsNoTracking()
+            .Include(a => a.UserEntry)
+            .Where(a => farEndIds.Contains(a.Id))
+            .ToDictionaryAsync(a => a.Id, ct);
+
+        var edgesByFarEndId = new Dictionary<int, List<(string RelationType, bool ExtraIsOwner)>>();
+        foreach (var edge in outgoing)
+        {
+            if (!edgesByFarEndId.TryGetValue(edge.FarEndId, out var list))
+                edgesByFarEndId[edge.FarEndId] = list = [];
+            list.Add((edge.RelationType, ExtraIsOwner: false)); // the main-line member owns this edge
+        }
+        foreach (var row in incoming)
+        {
+            if (!edgesByFarEndId.TryGetValue(row.AnimeId, out var list))
+                edgesByFarEndId[row.AnimeId] = list = [];
+            list.Add((row.RelationType, ExtraIsOwner: true)); // the far end owns this edge
+        }
+
+        var candidates = new List<RelatedEntryCandidate>();
+        foreach (var (farEndId, edges) in edgesByFarEndId)
+        {
+            var winningEdge = edges.OrderBy(e => SeriesRelationGroupOrder.GroupOf(SeriesRelations.ResolveDirectional(e.RelationType, e.ExtraIsOwner))).First();
+            var group = SeriesRelations.ResolveDirectional(winningEdge.RelationType, winningEdge.ExtraIsOwner);
+            var anime = cachedFarEnds.TryGetValue(farEndId, out var cached)
+                ? cached
+                : BuildSyntheticRelatedAnime(farEndId, outgoing);
+            candidates.Add(new RelatedEntryCandidate(anime, group, winningEdge.RelationType));
+        }
+
+        return candidates;
+    }
+
+    // An outgoing-only far end with no cached row at all renders purely from
+    // the relation row's own snapshot (design.md D5: "no fetch is needed").
+    // Never called for an incoming-only far end, which is always cached (see
+    // ProjectRelatedEntriesAsync's doc comment).
+    private static AnimeMetadata BuildSyntheticRelatedAnime(
+        int farEndId, List<(int FarEndId, string RelationType, string Title, string? PictureUrl, string? MediaType)> outgoing)
+    {
+        var snapshot = outgoing.First(o => o.FarEndId == farEndId);
+        return new AnimeMetadata { Id = farEndId, Title = snapshot.Title, PictureUrl = snapshot.PictureUrl, MediaType = snapshot.MediaType };
+    }
+
+    private static SeriesEntryDto ToRelatedEntryDto(RelatedEntryCandidate candidate, Dictionary<int, int?> airedEpisodesByAnimeId)
+    {
+        var anime = candidate.Anime;
+        return new SeriesEntryDto(
+            anime.Id,
+            anime.Title,
+            anime.EnglishTitle,
+            anime.PictureUrl,
+            anime.MediaType,
+            anime.AiringStatus,
+            anime.TotalEpisodes,
+            anime.AverageEpisodeDurationSeconds,
+            anime.AiredFrom,
+            anime.AiredTo,
+            anime.MalScore,
+            candidate.RelationType,
+            Order: 0, // reassigned by BuildDisplayExtrasAsync's merge sort
+            airedEpisodesByAnimeId.GetValueOrDefault(anime.Id),
+            anime.UserEntry is null ? null : UserAnimeEntryDto.FromEntity(anime.UserEntry),
+            candidate.Group.ToString(),
+            IsRelatedEntry: true,
+            OpensOwnSeries: false, // every related entry opens the anime's own detail page (design.md D7)
+            VersionSlotKey: null,
+            BranchHeadAnimeId: null);
     }
 
     // Per-member AiredEpisodes (design.md decision 1) for every series member,
@@ -263,7 +533,12 @@ public class SeriesService(
             RelationTypeWithinSeries(anime, memberAnimeIds),
             member.Order,
             airedEpisodesByAnimeId.GetValueOrDefault(anime.Id),
-            anime.UserEntry is null ? null : UserAnimeEntryDto.FromEntity(anime.UserEntry));
+            anime.UserEntry is null ? null : UserAnimeEntryDto.FromEntity(anime.UserEntry),
+            member.RelationGroup,
+            IsRelatedEntry: false,
+            OpensOwnSeries: member.MembershipKind == nameof(MembershipKind.NeighbourTelling),
+            member.VersionSlotKey,
+            member.BranchHeadAnimeId);
     }
 
     // Only this anime's own relation rows are considered, so a member
@@ -311,20 +586,33 @@ public class SeriesService(
             MineMain: SeriesAverages.Mine(mainLineMembers.Select(m => m.Anime.UserEntry?.MyScore)),
             MineAll: SeriesAverages.Mine(allMembers.Select(m => m.Anime.UserEntry?.MyScore)));
 
-    // --- Stats (3.3) ---
+    // --- Stats (3.3; split into a pick-scoped half and a whole-franchise
+    // half by rebuild-series-by-story-component design.md D6, task 7.3) ---
 
     // Internal (not private) so tests can exercise the aired-count fallback
     // and tied-stat computations directly against plain in-memory models,
     // without standing up a database.
+    //
+    // mainLineMembers is the whole, unfiltered main line — every alternative
+    // of every slot included — and feeds only the figures design.md D6 says
+    // span the whole franchise regardless of pick: the favourite/highest-
+    // score/most-rewatched tie-break order below. visibleMainLineMembers is
+    // one pick's trunk-plus-picked-branches subset (see
+    // VisibleMainLineMembers) and feeds every other main-line figure.
+    // ProjectAsync calls this once per admissible combination (task 7.3);
+    // for a series whose main line holds no slot the two lists are the same
+    // list, and every figure covers the whole main line exactly as before
+    // this capability.
     internal static SeriesStatsDto BuildStats(
-        List<SeriesMember> mainLineMembers, List<SeriesMember> extraMembers, List<AnimeMetadata> allAnime,
-        int mainLineAiredEpisodes, Dictionary<int, int?> airedEpisodesByAnimeId)
+        List<SeriesMember> mainLineMembers, List<SeriesMember> visibleMainLineMembers, List<SeriesMember> extraMembers,
+        List<AnimeMetadata> allAnime, Dictionary<int, int?> airedEpisodesByAnimeId)
     {
-        var mainLineAnime = mainLineMembers.Select(m => m.Anime).ToList();
+        var visibleMainLineAnime = visibleMainLineMembers.Select(m => m.Anime).ToList();
         var extraAnime = extraMembers.Select(m => m.Anime).ToList();
 
-        var (mainEpisodes, mainRuntimeSeconds, hasUnknown) = EpisodesAndRuntime(mainLineAnime, airedEpisodesByAnimeId);
+        var (mainEpisodes, mainRuntimeSeconds, hasUnknown) = EpisodesAndRuntime(visibleMainLineAnime, airedEpisodesByAnimeId);
         var (extraEpisodes, extraRuntimeSeconds, _) = EpisodesAndRuntime(extraAnime, airedEpisodesByAnimeId);
+        var mainLineAiredEpisodes = MainLineAiredEpisodesFromMap(visibleMainLineMembers, airedEpisodesByAnimeId);
 
         // A Rewatching main-line entry counts as fully watched (polish-rewatch
         // design.md D2), as the greater of its own episodes-watched and its
@@ -333,28 +621,29 @@ public class SeriesService(
         // figures beside it can never disagree about the same entry. Governs
         // only the watched side: the episode total, aired figure, and runtime
         // above are untouched.
-        var myWatchedEpisodes = mainLineAnime.Sum(a => EffectiveWatchedEpisodes(a, airedEpisodesByAnimeId));
-        var myWatchedSeconds = mainLineAnime.Sum(a => (long)EffectiveWatchedEpisodes(a, airedEpisodesByAnimeId) * EpisodeSeconds(a));
+        var myWatchedEpisodes = visibleMainLineAnime.Sum(a => EffectiveWatchedEpisodes(a, airedEpisodesByAnimeId));
+        var myWatchedSeconds = visibleMainLineAnime.Sum(a => (long)EffectiveWatchedEpisodes(a, airedEpisodesByAnimeId) * EpisodeSeconds(a));
         // Orthogonal to the above (design D10): entering Rewatching zeroes
         // episodes-watched and the rewatch count only increments once a run
         // finishes, so EffectiveWatchedEpisodes above contributes exactly the
         // original run while this contributes exactly the rewatches — the two
         // provably can't double-count the same viewing.
-        var myRewatchedSeconds = mainLineAnime.Sum(a => (long)WatchMath.RewatchEpisodesIncludingCurrentRun(
+        var myRewatchedSeconds = visibleMainLineAnime.Sum(a => (long)WatchMath.RewatchEpisodesIncludingCurrentRun(
             a.UserEntry?.RewatchCount ?? 0, a.TotalEpisodes, a.UserEntry?.EpisodesWatched ?? 0, a.UserEntry?.Status)
             * EpisodeSeconds(a));
         // A rewatch can only follow a completed run, so a Rewatching entry
         // counts as completed here too (polish-rewatch design.md D2) —
         // otherwise this stat would read "5 of 6" beside a "Completed" badge.
-        var entriesCompleted = mainLineAnime.Count(a => a.UserEntry?.Status is WatchStatus.Completed or WatchStatus.Rewatching);
+        var entriesCompleted = visibleMainLineAnime.Count(a => a.UserEntry?.Status is WatchStatus.Completed or WatchStatus.Rewatching);
         var extrasCompleted = extraAnime.Count(a => a.UserEntry?.Status == WatchStatus.Completed);
         var mainLineSettledByMe = SeriesAverages.MainLineSettledByMe(
-            mainLineAnime.Select(a => (a.AiringStatus, a.UserEntry?.Status)));
+            visibleMainLineAnime.Select(a => (a.AiringStatus, a.UserEntry?.Status)));
 
-        var (gapDays, gapFromId, gapToId) = LongestGap(mainLineAnime);
+        var (gapDays, gapFromId, gapToId) = LongestGap(visibleMainLineAnime);
 
-        // Watch order for tie-breaking: main line first (already Order-sorted),
-        // then extras (already media-group-then-Order-sorted) — design.md
+        // Watch order for tie-breaking: the whole main line (already
+        // Order-sorted, unfiltered by any pick per design.md D6), then
+        // extras (already media-group-then-Order-sorted) — design.md
         // decision 8.
         var orderedMembers = mainLineMembers.Concat(extraMembers).ToList();
         var highestMalIds = TiedTopIds(
@@ -397,7 +686,7 @@ public class SeriesService(
             entriesCompleted,
             extrasCompleted,
             mainLineSettledByMe,
-            mainLineMembers.Count,
+            visibleMainLineMembers.Count,
             extraMembers.Count,
             gapDays,
             gapFromId,

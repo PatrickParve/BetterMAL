@@ -85,7 +85,11 @@ public class AnimeDetailService(
         // this cache lookup is only a fallback for relation rows written
         // before that column existed.
         var relatedMediaTypeByAnimeId = await GetMediaTypesAsync(anime.RelatedAnime.Select(r => r.RelatedAnimeId), ct);
-        var inSeries = await db.SeriesMembers.AsNoTracking().AnyAsync(m => m.AnimeId == animeId, ct);
+        // Filtered to the primary membership (split-series-by-version task
+        // 8.2): the "Series" link always opens this anime's primary series
+        // (via the read endpoint's own IsPrimary resolution), so InSeries
+        // must agree about which membership counts.
+        var inSeries = await db.SeriesMembers.AsNoTracking().AnyAsync(m => m.AnimeId == animeId && m.IsPrimary, ct);
         var relations = await relationResolver.ResolveAsync(anime, ct);
 
         // Evaluated after the live-fetch block above, so a fetch that just

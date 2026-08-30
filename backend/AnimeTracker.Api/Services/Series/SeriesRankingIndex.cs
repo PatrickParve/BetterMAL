@@ -113,8 +113,14 @@ public sealed class SeriesRankingIndex
         foreach (var group in _membersBySeriesId)
         {
             var members = group.ToList();
-            if (!members.Any(m => m.EntryStatus is not null))
-                continue; // no member of this series is in my list
+            // A version-neighbour-only membership must not make its host
+            // series eligible here (rebuild-series-by-story-component
+            // design.md, series-browser spec "A version-neighbour membership
+            // does not list a series", task 7.6) — otherwise listing one
+            // telling would also list every neighbouring telling it holds as
+            // an extra. An ordinary (Core) extra still counts, unchanged.
+            if (!members.Any(m => m.EntryStatus is not null && m.MembershipKind == nameof(MembershipKind.Core)))
+                continue;
 
             var root = members.First(m => m.AnimeId == m.RootAnimeId);
             var mainLine = members.Where(m => m.IsMainLine).ToList();
@@ -134,10 +140,21 @@ public sealed class SeriesRankingIndex
             var malRevealed = mainLineSettledByMe && !mainLineAiring;
 
             var (firstYear, lastYear) = ListedSeriesYearSpan(members);
-            var (episodeTotal, hasUnknown) = MainLineEpisodeTotal(mainLine, airedEpisodesByAnimeId);
-            var (badge, behindEpisodes) = ProgressBadge(mainLine, status, airedEpisodesByAnimeId);
-            var mainLineWatchedEpisodes = mainLine.Sum(m => MemberEffectiveWatchedEpisodes(m, airedEpisodesByAnimeId));
-            var mainLineAiredEpisodes = ListedSeriesMainLineAiredEpisodes(mainLine, airedEpisodesByAnimeId);
+
+            // The card's episode/progress figures use the default
+            // combination of alternatives (rebuild-series-by-story-component
+            // design.md D6, series-browser spec "A card's figures cover its
+            // own telling" — "the card's figures SHALL use the default
+            // combination... the browser SHALL NOT re-derive figures per
+            // alternative", task 7.5). Score averages above stay over the
+            // whole, unfiltered main line, per the same rule.
+            var defaultVisibleIds = DefaultVisibleMainLineAnimeIds(mainLine);
+            var scopedMainLine = mainLine.Where(m => defaultVisibleIds.Contains(m.AnimeId)).ToList();
+
+            var (episodeTotal, hasUnknown) = MainLineEpisodeTotal(scopedMainLine, airedEpisodesByAnimeId);
+            var (badge, behindEpisodes) = ProgressBadge(scopedMainLine, status, airedEpisodesByAnimeId);
+            var mainLineWatchedEpisodes = scopedMainLine.Sum(m => MemberEffectiveWatchedEpisodes(m, airedEpisodesByAnimeId));
+            var mainLineAiredEpisodes = ListedSeriesMainLineAiredEpisodes(scopedMainLine, airedEpisodesByAnimeId);
             var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
                 root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.PictureUrl);
 
@@ -150,6 +167,59 @@ public sealed class SeriesRankingIndex
 
         return results;
     }
+
+    /// <summary>The main line's default-combination visible set
+    /// (rebuild-series-by-story-component design.md D6, task 7.5): trunk —
+    /// no <c>BranchHeadAnimeId</c> at all — plus, per version slot present,
+    /// the default alternative's own branch. Mirrors
+    /// <c>SeriesService.VisibleMainLineMembers</c>/<c>BuildSlots</c>, adapted
+    /// to this index's flatter projection; the browser card carries no
+    /// picker, so its pick-dependent figures always read this one
+    /// combination. Synthesizes a minimal <see cref="AnimeMetadata"/> per
+    /// member purely to reuse <see cref="SeriesVersionSlots.DefaultAlternativeId"/>
+    /// rather than restating that rule here.</summary>
+    private static HashSet<int> DefaultVisibleMainLineAnimeIds(List<SeriesRankingMemberProjection> mainLine)
+    {
+        var visible = mainLine.Where(m => m.BranchHeadAnimeId is null).Select(m => m.AnimeId).ToHashSet();
+
+        var alternativeGroups = mainLine.Where(m => m.VersionSlotKey is not null).GroupBy(m => m.VersionSlotKey!.Value).ToList();
+        if (alternativeGroups.Count == 0)
+            return visible;
+
+        var memberById = mainLine.ToDictionary(m => m.AnimeId, ToSyntheticAnime);
+
+        foreach (var group in alternativeGroups)
+        {
+            var alternativeIds = group.Select(m => m.AnimeId).OrderBy(id => SeriesGraphBuilder.OrderKey(memberById[id])).ToList();
+            var branchMemberIdsByAlternativeId = alternativeIds.ToDictionary(
+                id => id,
+                id => mainLine.Where(m => m.BranchHeadAnimeId == id).Select(m => m.AnimeId).ToHashSet());
+
+            var slot = new SeriesVersionSlots.VersionSlot
+            {
+                SlotKey = group.Key,
+                AlternativeIds = alternativeIds,
+                BranchMemberIdsByAlternativeId = branchMemberIdsByAlternativeId,
+            };
+
+            var defaultId = SeriesVersionSlots.DefaultAlternativeId(slot, memberById);
+            visible.UnionWith(branchMemberIdsByAlternativeId[defaultId]);
+        }
+
+        return visible;
+    }
+
+    private static AnimeMetadata ToSyntheticAnime(SeriesRankingMemberProjection m) => new()
+    {
+        Id = m.AnimeId,
+        Title = m.Title,
+        MalScore = m.MalScore,
+        PopularityRank = m.PopularityRank,
+        AiredFrom = m.AiredFrom,
+        UserEntry = m.EntryStatus is null
+            ? null
+            : new UserAnimeEntry { AnimeId = m.AnimeId, EpisodesWatched = m.EpisodesWatched ?? 0, Status = m.EntryStatus.Value },
+    };
 
     // Mirrors SeriesService.YearSpan, over every member rather than main-line
     // only (design.md D7/task 2.7) — the card's year span matches the series

@@ -2,17 +2,17 @@ namespace AnimeTracker.Api.Services.Series;
 
 /// <summary>The relation types that mean "this is the same story" — a series
 /// is the connected component of <c>AnimeRelatedAnime</c> reached by
-/// traversing only these, plus the narrow companion-media case of <c>other</c>
-/// handled by <see cref="IsTraversableOtherEdge"/> (design.md decision 1;
-/// widened to include <c>pv</c> by polish-rewatch-more-and-filters design.md
-/// D5a). <c>alternative_setting</c> and <c>character</c> are deliberately
-/// excluded: they're how MAL links shows that merely share a universe or a
-/// cast, and traversing them would fuse entire multi-decade franchises — and,
-/// through shared crossover shows, occasionally unrelated ones — into a
-/// single blob. Every other relation MAL reports (those two, plus
-/// <c>adaptation</c> and any unrecognized string, and <c>other</c> outside its
-/// companion-media case) is stored on <c>AnimeRelatedAnime</c> as always, just
-/// never traversed here.</summary>
+/// traversing <see cref="TraversalSet"/>, plus the narrow companion-media case
+/// of <c>other</c> handled by <see cref="IsTraversableOtherEdge"/> (design.md
+/// decision 1; widened to include <c>pv</c> by
+/// polish-rewatch-more-and-filters design.md D5a). <c>character</c> is
+/// deliberately excluded: it's how MAL links shows that merely share a cast,
+/// and traversing it would fuse entire multi-decade franchises — and, through
+/// shared crossover shows, occasionally unrelated ones — into a single blob.
+/// Every other relation MAL reports (<c>character</c>, <c>adaptation</c>, any
+/// unrecognized string, and <c>other</c> outside its companion-media case) is
+/// stored on <c>AnimeRelatedAnime</c> as always, just never traversed
+/// here.</summary>
 public static class SeriesRelations
 {
     // Concrete HashSet<string>, not IReadOnlySet<string>: EF Core's query
@@ -21,7 +21,21 @@ public static class SeriesRelations
     // IReadOnlySet<T> interface, which fails to translate when this field is
     // used inside a LINQ-to-Entities Where clause (SeriesGraphBuilder's
     // incoming-edge query).
-    public static readonly HashSet<string> TraversalSet = new()
+
+    /// <summary>Relations that mean "a different telling of the same
+    /// franchise" rather than "the same story" — no longer part of
+    /// <see cref="TraversalSet"/>, so they neither grow nor split a
+    /// component. Instead they're followed one hop, discovery-only, from a
+    /// story component's members to find its version neighbours, which are
+    /// classified (design.md decision D2) but never traversed through
+    /// (rebuild-series-by-story-component design.md decisions D1/D3).</summary>
+    public static readonly HashSet<string> VersionRelations = new() { "alternative_version", "alternative_setting" };
+
+    /// <summary>Relations that mean "the same story, the same telling" — a
+    /// series is the connected component reached by traversing this set
+    /// alone; <see cref="VersionRelations"/> neither grows nor splits it
+    /// (rebuild-series-by-story-component design.md decision D1).</summary>
+    public static readonly HashSet<string> StoryTraversalSet = new()
     {
         "sequel",
         "prequel",
@@ -30,8 +44,26 @@ public static class SeriesRelations
         "summary",
         "full_story",
         "spin_off",
-        "alternative_version",
     };
+
+    /// <summary>Alias of <see cref="StoryTraversalSet"/> — the name
+    /// <c>SeriesGraphBuilder</c>'s traversal and <c>SeriesService</c>'s
+    /// related-entry projection already use for "the set a build's component
+    /// traversal follows". <see cref="VersionRelations"/> used to be folded
+    /// into this set too, so a single build discovered every telling of a
+    /// franchise at once; narrowing it back to story relations alone is what
+    /// makes a series a story component again (design.md decision
+    /// D1).</summary>
+    public static readonly HashSet<string> TraversalSet = StoryTraversalSet;
+
+    /// <summary>Union of <see cref="TraversalSet"/> and <see cref="VersionRelations"/>
+    /// — what <see cref="TraversalSet"/> itself used to mean before it
+    /// narrowed back to story relations alone. <see cref="Services.Metadata.AdjacentAnimeSet"/>
+    /// is the one reader that still wants the wider set: metadata-refresh
+    /// adjacency must keep reaching a listed anime's alternative versions,
+    /// not just its same-story neighbours, so the narrowing above must not
+    /// silently stop refreshing them (design.md Risks/Trade-offs).</summary>
+    public static readonly HashSet<string> TraversalOrVersionRelations = new(TraversalSet.Concat(VersionRelations));
 
     // The media types an `other` edge is traversed for (design.md D5a, tasks
     // 4.1): a franchise's theme/image songs and promotional videos, which MAL
@@ -126,4 +158,49 @@ public static class SeriesRelations
 
         return sideContentIds;
     }
+
+    /// <summary>The <see cref="RelationGroup"/> an extra belongs to given one
+    /// relation edge between it and a main-line member, read directionally
+    /// from the extra's own side (split-series-by-version design.md decision
+    /// 4): <c>M --summary--> X</c> makes X a <see cref="RelationGroup.Summary"/>,
+    /// while <c>X --summary--> M</c> makes X the
+    /// <see cref="RelationGroup.FullStory"/> — mirroring how
+    /// <see cref="FindRecapIds"/> and <see cref="FindSideContentIds"/> already
+    /// read <c>summary</c>/<c>full_story</c> and <c>side_story</c>/<c>parent_story</c>
+    /// as directional pairs. <paramref name="extraIsOwner"/> is true when the
+    /// stored edge is <c>extra --relationType--> mainLineMember</c>, false when
+    /// it's <c>mainLineMember --relationType--> extra</c>. Relations with no
+    /// mirror name — the two version relations, <c>spin_off</c>, <c>character</c>,
+    /// <c>adaptation</c> — resolve the same group regardless of direction.
+    /// Any relation type not recognised here (including a non-companion
+    /// <c>other</c>) resolves to <see cref="RelationGroup.Other"/>.</summary>
+    public static RelationGroup ResolveDirectional(string relationType, bool extraIsOwner) => relationType switch
+    {
+        "alternative_version" => RelationGroup.AlternativeVersion,
+        "alternative_setting" => RelationGroup.AlternativeSetting,
+        "sequel" => extraIsOwner ? RelationGroup.Prequel : RelationGroup.Sequel,
+        "prequel" => extraIsOwner ? RelationGroup.Sequel : RelationGroup.Prequel,
+        "side_story" => extraIsOwner ? RelationGroup.ParentStory : RelationGroup.SideStory,
+        "parent_story" => extraIsOwner ? RelationGroup.SideStory : RelationGroup.ParentStory,
+        "summary" => extraIsOwner ? RelationGroup.FullStory : RelationGroup.Summary,
+        "full_story" => extraIsOwner ? RelationGroup.Summary : RelationGroup.FullStory,
+        "spin_off" => RelationGroup.SpinOff,
+        "character" => RelationGroup.Character,
+        "adaptation" => RelationGroup.Adaptation,
+        _ => RelationGroup.Other,
+    };
+
+    /// <summary>The single <see cref="RelationGroup"/> for an id related to
+    /// one or more main-line members by <paramref name="edgesToMainLine"/> —
+    /// the highest-precedence group among them, in <see cref="SeriesRelationGroupOrder"/>'s
+    /// fixed display order (design.md decision 4: "its group SHALL be the
+    /// highest-precedence such relation in the order above"). Shared by
+    /// <c>SeriesGraphBuilder</c>'s extra-group resolution and
+    /// <c>SeriesService</c>'s related-entry projection, so an id reached by
+    /// more than one relation resolves the same group on both.</summary>
+    public static RelationGroup HighestPrecedenceGroup(IEnumerable<(string RelationType, bool ExtraIsOwner)> edgesToMainLine) =>
+        edgesToMainLine
+            .Select(e => ResolveDirectional(e.RelationType, e.ExtraIsOwner))
+            .OrderBy(SeriesRelationGroupOrder.GroupOf)
+            .First();
 }

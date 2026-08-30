@@ -12,6 +12,20 @@ type SeriesExtraTileProps = {
   onEdit: (entry: SeriesEntryDto) => void
 }
 
+// A tile's link target is decided by the server, not inferred from its
+// display group (rebuild-series-by-story-component design.md D7, series-page
+// spec "A More tile's link target is decided by the series"): opensOwnSeries
+// is true only for a version neighbour that carries story relations of its
+// own — a telling with a franchise of its own, addressed by its own anime id
+// so the series read endpoint can build it on the visit itself. Every other
+// tile, including a folded-in version neighbour with no story relations of
+// its own, opens the anime's detail page — replacing the old relationGroup
+// inference, which sent every Alternative version/setting tile to the series
+// page unconditionally and could point back at the page it was rendered on.
+function tileHref(entry: SeriesEntryDto): string {
+  return entry.opensOwnSeries ? `/series/${entry.animeId}` : `/anime/${entry.animeId}`
+}
+
 // The More-section counterpart to SeriesEntryRow: a poster tile rather than a
 // row, carrying the same facts (redesign-series-page design.md decision 5) —
 // picture, title, year, episode count, MAL score, my score, my status — plus
@@ -27,7 +41,7 @@ export function SeriesExtraTile({ entry, onEdit }: SeriesExtraTileProps) {
 
   return (
     <li className={`series-extra-tile${statusClass}${isLandscape ? ' series-extra-tile--landscape' : ''}`}>
-      <Link to={`/anime/${entry.animeId}`} className="series-extra-tile__link">
+      <Link to={tileHref(entry)} className="series-extra-tile__link">
         <span className="series-extra-tile__picture-frame">
           {entry.pictureUrl ? (
             <img ref={pictureRef} src={entry.pictureUrl} alt="" className="series-extra-tile__picture" />

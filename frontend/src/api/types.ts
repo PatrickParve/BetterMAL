@@ -611,10 +611,27 @@ export type ResolvedRelationDto = {
   isReverseDerived: boolean
 }
 
-// Mirrors backend Services/Series/SeriesDto.cs (tasks 3.1-3.3). airedEpisodes
-// is null-means-unknown (design.md decision 1 of redesign-series-page):
-// finished -> total, airing -> schedule reader clamped to total (null when
-// unknown), not yet aired -> 0, unknown airing status -> null.
+// Mirrors backend Services/Series/SeriesDto.cs (tasks 3.1-3.3, extended by
+// split-series-by-version tasks 7.5/10.1 and rebuild-series-by-story-component
+// task 8.1). airedEpisodes is null-means-unknown
+// (design.md decision 1 of redesign-series-page): finished -> total, airing ->
+// schedule reader clamped to total (null when unknown), not yet aired -> 0,
+// unknown airing status -> null. relationGroup is this entry's relationship
+// to the main line (split-series-by-version design.md decision 4) — the raw
+// PascalCase enum name (e.g. "AlternativeVersion", "SideStory"), null for a
+// main-line entry. isRelatedEntry is true for an entry shown from a relation
+// the series traversal doesn't follow rather than stored as a member (design
+// D5) — it's shown, not counted, and (for the Alternative version/setting
+// groups specifically) never carries a stored series id of its own: its tile
+// links by this entry's own animeId (design D10). opensOwnSeries decides a
+// More tile's link target (rebuild-series-by-story-component design.md D7):
+// true only for a version-neighbour member that carries story relations of
+// its own, whose tile opens that anime's own series page; false — including
+// every related entry — opens the anime's detail page instead. versionSlotKey/
+// branchHeadAnimeId mirror the stored SeriesMember columns (design.md D4):
+// both null outside the main line and for a trunk entry; a version slot's own
+// alternatives carry both, the rest of that alternative's branch carries only
+// branchHeadAnimeId.
 export type SeriesEntryDto = {
   animeId: number
   title: string
@@ -631,6 +648,11 @@ export type SeriesEntryDto = {
   order: number
   airedEpisodes: number | null
   entry: UserAnimeEntryDto | null
+  relationGroup: string | null
+  isRelatedEntry: boolean
+  opensOwnSeries: boolean
+  versionSlotKey: number | null
+  branchHeadAnimeId: number | null
 }
 
 // value is null exactly when scoredCount is 0; otherwise unrounded — render
@@ -678,6 +700,28 @@ export type SeriesStatsDto = {
 
 export type SeriesStatus = 'Airing' | 'Ongoing' | 'Upcoming' | 'Finished'
 
+// One version slot on the main line (rebuild-series-by-story-component
+// design.md D4): alternativeAnimeIds is every alternative the slot holds, in
+// watch-order tie-break order; defaultBranchHeadAnimeId is the alternative
+// the slot opens on absent a reader's own pick (design.md D5) — always one of
+// alternativeAnimeIds. slotKey is the lowest MAL id among the alternatives,
+// the same value carried on each alternative's own SeriesEntryDto.versionSlotKey.
+export type SeriesSlotDto = {
+  slotKey: number
+  alternativeAnimeIds: number[]
+  defaultBranchHeadAnimeId: number
+}
+
+// One admissible combination of slot picks and the SeriesStatsDto it produces
+// (design.md D6, task 7.3). branchHeadAnimeIds names one alternative per slot,
+// positionally aligned with SeriesDto.slots — index i here is the pick for
+// slots[i]. Combinations are capped at 24; beyond the cap, every slot past the
+// first keeps its default pick in every combination.
+export type SeriesStatsByPickDto = {
+  branchHeadAnimeIds: number[]
+  stats: SeriesStatsDto
+}
+
 export type SeriesDto = {
   seriesId: number
   rootAnimeId: number
@@ -692,7 +736,13 @@ export type SeriesDto = {
   isPartial: boolean
   isTruncated: boolean
   scores: SeriesScoresDto
+  // The default combination's stats — every alternative picked at its
+  // default — so a first paint needs no lookup into statsByPick. Every other
+  // admissible combination, this one included, is also in statsByPick.
   stats: SeriesStatsDto
+  // Empty when the main line holds no version slot at all (design.md D4).
+  slots: SeriesSlotDto[]
+  statsByPick: SeriesStatsByPickDto[]
   mainLine: SeriesEntryDto[]
   extras: SeriesEntryDto[]
   // The series' own overrides (null when unset) and the picker inputs

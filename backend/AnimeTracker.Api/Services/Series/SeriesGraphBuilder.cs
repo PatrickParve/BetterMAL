@@ -10,12 +10,15 @@ using SeriesEntity = AnimeTracker.Api.Models.Series;
 namespace AnimeTracker.Api.Services.Series;
 
 /// <summary>Derives and persists a franchise from the related-anime graph
-/// (design.md's series-page decisions). A build is a bounded BFS from a seed
-/// anime over <see cref="SeriesRelations.TraversalSet"/>, followed by
-/// main-line classification, watch-order assignment, and a wholesale
-/// member-set replace that absorbs any overlapping stored series. Callers
-/// (<c>SeriesService</c>) decide when to build and which fetch budget to
-/// spend — this class only knows how.</summary>
+/// (design.md's series-page decisions). A build traverses a seed's story
+/// component (a bounded BFS over <see cref="SeriesRelations.TraversalSet"/>),
+/// then its version neighbours one hop out
+/// (rebuild-series-by-story-component design.md decisions D1-D3; see
+/// <see cref="TraverseAsync"/>), followed by main-line classification,
+/// watch-order assignment, and a wholesale member-set replace that absorbs
+/// any overlapping stored series. Callers (<c>SeriesService</c>) decide when
+/// to build and which fetch budget to spend — this class only knows
+/// how.</summary>
 public class SeriesGraphBuilder(
     AnimeTrackerDbContext db,
     IMetadataRefreshService refreshService,
@@ -43,7 +46,7 @@ public class SeriesGraphBuilder(
     // timestamp as needing a rebuild, so a classification correction reaches
     // already-stored series on their next read instead of requiring the user
     // to find and rebuild each one by hand (design.md decision 3).
-    public static readonly DateTimeOffset ClassificationRevisedAt = new(2026, 8, 25, 0, 0, 0, TimeSpan.Zero);
+    public static readonly DateTimeOffset ClassificationRevisedAt = new(2026, 8, 27, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>Builds and persists the series reachable from
     /// <paramref name="seedAnimeId"/>, spending at most <paramref name="fetchBudget"/>
@@ -62,19 +65,187 @@ public class SeriesGraphBuilder(
     public async Task<SeriesEntity?> BuildAsync(
         int seedAnimeId, int fetchBudget, int probeBudget, bool expandLeanMembers, CancellationToken ct = default)
     {
-        var (members, isPartial, isTruncated) = await TraverseAsync(seedAnimeId, fetchBudget, probeBudget, expandLeanMembers, ct);
+        var (members, edges, isPartial, isTruncated, versionNeighbours) =
+            await TraverseAsync(seedAnimeId, fetchBudget, probeBudget, expandLeanMembers, ct);
 
         if (members.Count <= 1)
             return null;
 
-        var (mainLineIds, rootAnimeId, orderByAnimeId) = Classify(members);
+        // Story components are disjoint (design.md D1), so a build now
+        // derives and persists exactly one series — the traversed component
+        // plus its classified version neighbours (design.md D2) — rather
+        // than partitioning members across several version-edge anchors.
+        var coreMemberIds = members.Select(m => m.Id).ToHashSet();
+        var memberById = members.ToDictionary(m => m.Id);
+        var versionNeighbourKindByAnimeId = new Dictionary<int, MembershipKind>();
+        foreach (var neighbour in versionNeighbours)
+        {
+            memberById[neighbour.AnimeId] = neighbour.Anime;
+            versionNeighbourKindByAnimeId[neighbour.AnimeId] = neighbour.MembershipKind;
+        }
 
-        return await PersistAsync(members, mainLineIds, orderByAnimeId, rootAnimeId, isPartial, isTruncated, ct);
+        var telling = ClassifyTelling(coreMemberIds, versionNeighbourKindByAnimeId, memberById, edges);
+        return await PersistAsync(telling, isPartial, isTruncated, ct);
     }
 
-    // --- Traversal (2.2, 2.3, 2.4) ---
+    // --- Traversal (2.2, 2.3, 2.4; extended to alternative_setting and
+    // per-edge relation recording by split-series-by-version tasks 3.1-3.2;
+    // narrowed to a two-phase, story-component-only traversal by
+    // rebuild-series-by-story-component design.md decisions D1-D3, tasks
+    // 4.1-4.3) ---
 
-    private async Task<(List<AnimeMetadata> Members, bool IsPartial, bool IsTruncated)> TraverseAsync(
+    /// <summary>Traverses the story component <paramref name="seedAnimeId"/>
+    /// belongs to, plus that component's version neighbours (design.md
+    /// decision D3). Phase 1 (<see cref="TraverseStoryComponentAsync"/>)
+    /// exhausts the seed's own story component first — breadth-first,
+    /// spending the whole fetch/probe budget there — before anything else is
+    /// considered. Phase 2 then follows every member's version relations one
+    /// hop, in both directions, to find and classify
+    /// (<see cref="DiscoverVersionNeighboursAsync"/>, <see cref="SeriesVersionNeighbours"/>,
+    /// design.md decision D2) that component's version neighbours, spending
+    /// no further budget. A version neighbour is never expanded through —
+    /// nothing reachable only from one is ever admitted, which is what keeps
+    /// a foreign telling's own entries off this build.
+    ///
+    /// When phase 1 alone yields a single anime, that lone anime's own
+    /// version neighbours are checked before giving up on it: if it has any,
+    /// the whole traversal is redone once more, seeded from whichever
+    /// neighbour has the largest story component of its own
+    /// (<see cref="PickLargestStoryComponentAsync"/>), so the original seed
+    /// is folded back into the result as that component's own version
+    /// neighbour. This is what makes opening a lone alternative version
+    /// (e.g. Clannad Movie) land on the franchise it belongs to, rather than
+    /// the "not part of a series" <see cref="BuildAsync"/> would otherwise
+    /// report for a lone member. With no version neighbour either, the lone
+    /// anime is returned exactly as phase 1 found it.</summary>
+    internal async Task<(List<AnimeMetadata> Members, List<RelationEdge> Edges, bool IsPartial, bool IsTruncated, List<SeriesVersionNeighbours.Neighbour> VersionNeighbours)> TraverseAsync(
+        int seedAnimeId, int fetchBudget, int probeBudget, bool expandLeanMembers, CancellationToken ct)
+    {
+        var (members, edges, isPartial, isTruncated) =
+            await TraverseStoryComponentAsync(seedAnimeId, fetchBudget, probeBudget, expandLeanMembers, ct);
+
+        if (members.Count == 1)
+        {
+            var (soleMemberCandidates, _) = await DiscoverVersionNeighboursAsync(members, ct);
+            if (soleMemberCandidates.Count > 0)
+            {
+                var reseedAnimeId = await PickLargestStoryComponentAsync(soleMemberCandidates, ct);
+                (members, edges, isPartial, isTruncated) =
+                    await TraverseStoryComponentAsync(reseedAnimeId, fetchBudget, probeBudget, expandLeanMembers, ct);
+            }
+        }
+
+        if (members.Count == 0)
+            return (members, edges, isPartial, isTruncated, []);
+
+        var (versionNeighbours, neighbourEdges) = await DiscoverVersionNeighboursAsync(members, ct);
+        edges.AddRange(neighbourEdges);
+
+        return (members, edges, isPartial, isTruncated, versionNeighbours);
+    }
+
+    /// <summary>The classified version neighbour (design.md decision D2)
+    /// whose own story component is largest — see <see cref="TraverseAsync"/>'s
+    /// seed-resolution paragraph. Each candidate is sized by running phase 1
+    /// on it with a zero fetch/probe budget: still a real traversal over
+    /// every cached relation, just unable to grow the component past what's
+    /// already cached, so sizing costs nothing (design.md decision D3's "no
+    /// fetch" carried over from neighbour classification to the candidate
+    /// that wins it). Ties — Clannad and After Story are each the other's
+    /// whole component — break on the lower MAL id, so the result doesn't
+    /// depend on classification order.</summary>
+    private async Task<int> PickLargestStoryComponentAsync(List<SeriesVersionNeighbours.Neighbour> candidates, CancellationToken ct)
+    {
+        var sized = new List<(int AnimeId, int ComponentSize)>();
+        foreach (var candidate in candidates)
+        {
+            var (sizingMembers, _, _, _) = await TraverseStoryComponentAsync(
+                candidate.AnimeId, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false, ct);
+            sized.Add((candidate.AnimeId, sizingMembers.Count));
+        }
+
+        return sized.OrderByDescending(s => s.ComponentSize).ThenBy(s => s.AnimeId).First().AnimeId;
+    }
+
+    /// <summary>Finds and classifies <paramref name="componentMembers"/>'
+    /// version neighbours (design.md decisions D2/D3): every anime linked to
+    /// a member by a version relation, in either direction, that isn't
+    /// itself one of <paramref name="componentMembers"/>. Followed one hop
+    /// only — a candidate's own further relations are read just far enough
+    /// to classify it (<see cref="SeriesVersionNeighbours.Classify"/>), never
+    /// to keep expanding outward. Costs no fetch or probe: a candidate with
+    /// no cached metadata row is silently excluded, exactly as
+    /// <see cref="SeriesVersionNeighbours"/> already excludes one. Returns
+    /// each admitted neighbour's edge(s) to the component alongside it — in
+    /// whichever direction they're declared — for the relation-group
+    /// resolution a later change reads them from.</summary>
+    private async Task<(List<SeriesVersionNeighbours.Neighbour> Neighbours, List<RelationEdge> Edges)> DiscoverVersionNeighboursAsync(
+        List<AnimeMetadata> componentMembers, CancellationToken ct)
+    {
+        var memberIds = componentMembers.Select(m => m.Id).ToHashSet();
+
+        var outgoingEdges = componentMembers
+            .SelectMany(m => m.RelatedAnime
+                .Where(r => SeriesRelations.VersionRelations.Contains(r.RelationType) && !memberIds.Contains(r.RelatedAnimeId))
+                .Select(r => new RelationEdge(m.Id, r.RelatedAnimeId, r.RelationType)))
+            .ToList();
+
+        // The mirror of phase 1's own incoming-edge query, over the version
+        // relations instead of the story ones: a candidate whose only stored
+        // edge is declared from its own side, not the member's, is still one
+        // of this component's version neighbours (design.md D3: "in both
+        // directions").
+        var incomingEdges = await db.AnimeRelatedAnime.AsNoTracking()
+            .Where(r => memberIds.Contains(r.RelatedAnimeId) &&
+                SeriesRelations.VersionRelations.Contains(r.RelationType) &&
+                !memberIds.Contains(r.AnimeId))
+            .Select(r => new RelationEdge(r.AnimeId, r.RelatedAnimeId, r.RelationType))
+            .ToListAsync(ct);
+
+        var candidateIds = outgoingEdges.Select(e => e.RelatedAnimeId)
+            .Concat(incomingEdges.Select(e => e.OwnerId))
+            .Distinct()
+            .ToList();
+        if (candidateIds.Count == 0)
+            return ([], []);
+
+        var cachedNeighbours = await db.AnimeMetadata.AsNoTracking()
+            .Include(a => a.RelatedAnime)
+            .Where(a => candidateIds.Contains(a.Id))
+            .ToListAsync(ct);
+
+        var neighbours = SeriesVersionNeighbours.Classify(componentMembers, cachedNeighbours);
+        var admittedIds = neighbours.Select(n => n.AnimeId).ToHashSet();
+
+        var edges = outgoingEdges.Where(e => admittedIds.Contains(e.RelatedAnimeId))
+            .Concat(incomingEdges.Where(e => admittedIds.Contains(e.OwnerId)))
+            .ToList();
+
+        return (neighbours, edges);
+    }
+
+    /// <summary>Phase 1 (design.md decision D3): a bounded BFS from
+    /// <paramref name="seedAnimeId"/> over story relations alone — version
+    /// relations neither grow nor are grown by this traversal (design.md
+    /// decision D1); <see cref="TraverseAsync"/> follows them separately, one
+    /// hop, once this phase is done. Unchanged from before this capability
+    /// (rebuild-series-by-story-component task 4.1): the fetch/probe
+    /// budgets, lean-member expansion, contradicted-edge handling and member
+    /// cap below are exactly what they were when this was the whole of
+    /// traversal.
+    ///
+    /// <c>Edges</c> lists every relation, exactly as declared by its
+    /// owning end, that connects two members of the traversed component —
+    /// story relations and a traversed companion <c>other</c> edge (recorded
+    /// as <c>"other"</c>) alike. Traversal is breadth-first from
+    /// <paramref name="seedAnimeId"/> (task 3.3), so the telling the build
+    /// was seeded from completes — and every one of its edges is recorded —
+    /// before budget is spent on distant tellings. Recorded once per owning
+    /// member as it's dequeued, from data already in hand, rather than
+    /// re-queried afterwards (task 3.2); edges whose far end never became a
+    /// member (contradicted, or dropped by a cap/fetch failure) are filtered
+    /// out before returning.</summary>
+    private async Task<(List<AnimeMetadata> Members, List<RelationEdge> Edges, bool IsPartial, bool IsTruncated)> TraverseStoryComponentAsync(
         int seedAnimeId, int fetchBudget, int probeBudget, bool expandLeanMembers, CancellationToken ct)
     {
         var visited = new HashSet<int> { seedAnimeId };
@@ -82,6 +253,7 @@ public class SeriesGraphBuilder(
         queue.Enqueue(seedAnimeId);
 
         var members = new List<AnimeMetadata>();
+        var edges = new List<RelationEdge>();
         var fetchesUsed = 0;
         var probesUsed = 0;
         var isPartial = false;
@@ -164,9 +336,11 @@ public class SeriesGraphBuilder(
             // without any special-casing — it's still admitted as a member
             // above, just not expanded from its own side, unless
             // expandLeanMembers just upgraded it above.
-            var storyOutgoingIds = metadata.RelatedAnime
+            var storyOutgoingEdges = metadata.RelatedAnime
                 .Where(r => SeriesRelations.IsTraversable(r.RelationType))
-                .Select(r => r.RelatedAnimeId);
+                .Select(r => new RelationEdge(animeId, r.RelatedAnimeId, r.RelationType))
+                .ToList();
+            var storyOutgoingIds = storyOutgoingEdges.Select(e => e.RelatedAnimeId);
 
             // Companion-media `other` edges (design.md decision 1, widened to
             // `pv` by polish-rewatch-more-and-filters design.md D5a): one
@@ -262,6 +436,19 @@ public class SeriesGraphBuilder(
                 .Select(e => e.AnimeId)
                 .ToHashSet();
 
+            // Only this member's own declared relations are recorded as
+            // edges — an edge stored the other way round is covered when its
+            // owner is dequeued and processed in its own turn, so every edge
+            // in the component is captured exactly once regardless of which
+            // end declares it (mirrors SeriesRelations.FindRecapIds/
+            // FindSideContentIds's own reliance on that symmetry).
+            var companionOutgoingEdges = companionOutgoingIds.Select(id => new RelationEdge(animeId, id, "other"));
+            foreach (var edge in storyOutgoingEdges.Concat(companionOutgoingEdges))
+            {
+                if (!contradictedFarEndIds.Contains(edge.RelatedAnimeId))
+                    edges.Add(edge);
+            }
+
             foreach (var neighbourId in outgoingIds.Concat(incomingIds).Distinct())
             {
                 if (contradictedFarEndIds.Contains(neighbourId))
@@ -281,31 +468,113 @@ public class SeriesGraphBuilder(
             }
         }
 
-        return (members, isPartial, isTruncated);
+        // Drop edges whose far end never actually became a member — dropped
+        // by the member cap, a fetch that failed, or an id that was 404 on
+        // MAL — so callers never see an edge pointing at a non-member.
+        var memberIds = members.Select(m => m.Id).ToHashSet();
+        var finalEdges = edges.Where(e => memberIds.Contains(e.RelatedAnimeId)).ToList();
+
+        return (members, finalEdges, isPartial, isTruncated);
     }
 
     private Task<AnimeMetadata?> LoadWithRelationsAsync(int animeId, CancellationToken ct) =>
         db.AnimeMetadata.Include(a => a.RelatedAnime).FirstOrDefaultAsync(a => a.Id == animeId, ct);
 
-    // --- Main-line classification, watch order, root (2.5, 2.6, 2.7) ---
+    // --- Per-telling classification, extras grouping, watch order, root
+    // (2.5-2.7; run per telling rather than once per build by
+    // split-series-by-version tasks 5.1-5.3) ---
 
-    private static (HashSet<int> MainLineIds, int RootAnimeId, Dictionary<int, int> OrderByAnimeId) Classify(
-        List<AnimeMetadata> members)
+    /// <summary>One build's persisted shape (rebuild-series-by-story-component
+    /// design.md D2/D4, tasks 6.1-6.3): its story-component members
+    /// (<see cref="CoreMemberIds"/>) plus its version-neighbour members, each
+    /// with the <see cref="MembershipKind"/> it was classified with; which of
+    /// the component's members are main line; the root; each member's
+    /// position within the main line or within its extras relation group;
+    /// each extra's relation group; and each main-line member's version slot
+    /// and branch. <see cref="FullMemberIds"/> is what actually gets a
+    /// <see cref="SeriesMember"/> row — every membership kind is stored,
+    /// counted and ordered alike; only <see cref="CoreMemberIds"/> is ever a
+    /// candidate for the main line or for identity-matching against a stored
+    /// series (design.md D9).
+    ///
+    /// <see cref="VersionSlotKeyByAnimeId"/>/<see cref="BranchHeadAnimeIdByAnimeId"/>
+    /// (design.md D4, tasks 5.2-5.3) are sparse — populated only for a
+    /// main-line member that's an alternative of a version slot or a member
+    /// of one's branch — mirroring the nullable
+    /// <see cref="SeriesMember.VersionSlotKey"/>/<see cref="SeriesMember.BranchHeadAnimeId"/>
+    /// columns they feed.</summary>
+    private sealed class TellingBuild
     {
-        var memberById = members.ToDictionary(m => m.Id);
-        var mainLineIds = ClassifyMainLineChain(members, memberById);
+        public required HashSet<int> CoreMemberIds { get; init; }
+        public required Dictionary<int, MembershipKind> VersionNeighbourKindByAnimeId { get; init; }
+        public required HashSet<int> MainLineIds { get; init; }
+        public required int RootAnimeId { get; init; }
+        public required Dictionary<int, int> OrderByAnimeId { get; init; }
+        public required Dictionary<int, RelationGroup> RelationGroupByAnimeId { get; init; }
+        public required Dictionary<int, int> VersionSlotKeyByAnimeId { get; init; }
+        public required Dictionary<int, int> BranchHeadAnimeIdByAnimeId { get; init; }
 
-        var mainLineMembers = members.Where(m => mainLineIds.Contains(m.Id)).ToList();
-        var mainLineOrdered = TopologicalMainLineOrder(mainLineMembers, mainLineIds, memberById);
+        public IEnumerable<int> FullMemberIds => CoreMemberIds.Concat(VersionNeighbourKindByAnimeId.Keys);
+
+        public MembershipKind KindOf(int animeId) =>
+            VersionNeighbourKindByAnimeId.GetValueOrDefault(animeId, MembershipKind.Core);
+    }
+
+    /// <summary>Classifies the seed's series in isolation: main line over its
+    /// story-component members alone — <see cref="ClassifyMainLineChain"/>
+    /// only ever sees <paramref name="coreMemberIds"/>, so a version
+    /// neighbour can never become main line by construction (task 5.1); each
+    /// main-line member's version slot and branch (<see cref="SeriesVersionSlots"/>,
+    /// task 5.2), folded into the watch order by contracting each slot to one
+    /// shared position (task 5.3); each extra's relation group — core extras
+    /// and version-neighbour extras alike — excluding version neighbours from
+    /// the inheritance walk (task 5.5); and each member's position —
+    /// main-line watch order, or position within its extras relation
+    /// group.</summary>
+    private static TellingBuild ClassifyTelling(
+        HashSet<int> coreMemberIds, Dictionary<int, MembershipKind> versionNeighbourKindByAnimeId,
+        Dictionary<int, AnimeMetadata> memberById, List<RelationEdge> edges)
+    {
+        var coreMembers = coreMemberIds.Select(id => memberById[id]).ToList();
+        var coreMemberById = coreMembers.ToDictionary(m => m.Id);
+
+        var mainLineIds = ClassifyMainLineChain(coreMembers, coreMemberById);
+
+        var mainLineMembers = coreMembers.Where(m => mainLineIds.Contains(m.Id)).ToList();
+        var slots = SeriesVersionSlots.Resolve(mainLineMembers, mainLineIds, coreMemberById);
+        var mainLineOrdered = TopologicalMainLineOrder(mainLineMembers, mainLineIds, coreMemberById, slots);
         var orderByAnimeId = new Dictionary<int, int>();
-        for (var i = 0; i < mainLineOrdered.Count; i++)
-            orderByAnimeId[mainLineOrdered[i].Id] = i;
+        foreach (var (anime, order) in mainLineOrdered)
+            orderByAnimeId[anime.Id] = order;
 
-        var extrasByGroup = members
+        var versionSlotKeyByAnimeId = new Dictionary<int, int>();
+        var branchHeadAnimeIdByAnimeId = new Dictionary<int, int>();
+        foreach (var slot in slots)
+        {
+            foreach (var alternativeId in slot.AlternativeIds)
+                versionSlotKeyByAnimeId[alternativeId] = slot.SlotKey;
+
+            foreach (var (branchHeadAnimeId, branchMemberIds) in slot.BranchMemberIdsByAlternativeId)
+                foreach (var memberId in branchMemberIds)
+                    branchHeadAnimeIdByAnimeId[memberId] = branchHeadAnimeId;
+        }
+
+        // The root is simply the watch order's first entry: story components
+        // are disjoint (design.md D1), so — unlike the old multi-telling
+        // build this replaces — a build never derives a sibling telling for
+        // an earliest shared member to collide roots with.
+        var rootAnimeId = mainLineOrdered[0].Anime.Id;
+
+        var versionNeighbourIds = versionNeighbourKindByAnimeId.Keys.ToHashSet();
+        var tellingIds = coreMemberIds.Concat(versionNeighbourIds).ToHashSet();
+        var relationGroupByAnimeId = ResolveExtraGroups(tellingIds, mainLineIds, versionNeighbourIds, edges);
+
+        var tellingMembers = tellingIds.Select(id => memberById[id]).ToList();
+        var extrasByGroup = tellingMembers
             .Where(m => !mainLineIds.Contains(m.Id))
-            .OrderBy(m => SeriesMediaTypeOrder.GroupOf(m.MediaType))
+            .OrderBy(m => SeriesRelationGroupOrder.GroupOf(relationGroupByAnimeId[m.Id]))
             .ThenBy(OrderKey)
-            .GroupBy(m => SeriesMediaTypeOrder.GroupOf(m.MediaType));
+            .GroupBy(m => relationGroupByAnimeId[m.Id]);
         foreach (var group in extrasByGroup)
         {
             var i = 0;
@@ -313,7 +582,88 @@ public class SeriesGraphBuilder(
                 orderByAnimeId[member.Id] = i++;
         }
 
-        return (mainLineIds, mainLineOrdered[0].Id, orderByAnimeId);
+        return new TellingBuild
+        {
+            CoreMemberIds = coreMemberIds,
+            VersionNeighbourKindByAnimeId = versionNeighbourKindByAnimeId,
+            MainLineIds = mainLineIds,
+            RootAnimeId = rootAnimeId,
+            OrderByAnimeId = orderByAnimeId,
+            RelationGroupByAnimeId = relationGroupByAnimeId,
+            VersionSlotKeyByAnimeId = versionSlotKeyByAnimeId,
+            BranchHeadAnimeIdByAnimeId = branchHeadAnimeIdByAnimeId,
+        };
+    }
+
+    /// <summary>Resolves each of a telling's extras to the <see cref="RelationGroup"/>
+    /// it displays under (design.md decision 4, task 5.2): the highest-precedence
+    /// relation to any main-line member of this telling
+    /// (<see cref="SeriesRelations.HighestPrecedenceGroup"/>); failing that,
+    /// inherited breadth-first from the nearest already-resolved extra — a
+    /// multi-source BFS seeded with every directly-resolved extra, ties broken
+    /// by the lower MAL id (design.md Risks/Trade-offs); failing that, Other.
+    /// Scoped to edges whose both ends belong to this telling, so a shared
+    /// member's edge into a neighbouring telling never leaks a foreign
+    /// group in here.
+    ///
+    /// <paramref name="versionNeighbourIds"/> — this telling's version
+    /// neighbours (rebuild-series-by-story-component design.md D2, task 5.5)
+    /// — never take part in the inheritance walk: one already resolves its
+    /// own group directly, from its own version relation to a main-line
+    /// member, so it never needs to inherit; and it's excluded as a BFS
+    /// source so it never passes that group on to whatever else it happens
+    /// to sit next to, which would otherwise mislabel a story extra as an
+    /// alternative version merely for hanging off one.</summary>
+    // Internal rather than private: tested directly (task 5.6) against
+    // synthetic version-neighbour ids, and driven by the real ones
+    // ClassifyTelling now threads through from BuildAsync's traversal
+    // (task 6.1).
+    internal static Dictionary<int, RelationGroup> ResolveExtraGroups(
+        HashSet<int> tellingIds, HashSet<int> mainLineIds, HashSet<int> versionNeighbourIds, List<RelationEdge> edges)
+    {
+        var extraIds = tellingIds.Except(mainLineIds).ToHashSet();
+        if (extraIds.Count == 0)
+            return [];
+
+        var scopedEdges = edges.Where(e => tellingIds.Contains(e.OwnerId) && tellingIds.Contains(e.RelatedAnimeId)).ToList();
+
+        var groupByExtraId = new Dictionary<int, RelationGroup>();
+        foreach (var extraId in extraIds)
+        {
+            var edgesToMainLine = scopedEdges
+                .Where(e => (e.OwnerId == extraId && mainLineIds.Contains(e.RelatedAnimeId)) ||
+                    (e.RelatedAnimeId == extraId && mainLineIds.Contains(e.OwnerId)))
+                .Select(e => (e.RelationType, ExtraIsOwner: e.OwnerId == extraId))
+                .ToList();
+
+            if (edgesToMainLine.Count > 0)
+                groupByExtraId[extraId] = SeriesRelations.HighestPrecedenceGroup(edgesToMainLine);
+        }
+
+        var queue = new Queue<int>(groupByExtraId.Keys.Where(id => !versionNeighbourIds.Contains(id)).OrderBy(id => id));
+        while (queue.Count > 0)
+        {
+            var currentId = queue.Dequeue();
+            var currentGroup = groupByExtraId[currentId];
+
+            var neighbourIds = scopedEdges
+                .Where(e => e.OwnerId == currentId || e.RelatedAnimeId == currentId)
+                .Select(e => e.OwnerId == currentId ? e.RelatedAnimeId : e.OwnerId)
+                .Where(id => extraIds.Contains(id) && !groupByExtraId.ContainsKey(id) && !versionNeighbourIds.Contains(id))
+                .Distinct()
+                .OrderBy(id => id);
+
+            foreach (var neighbourId in neighbourIds)
+            {
+                groupByExtraId[neighbourId] = currentGroup;
+                queue.Enqueue(neighbourId);
+            }
+        }
+
+        foreach (var extraId in extraIds)
+            groupByExtraId.TryAdd(extraId, RelationGroup.Other);
+
+        return groupByExtraId;
     }
 
     /// <summary>The sequel/prequel chain ranked highest by its count of
@@ -351,7 +701,8 @@ public class SeriesGraphBuilder(
     /// season chain is `tv` and eligible by construction) and falls back to
     /// the unrestricted set when nothing in the component is eligible `tv` at
     /// all (a movie-only franchise).</summary>
-    private static HashSet<int> ClassifyMainLineChain(List<AnimeMetadata> members, Dictionary<int, AnimeMetadata> memberById)
+    private static HashSet<int> ClassifyMainLineChain(
+        List<AnimeMetadata> members, Dictionary<int, AnimeMetadata> memberById)
     {
         var adjacency = memberById.Keys.ToDictionary(id => id, _ => new HashSet<int>());
         foreach (var member in members)
@@ -368,22 +719,20 @@ public class SeriesGraphBuilder(
             }
         }
 
-        var candidateIds = memberById.Keys.ToHashSet();
-        var ownEdges = members
-            .SelectMany(m => m.RelatedAnime.Select(r => (OwnerId: m.Id, r.RelatedAnimeId, r.RelationType)))
-            .ToList();
-        var ineligibleIds = SeriesRelations.FindRecapIds(ownEdges, candidateIds);
-        ineligibleIds.UnionWith(SeriesRelations.FindSideContentIds(ownEdges, candidateIds));
-        foreach (var member in members)
-        {
-            // `pv` (promotional video) joins `special`/`music` here
-            // (polish-rewatch-more-and-filters design.md D5b): a promo is
-            // never a chapter of the story, however MAL relates it — even in
-            // a franchise whose real entries carry no sequel/prequel edges at
-            // all, where a chain of promos could otherwise out-rank the show.
-            if (member.MediaType is "special" or "music" or "pv")
-                ineligibleIds.Add(member.Id);
-        }
+        // pv (promotional video) joins special/music here
+        // (polish-rewatch-more-and-filters design.md D5b): a promo is never a
+        // chapter of the story, however MAL relates it — even in a franchise
+        // whose real entries carry no sequel/prequel edges at all, where a
+        // chain of promos could otherwise out-rank the show. Extracted to
+        // SeriesMainLineEligibility so a version neighbour's own eligibility
+        // (SeriesVersionNeighbours) can be decided with this same rule.
+        // No forced-ineligible set is layered on top any more
+        // (rebuild-series-by-story-component design.md D1, task 5.1): a
+        // version neighbour is outside this component entirely — it's an
+        // extra by construction, never a candidate for this chain in the
+        // first place — so there's nothing left for a boundary-member carve
+        // out to exclude.
+        var ineligibleIds = SeriesMainLineEligibility.FindIneligibleIds(members);
         bool IsEligible(int id) => !ineligibleIds.Contains(id);
 
         var chains = FindConnectedComponents(memberById.Keys, adjacency);
@@ -406,7 +755,11 @@ public class SeriesGraphBuilder(
         return candidateIds.Min(id => OrderKey(memberById[id]));
     }
 
-    private static List<List<int>> FindConnectedComponents(IEnumerable<int> nodeIds, Dictionary<int, HashSet<int>> adjacency)
+    // Internal rather than private: SeriesVersionSlots (task 5.2) reuses this
+    // exact generic BFS to find version slots — connected components of size
+    // >= 2 over version edges among main-line members — rather than
+    // duplicating it.
+    internal static List<List<int>> FindConnectedComponents(IEnumerable<int> nodeIds, Dictionary<int, HashSet<int>> adjacency)
     {
         var visited = new HashSet<int>();
         var components = new List<List<int>>();
@@ -439,7 +792,10 @@ public class SeriesGraphBuilder(
     }
 
     // Aired-from ascending, nulls last, MAL id as tiebreak (design.md decision 3).
-    private static (int HasNoAiredDate, int AiredDayNumber, int AnimeId) OrderKey(AnimeMetadata anime) =>
+    // Internal rather than private: SeriesService's read-time projection
+    // (split-series-by-version task 7.3) reuses this exact key to interleave
+    // related entries with stored extras within a relation group.
+    internal static (int HasNoAiredDate, int AiredDayNumber, int AnimeId) OrderKey(AnimeMetadata anime) =>
         anime.AiredFrom is { } date ? (0, date.DayNumber, anime.Id) : (1, 0, anime.Id);
 
     /// <summary>Main-line order as a stable topological sort (Kahn's
@@ -453,14 +809,40 @@ public class SeriesGraphBuilder(
     /// each other's mirror, so `A --sequel--> B` and `B --prequel--> A` are
     /// the same constraint counted once, not two.
     ///
+    /// <paramref name="slots"/> (rebuild-series-by-story-component design.md
+    /// D4, task 5.3) — every alternative of a version slot is contracted to
+    /// one node before the sort runs, keyed on the slot's <c>SlotKey</c>, so
+    /// every alternative shares one position in the result and a branch
+    /// entry's own edges (redirected onto the contracted node) place it
+    /// around the slot rather than after whichever single alternative it
+    /// happened to edge to. An edge between two alternatives of the same slot
+    /// is dropped rather than becoming a self-loop on the contracted node.
+    /// Branch members are never contracted — they keep their own edges and
+    /// their own position, exactly like a trunk member — only the alternatives
+    /// themselves collapse into the slot's one position; a slot's tie-break
+    /// key is its lowest-id alternative's own <see cref="OrderKey"/>, per the
+    /// definition of <c>SlotKey</c>.
+    ///
     /// MAL relation data can contain a `sequel`/`prequel` cycle; this must
-    /// not throw on one. When the queue empties with nodes remaining (a
-    /// cycle), the remainder is emitted in <see cref="OrderKey"/> order.</summary>
-    private static List<AnimeMetadata> TopologicalMainLineOrder(
-        List<AnimeMetadata> mainLineMembers, HashSet<int> mainLineIds, Dictionary<int, AnimeMetadata> memberById)
+    /// not throw on one, including a cycle contraction itself introduces (two
+    /// slots each reachable from the other only through one another once
+    /// their alternatives collapse). When the queue empties with nodes
+    /// remaining (a cycle), the remainder is emitted in <see cref="OrderKey"/>
+    /// order — unchanged from before contraction.</summary>
+    private static List<(AnimeMetadata Anime, int Order)> TopologicalMainLineOrder(
+        List<AnimeMetadata> mainLineMembers, HashSet<int> mainLineIds, Dictionary<int, AnimeMetadata> memberById,
+        List<SeriesVersionSlots.VersionSlot> slots)
     {
-        var successors = mainLineIds.ToDictionary(id => id, _ => new HashSet<int>());
-        var inDegree = mainLineIds.ToDictionary(id => id, _ => 0);
+        var slotKeyByAlternativeId = new Dictionary<int, int>();
+        foreach (var slot in slots)
+            foreach (var alternativeId in slot.AlternativeIds)
+                slotKeyByAlternativeId[alternativeId] = slot.SlotKey;
+
+        int Representative(int animeId) => slotKeyByAlternativeId.GetValueOrDefault(animeId, animeId);
+
+        var representativeIds = mainLineIds.Select(Representative).ToHashSet();
+        var successors = representativeIds.ToDictionary(id => id, _ => new HashSet<int>());
+        var inDegree = representativeIds.ToDictionary(id => id, _ => 0);
 
         foreach (var member in mainLineMembers)
         {
@@ -484,17 +866,24 @@ public class SeriesGraphBuilder(
                         continue;
                 }
 
-                if (successors[predecessorId].Add(successorId))
-                    inDegree[successorId]++;
+                var predecessorRepresentative = Representative(predecessorId);
+                var successorRepresentative = Representative(successorId);
+                if (predecessorRepresentative == successorRepresentative)
+                    continue; // both ends are alternatives of the same slot — no edge between the contracted node and itself
+
+                if (successors[predecessorRepresentative].Add(successorRepresentative))
+                    inDegree[successorRepresentative]++;
             }
         }
 
+        (int, int, int) RepresentativeOrderKey(int representativeId) => OrderKey(memberById[representativeId]);
+
         var remainingInDegree = new Dictionary<int, int>(inDegree);
         var ready = new PriorityQueue<int, (int, int, int)>();
-        foreach (var id in mainLineIds)
+        foreach (var id in representativeIds)
         {
             if (remainingInDegree[id] == 0)
-                ready.Enqueue(id, OrderKey(memberById[id]));
+                ready.Enqueue(id, RepresentativeOrderKey(id));
         }
 
         var order = new List<int>();
@@ -506,75 +895,87 @@ public class SeriesGraphBuilder(
             foreach (var successorId in successors[id])
             {
                 if (--remainingInDegree[successorId] == 0)
-                    ready.Enqueue(successorId, OrderKey(memberById[successorId]));
+                    ready.Enqueue(successorId, RepresentativeOrderKey(successorId));
             }
         }
 
-        if (order.Count < mainLineIds.Count)
+        if (order.Count < representativeIds.Count)
         {
             var emitted = order.ToHashSet();
-            var remainder = mainLineIds.Where(id => !emitted.Contains(id)).OrderBy(id => OrderKey(memberById[id]));
+            var remainder = representativeIds.Where(id => !emitted.Contains(id)).OrderBy(RepresentativeOrderKey);
             order.AddRange(remainder);
         }
 
-        return order.Select(id => memberById[id]).ToList();
+        // Expand each position back to its member(s): a slot's alternatives
+        // all share this position's Order; anything else was already its own
+        // representative, so it expands to exactly itself.
+        var alternativeIdsBySlotKey = slots.ToDictionary(s => s.SlotKey, s => s.AlternativeIds);
+        var result = new List<(AnimeMetadata Anime, int Order)>();
+        for (var position = 0; position < order.Count; position++)
+        {
+            var representativeId = order[position];
+            var idsAtPosition = alternativeIdsBySlotKey.TryGetValue(representativeId, out var alternativeIds)
+                ? alternativeIds
+                : [representativeId];
+
+            foreach (var id in idsAtPosition.OrderBy(id => OrderKey(memberById[id])))
+                result.Add((memberById[id], position));
+        }
+
+        return result;
     }
 
-    // --- Persistence (2.8) ---
+    // --- Persistence (2.8; rewritten for multiple tellings per build by
+    // split-series-by-version tasks 6.1-6.5; collapsed back to a single
+    // series per build by rebuild-series-by-story-component design.md D3,
+    // D8, D9, tasks 6.1-6.3) ---
 
-    /// <summary>Finds any stored <see cref="Series"/> rows overlapping the new
-    /// component, keeps the one with the largest overlap (preserving its Id),
-    /// deletes the others, and replaces the kept row's member set wholesale —
-    /// all in the one transaction <see cref="AnimeTrackerDbContext.SaveChangesAsync"/>
-    /// opens implicitly (design.md decision 6).</summary>
-    private async Task<SeriesEntity> PersistAsync(
-        List<AnimeMetadata> members,
-        HashSet<int> mainLineIds,
-        Dictionary<int, int> orderByAnimeId,
-        int rootAnimeId,
-        bool isPartial,
-        bool isTruncated,
-        CancellationToken ct)
+    /// <summary>Persists the one series a build derives, in the transaction
+    /// <see cref="AnimeTrackerDbContext.SaveChangesAsync"/> opens implicitly
+    /// (design.md D3, task 6.1). Series identity across the rebuild is
+    /// resolved by <see cref="MatchToStoredSeries"/> (design.md D9, task 6.2):
+    /// the stored series overlapping this build's core members the most
+    /// keeps its identifier, chosen title and chosen picture; every other
+    /// stored series that overlaps on core members is stale and is deleted,
+    /// surrendering any chosen title/picture a still-unset survivor lacks. A
+    /// stored series that only shares a version neighbour with this build is
+    /// never matched or deleted — it simply isn't a candidate in
+    /// <see cref="MatchToStoredSeries"/>'s eyes.</summary>
+    private async Task<SeriesEntity> PersistAsync(TellingBuild telling, bool isPartial, bool isTruncated, CancellationToken ct)
     {
-        var memberIds = members.Select(m => m.Id).ToList();
+        var fullIds = telling.FullMemberIds.ToList();
 
-        var overlapCounts = await db.SeriesMembers.AsNoTracking()
-            .Where(sm => memberIds.Contains(sm.AnimeId))
-            .GroupBy(sm => sm.SeriesId)
-            .Select(g => new { SeriesId = g.Key, Count = g.Count() })
+        // Scoped to this build's full member set (core plus version
+        // neighbours), with no SeriesId filter, so a version neighbour's
+        // memberships in *other* series come back too — exactly what
+        // ResolveFoldedPrimaryAsync (design.md D8) needs to see whether one
+        // of them already holds a Core membership or a competing primary
+        // fold, without a further query per member.
+        var existingMemberships = await db.SeriesMembers.AsNoTracking()
+            .Where(sm => fullIds.Contains(sm.AnimeId))
             .ToListAsync(ct);
+        var priorRowsByAnimeId = existingMemberships
+            .GroupBy(sm => sm.AnimeId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Every pre-migration row defaulted to Core (design.md Migration Plan
+        // step 1), so a stored series from before this capability is seen
+        // here exactly as undifferentiated as it actually was.
+        var coreIdsByStoredSeriesId = existingMemberships
+            .Where(sm => sm.MembershipKind == nameof(MembershipKind.Core))
+            .GroupBy(sm => sm.SeriesId)
+            .ToDictionary(g => g.Key, g => g.Select(sm => sm.AnimeId).ToHashSet());
+
+        var (matchedSeriesId, staleSeriesIds) = MatchToStoredSeries(telling.CoreMemberIds, coreIdsByStoredSeriesId);
+        var staleSeriesIdSet = staleSeriesIds.ToHashSet();
+        var staleSeries = staleSeriesIds.Count > 0
+            ? await db.Series.Where(s => staleSeriesIds.Contains(s.Id)).ToListAsync(ct)
+            : [];
 
         SeriesEntity target;
-        if (overlapCounts.Count > 0)
+        if (matchedSeriesId is { } matchedId)
         {
-            var bestSeriesId = overlapCounts.OrderByDescending(x => x.Count).ThenBy(x => x.SeriesId).First().SeriesId;
-            target = await db.Series.FirstAsync(s => s.Id == bestSeriesId, ct);
-
-            var staleSeriesIds = overlapCounts.Select(x => x.SeriesId).Where(id => id != bestSeriesId).ToList();
-            if (staleSeriesIds.Count > 0)
-            {
-                var staleSeries = await db.Series.Where(s => staleSeriesIds.Contains(s.Id)).ToListAsync(ct);
-
-                // Adopt a title/picture from an absorbed row only when the
-                // survivor has none of its own — the survivor's own choice
-                // always wins, so adoption is strictly a fill-in for a value
-                // that would otherwise be lost when the row is deleted
-                // (design.md D9). Title and picture are adopted independently,
-                // each from whichever qualifying absorbed row has the largest
-                // member overlap (overlapCounts already ranks them).
-                var byOverlapDesc = staleSeries
-                    .OrderByDescending(s => overlapCounts.First(x => x.SeriesId == s.Id).Count)
-                    .ToList();
-                target.SelectedTitle ??= byOverlapDesc.FirstOrDefault(s => s.SelectedTitle is not null)?.SelectedTitle;
-                target.SelectedPictureUrl ??= byOverlapDesc.FirstOrDefault(s => s.SelectedPictureUrl is not null)?.SelectedPictureUrl;
-
-                db.Series.RemoveRange(staleSeries); // cascade-deletes their SeriesMember rows too
-            }
-
-            var obsoleteMembers = await db.SeriesMembers
-                .Where(sm => sm.SeriesId == bestSeriesId && !memberIds.Contains(sm.AnimeId))
-                .ToListAsync(ct);
-            db.SeriesMembers.RemoveRange(obsoleteMembers);
+            target = await db.Series.FirstAsync(s => s.Id == matchedId, ct);
         }
         else
         {
@@ -582,41 +983,199 @@ public class SeriesGraphBuilder(
             db.Series.Add(target);
         }
 
-        // Rows that already exist for a member (whether under target or an
-        // absorbed stale series) are updated in place rather than deleted and
-        // recreated, so a member moving between series is a plain FK update.
-        // This is also why FavouriteRank survives a rebuild for free: it's
-        // simply never touched here for a surviving member, and a member that
-        // leaves the series takes its (now-unused) rank with it through the
-        // row it already owned (design.md decision 11).
-        var existingByAnimeId = (await db.SeriesMembers
-                .Where(sm => memberIds.Contains(sm.AnimeId))
-                .ToListAsync(ct))
-            .ToDictionary(m => m.AnimeId);
-
-        foreach (var member in members)
+        // Fill in a missing chosen title/picture from whichever stale
+        // (to-be-deleted, absorbed) stored series has the largest overlap —
+        // the survivor's own choice always wins (design.md D9, mirroring the
+        // single-target absorption this generalises).
+        if (staleSeries.Count > 0 && (target.SelectedTitle is null || target.SelectedPictureUrl is null))
         {
-            var isMainLine = mainLineIds.Contains(member.Id);
-            var order = orderByAnimeId[member.Id];
-
-            if (existingByAnimeId.TryGetValue(member.Id, out var existing))
-            {
-                existing.SeriesId = target.Id;
-                existing.IsMainLine = isMainLine;
-                existing.Order = order;
-            }
-            else
-            {
-                target.Members.Add(new SeriesMember { AnimeId = member.Id, IsMainLine = isMainLine, Order = order });
-            }
+            var byOverlapDesc = staleSeries
+                .OrderByDescending(s => telling.CoreMemberIds.Count(coreIdsByStoredSeriesId[s.Id].Contains))
+                .ToList();
+            target.SelectedTitle ??= byOverlapDesc.FirstOrDefault(s => s.SelectedTitle is not null)?.SelectedTitle;
+            target.SelectedPictureUrl ??= byOverlapDesc.FirstOrDefault(s => s.SelectedPictureUrl is not null)?.SelectedPictureUrl;
         }
 
-        target.RootAnimeId = rootAnimeId;
+        target.RootAnimeId = telling.RootAnimeId;
         target.BuiltAt = DateTimeOffset.UtcNow;
         target.IsPartial = isPartial;
         target.IsTruncated = isTruncated;
 
+        if (staleSeries.Count > 0)
+            db.Series.RemoveRange(staleSeries); // cascade-deletes their SeriesMember rows too
+
+        List<SeriesMember> existingForTelling;
+        if (matchedSeriesId is { } keptSeriesId)
+        {
+            existingForTelling = await db.SeriesMembers
+                .Where(sm => sm.SeriesId == keptSeriesId && fullIds.Contains(sm.AnimeId))
+                .ToListAsync(ct);
+
+            // A member no longer part of the kept series (the rebuild
+            // dropped it) is removed.
+            var obsolete = await db.SeriesMembers
+                .Where(sm => sm.SeriesId == keptSeriesId && !fullIds.Contains(sm.AnimeId))
+                .ToListAsync(ct);
+            db.SeriesMembers.RemoveRange(obsolete);
+        }
+        else
+        {
+            existingForTelling = [];
+        }
+
+        var existingByAnimeId = existingForTelling.ToDictionary(sm => sm.AnimeId);
+
+        foreach (var animeId in fullIds)
+        {
+            var kind = telling.KindOf(animeId);
+            var isMainLine = telling.MainLineIds.Contains(animeId);
+            var order = telling.OrderByAnimeId[animeId];
+            var relationGroup = telling.RelationGroupByAnimeId.TryGetValue(animeId, out var group) ? group.ToString() : null;
+            var versionSlotKey = telling.VersionSlotKeyByAnimeId.TryGetValue(animeId, out var slotKey) ? slotKey : (int?)null;
+            var branchHeadAnimeId = telling.BranchHeadAnimeIdByAnimeId.TryGetValue(animeId, out var branchHead) ? branchHead : (int?)null;
+
+            // Core is always primary; a NeighbourTelling never is — that
+            // anime's own series is its home; a FoldedVersion is primary only
+            // when nothing else already claims Core, resolved between two
+            // folds by the larger component then the lower root (design.md
+            // D8, task 6.3).
+            var isPrimary = kind switch
+            {
+                MembershipKind.Core => true,
+                MembershipKind.NeighbourTelling => false,
+                _ => await ResolveFoldedPrimaryAsync(animeId, telling, matchedSeriesId, staleSeriesIdSet, priorRowsByAnimeId, ct),
+            };
+
+            // A row already at (target.Id, animeId) is updated in place —
+            // this is also why FavouriteRank survives a rebuild for free:
+            // it's simply never touched here for a surviving membership. A
+            // row that exists only under a *different* series can't be
+            // reassigned by an in-place SeriesId update now that SeriesId is
+            // part of the composite key — EF refuses to modify a key column
+            // on a tracked entity — so that case is a fresh insert, with
+            // FavouriteRank copied across explicitly so the member's rank
+            // still survives (design.md decision 2/"Favourite ranks survive
+            // the split"), whether that prior row was a Core, FoldedVersion
+            // or NeighbourTelling membership.
+            if (existingByAnimeId.TryGetValue(animeId, out var existing))
+            {
+                existing.IsMainLine = isMainLine;
+                existing.Order = order;
+                existing.RelationGroup = relationGroup;
+                existing.IsPrimary = isPrimary;
+                existing.MembershipKind = kind.ToString();
+                existing.VersionSlotKey = versionSlotKey;
+                existing.BranchHeadAnimeId = branchHeadAnimeId;
+            }
+            else
+            {
+                var favouriteRank = priorRowsByAnimeId.TryGetValue(animeId, out var priorRows)
+                    ? priorRows.Select(r => r.FavouriteRank).FirstOrDefault(r => r is not null)
+                    : null;
+
+                target.Members.Add(new SeriesMember
+                {
+                    AnimeId = animeId,
+                    IsMainLine = isMainLine,
+                    Order = order,
+                    RelationGroup = relationGroup,
+                    IsPrimary = isPrimary,
+                    FavouriteRank = favouriteRank,
+                    MembershipKind = kind.ToString(),
+                    VersionSlotKey = versionSlotKey,
+                    BranchHeadAnimeId = branchHeadAnimeId,
+                });
+            }
+        }
+
         await db.SaveChangesAsync(ct);
         return target;
+    }
+
+    /// <summary>The single-component match (design.md D9, task 6.2): the
+    /// stored series overlapping <paramref name="coreMemberIds"/> the most,
+    /// counted over each candidate's own Core members only, keeps its
+    /// identity; every other stored series with any such overlap is stale. A
+    /// stored series with no Core overlap at all — including one that shares
+    /// only a version neighbour with this build — is invisible here, which is
+    /// what keeps a build from ever matching or deleting on a
+    /// version-neighbour overlap.</summary>
+    private static (int? MatchedSeriesId, List<int> StaleSeriesIds) MatchToStoredSeries(
+        HashSet<int> coreMemberIds, Dictionary<int, HashSet<int>> coreIdsByStoredSeriesId)
+    {
+        var overlaps = coreIdsByStoredSeriesId
+            .Select(kvp => (SeriesId: kvp.Key, Overlap: coreMemberIds.Count(kvp.Value.Contains)))
+            .Where(x => x.Overlap > 0)
+            .ToList();
+
+        if (overlaps.Count == 0)
+            return (null, []);
+
+        var matchedSeriesId = overlaps
+            .OrderByDescending(x => x.Overlap)
+            .ThenBy(x => x.SeriesId)
+            .First()
+            .SeriesId;
+
+        var staleSeriesIds = overlaps.Select(x => x.SeriesId).Where(id => id != matchedSeriesId).ToList();
+        return (matchedSeriesId, staleSeriesIds);
+    }
+
+    /// <summary>Whether a <see cref="MembershipKind.FoldedVersion"/> membership
+    /// of <paramref name="animeId"/> in the series being built now should be
+    /// primary (design.md D8, task 6.3). Never, if any of its other existing
+    /// memberships — elsewhere meaning neither this series nor one about to
+    /// be absorbed into it — is Core: that anime belongs to a real story
+    /// component elsewhere, which always outranks a fold. Otherwise the
+    /// larger of the series competing for it wins — this build's own core
+    /// member count against whichever other stored series currently holds
+    /// the primary fold, falling back to the lower root MAL id on a tie —
+    /// and, if this build wins it, that other stored row is demoted in place
+    /// so the invariant (exactly one primary membership) holds without
+    /// waiting on that other series' own next rebuild.</summary>
+    private async Task<bool> ResolveFoldedPrimaryAsync(
+        int animeId, TellingBuild telling, int? currentSeriesId, HashSet<int> staleSeriesIds,
+        Dictionary<int, List<SeriesMember>> priorRowsByAnimeId, CancellationToken ct)
+    {
+        if (!priorRowsByAnimeId.TryGetValue(animeId, out var priorRows))
+            return true; // no existing membership anywhere: nothing to lose to
+
+        var rowsElsewhere = priorRows.Where(r => r.SeriesId != currentSeriesId && !staleSeriesIds.Contains(r.SeriesId)).ToList();
+
+        if (rowsElsewhere.Any(r => r.MembershipKind == nameof(MembershipKind.Core)))
+            return false;
+
+        var competingFold = rowsElsewhere.FirstOrDefault(r => r.MembershipKind == nameof(MembershipKind.FoldedVersion) && r.IsPrimary);
+        if (competingFold is null)
+            return true; // no other fold currently claims primary
+
+        var competingCoreCount = await db.SeriesMembers.CountAsync(
+            sm => sm.SeriesId == competingFold.SeriesId && sm.MembershipKind == nameof(MembershipKind.Core), ct);
+
+        bool thisWins;
+        if (telling.CoreMemberIds.Count != competingCoreCount)
+        {
+            thisWins = telling.CoreMemberIds.Count > competingCoreCount;
+        }
+        else
+        {
+            var competingRootAnimeId = await db.Series
+                .Where(s => s.Id == competingFold.SeriesId)
+                .Select(s => s.RootAnimeId)
+                .FirstAsync(ct);
+            thisWins = telling.RootAnimeId < competingRootAnimeId;
+        }
+
+        if (thisWins)
+        {
+            // Demote the other stored row in place — otherwise both this
+            // membership and that one would be primary at once until that
+            // other series happens to rebuild.
+            var tracked = await db.SeriesMembers.FirstAsync(
+                sm => sm.SeriesId == competingFold.SeriesId && sm.AnimeId == animeId, ct);
+            tracked.IsPrimary = false;
+        }
+
+        return thisWins;
     }
 }
