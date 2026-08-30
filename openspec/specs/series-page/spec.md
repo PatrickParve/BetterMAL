@@ -4,7 +4,11 @@
 TBD - created by archiving change add-series-page. Update Purpose after archive.
 ## Requirements
 ### Requirement: Series composition from the relation graph
-The system SHALL derive a series as the connected component of the stored related-anime graph, traversing only story relations: `sequel`, `prequel`, `side_story`, `parent_story`, `summary`, `full_story`, `spin_off`, and `alternative_version`. Every other relation MAL reports — including `alternative_setting`, `character`, and any unrecognized relation string — SHALL be stored as it already is but SHALL NOT be traversed, so shows that merely share a universe or a cast never merge into one series.
+The system SHALL derive a series as the connected component of the stored related-anime graph, traversing **story relations only** — `sequel`, `prequel`, `side_story`, `parent_story`, `summary`, `full_story`, `spin_off` — together with the narrow companion-media case of `other` defined below. The `series-versions` capability governs how that component becomes a series.
+
+`alternative_version` and `alternative_setting` SHALL NOT be traversed. They SHALL be followed **one hop** from each member, after the component is complete, solely to find that component's **version neighbours**, which the `series-versions` capability classifies. Following them SHALL NOT admit anything reachable only through a version neighbour, and SHALL NOT merge or split a component.
+
+Every other relation MAL reports — including `character`, `adaptation`, and any unrecognized relation string — SHALL be stored as it already is and SHALL NOT be traversed, so shows that merely share a cast never merge into one series. Such a relation SHALL still reach the series page, as a related entry under "Every relation of a main-line entry is shown in More".
 
 The `other` relation SHALL be traversed in exactly one case: when precisely one of its two ends is an anime whose media type is one of a fixed **companion-media set** — `music` and `pv`. MAL links a franchise's opening/ending/image songs and its promotional videos to the show they belong to with `other` and nothing else, so a franchise's music and PV entries are otherwise unreachable — they either vanish from the series entirely or form their own companion-only series. `cm` (commercial) SHALL NOT be in the companion-media set.
 
@@ -16,17 +20,29 @@ Traversal SHALL be undirected: from a member the system SHALL follow both that a
 
 A story relation an external source **contradicts** — one end asserts it, the other end was fetched and does not, and AniList knows both anime and relates them not at all — SHALL NOT be traversed. Such an edge is one anime's unreciprocated claim about another that no other source supports, and traversing it silently admits an unrelated anime to the franchise. The edge SHALL remain stored and SHALL remain visible on the detail page; only its power to pull a member into a series is withdrawn. An edge that is merely unreciprocated, with no external source to settle it, SHALL still be traversed, so a franchise never shrinks on the strength of missing information alone.
 
-An anime SHALL belong to at most one series.
+An anime SHALL belong to at most one **story component**, and SHALL appear at most once on any one series page. It MAY additionally be a version-neighbour extra of other series, as `series-versions` defines.
 
-Every series stored under the previous traversal or ordering rules SHALL be rebuilt once, on its next read, so a franchise's music entries, its promotional videos, and this change's corrections reach an already-stored series without the user having to request a rebuild.
+Every series stored under the previous traversal, partitioning or grouping rules SHALL be rebuilt once, on its next read, so this change's corrections reach an already-stored series without the user having to request a rebuild.
 
 #### Scenario: Sequels and prequels form one series
 - **WHEN** a series is built from an anime whose relations chain through two sequels and one prequel
 - **THEN** all four anime are members of the same series
 
-#### Scenario: Alternative-setting relations do not merge series
-- **WHEN** an anime is related to another only by `alternative_setting` or `character`
-- **THEN** the other anime is not a member of its series
+#### Scenario: A version relation neither merges nor splits
+- **WHEN** two main-line-eligible anime are related by `alternative_version` and also joined by a `sequel` chain through a third
+- **THEN** all three are members of one series, and the version relation changes only how they are shown
+
+#### Scenario: An alternative version with no story path is not a member
+- **WHEN** an anime is related to a member only by `alternative_version` and shares no story relation with the component
+- **THEN** it is not part of that component, and is handled as a version neighbour
+
+#### Scenario: Nothing is admitted through a version neighbour
+- **WHEN** a version neighbour carries `sequel` relations to two anime of its own
+- **THEN** neither of those anime is a member of this series
+
+#### Scenario: Character relations still do not merge series
+- **WHEN** an anime is related to another only by `character`
+- **THEN** the other anime is not a member of its series, and is shown as a related entry instead
 
 #### Scenario: Reverse edges keep the component connected
 - **WHEN** anime A stores a `sequel` relation to anime B, and B has never been full-fetched and stores no relations of its own
@@ -66,7 +82,7 @@ Every series stored under the previous traversal or ordering rules SHALL be rebu
 
 #### Scenario: Commercials and crossovers still do not merge series
 - **WHEN** a show stores an `other` relation to a commercial or a crossover short
-- **THEN** that anime is not pulled into the show's series
+- **THEN** that anime is not pulled into the show's series, and is shown as a related entry instead
 
 #### Scenario: An uncached `other` end is probed once
 - **WHEN** a member stores an `other` relation to an anime with no cached metadata row, and probe budget remains
@@ -82,6 +98,8 @@ Every series stored under the previous traversal or ordering rules SHALL be rebu
 
 ### Requirement: Main line and extras
 Within a series the system SHALL identify a main line: the connected chain over `sequel`/`prequel` relations among the members holding the most main-line-eligible members — ties broken in favour of the chain containing the earliest-aired eligible member — reduced to just its eligible members. Every other member of the series SHALL be an extra.
+
+Main-line classification SHALL run over the series' own **story-component** members. A version neighbour SHALL never be main line, and SHALL never bridge two chains, since it is not part of the component the chains are formed over.
 
 A member SHALL be main-line-eligible unless it is any of:
 - a member whose media type is `special`, `music`, or `pv`;
@@ -100,7 +118,15 @@ A recap or side-content tag overrides a sequel/prequel edge on the same member: 
 
 Where no member of the series is eligible at all, the system SHALL fall back to the unreduced chain, so a specials-only or side-story-only franchise still has a main line to render.
 
-Extras SHALL be grouped by media type in the fixed display order Movie, OVA, ONA, Special, Music, PV, TV, Other, and ordered by aired-from date within each group. `pv` SHALL therefore be its own group rather than falling into Other, placed with the other short-form non-story extras and ahead of the TV and Other catch-alls.
+Extras SHALL be grouped by their **relation to the main line** rather than by media type, in the fixed display order Alternative version, Alternative setting, Prequel, Sequel, Parent story, Side story, Full story, Summary, Spin-off, Character, Adaptation, Other, and ordered by aired-from date within each group.
+
+An extra's group SHALL be resolved so that it belongs to exactly one:
+
+1. Where the extra carries a relation, in either direction, to any main-line member of this series, its group SHALL be the highest-precedence such relation in the display order above. Version relations rank first precisely so a version neighbour that also carries a sequel edge still reads as an alternative version.
+2. Where it does not — an extra reached only through another extra — it SHALL inherit the group of the extra that reaches it, resolved breadth-first outward from the main line, ties broken by the lower MAL id. A special of a side story therefore reads as Side story. A **version neighbour** SHALL NOT pass its group on by inheritance, and SHALL NOT be reached by it, so a story extra is never labelled an alternative version merely for sitting next to one.
+3. Failing both, its group SHALL be Other.
+
+The relation SHALL be read **directionally, from the extra's side**: `M --summary--> X` makes X a Summary, while `X --summary--> M` makes X the Full story; `M --side_story--> X` makes X a Side story, while `X --side_story--> M` makes X the Parent story. The same holds for `sequel`/`prequel`.
 
 #### Scenario: Sequels and story movies are main line
 - **WHEN** a series contains three TV seasons and a movie, all linked by sequel relations
@@ -114,13 +140,29 @@ Extras SHALL be grouped by media type in the fixed display order Movie, OVA, ONA
 - **WHEN** a member whose media type is `pv` is linked into the sequel chain
 - **THEN** it is an extra, not a main-line entry
 
-#### Scenario: Promotional videos have their own More group
-- **WHEN** a series has two `pv` members
-- **THEN** they appear under a "PV" group in the More section, between the Music and TV groups, rather than under Other
+#### Scenario: Extras are grouped by relation, not media type
+- **WHEN** a series has two specials that recap its first season and one OVA that is a side story of its second
+- **THEN** the two specials appear under a "Summary" group and the OVA under a "Side story" group, rather than under "Special" and "OVA"
+
+#### Scenario: Direction decides the group
+- **WHEN** an extra declares `full_story` to a main-line member, and another extra is the target of a main-line member's `summary`
+- **THEN** the first is grouped under "Full story" and the second under "Summary"
+
+#### Scenario: A version relation outranks a sequel edge
+- **WHEN** a version neighbour carries both an `alternative_version` relation and a `sequel` relation to main-line members
+- **THEN** it appears under "Alternative version"
+
+#### Scenario: An extra of an extra inherits its group
+- **WHEN** a special's only relation is to an extra that is grouped under "Side story"
+- **THEN** that special is grouped under "Side story" too
+
+#### Scenario: A version neighbour does not pass its group on
+- **WHEN** an extra's only relation is to a version neighbour grouped under "Alternative setting"
+- **THEN** that extra is grouped under "Other" rather than under "Alternative setting"
 
 #### Scenario: Side stories and music videos are extras
 - **WHEN** a series contains a side story, an OVA run, and a music video
-- **THEN** none of them are main-line entries, and they appear grouped by media type
+- **THEN** none of them are main-line entries, and they appear grouped by their relation to the main line
 
 #### Scenario: A recap special stays an extra even when it bridges two seasons
 - **WHEN** a `tv_special` recaps one season (`summary`/`full_story`) and also carries a `sequel`/`prequel` edge into the next season
@@ -146,6 +188,10 @@ Extras SHALL be grouped by media type in the fixed display order Movie, OVA, ONA
 - **WHEN** a series is built starting from the second season of a spin-off whose sequel chain is shorter than the parent series' chain
 - **THEN** the parent series' chain is the main line and the spin-off's entries are extras
 
+#### Scenario: A separate telling's chain cannot take the main line
+- **WHEN** Brotherhood is a version neighbour of the Fullmetal Alchemist (2003) series and its own chain is longer
+- **THEN** the 2003 series' main line is still its own chain
+
 #### Scenario: A franchise of only side entries still renders a main line
 - **WHEN** every member of a series is ineligible — all specials, recaps, or side content of one another
 - **THEN** the largest chain is used unreduced rather than leaving the series with no main line
@@ -153,13 +199,15 @@ Extras SHALL be grouped by media type in the fixed display order Movie, OVA, ONA
 ### Requirement: Watch order and series root
 The system SHALL order main-line entries in **story order**: a topological ordering over the `sequel`/`prequel` edges among the main-line members, so an entry always precedes the entries it is a prequel to. The system SHALL present that ordering as the series' watch order, numbered from 1.
 
+Where the main line contains a **version slot** — main-line entries that are alternative versions of one another, per the `series-versions` capability — the ordering SHALL be computed with each slot contracted to a single position, so every alternative of a slot takes the same position and a branch entry is ordered around the slot rather than always after it. The rendered numbering SHALL be computed over the entries actually shown for the picked alternative, so it never skips a number.
+
 Aired-from date SHALL be a tie-break, not the ordering: where two entries are unconstrained relative to each other — neither reachable from the other over the chain — the earlier aired-from date SHALL come first, entries lacking a date SHALL be placed last, and MAL id SHALL break the remaining tie. An entry with no chain edge at all SHALL therefore be placed purely by its aired date, interleaved with the chain.
 
 The main line is deliberately **story order, not release order**. A prequel film released after the season it precedes belongs before that season in a watch order, and ordering by air date puts it after — the chain edges the main line is already classified from state the correct order and were previously discarded at the ordering step.
 
-Where the chain edges contain a cycle, so that no topological order exists, the system SHALL break the cycle in favour of aired-from order and produce a stable ordering rather than failing the build. Extras remain ordered by aired-from date within their media-type group, as specified under "Main line and extras".
+Where the chain edges contain a cycle, so that no topological order exists — including a cycle introduced by contracting a version slot — the system SHALL break the cycle in favour of aired-from order and produce a stable ordering rather than failing the build. Extras remain ordered by aired-from date within their **relation group**, as specified under "Main line and extras".
 
-The series root SHALL be the first entry in that ordering. The series SHALL take its title and its main picture from the root.
+The root SHALL be the first entry of the series' watch order, and the series SHALL take its title and its main picture from that root. The root SHALL NOT change with the picked alternative, so a series' header is stable however the watch order is filtered.
 
 #### Scenario: A prequel film released later still sorts first
 - **WHEN** a series contains Jujutsu Kaisen (aired 2020-10-03) and Jujutsu Kaisen 0 (aired 2021-12-24), and MAL states `40748 --prequel--> 48561` on both ends
@@ -168,6 +216,14 @@ The series root SHALL be the first entry in that ordering. The series SHALL take
 #### Scenario: Chain order beats air date
 - **WHEN** two main-line entries are linked by a `sequel`/`prequel` edge whose direction disagrees with their aired-from dates
 - **THEN** the chain edge decides their order
+
+#### Scenario: Alternatives share a position
+- **WHEN** two main-line entries form a version slot
+- **THEN** they occupy one position in the watch order rather than two consecutive ones
+
+#### Scenario: The header does not move with the picker
+- **WHEN** I switch the picked alternative of a version slot
+- **THEN** the series' title and main picture are unchanged
 
 #### Scenario: Unconstrained entries fall back to air date
 - **WHEN** two main-line entries have no chain path between them
@@ -189,10 +245,16 @@ The series root SHALL be the first entry in that ordering. The series SHALL take
 - **WHEN** I open a series whose earliest story-order main-line entry is its first season
 - **THEN** the page's main picture and the series title are that first season's
 
-### Requirement: Series persistence and identity
-The system SHALL persist each derived series with a stable identifier and its member set, recording for each member whether it is main line and its position within its list, plus the time the series was built.
+#### Scenario: Two separate tellings have their own roots
+- **WHEN** I open each of two series joined only by a version relation
+- **THEN** each page shows its own first entry as its picture and title, not the other's
 
-When a newly computed component overlaps one or more already-stored series, the system SHALL keep the stored series with the largest overlap — preserving its identifier — delete the others, and replace its member set wholesale, so a newly announced entry folds into the existing series rather than creating a competing one.
+### Requirement: Series persistence and identity
+The system SHALL persist each derived series with a stable identifier and its member set, recording for each member whether it is main line, its position within its list, its relation group, whether it is a story-component member or a version neighbour, whether that series is the member's primary one, and — for a main-line entry — its version slot and its branch, plus the time the series was built.
+
+A member SHALL be recorded per series rather than per anime, so an anime that is a version neighbour of two series holds one record in each. Exactly one of an anime's records SHALL be marked primary, as the `series-versions` capability defines.
+
+A build SHALL persist the seed's series alone. Its component SHALL be matched to the stored series it overlaps most, computing overlap over **story-component members only**; that series keeps its identifier, and every other stored series overlapping the component is deleted after surrendering any chosen title or picture the survivor lacks. A newly announced entry therefore folds into the existing series rather than creating a competing one, and the fragments left by an earlier rules change collapse back into one series rather than persisting.
 
 The system SHALL NOT store the series' score averages, computing them at read time instead, so editing a score never leaves a stale average behind.
 
@@ -204,6 +266,14 @@ The system SHALL NOT store the series' score averages, computing them at read ti
 - **WHEN** a build's component covers the members of two separately stored series
 - **THEN** one series remains, holding every member, and the other stored series is deleted
 
+#### Scenario: A version neighbour holds its own record
+- **WHEN** an anime is a version neighbour of two series
+- **THEN** two membership records exist for it, each carrying its own relation group and favourite rank, and neither is primary where it holds a story-component membership elsewhere
+
+#### Scenario: A neighbour's stored series is not absorbed
+- **WHEN** a rebuilt series holds another series' root as a version-neighbour extra
+- **THEN** that other series is not deleted, since overlap is computed over story-component members only
+
 #### Scenario: Editing a score changes the average immediately
 - **WHEN** I change my score on one entry and reopen the series page
 - **THEN** my series averages reflect the new score with no rebuild
@@ -211,13 +281,19 @@ The system SHALL NOT store the series' score averages, computing them at read ti
 ### Requirement: Bounded series builds
 A series build SHALL be bounded by three limits: at most 400 members, at most 8 live MAL full-detail fetches on a visit-triggered build or 20 on an explicitly requested rebuild, and a separate **probe budget** of at most 4 fetches on a visit-triggered build or 10 on an explicitly requested rebuild. Fetches SHALL be spent first on members that have no cached metadata row at all, since those cannot be displayed otherwise; remaining budget SHALL be spent expanding members with a lean cached row (no relations of its own), since an unexpanded lean member can hide a real season from the series or from main-line classification.
 
+The limits SHALL apply to the **story component** a build traverses, and SHALL be spent there alone. Because version relations are not traversed, no budget can be spent on a separate telling before the seed's own series is complete.
+
+The version-neighbour hop SHALL spend **no** fetch and **no** probe budget: a neighbour is classified from its cached relation rows, and a neighbour with no cached row is shown as a related entry rather than fetched.
+
 The probe budget SHALL be separate from the member fetch budget and SHALL be spent only on resolving the media type of an `other` edge's uncached far end, per the composition requirement. A probe SHALL NOT consume member fetch budget and member fetches SHALL NOT consume probe budget, so a franchise carrying many `other` edges to commercials can never starve the fetches that real, story-related members need in order to be displayed at all.
+
+Related entries — the non-traversed relations shown in More — SHALL cost neither budget and SHALL NOT count toward the member cap, since they are rendered from stored relation rows rather than fetched.
 
 Because a probe caches the row it fetches, no `other` far end is probed more than once across all builds, and the probe budget's steady-state cost for a franchise the user revisits SHALL be zero.
 
 The member limit SHALL be a safety ceiling against a runaway component rather than a working limit: it SHALL be set high enough that no real franchise reaches it, so that reaching it means the traversal has gone wrong and the truncation notice is meaningful.
 
-A build that exhausts either its fetch budget or its probe budget SHALL mark the series partial; a build that reaches the member cap SHALL mark it truncated. A partial series SHALL be rebuilt on the next visit, so successive visits — each starting from more cached data than the last — complete it without any background job. Because probes never repeat, a series left partial by an exhausted probe budget SHALL converge over successive visits rather than re-probing indefinitely.
+A build that exhausts either its fetch budget or its probe budget SHALL mark the series it stores partial; a build that reaches the member cap SHALL mark it truncated. A partial series SHALL be rebuilt on the next visit, so successive visits — each starting from more cached data than the last — complete it without any background job. Because probes never repeat, a series left partial by an exhausted probe budget SHALL converge over successive visits rather than re-probing indefinitely.
 
 A series stored as truncated SHALL NOT be rebuilt automatically on every visit, since a component genuinely over the cap would then re-traverse and spend fetch budget on every visit indefinitely. It SHALL pick up a raised cap on the next explicitly requested rebuild or the next staleness-triggered rebuild.
 
@@ -230,6 +306,18 @@ Concurrent builds of the same series SHALL collapse into one, matching the singl
 #### Scenario: Build stops at the fetch budget
 - **WHEN** I open the series page for a franchise with 20 members the app has never fetched
 - **THEN** the page returns after at most 8 live MAL fetches, and the series is marked partial
+
+#### Scenario: No budget is spent outside the component
+- **WHEN** I open a series whose version neighbours hold many uncached entries of their own
+- **THEN** every fetch is spent inside the seed's own component and the page renders complete
+
+#### Scenario: Classifying neighbours costs nothing
+- **WHEN** a series has six version neighbours with cached rows
+- **THEN** all six are classified with no fetch and no probe
+
+#### Scenario: Related entries cost nothing
+- **WHEN** a series' main-line entries carry forty `character` relations to anime with no cached rows
+- **THEN** all forty are shown as related entries, no fetch is spent on them, and the series is not marked partial on their account
 
 #### Scenario: Probes do not eat the member fetch budget
 - **WHEN** a build probes four uncached `other` far ends and also fetches members with no cached row
@@ -266,11 +354,13 @@ Concurrent builds of the same series SHALL collapse into one, matching the singl
 ### Requirement: Series read endpoint and freshness
 The system SHALL expose a read endpoint that resolves a series from any member's anime id, building it when no series is stored for that anime, when the stored series is partial, when it was built more than 30 days ago, or when it was built before the current main-line classification rules took effect, and serving the stored series otherwise without any MAL call.
 
+Where the anime is a member of more than one series, the endpoint SHALL resolve to its **primary** series, as the `series-versions` capability defines. A telling reached from another telling's page SHALL be addressed by its own root's anime id, which resolves to that telling.
+
 The system SHALL record the point at which its main-line classification rules last changed, and SHALL treat every series built before that point as needing a rebuild, so a correction to classification reaches already-stored series on their next read rather than requiring the user to identify and rebuild each affected series by hand. A classification-triggered rebuild SHALL be identical to any other build — the same traversal rules, fetch budget, single-flight collapsing, and series identity.
 
 The system SHALL expose a rebuild endpoint that forces recomputation with the larger fetch budget.
 
-When the component derived for an anime contains only that anime, the system SHALL report that it belongs to no series rather than storing a one-member series.
+When the component derived for an anime contains only that anime, the system SHALL report that it belongs to no series rather than storing a one-member series. An anime whose only relation is a version relation SHALL NOT fall under this rule, since the telling it is an alternative of is a member of its series.
 
 #### Scenario: Cached series is served without fetching
 - **WHEN** I open a complete series that was built yesterday
@@ -292,9 +382,17 @@ When the component derived for an anime contains only that anime, the system SHA
 - **WHEN** I open the series page from the third season's anime id
 - **THEN** I get the same series I would get from the first season's id
 
+#### Scenario: A shared member resolves to its primary
+- **WHEN** I open the series page from the anime id of an OVA shared between two tellings
+- **THEN** I get its primary series, and that page lists the other telling as an alternative version
+
 #### Scenario: Anime with no series
 - **WHEN** the series endpoint is called for an anime whose story relations resolve to nothing else
 - **THEN** it reports that no series exists rather than returning a series of one
+
+#### Scenario: A lone alternative version does have a series
+- **WHEN** the series endpoint is called for an anime whose only relation is an `alternative_version`
+- **THEN** it returns that anime's own series, holding it and the telling it is an alternative of
 
 ### Requirement: Series page header
 The series page SHALL show the root entry's picture, the series title, a status pill, and the year span of the series (e.g. `2013 – 2023`, or the single year when every entry aired in one year).
@@ -663,6 +761,43 @@ The highest MAL score SHALL be shown in full rather than blurred when the entry 
 - **WHEN** no member of a series has a rewatch count above zero
 - **THEN** the page shows no "Most rewatched" stat at all
 
+### Requirement: Series figures follow the picked route
+Where a series' main line holds one or more version slots, the page's figures SHALL take two different member scopes.
+
+The **score averages** — MAL's and mine, across the main line and across all entries, as "Series score averages" defines — SHALL be computed over **every** main-line entry, every alternative included, whatever is picked. They SHALL NOT change when the picker does, so the figure that describes the franchise stays stable.
+
+Every other main-line figure "Series stats" defines — the main-line episode total, the main-line runtime total, episodes aired, my watched episodes and watched time, my rewatched time, entries completed, the lower-bound marker on an unknown episode count, whether the main line is settled by me, and the longest gap — SHALL be computed over the **trunk plus the picked alternatives and their branches**, so that time left describes the route I chose rather than counting every retelling of the same story.
+
+Those figures SHALL be recomputed for each admissible combination of picks and delivered with the series, so switching a picker changes them without a further request and without the client re-deriving them. The number of combinations SHALL be capped; beyond the cap, slots after the first SHALL keep their default alternative's figures while the picker still changes which entries are shown.
+
+The figures a series carries outside its own page — the browser card, the profile's Top series, and search — SHALL use the default combination.
+
+A series whose main line has no version slot SHALL be unaffected: every figure covers its whole main line, exactly as before.
+
+#### Scenario: Averages hold still across a switch
+- **WHEN** I switch between two routes of a series
+- **THEN** the MAL and my score averages are unchanged
+
+#### Scenario: Totals follow the route
+- **WHEN** I switch from a four-entry route to a three-entry route
+- **THEN** the main-line episode total, the runtime total and the time left all change to describe the route now picked
+
+#### Scenario: Time left describes one route
+- **WHEN** a series holds four alternative retellings of the same story on its main line
+- **THEN** its time left counts the picked route once, not all four
+
+#### Scenario: Switching costs no request
+- **WHEN** I switch the picked alternative
+- **THEN** the figures update without another series request
+
+#### Scenario: The card uses the default
+- **WHEN** I look at that series' card in the series browser
+- **THEN** its figures are those of the default combination
+
+#### Scenario: A series without a slot is unchanged
+- **WHEN** a series' main line holds no alternative versions
+- **THEN** every figure covers its whole main line as before
+
 ### Requirement: Favourite ordering within a series
 When several entries tie for my highest score in a series, the page SHALL let me order them by hand, so that which of them is really my favourite is recorded rather than decided by watch order.
 
@@ -736,15 +871,15 @@ Activating the "in my list" control while it reads as off SHALL turn the filter 
 - **THEN** it shows its heading and entry count alone, with no control naming how many tiles are hidden
 
 ### Requirement: Main series and More sections
-The main line's presentation SHALL be governed by the Series timeline ribbon requirement, not by this one; this requirement governs only the More section, where extras SHALL be presented as poster tiles grouped by media type, so the extras read as a different kind of thing from the chronological main line.
+The main line's presentation SHALL be governed by the Series timeline ribbon requirement, not by this one; this requirement governs only the More section, where extras SHALL be presented as poster tiles grouped by their relation to the main line, so the extras read as a different kind of thing from the chronological main line and each group states how its entries stand to the franchise.
 
-Each tile SHALL carry the information a main-line card carries — picture, title, media type, year, episode count, MAL score, my score, and my list status — SHALL link to that anime's detail page, SHALL offer the same edit control, and SHALL show its entry's rewatch count when it is greater than zero. As on a main-line card, a tile's title SHALL reserve the same vertical space regardless of line count, so tiles in the same row stay aligned.
+Each tile SHALL carry the information a main-line card carries — picture, title, media type, year, episode count, MAL score, my score, and my list status — SHALL link to that anime's detail page, SHALL offer the same edit control, and SHALL show its entry's rewatch count when it is greater than zero. As on a main-line card, a tile's title SHALL reserve the same vertical space regardless of line count, so tiles in the same row stay aligned. Because groups no longer share a media type, each tile's media type SHALL be legible on the tile itself.
 
 Each of a tile's secondary text lines — the media type/year/episode count line, and the aired-progress line when it is shown — SHALL occupy exactly one line whatever its content, truncating with an ellipsis rather than wrapping, so no tile is made taller than its row neighbours by the length of its own text. The grid SHALL size its columns so that a tile whose picture is portrait is wide enough to show that meta line in full for the ordinary worst case — a two-word media type such as `TV special`, a four-digit year, and a two-digit episode count — so an extra's episode count is not the part that gets truncated away. Ellipsis truncation remains the backstop for longer content, not the normal outcome.
 
-Each More group SHALL show its entry count in its heading.
+Each More group SHALL show its entry count in its heading, counting the entries the media-type filter currently admits.
 
-The More section SHALL offer two section-wide controls: an "in my list" filter and an expand/collapse-all control. Which extras are visible SHALL be governed by those two controls and the group headings alone — the section SHALL NOT force any extra to stay visible on the user's behalf, whatever its status or progress, and SHALL NOT vary its initial state with how many extras the series has.
+The More section SHALL offer three section-wide controls: an "in my list" filter, an expand/collapse-all control, and the media-type filter buttons its own requirement defines. Which extras are visible SHALL be governed by those controls and the group headings alone — the section SHALL NOT force any extra to stay visible on the user's behalf, whatever its status or progress, and SHALL NOT vary its initial state with how many extras the series has.
 
 The "in my list" filter SHALL be on when a series page is opened: every group renders expanded, showing only the extras that are in my list — whatever their status: Watching, Completed, On hold, Plan to watch, or Dropped alike — and hiding every extra that is not in my list. It SHALL be a two-state control that reports which state it is in, per "A More group's heading opens that group in full". Turning it on SHALL restore that filtered view across every group; turning it off SHALL show every extra.
 
@@ -756,9 +891,13 @@ Each More group SHALL additionally be collapsible on its own from its heading, p
 
 An edit saved from a tile SHALL update it in place without reloading the page.
 
-#### Scenario: Extras grouped in More
-- **WHEN** a series has two specials, one OVA, and a music video
-- **THEN** the More section shows them as poster tiles under a collapsible group per media type, each heading carrying its count
+#### Scenario: Extras grouped in More by relation
+- **WHEN** a series has two recap specials, one side-story OVA, and one alternative version
+- **THEN** the More section shows them as poster tiles under a collapsible "Summary", "Side story" and "Alternative version" group, each heading carrying its count
+
+#### Scenario: Media type is legible on the tile
+- **WHEN** one "Side story" group holds an OVA, a movie and a special
+- **THEN** each tile states its own media type
 
 #### Scenario: A tile's episode count is not truncated away
 - **WHEN** a portrait-pictured extra is a `TV special` that aired in 2003 and has 99 episodes
@@ -813,25 +952,136 @@ An edit saved from a tile SHALL update it in place without reloading the page.
 - **THEN** the More section is not shown
 
 #### Scenario: Singular wording for one extras category
-- **WHEN** a series has extras in only one media-type group
+- **WHEN** a series has extras in only one relation group
 - **THEN** the all-groups control reads "Expand" or "Collapse" without the word "all"
 
 #### Scenario: Plural wording for more than one extras category
-- **WHEN** a series has extras across two or more media-type groups
+- **WHEN** a series has extras across two or more relation groups
 - **THEN** the all-groups control reads "Expand all" or "Collapse all"
 
 #### Scenario: A rewatched extra shows its count
 - **WHEN** an extra has a rewatch count of 1
 - **THEN** its tile shows a rewatch indicator reading 1
 
+### Requirement: The More section offers media-type filter buttons
+Above the More section the page SHALL offer one button per media type present among that series' extras and related entries — TV, Movie, OVA, ONA, Special, Music, PV, and any other type those entries carry — as a multi-select set.
+
+Selecting a type SHALL narrow every group to the entries of that type. Selecting several SHALL show the entries of any selected type. Selecting none SHALL narrow nothing, which is the state a freshly opened page is in.
+
+The buttons SHALL state which of them are selected. A button whose type no entry carries SHALL NOT be offered.
+
+The type filter SHALL compose with the "in my list" filter and with each group's collapsed or opened state rather than replacing them: an entry is shown when its type is admitted **and** the other controls admit it. Each group's heading count SHALL report the entries the type filter admits.
+
+While at least one type is selected, a group left with no admitted entries SHALL NOT be rendered at all, since a column of empty headings across a dozen relation groups tells the reader nothing.
+
+The type buttons SHALL NOT narrow the main-line timeline. The main line is a numbered watch order, and hiding one of its entries would make the numbering misstate the series.
+
+#### Scenario: One type narrows every group
+- **WHEN** I select "Movie"
+- **THEN** every group shows only its movies, and groups holding no movie are not rendered
+
+#### Scenario: Several types are additive
+- **WHEN** I select "Movie" and "OVA"
+- **THEN** every group shows its movies and its OVAs
+
+#### Scenario: Deselecting the last type restores everything
+- **WHEN** I deselect the only selected type
+- **THEN** every group shows what the other controls admit, as on a freshly opened page
+
+#### Scenario: The timeline is untouched
+- **WHEN** I select "Movie" on a series whose main line is four TV seasons
+- **THEN** the timeline still shows all four, numbered 1–4
+
+#### Scenario: Only present types are offered
+- **WHEN** a series' extras and related entries hold no music entry
+- **THEN** no "Music" button is offered
+
+#### Scenario: The type filter composes with the list filter
+- **WHEN** the "in my list" filter is on and I select "OVA"
+- **THEN** the groups show only OVAs that are in my list
+
+#### Scenario: Counts follow the type filter
+- **WHEN** a group holds six entries of which two are movies and I select "Movie"
+- **THEN** that group's heading reports two
+
+### Requirement: Every relation of a main-line entry is shown in More
+The More section SHALL additionally show, as **related entries**, every anime a main-line member relates to by a relation the series traversal does not follow — `character`, `adaptation`, a non-companion `other`, and any unrecognized relation string — whether or not that anime is in my list.
+
+Related entries SHALL be read in both directions, exactly as an anime's own relation set is read, and SHALL be grouped and ordered by the same rules extras are: the relation group named by the relation, read directionally from the related entry's side.
+
+A group SHALL be named by the relation and never by the related entry's media type. A commercial reaches the page over a non-companion `other` relation and SHALL therefore appear under Other alongside every other `other` relation, rather than in a group of its own; media type is what the type filter buttons select on.
+
+A related entry SHALL be rendered from what is already stored for that relation — its title, its picture and its media type — enriched with its cached metadata and my list entry when those exist, and SHALL NOT require a MyAnimeList fetch to be shown. It SHALL link to that anime's detail page and SHALL offer the same edit control every other tile offers.
+
+A related entry SHALL NOT be a member of the series: it SHALL NOT enter any average, any stat, any episode or runtime total, any member count, or the member cap, and SHALL NOT appear on the series' card in the browser. It is shown, not counted.
+
+An anime that is already a member of the series SHALL NOT also be listed as a related entry, so nothing appears twice on the page.
+
+Because these entries are read from what is stored rather than fetched, they SHALL be complete on the first read of a series and SHALL NOT mark it partial.
+
+#### Scenario: A character relation reaches the page
+- **WHEN** a main-line entry carries a `character` relation to an anime not in my list
+- **THEN** that anime is shown under a "Character" group in the More section
+
+#### Scenario: A commercial reaches the page without joining the series
+- **WHEN** a main-line entry carries an `other` relation to a commercial
+- **THEN** the commercial is shown under "Other", and the series' averages, stats and member count are unchanged by it
+
+#### Scenario: Nothing is fetched to show it
+- **WHEN** a main-line entry relates to an anime with no cached metadata row
+- **THEN** it is still shown, from the stored relation's title, picture and media type, with no MyAnimeList request
+
+#### Scenario: A cached related entry shows its full detail
+- **WHEN** a related entry's anime has a cached metadata row and is in my list
+- **THEN** its tile shows its scores, episode count and my status like any other tile, and offers the same edit control
+
+#### Scenario: A member is not repeated as a related entry
+- **WHEN** an anime is both a member of the series and the target of an untraversed relation from a main-line entry
+- **THEN** it is shown once, as a member
+
+#### Scenario: Related entries do not make a series partial
+- **WHEN** a series' only unresolved data is the metadata of its related entries
+- **THEN** the series is not marked partial and is not rebuilt on the next visit for that reason
+
+### Requirement: A More tile's link target is decided by the series
+Every tile in the More section SHALL carry, from the server, whether it opens a series page or an anime detail page, and the client SHALL use that answer rather than inferring one from the tile's relation group.
+
+A tile SHALL open a **series page**, addressed by that anime's own id, exactly when the anime is a version neighbour that has story relations of its own — the case in which a series of its own exists or would be built. The series read endpoint builds a series for an anime that has none, so such a tile is never dead and needs no fallback target.
+
+Every other tile — a story extra, a folded-in version neighbour with no story relations of its own, and every related entry — SHALL open that anime's **detail page**.
+
+A tile SHALL NEVER navigate to the series page it is rendered on.
+
+#### Scenario: Crossing to a separate telling
+- **WHEN** I open the Fullmetal Alchemist (2003) series page and activate the Brotherhood tile in its Alternative version group
+- **THEN** Brotherhood's series page opens
+
+#### Scenario: A folded-in alternative opens its anime page
+- **WHEN** I open the Clannad series page and activate the Clannad Movie tile in its Alternative version group
+- **THEN** Clannad Movie's detail page opens
+
+#### Scenario: A special grouped as an alternative setting opens its anime page
+- **WHEN** I open the Clannad series page and activate the Clannad: After Story - Mou Hitotsu no Sekai, Kyou-hen tile in its Alternative setting group
+- **THEN** that anime's detail page opens, rather than the series page I am already on
+
+#### Scenario: An unstored telling is built by the visit
+- **WHEN** the version neighbour shown has no stored series and I activate its tile
+- **THEN** its series is built and its page renders, as it would on any first visit to a series
+
+#### Scenario: Other groups are unaffected
+- **WHEN** I activate a tile in the Side story group
+- **THEN** that anime's detail page opens, as before
+
 ### Requirement: The More section's view state is restored with the page
-The More section's three view controls — the "in my list" filter, each group's collapsed state, and each group's exemption from the filter — SHALL be part of the series page's restorable state, restored on back/forward navigation exactly as every other page's view controls are, per the `page-state-restoration` capability.
+The More section's four view controls — the "in my list" filter, the media-type filter, each group's collapsed state, and each group's exemption from the "in my list" filter — together with the **alternative picked for each version slot** SHALL be part of the series page's restorable state, restored on back/forward navigation exactly as every other page's view controls are, per the `page-state-restoration` capability.
 
-Returning to a series page by back/forward navigation SHALL therefore show the More section as it was left: a group opened in full is still open, a collapsed group is still collapsed, and the "in my list" control still reports the state it reported when the page was left.
+Returning to a series page by back/forward navigation SHALL therefore show the page as it was left: a group opened in full is still open, a collapsed group is still collapsed, the media types I selected are still selected, the "in my list" control still reports the state it reported when the page was left, and the route I picked is still picked.
 
-A fresh visit — a link, a typed URL, a reload — SHALL still open the section on its documented default: the filter on, every group expanded, and no group exempted. The state SHALL NOT be persisted beyond the browser tab's application session, and SHALL NOT be shared between two different series' pages.
+A fresh visit — a link, a typed URL, a reload — SHALL still open the section on its documented default: the "in my list" filter on, no media type selected, every group expanded, no group exempted, and every version slot on the default alternative the `series-versions` capability defines.
 
-A group key held in restored state that matches no group the restored page renders — because the series' extras changed between the two renders — SHALL be ignored rather than treated as an error.
+A group key held in restored state that matches no group the restored page renders — because the series' extras changed between the two renders — SHALL be ignored rather than treated as an error. A restored media type that no extra of the series carries SHALL likewise be ignored, as SHALL a restored pick naming an anime that is no longer an alternative of any slot.
+
+The state SHALL NOT be persisted beyond the browser tab's application session, and SHALL NOT be shared between two different series' pages.
 
 #### Scenario: An opened group is still open on return
 - **WHEN** I open a More group in full, open one of its extras, and navigate back
@@ -841,13 +1091,25 @@ A group key held in restored state that matches no group the restored page rende
 - **WHEN** I turn the "in my list" filter off, open an entry, and navigate back
 - **THEN** the filter is still off and every extra is still shown
 
+#### Scenario: Selected media types survive a round trip
+- **WHEN** I select "Movie" and "OVA", open an entry, and navigate back
+- **THEN** both are still selected and the section shows the same tiles it showed before
+
+#### Scenario: A picked route survives a round trip
+- **WHEN** I pick a route other than the default, open one of its entries, and navigate back
+- **THEN** that route is still picked and the same main-line entries are shown
+
 #### Scenario: A collapsed group is still collapsed on return
 - **WHEN** I collapse a group, navigate away, and navigate back
 - **THEN** that group renders no tiles
 
 #### Scenario: A fresh visit still opens on the default
 - **WHEN** I reach a series page by following a link rather than by navigating back
-- **THEN** the "in my list" filter is on, every group is expanded, and no group is exempted
+- **THEN** the "in my list" filter is on, no media type is selected, every group is expanded, no group is exempted, and every version slot is on its default alternative
+
+#### Scenario: A stale pick is ignored
+- **WHEN** restored state names a picked anime that the rebuilt series no longer holds as an alternative
+- **THEN** the slot opens on its default rather than failing
 
 #### Scenario: Two series do not share More-section state
 - **WHEN** I open one series and expand its More section, then open a different series
@@ -1148,6 +1410,8 @@ A background build triggered this way SHALL be identical in every other respect 
 ### Requirement: Build all series from my list
 The system SHALL provide an action on the Settings page that builds a series for every anime in my list that belongs to no stored series, and rebuilds every series that was built before the current main-line classification rules took effect, so the profile page's Top series ranking can be completed and corrected on demand rather than only filling in over time.
 
+A target SHALL be considered covered only when it holds a **primary** membership in an up-to-date stored series, so an anime stored only as another series' version neighbour is still built into its own.
+
 The action SHALL run in the background and SHALL NOT block the request that starts it. The request that starts it SHALL report the run as in flight, without waiting for the background run to begin, so that a single press is enough for the Settings page to show progress and disable the control. While it runs, the system SHALL report progress as the number of targets processed out of the total, and the Settings page SHALL show that progress and refresh it while the run is in flight. After a run finishes, its final counts SHALL remain visible until another run starts.
 
 The action's control SHALL be disabled while a run is in flight, so one run cannot be started on top of another.
@@ -1170,6 +1434,18 @@ Individual builds SHALL use the same traversal rules, fetch budget, partial/trun
 - **WHEN** a run starts and some of my list's anime belong to series built before the current classification rules
 - **THEN** those series are rebuilt by the run, not skipped as already covered
 
+#### Scenario: One build covers a whole franchise
+- **WHEN** a run builds a franchise and later reaches another anime of the same story component
+- **THEN** that target is counted as processed without being built again
+
+#### Scenario: A version-neighbour membership does not count as covered
+- **WHEN** an anime in my list is stored only as another series' version neighbour and has story relations of its own
+- **THEN** the run builds its own series rather than skipping it
+
+#### Scenario: A folded-in neighbour is covered by its host
+- **WHEN** an anime in my list has no story relations of its own and is already a version-neighbour extra of a stored series
+- **THEN** it is counted as covered, since no series of its own can exist
+
 #### Scenario: Progress is visible while it runs
 - **WHEN** a run is in flight
 - **THEN** the Settings page shows how many targets have been processed out of the total, updating as the run proceeds
@@ -1181,10 +1457,6 @@ Individual builds SHALL use the same traversal rules, fetch budget, partial/trun
 #### Scenario: The action cannot be double-started
 - **WHEN** a run is in flight
 - **THEN** the action's control is disabled
-
-#### Scenario: One build covers a whole franchise
-- **WHEN** a run builds a series and later reaches another anime that build already stored as an up-to-date member
-- **THEN** that target is counted as processed without being built again
 
 #### Scenario: One failing target does not stop the run
 - **WHEN** building one target fails
