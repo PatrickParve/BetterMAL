@@ -133,7 +133,7 @@ The exclusion in rule 1 SHALL precede any air-date rule: air-date proximity alon
 
 Candidates not selected SHALL continue to appear in the More overlay exactly as they do today; ranking decides which one gets the button, never which ones are shown.
 
-Where an anime has no candidate edge in a direction at all, the system MAY fall back to its immediate neighbour in the stored series' main line, in that series' story order. A direct edge SHALL always outrank the series-neighbour fallback, so a page that resolves correctly today cannot regress.
+Where an anime has no candidate edge in a direction at all, the system MAY fall back to its immediate neighbour in the stored series' main line, in that series' story order. Where the anime is a member of more than one series, the fallback SHALL use its **primary** series, as the `series-versions` capability defines, so the button never crosses into another telling of the franchise. A direct edge SHALL always outrank the series-neighbour fallback, so a page that resolves correctly today cannot regress.
 
 MAL's array position is ascending anime id, so "the first MAL reports" is an arbitrary pick that happens to be right only when the correct answer also holds the lowest id.
 
@@ -168,6 +168,10 @@ MAL's array position is ascending anime id, so "the first MAL reports" is an arb
 #### Scenario: Series neighbour fills a missing direction
 - **WHEN** an anime has no prequel candidate of any kind but sits second in its stored series' main line
 - **THEN** the prequel button MAY target the main-line entry before it
+
+#### Scenario: The fallback uses the primary series
+- **WHEN** an anime with no prequel candidate is a member of two tellings' series
+- **THEN** the fallback walks its primary series' main line, not the other telling's
 
 #### Scenario: A direct edge outranks the series neighbour
 - **WHEN** an anime has both a direct prequel edge and a different main-line predecessor
