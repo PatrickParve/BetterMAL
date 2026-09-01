@@ -18,6 +18,11 @@ public class AnimeRankingSnapshot
         this.rankByAnimeId = rankByAnimeId;
     }
 
+    /// <summary>The empty ranking — for a caller with no ranking to supply,
+    /// so it can pass a real object rather than a null (mirrors
+    /// <see cref="Series.SeriesRankingIndex.Empty"/>/<see cref="Search.SeriesSearchIndex.Empty"/>).</summary>
+    public static AnimeRankingSnapshot Empty { get; } = Build([], []);
+
     /// <summary>Every ranked (band 0-2) anime, best first.</summary>
     public List<UserAnimeEntry> RankedEntries { get; }
 

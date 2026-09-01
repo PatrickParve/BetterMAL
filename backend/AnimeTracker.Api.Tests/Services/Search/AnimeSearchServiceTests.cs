@@ -405,4 +405,108 @@ public class AnimeSearchServiceTests
         using var secondWait = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => trigger.WaitAsync(secondWait.Token));
     }
+
+    // --- Normalized matching (design.md D1-D3, tasks.md 1.7) ---
+
+    [Fact]
+    public async Task SearchAsync_SpacingIsIgnored()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var localIndex = new List<AnimeTitleProjection> { new(1, "Fullmetal Alchemist", null, null, 1) };
+        var service = CreateService(db, localIndex);
+
+        var results = await service.SearchAsync("full metal", limit: 5);
+
+        Assert.Single(results);
+        Assert.Equal(1, results[0].Id);
+    }
+
+    [Fact]
+    public async Task SearchAsync_PunctuationIsIgnoredForSpacedAndUnspacedQueries()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var localIndex = new List<AnimeTitleProjection> { new(1, "Re:ZERO -Starting Life in Another World-", null, null, 1) };
+        var service = CreateService(db, localIndex);
+
+        var reZero = await service.SearchAsync("re zero", limit: 5);
+        var rezero = await service.SearchAsync("rezero", limit: 5);
+
+        Assert.Single(reZero);
+        Assert.Single(rezero);
+    }
+
+    [Fact]
+    public async Task SearchAsync_AccentsMatchTheirUnaccentedSpellingBothWays()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var localIndex = new List<AnimeTitleProjection> { new(1, "Kimi ni Todoke: Yūki no Ippo", null, null, 1) };
+        var service = CreateService(db, localIndex);
+
+        var unaccentedQuery = await service.SearchAsync("Yuki no Ippo", limit: 5);
+
+        Assert.Single(unaccentedQuery);
+
+        var accentedIndex = new List<AnimeTitleProjection> { new(1, "Yuki no Ippo", null, null, 1) };
+        var accentedService = CreateService(db, accentedIndex);
+        var accentedQuery = await accentedService.SearchAsync("Yūki no Ippo", limit: 5);
+
+        Assert.Single(accentedQuery);
+    }
+
+    [Fact]
+    public async Task SearchAsync_QuotedQueryMatchesUnderNormalizationButNotASubstringTitle()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var localIndex = new List<AnimeTitleProjection>
+        {
+            new(1, "Fullmetal Alchemist", null, null, 1),
+            new(2, "Fullmetal Alchemist: Brotherhood", null, null, 2),
+        };
+        var service = CreateService(db, localIndex);
+
+        var results = await service.SearchAsync("\"fullmetal alchemist\"", limit: 5);
+
+        Assert.Single(results);
+        Assert.Equal(1, results[0].Id);
+    }
+
+    [Fact]
+    public async Task SearchAsync_PunctuationOnlyQueryReturnsNoResults()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var localIndex = new List<AnimeTitleProjection> { new(1, "Fullmetal Alchemist", null, null, 1) };
+        var service = CreateService(db, localIndex);
+
+        var results = await service.SearchAsync("!!!", limit: 5);
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task SearchAsync_PrefixMatchesStillLeadContainsMatchesUnderNormalization()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var localIndex = new List<AnimeTitleProjection>
+        {
+            new(1, "Kaguya-sama: Love is War", null, null, 1), // prefix once de-punctuated
+            new(2, "Petition for Kaguya-sama's Happiness", null, null, 2), // contains only
+        };
+        var service = CreateService(db, localIndex);
+
+        var results = await service.SearchAsync("kaguya sama", limit: 5);
+
+        Assert.Equal([1, 2], results.Select(r => r.Id));
+    }
 }

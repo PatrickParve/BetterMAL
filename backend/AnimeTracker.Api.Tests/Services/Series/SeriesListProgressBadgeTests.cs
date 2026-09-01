@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.EntityFrameworkCore;
 using SeriesModel = AnimeTracker.Api.Models.Series;
@@ -37,7 +38,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.Equal(SeriesProgressBadge.Completed, listed.ProgressBadge);
         Assert.Null(listed.BehindEpisodes);
@@ -57,7 +58,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries(new Dictionary<int, int> { [101] = 5 }));
+        var listed = Assert.Single(index.ListedSeries(new Dictionary<int, int> { [101] = 5 }, AnimeRankingSnapshot.Empty));
 
         Assert.Equal(SeriesProgressBadge.CaughtUp, listed.ProgressBadge);
         Assert.Null(listed.BehindEpisodes);
@@ -77,7 +78,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries(new Dictionary<int, int> { [101] = 8 }));
+        var listed = Assert.Single(index.ListedSeries(new Dictionary<int, int> { [101] = 8 }, AnimeRankingSnapshot.Empty));
 
         Assert.Equal(SeriesProgressBadge.Behind, listed.ProgressBadge);
         Assert.Equal(3, listed.BehindEpisodes);
@@ -96,7 +97,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries(new Dictionary<int, int> { [101] = 8 }));
+        var listed = Assert.Single(index.ListedSeries(new Dictionary<int, int> { [101] = 8 }, AnimeRankingSnapshot.Empty));
 
         Assert.Equal(SeriesProgressBadge.Behind, listed.ProgressBadge);
         Assert.Equal(8, listed.BehindEpisodes);
@@ -115,7 +116,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.Equal(SeriesProgressBadge.CaughtUp, listed.ProgressBadge);
     }
@@ -134,7 +135,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.Equal(SeriesProgressBadge.Behind, listed.ProgressBadge);
         Assert.Equal(7, listed.BehindEpisodes);
@@ -156,7 +157,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.Equal(SeriesProgressBadge.Dropped, listed.ProgressBadge);
         Assert.Null(listed.BehindEpisodes);
@@ -175,7 +176,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.Equal(SeriesProgressBadge.Dropped, listed.ProgressBadge);
     }
@@ -196,7 +197,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.NotEqual(SeriesProgressBadge.Dropped, listed.ProgressBadge);
         Assert.Equal(SeriesProgressBadge.Behind, listed.ProgressBadge);
@@ -216,7 +217,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.Equal(SeriesProgressBadge.Unwatched, listed.ProgressBadge);
     }
@@ -234,7 +235,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.Equal(SeriesProgressBadge.Dropped, listed.ProgressBadge);
     }
@@ -250,7 +251,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.Equal(SeriesProgressBadge.None, listed.ProgressBadge);
     }
@@ -270,7 +271,7 @@ public class SeriesListProgressBadgeTests
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
         // 100 is absent from the aired-episodes dictionary: unknown.
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.Equal(SeriesProgressBadge.None, listed.ProgressBadge);
     }
@@ -293,7 +294,7 @@ public class SeriesListProgressBadgeTests
         // 101 absent from the aired-episodes dictionary, but the drop on
         // 100 with nothing watched after it (101 has no entry at all)
         // decides this before the unknown count would ever matter.
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.Equal(SeriesProgressBadge.Dropped, listed.ProgressBadge);
     }
@@ -322,7 +323,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.NotEqual(SeriesProgressBadge.Behind, listed.ProgressBadge);
         Assert.Equal(SeriesProgressBadge.CaughtUp, listed.ProgressBadge);
@@ -344,7 +345,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.NotEqual(SeriesProgressBadge.Unwatched, listed.ProgressBadge);
         Assert.Equal(SeriesProgressBadge.CaughtUp, listed.ProgressBadge);
@@ -364,7 +365,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.NotEqual(SeriesProgressBadge.Dropped, listed.ProgressBadge);
         Assert.Equal(SeriesProgressBadge.Behind, listed.ProgressBadge);
@@ -382,7 +383,7 @@ public class SeriesListProgressBadgeTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.Equal(SeriesProgressBadge.Completed, listed.ProgressBadge);
     }

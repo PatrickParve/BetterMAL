@@ -2,6 +2,7 @@ using AnimeTracker.Api.Controllers;
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Artwork;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -21,7 +22,7 @@ public class SeriesControllerBulkBuildTests
         var tracker = new SeriesBulkBuildProgressTracker();
         using var db = new AnimeTrackerDbContext(
             new DbContextOptionsBuilder<AnimeTrackerDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-        var listService = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService());
+        var listService = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService(), new UnusedAnimeRankingService());
         var controller = new SeriesController(
             new UnusedSeriesService(), listService, trigger, tracker, new UnusedArtworkSelectionService(), new UnusedPictureRefreshService());
 
@@ -79,6 +80,24 @@ public class SeriesControllerBulkBuildTests
         public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<Models.AnimeMetadata> anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+    }
+
+    // This test doesn't touch ranking figures — a stub returning the empty
+    // ranking is enough (design.md D7/tasks.md 2.7).
+    private sealed class UnusedAnimeRankingService : IAnimeRankingService
+    {
+        public Task<AnimeRankingSnapshot> GetSnapshotAsync(CancellationToken ct = default) =>
+            Task.FromResult(AnimeRankingSnapshot.Empty);
+        public Task<List<AnimeRankingScoreCountDto>> GetScoreCountsAsync(string mediaTypeScope, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<AnimeRankingTierDto?> GetTierAsync(int score, string mediaTypeScope, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task ApplyTierOrderAsync(List<AnimeRankingTierOrderRequest> tiers, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task MoveAdjacentAsync(int promotedAnimeId, int demotedAnimeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task PlaceLastInTierAsync(int animeId, int score, CancellationToken ct = default) =>
             throw new NotImplementedException();
     }
 }

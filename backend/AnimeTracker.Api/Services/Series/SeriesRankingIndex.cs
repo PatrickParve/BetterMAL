@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Watching;
 
 namespace AnimeTracker.Api.Services.Series;
@@ -104,9 +105,13 @@ public sealed class SeriesRankingIndex
     /// <paramref name="airedEpisodesByAnimeId"/> holds the aired-so-far count
     /// for every currently-airing main-line member across the whole index
     /// (design.md D6); an id with no entry means "unknown", per the series
-    /// page's own rule for that case. Unordered; the caller applies whatever
-    /// ordering it needs.</summary>
-    public List<SeriesListItemDto> ListedSeries(Dictionary<int, int> airedEpisodesByAnimeId)
+    /// page's own rule for that case. <paramref name="ranking"/> is the
+    /// derived ranking my score edits and hand-order already produce
+    /// (polish-search-sort-and-titles design.md D7/D8) — read here, never
+    /// stored or duplicated, so a score edit changes the average rank with no
+    /// rebuild. Unordered; the caller applies whatever ordering it
+    /// needs.</summary>
+    public List<SeriesListItemDto> ListedSeries(Dictionary<int, int> airedEpisodesByAnimeId, AnimeRankingSnapshot ranking)
     {
         var results = new List<SeriesListItemDto>();
 
@@ -158,11 +163,20 @@ public sealed class SeriesRankingIndex
             var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
                 root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.PictureUrl);
 
+            // Both figures below describe the whole main line, not
+            // scopedMainLine — unlike the episode figures two lines above,
+            // they accompany the score averages (also over the whole main
+            // line) and must describe the same member set (design.md D8).
+            var mainLineAiredCount = mainLine.Count(m => m.AiringStatus != "not_yet_aired");
+            var mainLineRanks = mainLine.Select(m => ranking.RankOf(m.AnimeId)).Where(r => r is not null).ToList();
+            var mainLineAverageRank = mainLineRanks.Count > 0 ? mainLineRanks.Average(r => r!.Value) : (double?)null;
+
             results.Add(new SeriesListItemDto(
                 group.Key, root.RootAnimeId, title, englishTitle, pictureUrl,
                 status, badge, behindEpisodes, malAverage, mineAverage, malRevealed,
                 firstYear, lastYear, episodeTotal, hasUnknown, members.Count,
-                mainLineWatchedEpisodes, mainLineAiredEpisodes));
+                mainLineWatchedEpisodes, mainLineAiredEpisodes,
+                mainLineAiredCount, mainLineAverageRank));
         }
 
         return results;

@@ -164,4 +164,51 @@ public class SeriesSearchLookupTests
         Assert.Equal("Beyblade", series.Title);
         Assert.Null(series.EnglishTitle);
     }
+
+    // --- Normalized matching (design.md D1-D3, tasks.md 1.8) ---
+
+    [Fact]
+    public void MemberTitleWithPunctuationMatchedByADePunctuatedQuery()
+    {
+        var index = new SeriesSearchIndex(
+        [
+            Member(1, 100, "Re:ZERO -Starting Life in Another World-", rootAnimeId: 100),
+        ]);
+
+        var results = index.Match("re zero starting life", exact: false);
+
+        var series = Assert.Single(results);
+        Assert.Equal(1, series.SeriesId);
+    }
+
+    [Fact]
+    public void ChosenTitleWithPunctuationMatchedByADePunctuatedQuery()
+    {
+        var index = new SeriesSearchIndex(
+        [
+            // The member's own title doesn't match at all — only the chosen
+            // (renamed) title does, once its punctuation is stripped.
+            Member(1, 100, "Hagane no Renkinjutsushi", rootAnimeId: 100, selectedTitle: "Full-Metal: Alchemist!"),
+        ]);
+
+        var results = index.Match("full metal alchemist", exact: false);
+
+        Assert.Single(results);
+    }
+
+    [Fact]
+    public void MatchQualityStillOrdersResultsUnderNormalization()
+    {
+        var index = new SeriesSearchIndex(
+        [
+            // Prefix once de-punctuated (query is the leading words, minus punctuation).
+            Member(1, 100, "Kaguya-sama: Love is War", rootAnimeId: 100),
+            // Contains only: the query sits in the middle of the de-punctuated title.
+            Member(2, 200, "Some Preamble Kaguya-sama Love Story", rootAnimeId: 200),
+        ]);
+
+        var results = index.Match("kaguya sama love", exact: false);
+
+        Assert.Equal([1, 2], results.Select(s => s.SeriesId));
+    }
 }

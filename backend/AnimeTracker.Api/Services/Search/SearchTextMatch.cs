@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text;
+
 namespace AnimeTracker.Api.Services.Search;
 
 /// <summary>Title-matching and popularity-ranking helpers shared by anime and
@@ -5,14 +8,37 @@ namespace AnimeTracker.Api.Services.Search;
 /// 1).</summary>
 internal static class SearchTextMatch
 {
-    public static bool EqualsIgnoreCase(string? value, string term) =>
-        value is not null && string.Equals(value, term, StringComparison.OrdinalIgnoreCase);
+    /// <summary>Lower-cases, folds accents to their base letters, and drops
+    /// every character that is not a letter or digit — whitespace,
+    /// punctuation, and symbols alike — so "Full-Metal", "full metal", and
+    /// "FullMetal" all normalize the same. Letters of every script survive
+    /// (kana, kanji, Cyrillic, ...), so a Japanese title matches exactly as
+    /// it did before this normalization existed (design.md D1).</summary>
+    public static string Normalize(string value)
+    {
+        var decomposed = value.Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(decomposed.Length);
+        foreach (var c in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)
+                continue;
+            if (!char.IsLetterOrDigit(c))
+                continue;
 
-    public static bool ContainsIgnoreCase(string? value, string term) =>
-        value is not null && value.Contains(term, StringComparison.OrdinalIgnoreCase);
+            builder.Append(char.ToLowerInvariant(c));
+        }
 
-    public static bool StartsWithIgnoreCase(string? value, string term) =>
-        value is not null && value.StartsWith(term, StringComparison.OrdinalIgnoreCase);
+        return builder.ToString();
+    }
+
+    public static bool EqualsNormalized(string? value, string term) =>
+        value is not null && string.Equals(Normalize(value), Normalize(term), StringComparison.Ordinal);
+
+    public static bool ContainsNormalized(string? value, string term) =>
+        value is not null && Normalize(value).Contains(Normalize(term), StringComparison.Ordinal);
+
+    public static bool StartsWithNormalized(string? value, string term) =>
+        value is not null && Normalize(value).StartsWith(Normalize(term), StringComparison.Ordinal);
 
     // MAL popularity is a rank (1 = most popular); 0 or null means "unranked"
     // and must sort last rather than ahead of rank 1.

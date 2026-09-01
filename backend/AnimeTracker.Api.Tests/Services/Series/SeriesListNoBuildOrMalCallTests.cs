@@ -1,6 +1,8 @@
 using AnimeTracker.Api.Data;
+using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.EntityFrameworkCore;
 using SeriesModel = AnimeTracker.Api.Models.Series;
@@ -10,8 +12,11 @@ namespace AnimeTracker.Api.Tests.Services.Series;
 // The guarantee the whole Series page rests on (design.md D1/Risks, spec
 // "The endpoint makes no MAL calls" / "A partial or truncated series shows
 // figures computed over the members it has"): SeriesListService depends on
-// SeriesRankingLookup (a plain read) and IEpisodeScheduleService's batched
-// id overload (also a plain read) alone — no ISeriesService, no graph
+// SeriesRankingLookup (a plain read), IEpisodeScheduleService's batched
+// id overload (also a plain read), and IAnimeRankingService's snapshot read
+// (polish-search-sort-and-titles design.md D7 — also a plain read, over the
+// same in-memory context, via the real AnimeRankingService so this test
+// proves it rather than assuming it) alone — no ISeriesService, no graph
 // builder, no MAL client — so a partial series still resolves, and the
 // schedule reader is called at most once, batched over currently-airing
 // main-line ids, never per member.
@@ -55,7 +60,7 @@ public class SeriesListNoBuildOrMalCallTests
         await db.SaveChangesAsync();
 
         var scheduleService = new PoisonedEpisodeScheduleService();
-        var service = new SeriesListService(new SeriesRankingLookup(db), scheduleService);
+        var service = new SeriesListService(new SeriesRankingLookup(db), scheduleService, new AnimeRankingService(new UserAnimeEntryRepository(db), new TopAnimeSelectionRepository(db)));
 
         var result = await service.GetSeriesListAsync();
 
@@ -75,7 +80,7 @@ public class SeriesListNoBuildOrMalCallTests
         await db.SaveChangesAsync();
 
         var scheduleService = new PoisonedEpisodeScheduleService();
-        var service = new SeriesListService(new SeriesRankingLookup(db), scheduleService);
+        var service = new SeriesListService(new SeriesRankingLookup(db), scheduleService, new AnimeRankingService(new UserAnimeEntryRepository(db), new TopAnimeSelectionRepository(db)));
 
         await service.GetSeriesListAsync();
 

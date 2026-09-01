@@ -31,7 +31,11 @@ public enum SeriesProgressBadge
 /// the same member set; `EntryCount` is the opposite scope on purpose —
 /// every member, extras included, matching `SeriesBadge` everywhere else in
 /// the app. `MainLineWatchedEpisodes`/`MainLineAiredEpisodes` are the two
-/// figures the client's "my progress" sort divides.</summary>
+/// figures the client's "my progress" sort divides. `MainLineAiredCount` is
+/// main-line members that have started airing — the same figure Top series
+/// filters on — and `MainLineAverageRank` is the mean overall ranking
+/// position of the main-line members my rankings cover, `null` when they
+/// cover none.</summary>
 public record SeriesListItemDto(
     int SeriesId,
     int RootAnimeId,
@@ -50,7 +54,9 @@ public record SeriesListItemDto(
     bool HasUnknownEpisodeCounts,
     int EntryCount,
     int MainLineWatchedEpisodes,
-    int MainLineAiredEpisodes);
+    int MainLineAiredEpisodes,
+    int MainLineAiredCount,
+    double? MainLineAverageRank);
 
 /// <summary>Every series eligible for the Series page (add-series-browser
 /// design.md D1), in the endpoint's deterministic default order — my

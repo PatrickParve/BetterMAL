@@ -28,7 +28,7 @@ import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { useAnimeSearch } from '../hooks/useAnimeSearch.ts'
 import { useClickOutside } from '../hooks/useClickOutside.ts'
-import { STATUS_LABELS, formatTimestamp } from '../utils/anime.ts'
+import { STATUS_LABELS, formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
 import './SettingsPage.css'
 
 // A named group of controls (design.md decision 10): every control on the
@@ -534,7 +534,7 @@ function AnimeRefreshPicker() {
 
   function pick(result: AnimeSearchResult) {
     setSelected(result)
-    setQuery(result.title)
+    setQuery(pickDisplayTitle(result.title, result.englishTitle))
     setOpen(false)
     setMessage(null)
   }
@@ -543,11 +543,12 @@ function AnimeRefreshPicker() {
     if (!selected || refreshing) return
     setRefreshing(true)
     setMessage(null)
+    const displayTitle = pickDisplayTitle(selected.title, selected.englishTitle)
     try {
       await refreshAnime(selected.id)
-      setMessage(`Refreshed "${selected.title}".`)
+      setMessage(`Refreshed "${displayTitle}".`)
     } catch {
-      setMessage(`Couldn't refresh "${selected.title}". Please try again.`)
+      setMessage(`Couldn't refresh "${displayTitle}". Please try again.`)
     } finally {
       setRefreshing(false)
     }
@@ -573,7 +574,7 @@ function AnimeRefreshPicker() {
               <li key={result.id}>
                 <button type="button" onClick={() => pick(result)}>
                   {result.pictureUrl && <img src={result.pictureUrl} alt="" />}
-                  <span>{result.title}</span>
+                  <span>{pickDisplayTitle(result.title, result.englishTitle)}</span>
                 </button>
               </li>
             ))}

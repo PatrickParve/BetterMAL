@@ -63,6 +63,7 @@ export function SeriesBrowserPage() {
   const sort = isSortKey(sortParam) ? sortParam : DEFAULT_SORT
   const progressFilter = parseListParam<SeriesProgressFilterValue>(searchParams.get('progress'), SERIES_PROGRESS_FILTER_OPTIONS)
   const statusFilter = parseListParam<SeriesStatusFilterValue>(searchParams.get('status'), SERIES_STATUS_FILTER_OPTIONS)
+  const multiOnly = searchParams.get('multi') === '1'
 
   const { data, loading } = usePageData<SeriesBrowserReadState>('series-browser', () =>
     getSeriesList()
@@ -80,8 +81,8 @@ export function SeriesBrowserPage() {
   // transforms over the whole list — the filtered set is still sorted by
   // whatever sort is active.
   const filteredItems = useMemo(
-    () => filterSeries(items, progressFilter, statusFilter),
-    [items, progressFilter, statusFilter],
+    () => filterSeries(items, progressFilter, statusFilter, multiOnly),
+    [items, progressFilter, statusFilter, multiOnly],
   )
   const sortedItems = useMemo(() => sortSeries(filteredItems, sort), [filteredItems, sort])
 
@@ -99,6 +100,15 @@ export function SeriesBrowserPage() {
       const next = current.includes(value) ? current.filter((v) => v !== value) : [...current, value]
       if (next.length > 0) params.set(key, next.join(','))
       else params.delete(key)
+      return params
+    })
+  }
+
+  function toggleMulti() {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev)
+      if (multiOnly) params.delete('multi')
+      else params.set('multi', '1')
       return params
     })
   }
@@ -178,6 +188,19 @@ export function SeriesBrowserPage() {
                   {option.label}
                 </button>
               ))}
+            </div>
+          </div>
+          <div className="series-browser-page__filter-group">
+            <span className="series-browser-page__filter-label">Entries</span>
+            <div role="group" aria-label="Filter by entry count" className="series-browser-page__filter-buttons">
+              <button
+                type="button"
+                className={`series-browser-page__filter-button${multiOnly ? ' series-browser-page__filter-button--active' : ''}`}
+                aria-pressed={multiOnly}
+                onClick={toggleMulti}
+              >
+                Multi-entry only
+              </button>
             </div>
           </div>
           <select

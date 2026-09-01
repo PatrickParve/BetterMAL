@@ -483,10 +483,22 @@ function seriesNullsLast(
   }
 }
 
+// My average's tie-break chain (polish-search-sort-and-titles design.md D9):
+// average my-score, then average ranking position (nearer the top first),
+// then main-line episodes aired, before falling through to sortSeries' own
+// title tie-break. Two series that both have no my-average compare equal at
+// the first step and continue down the chain rather than jumping straight
+// to the title.
+const compareByMyScore = seriesNullsLast((item) => item.mineMain.value, 'descending')
+const compareByAverageRank = seriesNullsLast((item) => item.mainLineAverageRank, 'ascending')
+const compareByAiredEpisodes = seriesNullsLast((item) => item.mainLineAiredEpisodes, 'descending')
+const compareMyScoreChain = (a: SeriesListItemDto, b: SeriesListItemDto): number =>
+  compareByMyScore(a, b) || compareByAverageRank(a, b) || compareByAiredEpisodes(a, b)
+
 const SERIES_SORT_COMPARATORS: Record<SeriesSortKey, (a: SeriesListItemDto, b: SeriesListItemDto) => number> = {
   alphabetical: (a, b) => seriesDisplayTitleKey(a).localeCompare(seriesDisplayTitleKey(b)),
   malScore: seriesNullsLast((item) => item.malMain.value, 'descending'),
-  myScore: seriesNullsLast((item) => item.mineMain.value, 'descending'),
+  myScore: compareMyScoreChain,
   status: (a, b) => SERIES_STATUS_ORDER[a.status] - SERIES_STATUS_ORDER[b.status],
   // "Newest" puts the most recently started series first — descending.
   newest: seriesNullsLast((item) => item.firstYear, 'descending'),
@@ -541,15 +553,21 @@ const STATUS_FILTER_VALUES: Record<SeriesStatusFilterValue, SeriesStatus> = {
   finished: 'Finished',
 }
 
-// Two independent multi-select filters over the whole listed set: buttons
-// within one group OR together, the two groups AND together. An empty
+// Two multi-select filters plus one toggle over the whole listed set:
+// buttons within one group OR together, the groups AND together. An empty
 // selection in a group applies no filter for that group. A series with no
 // progress badge ('None') matches no Progress button — selecting any
-// Progress filter hides it, same as any other non-matching value.
+// Progress filter hides it, same as any other non-matching value. multiOnly
+// applies the identical rule ProfilePage's filterMultiEntry applies to
+// TopSeriesItemDto.mainLineAiredCount (polish-search-sort-and-titles
+// design.md D10) — the two must move together, or the Series page's toggle
+// and the profile's Top series control would disagree about what
+// "multi-entry" means.
 export function filterSeries(
   items: SeriesListItemDto[],
   progressFilter: SeriesProgressFilterValue[],
   statusFilter: SeriesStatusFilterValue[],
+  multiOnly: boolean,
 ): SeriesListItemDto[] {
   const allowedBadges =
     progressFilter.length > 0 ? new Set(progressFilter.flatMap((value) => PROGRESS_FILTER_BADGES[value])) : null
@@ -558,6 +576,7 @@ export function filterSeries(
   return items.filter((item) => {
     if (allowedBadges && !allowedBadges.has(item.progressBadge)) return false
     if (allowedStatuses && !allowedStatuses.has(item.status)) return false
+    if (multiOnly && item.mainLineAiredCount <= 1) return false
     return true
   })
 }

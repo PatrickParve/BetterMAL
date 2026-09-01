@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.EntityFrameworkCore;
 using SeriesModel = AnimeTracker.Api.Models.Series;
@@ -34,7 +35,7 @@ public class SeriesListEligibilityTests
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
 
-        Assert.Empty(index.ListedSeries([]));
+        Assert.Empty(index.ListedSeries([], AnimeRankingSnapshot.Empty));
     }
 
     [Fact]
@@ -56,7 +57,7 @@ public class SeriesListEligibilityTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.Equal(1, listed.SeriesId);
     }
@@ -72,7 +73,7 @@ public class SeriesListEligibilityTests
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
 
-        Assert.Empty(index.ListedSeries([]));
+        Assert.Empty(index.ListedSeries([], AnimeRankingSnapshot.Empty));
     }
 
     [Fact]
@@ -88,7 +89,7 @@ public class SeriesListEligibilityTests
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
-        var listed = Assert.Single(index.ListedSeries([]));
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.Equal(1, listed.SeriesId);
     }
@@ -113,6 +114,6 @@ public class SeriesListEligibilityTests
         var index = await new SeriesRankingLookup(db).LoadAsync();
 
         Assert.Empty(index.EligibleSeries());
-        Assert.Single(index.ListedSeries([]));
+        Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
     }
 }

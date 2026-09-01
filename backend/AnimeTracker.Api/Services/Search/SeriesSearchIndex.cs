@@ -32,6 +32,10 @@ public sealed class SeriesSearchIndex
     /// (exact, then prefix, then contains) and, as a tie-break, the best
     /// popularity rank among the members that matched (design.md decision
     /// 2).</summary>
+    // No empty-normalized-term guard here (design.md D2): this is only ever
+    // reached from AnimeSearchService.SearchAsync/SearchPageAsync, both of
+    // which already return early before loading the series index when the
+    // term normalizes to nothing, so `term` here is never punctuation-only.
     public List<SeriesSearchResultDto> Match(string term, bool exact)
     {
         if (_members.Count == 0)
@@ -83,21 +87,21 @@ public sealed class SeriesSearchIndex
     {
         if (exact)
         {
-            return SearchTextMatch.EqualsIgnoreCase(member.Title, term)
-                || SearchTextMatch.EqualsIgnoreCase(member.EnglishTitle, term)
-                || SearchTextMatch.EqualsIgnoreCase(member.SelectedTitle, term)
+            return SearchTextMatch.EqualsNormalized(member.Title, term)
+                || SearchTextMatch.EqualsNormalized(member.EnglishTitle, term)
+                || SearchTextMatch.EqualsNormalized(member.SelectedTitle, term)
                 ? MatchQuality.Exact
                 : null;
         }
 
-        if (SearchTextMatch.StartsWithIgnoreCase(member.Title, term)
-            || SearchTextMatch.StartsWithIgnoreCase(member.EnglishTitle, term)
-            || SearchTextMatch.StartsWithIgnoreCase(member.SelectedTitle, term))
+        if (SearchTextMatch.StartsWithNormalized(member.Title, term)
+            || SearchTextMatch.StartsWithNormalized(member.EnglishTitle, term)
+            || SearchTextMatch.StartsWithNormalized(member.SelectedTitle, term))
             return MatchQuality.Prefix;
 
-        if (SearchTextMatch.ContainsIgnoreCase(member.Title, term)
-            || SearchTextMatch.ContainsIgnoreCase(member.EnglishTitle, term)
-            || SearchTextMatch.ContainsIgnoreCase(member.SelectedTitle, term))
+        if (SearchTextMatch.ContainsNormalized(member.Title, term)
+            || SearchTextMatch.ContainsNormalized(member.EnglishTitle, term)
+            || SearchTextMatch.ContainsNormalized(member.SelectedTitle, term))
             return MatchQuality.Contains;
 
         return null;

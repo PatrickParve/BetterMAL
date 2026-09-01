@@ -779,7 +779,11 @@ export type SeriesProgressBadge = 'None' | 'Completed' | 'CaughtUp' | 'Behind' |
 // describes the same member set; entryCount is the opposite scope on
 // purpose — every member, extras included, matching SeriesBadge everywhere
 // else in the app. mainLineWatchedEpisodes/mainLineAiredEpisodes are the two
-// figures the My progress sort divides.
+// figures the My progress sort divides. mainLineAiredCount is main-line
+// members that have started airing (polish-search-sort-and-titles design.md
+// D7/D8) — the same figure the profile's Top series filter uses — and
+// mainLineAverageRank is the mean ranking position of the main-line members
+// my rankings cover, null when they cover none.
 export type SeriesListItemDto = {
   seriesId: number
   rootAnimeId: number
@@ -799,6 +803,8 @@ export type SeriesListItemDto = {
   entryCount: number
   mainLineWatchedEpisodes: number
   mainLineAiredEpisodes: number
+  mainLineAiredCount: number
+  mainLineAverageRank: number | null
 }
 
 // Every series eligible for the Series page (add-series-browser design.md

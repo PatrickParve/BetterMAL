@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.EntityFrameworkCore;
 using SeriesModel = AnimeTracker.Api.Models.Series;
@@ -39,6 +40,24 @@ public class SeriesListOrderingTests
             Task.FromResult(new Dictionary<int, int>());
     }
 
+    // None of these tests order by ranking — a stub returning the empty
+    // ranking is enough (design.md D7/tasks.md 2.7).
+    private sealed class UnusedAnimeRankingService : IAnimeRankingService
+    {
+        public Task<AnimeRankingSnapshot> GetSnapshotAsync(CancellationToken ct = default) =>
+            Task.FromResult(AnimeRankingSnapshot.Empty);
+        public Task<List<AnimeRankingScoreCountDto>> GetScoreCountsAsync(string mediaTypeScope, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<AnimeRankingTierDto?> GetTierAsync(int score, string mediaTypeScope, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task ApplyTierOrderAsync(List<AnimeRankingTierOrderRequest> tiers, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task MoveAdjacentAsync(int promotedAnimeId, int demotedAnimeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task PlaceLastInTierAsync(int animeId, int score, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+    }
+
     [Fact]
     public async Task DefaultOrder_MyAverageDescendingWithNullsLastThenTitle()
     {
@@ -48,7 +67,7 @@ public class SeriesListOrderingTests
         AddSeries(db, 3, 300, "Beta", myScore: 9);
         await db.SaveChangesAsync();
 
-        var service = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService());
+        var service = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService(), new UnusedAnimeRankingService());
         var result = await service.GetSeriesListAsync();
 
         Assert.Equal(["Beta", "Zeta", "Alpha"], result.Items.Select(i => i.Title));
@@ -62,7 +81,7 @@ public class SeriesListOrderingTests
         AddSeries(db, 2, 200, "Apple", myScore: 8);
         await db.SaveChangesAsync();
 
-        var service = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService());
+        var service = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService(), new UnusedAnimeRankingService());
         var result = await service.GetSeriesListAsync();
 
         Assert.Equal(["Apple", "banana"], result.Items.Select(i => i.Title));
@@ -77,7 +96,7 @@ public class SeriesListOrderingTests
         AddSeries(db, 3, 300, "Beta", myScore: 9);
         await db.SaveChangesAsync();
 
-        var service = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService());
+        var service = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService(), new UnusedAnimeRankingService());
         var first = await service.GetSeriesListAsync();
         var second = await service.GetSeriesListAsync();
 

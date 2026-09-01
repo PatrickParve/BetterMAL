@@ -17,6 +17,7 @@ import { PicturePickerOverlay } from "../components/PicturePickerOverlay.tsx";
 import { ProgressBar } from "../components/ProgressBar.tsx";
 import { RelatedAnimeOverlay } from "../components/RelatedAnimeOverlay.tsx";
 import { ScoreValue } from "../components/ScoreValue.tsx";
+import { SpaceWrappedTitle } from "../components/SpaceWrappedTitle.tsx";
 import { useEntryEditor } from "../context/EntryEditorContext.tsx";
 import {
   useEpisodeIncrement,
@@ -374,7 +375,9 @@ export function AnimeDetailPage() {
     <div className="anime-detail-page">
       <div className="anime-detail-page__header">
         <div className="anime-detail-page__top">
-          <h1>{pickDisplayTitle(detail.title, detail.englishTitle)}</h1>
+          <h1>
+            <SpaceWrappedTitle text={pickDisplayTitle(detail.title, detail.englishTitle)} />
+          </h1>
 
           <div className="anime-detail-page__related">
             {hasSeriesRelation && (

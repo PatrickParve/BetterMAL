@@ -33,7 +33,11 @@ public class AnimeSearchService(
     public async Task<List<AnimeSearchResultDto>> SearchAsync(string query, int limit, CancellationToken ct = default)
     {
         var (term, exact) = ParseQuery(query);
-        if (term.Length == 0)
+        // A term that normalizes to nothing (e.g. "!!!") must match nothing,
+        // not every title (design.md D2) — checked before any index load or
+        // MAL call. Subsumes the old zero-length check since an empty term
+        // normalizes to empty too.
+        if (SearchTextMatch.Normalize(term).Length == 0)
             return [];
 
         var index = await repository.GetSearchIndexAsync(ct);
@@ -53,26 +57,32 @@ public class AnimeSearchService(
 
         var merged = MergeById(localCandidates, malCandidates);
 
+        // `term` is renormalized inside each SearchTextMatch call below
+        // rather than once up front — the cost is a few thousand short
+        // strings per request, negligible beside the index round trip this
+        // method already pays (design.md D1). `term` itself stays raw so it
+        // still reaches SearchMalAsync and ScheduleSeriesBuildForTopMatch
+        // unchanged.
         IEnumerable<SearchCandidate> ranked;
         if (exact)
         {
             ranked = merged
-                .Where(c => SearchTextMatch.EqualsIgnoreCase(c.Title, term) || SearchTextMatch.EqualsIgnoreCase(c.EnglishTitle, term))
+                .Where(c => SearchTextMatch.EqualsNormalized(c.Title, term) || SearchTextMatch.EqualsNormalized(c.EnglishTitle, term))
                 .OrderBy(c => SearchTextMatch.PopularityKey(c.PopularityRank))
                 .ThenBy(c => c.Title, StringComparer.OrdinalIgnoreCase);
         }
         else
         {
             var matches = merged
-                .Where(c => SearchTextMatch.ContainsIgnoreCase(c.Title, term) || SearchTextMatch.ContainsIgnoreCase(c.EnglishTitle, term))
+                .Where(c => SearchTextMatch.ContainsNormalized(c.Title, term) || SearchTextMatch.ContainsNormalized(c.EnglishTitle, term))
                 .ToList();
 
             var prefix = matches
-                .Where(c => SearchTextMatch.StartsWithIgnoreCase(c.Title, term) || SearchTextMatch.StartsWithIgnoreCase(c.EnglishTitle, term))
+                .Where(c => SearchTextMatch.StartsWithNormalized(c.Title, term) || SearchTextMatch.StartsWithNormalized(c.EnglishTitle, term))
                 .OrderBy(c => SearchTextMatch.PopularityKey(c.PopularityRank))
                 .ThenBy(c => c.Title, StringComparer.OrdinalIgnoreCase);
             var rest = matches
-                .Where(c => !SearchTextMatch.StartsWithIgnoreCase(c.Title, term) && !SearchTextMatch.StartsWithIgnoreCase(c.EnglishTitle, term))
+                .Where(c => !SearchTextMatch.StartsWithNormalized(c.Title, term) && !SearchTextMatch.StartsWithNormalized(c.EnglishTitle, term))
                 .OrderBy(c => SearchTextMatch.PopularityKey(c.PopularityRank))
                 .ThenBy(c => c.Title, StringComparer.OrdinalIgnoreCase);
 
@@ -108,7 +118,10 @@ public class AnimeSearchService(
     public async Task<SearchPageDto> SearchPageAsync(string query, string sortKey, int offset, int limit, CancellationToken ct = default)
     {
         var (term, exact) = ParseQuery(query);
-        if (term.Length == 0)
+        // See the matching guard in SearchAsync (design.md D2): a
+        // punctuation-only term normalizes to nothing and must match
+        // nothing.
+        if (SearchTextMatch.Normalize(term).Length == 0)
             return new SearchPageDto(query, [], offset, limit, 0, [], false);
 
         const int MaxResults = 100;
@@ -138,7 +151,7 @@ public class AnimeSearchService(
 
             if (exact)
             {
-                candidates = candidates.Where(c => SearchTextMatch.EqualsIgnoreCase(c.Title, term) || SearchTextMatch.EqualsIgnoreCase(c.EnglishTitle, term));
+                candidates = candidates.Where(c => SearchTextMatch.EqualsNormalized(c.Title, term) || SearchTextMatch.EqualsNormalized(c.EnglishTitle, term));
             }
 
             filtered = candidates.ToList();
@@ -204,15 +217,15 @@ public class AnimeSearchService(
         var index = await repository.GetSearchFallbackIndexAsync(ct);
 
         var matching = exact
-            ? index.Where(a => SearchTextMatch.EqualsIgnoreCase(a.Title, term) || SearchTextMatch.EqualsIgnoreCase(a.EnglishTitle, term))
-            : index.Where(a => SearchTextMatch.ContainsIgnoreCase(a.Title, term) || SearchTextMatch.ContainsIgnoreCase(a.EnglishTitle, term));
+            ? index.Where(a => SearchTextMatch.EqualsNormalized(a.Title, term) || SearchTextMatch.EqualsNormalized(a.EnglishTitle, term))
+            : index.Where(a => SearchTextMatch.ContainsNormalized(a.Title, term) || SearchTextMatch.ContainsNormalized(a.EnglishTitle, term));
 
         var truncated = matching.Take(maxResults).ToList();
 
         bool IsExactMatch(AnimeSearchFallbackProjection a) =>
-            SearchTextMatch.EqualsIgnoreCase(a.Title, term) || SearchTextMatch.EqualsIgnoreCase(a.EnglishTitle, term);
+            SearchTextMatch.EqualsNormalized(a.Title, term) || SearchTextMatch.EqualsNormalized(a.EnglishTitle, term);
         bool IsPrefixMatch(AnimeSearchFallbackProjection a) =>
-            SearchTextMatch.StartsWithIgnoreCase(a.Title, term) || SearchTextMatch.StartsWithIgnoreCase(a.EnglishTitle, term);
+            SearchTextMatch.StartsWithNormalized(a.Title, term) || SearchTextMatch.StartsWithNormalized(a.EnglishTitle, term);
 
         var exactBand = truncated.Where(IsExactMatch)
             .OrderBy(a => SearchTextMatch.PopularityKey(a.PopularityRank))
