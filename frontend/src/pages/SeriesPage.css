@@ -197,6 +197,29 @@
   margin: 0;
 }
 
+/* When a version slot's picker needs to start at the very top of the Main
+   series box (series-versions "The picker SHALL be rendered above the first
+   card of the route it selects"), the heading is pulled out of the box's
+   flex flow so it no longer pushes the timeline — and so the picker — down
+   by its own line height. Positioned at the same inset the box's padding
+   would have given it in flow, so it reads exactly where it always has;
+   the timeline (and the picker stacked above its first row) now starts
+   there too, on the same line as the heading or above it, rather than below
+   it. pointer-events: none lets a click on a card or picker button that
+   happens to sit under the heading's text through to it, since the heading
+   itself is not interactive. */
+.series-page__main-line-box--sloted {
+  position: relative;
+}
+
+.series-page__main-line-box--sloted h2 {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 1;
+  pointer-events: none;
+}
+
 .series-page__score-chips {
   display: flex;
   flex-wrap: wrap;
@@ -294,6 +317,24 @@
 }
 
 .series-page__entries-completed-label {
+  min-width: 56px;
+  color: var(--text);
+  opacity: 0.6;
+  font-size: 12px;
+}
+
+.series-page__time-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.series-page__time-stat-row {
+  display: flex;
+  gap: 6px;
+}
+
+.series-page__time-stat-label {
   min-width: 56px;
   color: var(--text);
   opacity: 0.6;
@@ -495,22 +536,34 @@
   opacity: 1;
 }
 
-/* A version slot's picker (series-versions "Alternative versions on a main
-   line share one watch-order position"), rendered inside SeriesTimeline's
-   own card markup (task 8.3) but styled here, in the page's other button-
-   group control language — mirrors .series-page__type-filter-button, sized
-   down to fit a 192px timeline card and allowed to wrap onto a second line
-   when a slot holds more than two or three alternatives. */
+/* A version slot's picker (series-versions "The picker SHALL be rendered
+   above the first card of the route it selects"), rendered inside
+   SeriesTimeline's own picker-rail markup but styled here, in the page's
+   other button-group control language. Stacked one alternative per row,
+   each the card's full width, rather than splitting one line N ways — with
+   only two or three alternatives typical, a full-width row reads each
+   title without the ellipsis-heavy squeeze a side-by-side split forced.
+   flex: 0 0 auto on the buttons keeps each at its own natural height rather
+   than sharing the rail's height evenly; the rail's own height is computed
+   from this exact button height (SeriesTimeline.css). */
 .series-page__slot-picker {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 4px;
-  padding: 4px 8px 0;
+  height: 100%;
 }
 
 .series-page__slot-picker-button {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  width: 100%;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  /* flex-start, not center: a centered label that's wider than the button
+     overflows equally on both sides, so the start of the title disappears
+     off the left edge with no ellipsis to mark it. Left-aligned, only the
+     end ever truncates, where text-overflow: ellipsis already marks it. */
+  justify-content: flex-start;
   font: inherit;
   font-size: 10px;
   line-height: 1.3;

@@ -61,6 +61,20 @@ public class RankingController(IAnimeRankingService rankingService) : Controller
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    /// <summary>The series page's tied-favourite reorder: moves
+    /// <see cref="AnimeRankingMoveAdjacentRequest.DemotedAnimeId"/> to sit
+    /// immediately after <see cref="AnimeRankingMoveAdjacentRequest.PromotedAnimeId"/>
+    /// within their shared score tier, so a favourite tie broken on the
+    /// series page is reflected the same way everywhere else the ranking is
+    /// read. A no-op, reported as success, when the pair isn't currently
+    /// hand-orderable at the same score.</summary>
+    [HttpPut("api/rankings/move-adjacent")]
+    public async Task<IActionResult> MoveAdjacent([FromBody] AnimeRankingMoveAdjacentRequest request, CancellationToken ct)
+    {
+        await rankingService.MoveAdjacentAsync(request.PromotedAnimeId, request.DemotedAnimeId, ct);
+        return NoContent();
+    }
 }
 
 public record AnimeRankingResponseDto(List<AnimeRankingScoreCountDto> Scores, AnimeRankingTierDto? Tier);
@@ -70,3 +84,5 @@ public class AnimeRankingOrderRequest
     public string MediaType { get; set; } = "";
     public List<AnimeRankingTierOrderRequest> Tiers { get; set; } = [];
 }
+
+public record AnimeRankingMoveAdjacentRequest(int PromotedAnimeId, int DemotedAnimeId);

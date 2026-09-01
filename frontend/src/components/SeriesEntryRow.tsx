@@ -6,8 +6,6 @@ import './SeriesEntryRow.css'
 
 type SeriesEntryRowProps = {
   entry: SeriesEntryDto
-  /** Watch-order number for main-line rows; omitted for More-section rows. */
-  rank?: number
   onEdit: (entry: SeriesEntryDto) => void
 }
 
@@ -34,7 +32,7 @@ export function watchedFigureLabel(entry: SeriesEntryDto): string | null {
 // editor. Same split-link shape as AnimeCard/MyListRow: the edit button sits
 // outside the <Link> so it never triggers navigation, and the hover
 // highlight matches the my-list/top-anime row treatment.
-export function SeriesEntryRow({ entry, rank, onEdit }: SeriesEntryRowProps) {
+export function SeriesEntryRow({ entry, onEdit }: SeriesEntryRowProps) {
   const displayTitle = pickDisplayTitle(entry.title, entry.englishTitle)
   const year = entry.airedFrom ? entry.airedFrom.slice(0, 4) : null
   const statusClass = entry.entry ? ` series-entry-row--${STATUS_CLASS[entry.entry.status]}` : ''
@@ -43,7 +41,6 @@ export function SeriesEntryRow({ entry, rank, onEdit }: SeriesEntryRowProps) {
 
   return (
     <li className={`series-entry-row${statusClass}`}>
-      {rank !== undefined && <span className="series-entry-row__rank">#{rank}</span>}
       <Link to={`/anime/${entry.animeId}`} className="series-entry-row__link">
         {entry.pictureUrl ? (
           <img src={entry.pictureUrl} alt="" className="series-entry-row__picture" />

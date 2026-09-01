@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import type { SeriesEntryDto, SeriesSlotDto } from '../api/types.ts'
 import { useLandscapePicture } from '../hooks/useLandscapePicture.ts'
@@ -9,22 +10,29 @@ import './SeriesTimeline.css'
 
 // A slotted position's picker inputs (series-versions "Alternative versions on
 // a main line share one watch-order position"): options is every alternative
-// of the entry's own slot, resolved from allEntries since only the picked one
-// is ever present in the visible entries array itself.
+// of the slot, resolved from allEntries since only the picked one is ever
+// present in the visible entries array itself. activeAnimeId is the resolved
+// pick, needed here because the picker-owning column (design decision 8)
+// need not be the active alternative's own card.
 type SlotPicker = {
   options: SeriesEntryDto[]
+  activeAnimeId: number
   onPick: (animeId: number) => void
 }
 
 type SeriesTimelineProps = {
   /** Visible main-line entries in watch order — trunk plus, per slot, the
-   * picked alternative and its branch (series-versions capability). Numbered
-   * from 1 over exactly this array, so switching a pick never skips a number. */
+   * picked alternative and its branch (series-versions capability). */
   entries: SeriesEntryDto[]
   /** Every main-line entry, every alternative included — resolves a slotted
    * position's picker options, which aren't all present in `entries`. */
   allEntries: SeriesEntryDto[]
   slots: SeriesSlotDto[]
+  /** Each slot's resolved pick (SeriesPage's resolveSeriesPick) — locates the
+   * picker-owning column (series-versions design decision 8: the first entry
+   * of `entries`, already in watch order, whose branchHeadAnimeId is the
+   * slot's resolved pick) and which option in it reads as active. */
+  resolvedPick: Record<number, number>
   onPick: (slotKey: number, animeId: number) => void
   onEdit: (entry: SeriesEntryDto) => void
 }
@@ -72,41 +80,89 @@ function formatAirRange(entry: SeriesEntryDto): string {
 // which is also why a version slot's picker lives here rather than in a
 // second, non-chronological rendering of the main line
 // (rebuild-series-by-story-component task 8.3).
-export function SeriesTimeline({ entries, allEntries, slots, onPick, onEdit }: SeriesTimelineProps) {
-  const slotByKey = new Map(slots.map((slot) => [slot.slotKey, slot]))
+export function SeriesTimeline({ entries, allEntries, slots, resolvedPick, onPick, onEdit }: SeriesTimelineProps) {
   const entryById = new Map(allEntries.map((entry) => [entry.animeId, entry]))
+  const hasSlots = slots.length > 0
+
+  // The picker-owning column per slot (series-versions design decision 8):
+  // the first entry of `entries` — already in watch order — whose
+  // branchHeadAnimeId is the slot's resolved pick. SeriesVersionSlots puts an
+  // alternative in its own branch, so one predicate covers both the case
+  // where the route starts at the alternative itself and the case where a
+  // branch entry (a prologue) precedes it in story order.
+  const pickerByColumn = new Map<number, SlotPicker>()
+  for (const slot of slots) {
+    const activeAnimeId = resolvedPick[slot.slotKey]
+    const owner = entries.find((entry) => entry.branchHeadAnimeId === activeAnimeId)
+    if (!owner) continue
+    pickerByColumn.set(owner.animeId, {
+      options: slot.alternativeAnimeIds
+        .map((id) => entryById.get(id))
+        .filter((option): option is SeriesEntryDto => option != null),
+      activeAnimeId,
+      onPick: (animeId) => onPick(slot.slotKey, animeId),
+    })
+  }
+
+  // The tallest stack of buttons any slot in this series needs — every
+  // column's rail is this many rows tall (SeriesTimeline.css), whether or
+  // not it owns a picker, so every card's top edge lines up regardless of
+  // which column the picker lands in.
+  const maxOptionCount = hasSlots ? Math.max(...slots.map((slot) => slot.alternativeAnimeIds.length)) : 0
 
   return (
     <div className="series-timeline">
-      <div className="series-timeline__scroll">
-        <div className="series-timeline__row">
-          {entries.map((entry, index) => {
-            const slot = entry.versionSlotKey !== null ? slotByKey.get(entry.versionSlotKey) : undefined
-            const picker: SlotPicker | undefined = slot && {
-              options: slot.alternativeAnimeIds
-                .map((id) => entryById.get(id))
-                .filter((option): option is SeriesEntryDto => option != null),
-              onPick: (animeId) => onPick(slot.slotKey, animeId),
-            }
-            return (
-              <TimelineCard key={entry.animeId} entry={entry} number={index + 1} picker={picker} onEdit={onEdit} />
-            )
-          })}
+      <div className={`series-timeline__scroll${hasSlots ? ' series-timeline__scroll--sloted' : ''}`}>
+        <div className="series-timeline__row" style={hasSlots ? ({ '--picker-rows': maxOptionCount } as CSSProperties) : undefined}>
+          {entries.map((entry) => (
+            <div className="series-timeline__col" key={entry.animeId}>
+              {hasSlots && (
+                <div className="series-timeline__picker-rail">
+                  {pickerByColumn.has(entry.animeId) && <SlotPickerButtons picker={pickerByColumn.get(entry.animeId)!} />}
+                </div>
+              )}
+              <TimelineCard entry={entry} onEdit={onEdit} />
+            </div>
+          ))}
         </div>
       </div>
     </div>
   )
 }
 
+// Stacked one per row, each the full width of the card it sits above
+// (series-versions "The picker SHALL be rendered above the first card of the
+// route it selects") — every alternative gets its own line rather than
+// splitting one line N ways, which is what lets the rail's height (and so
+// its top edge) be computed from option count alone (SeriesTimeline.css).
+function SlotPickerButtons({ picker }: { picker: SlotPicker }) {
+  const optionTitles = picker.options.map((option) => pickDisplayTitle(option.title, option.englishTitle))
+  return (
+    <div className="series-page__slot-picker" role="group" aria-label={`Choose version: ${optionTitles.join(' or ')}`}>
+      {picker.options.map((option, i) => {
+        const active = option.animeId === picker.activeAnimeId
+        return (
+          <button
+            key={option.animeId}
+            type="button"
+            className={`series-page__slot-picker-button${active ? ' series-page__slot-picker-button--active' : ''}`}
+            aria-pressed={active}
+            title={optionTitles[i]}
+            onClick={() => picker.onPick(option.animeId)}
+          >
+            {optionTitles[i]}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function TimelineCard({
   entry,
-  number,
-  picker,
   onEdit,
 }: {
   entry: SeriesEntryDto
-  number: number
-  picker: SlotPicker | undefined
   onEdit: (entry: SeriesEntryDto) => void
 }) {
   const displayTitle = pickDisplayTitle(entry.title, entry.englishTitle)
@@ -125,29 +181,6 @@ function TimelineCard({
     <div
       className={`series-timeline__card${undated ? ' series-timeline__card--undated' : ''}${isLandscape ? ' series-timeline__card--landscape' : ''}`}
     >
-      <div className="series-timeline__card-header">
-        <span className="series-timeline__card-number">{number}</span>
-      </div>
-      {picker && (
-        <div className="series-page__slot-picker" role="group" aria-label={`Choose version for watch order position ${number}`}>
-          {picker.options.map((option) => {
-            const optionTitle = pickDisplayTitle(option.title, option.englishTitle)
-            const active = option.animeId === entry.animeId
-            return (
-              <button
-                key={option.animeId}
-                type="button"
-                className={`series-page__slot-picker-button${active ? ' series-page__slot-picker-button--active' : ''}`}
-                aria-pressed={active}
-                title={optionTitle}
-                onClick={() => picker.onPick(option.animeId)}
-              >
-                {optionTitle}
-              </button>
-            )
-          })}
-        </div>
-      )}
       <Link to={`/anime/${entry.animeId}`} className="series-timeline__card-link">
         {entry.pictureUrl ? (
           <img ref={pictureRef} src={entry.pictureUrl} alt="" className="series-timeline__card-picture" />

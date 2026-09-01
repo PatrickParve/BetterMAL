@@ -2,9 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   getSeries,
+  moveFavouriteAdjacent,
   rebuildSeries,
   refreshSeriesPictures,
-  setSeriesFavouriteOrder,
   setSeriesPicture,
   setSeriesTitle,
 } from '../api/client.ts'
@@ -41,6 +41,7 @@ import {
   mediaTypeLabel,
   pickDisplayTitle,
 } from '../utils/anime.ts'
+import { deriveSeriesStats, effectiveWatchedEpisodes, realExtras } from '../utils/seriesStats.ts'
 import './SeriesPage.css'
 
 const MAX_REBUILD_ROUNDS = 12
@@ -84,8 +85,12 @@ function mineAverage(entries: SeriesEntryDto[]): SeriesAverageDto {
   }
 }
 
-function recomputeScores(mainLine: SeriesEntryDto[], extras: SeriesEntryDto[]) {
-  const all = [...mainLine, ...extras]
+// realMembers must already be the real extras (realExtras from
+// seriesStats.ts), not the raw display list — related entries the server
+// excludes from every average (design.md decision 6 of
+// polish-series-page-more-and-routes).
+function recomputeScores(mainLine: SeriesEntryDto[], realMembers: SeriesEntryDto[]) {
+  const all = [...mainLine, ...realMembers]
   return {
     malMain: malAverage(mainLine),
     malAll: malAverage(all),
@@ -94,44 +99,63 @@ function recomputeScores(mainLine: SeriesEntryDto[], extras: SeriesEntryDto[]) {
   }
 }
 
-// Mirrors SeriesService's tie-break rule for my-highest-score ties: an
-// entry already present in the previous (server-ordered) tie list keeps its
-// relative order; an entry newly entering the tie has no known favourite
-// rank client-side, so it's unranked — appended in watch order, same as the
-// backend does for an unranked entry (task 6.6). malScore never changes
-// through a row edit, so highestMalScoreAnimeIds needs no equivalent here.
-function recomputeMyHighestIds(prevIds: number[], mainLine: SeriesEntryDto[], extras: SeriesEntryDto[]): number[] {
-  const all = [...mainLine, ...extras]
+// Mirrors SeriesService's tie-break rule for my-highest-score ties: sorted
+// by each entry's globalRank — its place in the anime-ranking capability's
+// whole-library ranking (polish-... design.md D?) — ascending, so the
+// favourite list agrees with, and a series-page reorder can move, the same
+// ranking the ranking editor produces. An entry outside that ranking (never
+// hand-ordered) sorts last, same as the server's tie-break. malScore never
+// changes through a row edit, so highestMalScoreAnimeIds needs no equivalent
+// here. realMembers — see recomputeScores above.
+function recomputeMyHighestIds(mainLine: SeriesEntryDto[], realMembers: SeriesEntryDto[]): number[] {
+  const all = [...mainLine, ...realMembers]
   const scored = all.filter((e) => (e.entry?.myScore ?? 0) > 0)
   if (scored.length === 0) return []
 
   const max = Math.max(...scored.map((e) => e.entry!.myScore!))
   const tied = scored.filter((e) => e.entry!.myScore === max)
-  const tiedIds = new Set(tied.map((e) => e.animeId))
+  return tied
+    .slice()
+    .sort((a, b) => (a.globalRank ?? Infinity) - (b.globalRank ?? Infinity))
+    .map((e) => e.animeId)
+}
 
-  const known = prevIds.filter((id) => tiedIds.has(id))
-  const knownSet = new Set(known)
-  const newlyTied = tied.filter((e) => !knownSet.has(e.animeId)).map((e) => e.animeId)
-  return [...known, ...newlyTied]
+// Mirrors BuildStats' TiedTopIds for mostRewatchedAnimeIds with no
+// tie-break key: every entry whose rewatch count ties the maximum (above
+// zero), in watch order — main line then real extras, the order the two
+// arrays are already in (design.md decision 4). A rewatch count is
+// editable, so this stat goes stale without a recomputation on every edit,
+// unlike highestMalScoreAnimeIds.
+function recomputeMostRewatchedIds(mainLine: SeriesEntryDto[], realMembers: SeriesEntryDto[]): number[] {
+  const all = [...mainLine, ...realMembers]
+  const rewatched = all.filter((e) => (e.entry?.rewatchCount ?? 0) > 0)
+  if (rewatched.length === 0) return []
+
+  const max = Math.max(...rewatched.map((e) => e.entry!.rewatchCount))
+  return rewatched.filter((e) => e.entry!.rewatchCount === max).map((e) => e.animeId)
 }
 
 // Patches one entry's UserAnimeEntryDto into whichever of mainLine/extras it
-// lives in and recomputes the four averages and the my-favourite tie list
-// from the result — an edit can change both (task 6.6). The completion badge
-// is *not* recomputed here: it derives straight from series.mainLine on
-// every render (completionBadge below), so patching the entry array is
-// already enough to keep it current.
+// lives in and recomputes the four averages and the my-favourite/most-
+// rewatched tie lists from the result — an edit can change any of them
+// (task 6.6). Every recomputation is scoped to the real extras, not the raw
+// display list, matching the member basis BuildStats itself uses
+// (design.md decision 6). The completion badge is *not* recomputed here: it
+// derives straight from series.mainLine on every render (completionBadge
+// below), so patching the entry array is already enough to keep it current.
 function patchSeriesEntry(series: SeriesDto, animeId: number, entry: UserAnimeEntryDto | null): SeriesDto {
   const patch = (entries: SeriesEntryDto[]) => entries.map((e) => (e.animeId === animeId ? { ...e, entry } : e))
   const mainLine = patch(series.mainLine)
   const extras = patch(series.extras)
-  const myHighestScoreAnimeIds = recomputeMyHighestIds(series.stats.myHighestScoreAnimeIds, mainLine, extras)
+  const realMembers = realExtras(extras)
+  const myHighestScoreAnimeIds = recomputeMyHighestIds(mainLine, realMembers)
+  const mostRewatchedAnimeIds = recomputeMostRewatchedIds(mainLine, realMembers)
   return {
     ...series,
     mainLine,
     extras,
-    scores: recomputeScores(mainLine, extras),
-    stats: { ...series.stats, myHighestScoreAnimeIds },
+    scores: recomputeScores(mainLine, realMembers),
+    stats: { ...series.stats, myHighestScoreAnimeIds, mostRewatchedAnimeIds },
   }
 }
 
@@ -167,13 +191,12 @@ function isDefaultPick(slots: SeriesSlotDto[], resolvedPick: Record<number, numb
 // Resolves the SeriesStatsDto for the reader's current pick (design.md D6,
 // task 8.4). Deliberately not a client-side re-derivation — the server
 // already computed one SeriesStatsDto per admissible combination
-// (statsByPick), so this just looks the matching one up. At the default pick
-// — no slots, or every slot still on its default — this returns series.stats
-// directly rather than the equal-but-distinct statsByPick entry, so an
-// in-place score/status edit (patchSeriesEntry) keeps showing live here
-// exactly as it did before this capability; only after the reader actively
-// switches a slot away from its default does this read from the server's
-// last-fetched statsByPick snapshot instead.
+// (statsByPick), so this just looks the matching one up. This is the *base*
+// deriveSeriesStats (seriesStats.ts) then patches with edit-sensitive
+// figures (polish-series-page-more-and-routes design.md decision 5) — that
+// derivation, not which snapshot this function picks, is what now keeps an
+// edit live on every route; this function still supplies everything else
+// (episode/runtime totals, aired figures, the longest gap, studios, genres).
 function statsForPick(series: SeriesDto, resolvedPick: Record<number, number>): SeriesStatsDto {
   if (isDefaultPick(series.slots, resolvedPick)) return series.stats
   const wanted = series.slots.map((slot) => resolvedPick[slot.slotKey])
@@ -257,19 +280,6 @@ function malGroupRevealed(group: SeriesEntryDto[], series: SeriesDto): boolean {
   if (series.stats.mainLineCompletedByMe && !mainLineAiring) return true
   const anySeriesAiring = [...series.mainLine, ...series.extras].some((e) => e.airingStatus === 'currently_airing')
   return isGroupCompleted(group) && !anySeriesAiring
-}
-
-// An entry's effective watched-episode figure (polish-rewatch design.md D2):
-// a Rewatching entry counts as fully watched — the greater of its own
-// episodesWatched and its aired-so-far figure — since entering Rewatching
-// resets episodesWatched to 0. Every other status reads episodesWatched as
-// recorded. Mirrors the backend's WatchMath.EffectiveWatchedEpisodes exactly,
-// using this entry's own airedEpisodes (null-means-unknown, treated as "fall
-// back to episodesWatched") rather than restating that fallback here.
-function effectiveWatchedEpisodes(entry: SeriesEntryDto): number {
-  const watched = entry.entry?.episodesWatched ?? 0
-  if (entry.entry?.status !== 'Rewatching') return watched
-  return Math.max(watched, entry.airedEpisodes ?? watched)
 }
 
 // Computed client-side from the main-line entry array rather than a server
@@ -447,9 +457,11 @@ export function SeriesPage() {
   }, [data, animeId, setData])
 
   // More-section view state (design.md decision 3): `mineOnly` is the "in my
-  // list" filter, on by default; `collapsedGroups` is per-group collapse,
-  // all expanded by default; `unfilteredGroups` tracks groups where "+N
-  // more" was used to see past the filter without disabling it everywhere.
+  // list" filter, on by default; `collapsedGroups` is per-group collapse, all
+  // collapsed by default (polish-series-page-more-and-routes design.md
+  // decision 1 — an absent key reads as collapsed); `unfilteredGroups` tracks
+  // groups where "+N more" was used to see past the filter without disabling
+  // it everywhere.
   // Restorable like the page's other view controls (polish-rewatch-more-
   // and-filters design.md D3): the `pageStateStore` snapshot holds live
   // object references and never serialises, so the `Set` and `Record`
@@ -506,6 +518,27 @@ export function SeriesPage() {
     setPendingScrollGroupKey(null)
   }, [pendingScrollGroupKey])
 
+  // Scroll-on-pick: picking an alternative changes the stats box above the
+  // Main series section (favourites, entries completed, the time figures),
+  // which can change height and shift the Main series box up or down
+  // depending on where the reader had scrolled to when they clicked. Pinning
+  // the box to the top of the viewport on every pick — the same
+  // scroll-to-top-of-viewport move the More section's group headings use
+  // above — keeps the reader oriented on the box they just acted on, and
+  // makes a second switch a no-op scroll once the box is already there.
+  const mainLineBoxRef = useRef<HTMLElement>(null)
+  const [pendingScrollToMainLine, setPendingScrollToMainLine] = useState(false)
+
+  useLayoutEffect(() => {
+    if (!pendingScrollToMainLine) return
+    const box = mainLineBoxRef.current
+    if (box) {
+      const target = box.getBoundingClientRect().top + window.scrollY
+      window.scrollTo(0, target)
+    }
+    setPendingScrollToMainLine(false)
+  }, [pendingScrollToMainLine])
+
   // Stops an in-flight rebuild loop from issuing another round once the page
   // has navigated away (design.md decision 2) — a round already in flight is
   // simply discarded rather than cancelled mid-request.
@@ -552,18 +585,24 @@ export function SeriesPage() {
   }
 
   // Reorders locally first so the buttons feel immediate, then persists the
-  // whole ordered list; a failed save reverts to the order that was actually
-  // stored (design.md decision 11).
-  async function handleReorderFavourite(seriesId: number, currentOrder: number[], index: number, direction: -1 | 1) {
+  // change into the whole-library ranking (design.md decision 11): the
+  // demoted entry moves to sit immediately after the promoted one in their
+  // shared score tier there too, so the favourite list — sorted by that same
+  // ranking — and the ranking editor never disagree. A failed save reverts
+  // to the order that was actually stored.
+  async function handleReorderFavourite(currentOrder: number[], index: number, direction: -1 | 1) {
     const targetIndex = index + direction
     if (targetIndex < 0 || targetIndex >= currentOrder.length) return
 
     const reordered = [...currentOrder]
     ;[reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]]
 
+    const promotedAnimeId = direction === -1 ? currentOrder[index] : currentOrder[targetIndex]
+    const demotedAnimeId = direction === -1 ? currentOrder[targetIndex] : currentOrder[index]
+
     patchSeries((series) => ({ ...series, stats: { ...series.stats, myHighestScoreAnimeIds: reordered } }))
     try {
-      await setSeriesFavouriteOrder(seriesId, reordered)
+      await moveFavouriteAdjacent(promotedAnimeId, demotedAnimeId)
     } catch {
       patchSeries((series) => ({ ...series, stats: { ...series.stats, myHighestScoreAnimeIds: currentOrder } }))
     }
@@ -612,6 +651,7 @@ export function SeriesPage() {
   // title or picture" — a plain local state write, no request.
   function handlePickAlternative(slotKey: number, animeId: number) {
     setPick((prev) => ({ ...prev, [slotKey]: animeId }))
+    setPendingScrollToMainLine(true)
   }
 
   // series-page "A More group's heading opens that group in full"
@@ -631,18 +671,6 @@ export function SeriesPage() {
     setPendingScrollGroupKey(key)
   }
 
-  // Multi-select toggle for the media-type filter row (task 10.3): selecting
-  // narrows every group to that type, alongside whatever else is already
-  // selected; selecting none narrows nothing.
-  function toggleMediaType(mediaType: string) {
-    setSelectedMediaTypes((prev) => {
-      const next = new Set(prev)
-      if (next.has(mediaType)) next.delete(mediaType)
-      else next.add(mediaType)
-      return next
-    })
-  }
-
   // Reveals a group's remaining tiles from its "+N more" control, which is
   // only ever offered on an expanded group hiding some of its own behind the
   // filter (design.md D3) — so this is always the unfilter case; a collapsed
@@ -653,14 +681,13 @@ export function SeriesPage() {
 
   // design.md D2: filterActive reports whether the filter is actually in
   // force everywhere, not just the stored intent — so opening one group in
-  // full (D1) immediately reads as "off" here too. Pressing while active
-  // turns the filter off; pressing while inactive turns it on and resets
-  // every per-group override, returning the section to the state a freshly
-  // opened series page is in (both directions already reset the same way).
+  // full (D1) immediately reads as "off" here too. This control governs only
+  // what an expanded group shows, never a group's collapsed state: pressing
+  // while active turns the filter off; pressing while inactive turns it on
+  // and drops every per-group filter exemption.
   function toggleMineOnly() {
     setMineOnly(!filterActive)
     setUnfilteredGroups(new Set())
-    setCollapsedGroups({})
   }
 
   if (Number.isNaN(animeId)) {
@@ -689,7 +716,11 @@ export function SeriesPage() {
   // deliberately keep reading `scores` above, untouched by any pick.
   const resolvedPick = resolveSeriesPick(series.slots, pick)
   const mainLineVisible = visibleMainLine(series.mainLine, resolvedPick)
-  const stats = statsForPick(series, resolvedPick)
+  // deriveSeriesStats replaces the pick-scoped snapshot's edit-sensitive
+  // fields with client computations over the page's own entry arrays
+  // (design.md decision 5), so an in-place edit and a route switch can never
+  // resurrect a stale server-delivered figure.
+  const stats = deriveSeriesStats(statsForPick(series, resolvedPick), mainLineVisible, realExtras(series.extras))
   const displayTitle = pickDisplayTitle(series.title, series.englishTitle)
   const { badge, behind } = completionBadge(series, mainLineVisible)
   const isRunning = series.status === 'Airing' || series.status === 'Ongoing'
@@ -716,13 +747,19 @@ export function SeriesPage() {
   const showTimeWatched = timeWatchedSeconds > 0
   const showTimeLeft = timeLeftSeconds > 0 || runtimeUnknown
 
-  const highestMalEntries = stats.highestMalScoreAnimeIds
+  // Read from series.stats, not the pick-resolved stats above: BuildStats
+  // computes all three tie lists over the whole, unfiltered main line, so
+  // every statsByPick entry already carries identical values (design.md
+  // decision 4) — reading series.stats directly is what lets a favourite
+  // reorder and a rewatch-count edit, which only ever write series.stats,
+  // take effect on a non-default route too.
+  const highestMalEntries = series.stats.highestMalScoreAnimeIds
     .map((id) => findEntry(series, id))
     .filter((e): e is SeriesEntryDto => e !== undefined)
-  const myHighestEntries = stats.myHighestScoreAnimeIds
+  const myHighestEntries = series.stats.myHighestScoreAnimeIds
     .map((id) => findEntry(series, id))
     .filter((e): e is SeriesEntryDto => e !== undefined)
-  const mostRewatchedEntries = stats.mostRewatchedAnimeIds
+  const mostRewatchedEntries = series.stats.mostRewatchedAnimeIds
     .map((id) => findEntry(series, id))
     .filter((e): e is SeriesEntryDto => e !== undefined)
 
@@ -752,7 +789,7 @@ export function SeriesPage() {
   const extrasGroupView = extrasGroups
     .map((group, index) => {
       const key = extrasGroupKey(group, index)
-      const isCollapsed = collapsedGroups[key] ?? false
+      const isCollapsed = collapsedGroups[key] ?? true
       const isUnfiltered = unfilteredGroups.has(key)
       const typeAdmitted = group.items.filter(typeAdmits)
       // design.md D1: the group's heading opens it in full unless it's
@@ -772,6 +809,38 @@ export function SeriesPage() {
   const nothingHidden = extrasGroupView.every(
     ({ visibleItems, typeAdmittedCount }) => visibleItems.length === typeAdmittedCount,
   )
+
+  // Multi-select toggle for the media-type filter row (design.md decision 3):
+  // selecting narrows every group to that type, alongside whatever else is
+  // already selected; selecting none narrows nothing. Adding a type also
+  // opens every group holding at least one entry of it, so the entries it
+  // admits are actually rendered rather than only counted in a heading;
+  // removing a type changes no group's collapsed state. Neither direction
+  // touches `unfilteredGroups` — only a group heading grants that exemption.
+  // Needs `extrasGroups` to know which keys to open, hence its placement
+  // below the early returns, beside `toggleAllExtrasGroups`.
+  function toggleMediaType(mediaType: string) {
+    const adding = !selectedMediaTypes.has(mediaType)
+    setSelectedMediaTypes((prev) => {
+      const next = new Set(prev)
+      if (next.has(mediaType)) next.delete(mediaType)
+      else next.add(mediaType)
+      return next
+    })
+    if (adding) {
+      const keysToOpen = extrasGroups
+        .map((group, index) => ({ group, key: extrasGroupKey(group, index) }))
+        .filter(({ group }) => group.items.some((e) => (e.mediaType ?? 'unknown') === mediaType))
+        .map(({ key }) => key)
+      setCollapsedGroups((prev) => {
+        const next = { ...prev }
+        keysToOpen.forEach((key) => {
+          next[key] = false
+        })
+        return next
+      })
+    }
+  }
 
   function toggleAllExtrasGroups() {
     if (nothingHidden) {
@@ -973,16 +1042,23 @@ export function SeriesPage() {
               )}
             </dd>
           </div>
-          {showTimeWatched && (
+          {(showTimeWatched || showTimeLeft) && (
             <div>
-              <dt>Time watched</dt>
-              <dd>{formatRuntime(timeWatchedSeconds)}</dd>
-            </div>
-          )}
-          {showTimeLeft && (
-            <div>
-              <dt>Time left</dt>
-              <dd>{formatRuntime(timeLeftSeconds)}</dd>
+              <dt>Time</dt>
+              <dd className="series-page__time-stat">
+                {showTimeWatched && (
+                  <span className="series-page__time-stat-row">
+                    <span className="series-page__time-stat-label">Watched:</span>
+                    {formatRuntime(timeWatchedSeconds)}
+                  </span>
+                )}
+                {showTimeLeft && (
+                  <span className="series-page__time-stat-row">
+                    <span className="series-page__time-stat-label">Left:</span>
+                    {formatRuntime(timeLeftSeconds)}
+                  </span>
+                )}
+              </dd>
             </div>
           )}
           {highestMalEntries.length > 0 && (
@@ -1048,7 +1124,7 @@ export function SeriesPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              handleReorderFavourite(series.seriesId, stats.myHighestScoreAnimeIds, index, -1)
+                              handleReorderFavourite(series.stats.myHighestScoreAnimeIds, index, -1)
                             }
                             disabled={index === 0}
                             aria-label={`Move ${pickDisplayTitle(entry.title, entry.englishTitle)} up`}
@@ -1058,7 +1134,7 @@ export function SeriesPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              handleReorderFavourite(series.seriesId, stats.myHighestScoreAnimeIds, index, 1)
+                              handleReorderFavourite(series.stats.myHighestScoreAnimeIds, index, 1)
                             }
                             disabled={index === myHighestEntries.length - 1}
                             aria-label={`Move ${pickDisplayTitle(entry.title, entry.englishTitle)} down`}
@@ -1089,12 +1165,16 @@ export function SeriesPage() {
       </section>
 
       {mainLineVisible.length > 0 && (
-        <section className="series-box">
+        <section
+          ref={mainLineBoxRef}
+          className={`series-box series-page__main-line-box${series.slots.length > 0 ? ' series-page__main-line-box--sloted' : ''}`}
+        >
           <h2>Main series</h2>
           <SeriesTimeline
             entries={mainLineVisible}
             allEntries={series.mainLine}
             slots={series.slots}
+            resolvedPick={resolvedPick}
             onPick={handlePickAlternative}
             onEdit={handleEdit}
           />

@@ -20,6 +20,15 @@
   -ms-overflow-style: none;
 }
 
+/* A version slot's picker stack needs room, not the row's usual top
+   breathing room above it — dropping the top inset lets the picker start
+   right where .series-box's own heading-to-body gap ends, as close to the
+   top of the box as the heading allows (series-versions "The picker SHALL
+   be rendered above the first card of the route it selects"). */
+.series-timeline__scroll--sloted {
+  padding-top: 0;
+}
+
 .series-timeline__scroll::-webkit-scrollbar {
   display: none;
 }
@@ -29,6 +38,43 @@
   align-items: stretch;
   gap: 12px;
   min-width: 100%;
+}
+
+/* One column per main-line position: a version slot's picker rail (below)
+   stacked above its card, so every card's top edge stays aligned whichever
+   column owns the picker (series-versions "The picker sits above the route's
+   first card"). flex: 0 0 auto — moved here from the card below — keeps a
+   column from growing or shrinking along the row's main axis; its width
+   still comes from the card's own --card-w. */
+.series-timeline__col {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Reserved space for a version slot's picker (series-versions "The picker
+   SHALL NOT change any card's size or push one card out of line with its
+   neighbours"), rendered in every column when the series has a slot and left
+   empty in every column that doesn't own it. width: 0; min-width: 100% keeps
+   the rail from contributing its own width to the column's sizing — the
+   card's --card-w decides that — while still resolving to the column's full
+   width once it's known, so the rail is never a hard-coded pixel figure that
+   would be wrong for a landscape card.
+
+   The buttons stack one per row (SeriesPage.css), so the rail's own height
+   is exactly as tall as the widest slot's option count needs — --picker-rows
+   (set once per row in SeriesTimeline.tsx, from the tallest slot the series
+   has) times one button's own height plus its gap to the next. This is a
+   fixed height, not measured, so it must track .series-page__slot-picker's
+   own button sizing (10px font, 1.3 line-height, 3px vertical padding, 1px
+   border ⇒ 21px) and gap (4px) exactly — every column's rail needs the same
+   height whether or not it owns a picker, so every card's top edge lines up
+   regardless of which column the picker lands in. */
+.series-timeline__picker-rail {
+  width: 0;
+  min-width: 100%;
+  height: calc(var(--picker-rows, 0) * 21px + (var(--picker-rows, 0) - 1) * 4px);
 }
 
 /* Fixed size rather than flex-grow-by-duration — a variable-width,
@@ -42,7 +88,6 @@
   --card-w: 192px;
   position: relative;
   display: flex;
-  flex: 0 0 auto;
   flex-direction: column;
   width: var(--card-w);
   overflow: hidden;
@@ -71,31 +116,6 @@
 .series-timeline__card--undated {
   border-style: dashed;
   opacity: 0.9;
-}
-
-/* Watch-order number (series-page spec "Watch order and series root":
-   numbered from 1, computed over exactly the entries shown) — normal flow
-   rather than absolutely positioned over the picture, so it never collides
-   with a slotted position's picker strip (.series-page__slot-picker, styled
-   in SeriesPage.css) directly below it. */
-.series-timeline__card-header {
-  display: flex;
-  padding: 6px 8px 0;
-}
-
-.series-timeline__card-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--code-bg);
-  color: var(--text-h);
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
 }
 
 .series-timeline__card-link {

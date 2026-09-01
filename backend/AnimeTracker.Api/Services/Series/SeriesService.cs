@@ -5,6 +5,7 @@ using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Profile;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Watching;
 using Microsoft.EntityFrameworkCore;
 // Alias needed because this namespace's last segment ("Series") shadows the
@@ -22,7 +23,8 @@ public class SeriesService(
     AnimeTrackerDbContext db,
     SeriesGraphBuilder graphBuilder,
     RefreshGate refreshGate,
-    IEpisodeScheduleService scheduleService) : ISeriesService
+    IEpisodeScheduleService scheduleService,
+    IAnimeRankingService rankingService) : ISeriesService
 {
     private static readonly TimeSpan StaleAfter = TimeSpan.FromDays(30);
 
@@ -31,27 +33,6 @@ public class SeriesService(
 
     public Task<SeriesDto> RebuildSeriesAsync(int animeId, CancellationToken ct = default) =>
         ResolveAsync(animeId, forceRebuild: true, ct);
-
-    public async Task SetFavouriteOrderAsync(int seriesId, List<int> animeIds, CancellationToken ct = default)
-    {
-        var members = await db.SeriesMembers.Where(m => m.SeriesId == seriesId).ToListAsync(ct);
-        if (members.Count == 0 && !await db.Series.AsNoTracking().AnyAsync(s => s.Id == seriesId, ct))
-            throw new SeriesIdNotFoundException(seriesId);
-
-        var memberIds = members.Select(m => m.AnimeId).ToHashSet();
-        var unknownIds = animeIds.Where(id => !memberIds.Contains(id)).ToList();
-        if (unknownIds.Count > 0)
-            throw new UnknownSeriesMemberIdsException(unknownIds);
-
-        var rankByAnimeId = animeIds
-            .Select((animeId, rank) => (animeId, rank))
-            .ToDictionary(x => x.animeId, x => x.rank);
-
-        foreach (var member in members)
-            member.FavouriteRank = rankByAnimeId.TryGetValue(member.AnimeId, out var rank) ? rank : null;
-
-        await db.SaveChangesAsync(ct);
-    }
 
     private async Task<SeriesDto> ResolveAsync(int animeId, bool forceRebuild, CancellationToken ct)
     {
@@ -166,13 +147,21 @@ public class SeriesService(
             .FirstOrDefaultAsync(ct);
         var airedEpisodesByAnimeId = await AiredEpisodesByAnimeIdAsync(allAnime, ct);
 
+        // The whole-library ranking (polish-... design.md D?), fetched fresh
+        // on every read like every other figure here: each member's own rank
+        // for SeriesEntryDto.GlobalRank, and the favourite tie-break below —
+        // so a series-page favourite reorder, which writes this same
+        // ranking, is reflected the moment the series is next read.
+        var rankingSnapshot = await rankingService.GetSnapshotAsync(ct);
+        var globalRankByAnimeId = allAnime.ToDictionary(a => a.Id, a => rankingSnapshot.RankOf(a.Id));
+
         var pictureOptions = SeriesPicturePool.Build(mainLineMembers);
         if (series.SelectedPictureUrl is { } selectedPictureUrl && !pictureOptions.Contains(selectedPictureUrl))
             pictureOptions.Add(selectedPictureUrl); // a stored choice is never re-validated away (design.md D9)
         var titleOptions = SeriesTitleRule.OfferedTitles(mainLineMembers);
         var picturesPendingCount = mainLineMembers.Count(m => m.Anime.UserEntry is not null && m.Anime.PicturesSyncedAt is null);
 
-        var displayExtras = await BuildDisplayExtrasAsync(mainLineMembers, extraMembers, memberAnimeIds, airedEpisodesByAnimeId, ct);
+        var displayExtras = await BuildDisplayExtrasAsync(mainLineMembers, extraMembers, memberAnimeIds, airedEpisodesByAnimeId, globalRankByAnimeId, ct);
 
         // Version slots and their per-combination stats (design.md D4/D6,
         // tasks 7.2-7.3): read straight off the stored VersionSlotKey/
@@ -181,11 +170,11 @@ public class SeriesService(
         // whole, unfiltered mainLineMembers regardless of any pick.
         var slots = BuildSlots(mainLineMembers);
         var defaultPick = slots.ToDictionary(s => s.SlotKey, s => s.DefaultBranchHeadAnimeId);
-        var stats = BuildStats(mainLineMembers, VisibleMainLineMembers(mainLineMembers, defaultPick), extraMembers, allAnime, airedEpisodesByAnimeId);
+        var stats = BuildStats(mainLineMembers, VisibleMainLineMembers(mainLineMembers, defaultPick), extraMembers, allAnime, airedEpisodesByAnimeId, globalRankByAnimeId);
         var statsByPick = EnumeratePickCombinations(slots)
             .Select(combo => new SeriesStatsByPickDto(
                 slots.Select(s => combo[s.SlotKey]).ToList(),
-                BuildStats(mainLineMembers, VisibleMainLineMembers(mainLineMembers, combo), extraMembers, allAnime, airedEpisodesByAnimeId)))
+                BuildStats(mainLineMembers, VisibleMainLineMembers(mainLineMembers, combo), extraMembers, allAnime, airedEpisodesByAnimeId, globalRankByAnimeId)))
             .ToList();
 
         return new SeriesDto(
@@ -205,7 +194,7 @@ public class SeriesService(
             stats,
             slots,
             statsByPick,
-            mainLineMembers.Select(m => ToEntryDto(m, memberAnimeIds, airedEpisodesByAnimeId)).ToList(),
+            mainLineMembers.Select(m => ToEntryDto(m, memberAnimeIds, airedEpisodesByAnimeId, globalRankByAnimeId)).ToList(),
             displayExtras,
             series.SelectedTitle,
             series.SelectedPictureUrl,
@@ -321,6 +310,7 @@ public class SeriesService(
         List<SeriesMember> extraMembers,
         HashSet<int> memberAnimeIds,
         Dictionary<int, int?> airedEpisodesByAnimeId,
+        Dictionary<int, int?> globalRankByAnimeId,
         CancellationToken ct)
     {
         var relatedEntries = await ProjectRelatedEntriesAsync(mainLineMembers, memberAnimeIds, ct);
@@ -330,7 +320,7 @@ public class SeriesService(
 
         return extraMembers
             .Select(m => (Group: ParseRelationGroup(m.RelationGroup), Sort: SeriesGraphBuilder.OrderKey(m.Anime),
-                Dto: ToEntryDto(m, memberAnimeIds, airedEpisodesByAnimeId)))
+                Dto: ToEntryDto(m, memberAnimeIds, airedEpisodesByAnimeId, globalRankByAnimeId)))
             .Concat(relatedEntries.Select(r => (Group: r.Group, Sort: SeriesGraphBuilder.OrderKey(r.Anime),
                 Dto: ToRelatedEntryDto(r, relatedAiredEpisodes))))
             .OrderBy(x => SeriesRelationGroupOrder.GroupOf(x.Group))
@@ -454,7 +444,8 @@ public class SeriesService(
             IsRelatedEntry: true,
             OpensOwnSeries: false, // every related entry opens the anime's own detail page (design.md D7)
             VersionSlotKey: null,
-            BranchHeadAnimeId: null);
+            BranchHeadAnimeId: null,
+            GlobalRank: null); // never enters the favourite tie-break or any other figure (design.md D5)
     }
 
     // Per-member AiredEpisodes (design.md decision 1) for every series member,
@@ -515,7 +506,9 @@ public class SeriesService(
         return airedEpisodes;
     }
 
-    private static SeriesEntryDto ToEntryDto(SeriesMember member, HashSet<int> memberAnimeIds, Dictionary<int, int?> airedEpisodesByAnimeId)
+    private static SeriesEntryDto ToEntryDto(
+        SeriesMember member, HashSet<int> memberAnimeIds, Dictionary<int, int?> airedEpisodesByAnimeId,
+        Dictionary<int, int?> globalRankByAnimeId)
     {
         var anime = member.Anime;
         return new SeriesEntryDto(
@@ -538,7 +531,8 @@ public class SeriesService(
             IsRelatedEntry: false,
             OpensOwnSeries: member.MembershipKind == nameof(MembershipKind.NeighbourTelling),
             member.VersionSlotKey,
-            member.BranchHeadAnimeId);
+            member.BranchHeadAnimeId,
+            GlobalRank: globalRankByAnimeId.GetValueOrDefault(anime.Id));
     }
 
     // Only this anime's own relation rows are considered, so a member
@@ -603,9 +597,15 @@ public class SeriesService(
     // for a series whose main line holds no slot the two lists are the same
     // list, and every figure covers the whole main line exactly as before
     // this capability.
+    //
+    // globalRankByAnimeId is the anime-ranking capability's whole-library
+    // rank per anime (design.md D?) — the favourite tie-break's source below.
+    // Optional/nullable so the existing BuildStats tests, which don't care
+    // about favourite tie order, need no dictionary of their own.
     internal static SeriesStatsDto BuildStats(
         List<SeriesMember> mainLineMembers, List<SeriesMember> visibleMainLineMembers, List<SeriesMember> extraMembers,
-        List<AnimeMetadata> allAnime, Dictionary<int, int?> airedEpisodesByAnimeId)
+        List<AnimeMetadata> allAnime, Dictionary<int, int?> airedEpisodesByAnimeId,
+        IReadOnlyDictionary<int, int?>? globalRankByAnimeId = null)
     {
         var visibleMainLineAnime = visibleMainLineMembers.Select(m => m.Anime).ToList();
         var extraAnime = extraMembers.Select(m => m.Anime).ToList();
@@ -652,10 +652,14 @@ public class SeriesService(
         var highestMineIds = TiedTopIds(
             orderedMembers.Where(m => m.Anime.UserEntry?.MyScore is > 0),
             m => m.Anime.UserEntry!.MyScore!.Value,
-            // Unranked (null) entries sort after every ranked one; ties within
-            // that (including two unranked entries) keep watch order, since
-            // OrderBy is a stable sort over the already watch-ordered sequence.
-            m => m.FavouriteRank ?? int.MaxValue);
+            // Ties break by each anime's rank in the whole-library ranking
+            // (polish-... design.md D?), so a series' favourite list agrees
+            // with — and a reorder made here moves — the same ranking the
+            // ranking editor produces. An anime outside that ranking (never
+            // hand-ordered, e.g. dropped or a music entry) sorts after every
+            // ranked one; ties within that keep watch order, since OrderBy is
+            // a stable sort over the already watch-ordered sequence.
+            m => globalRankByAnimeId?.GetValueOrDefault(m.AnimeId) ?? int.MaxValue);
         var mostRewatchedIds = TiedTopIds(
             orderedMembers.Where(m => m.Anime.UserEntry?.RewatchCount is > 0),
             m => m.Anime.UserEntry!.RewatchCount);
@@ -700,7 +704,7 @@ public class SeriesService(
 
     // Every member whose comparable key ties the maximum, in the order given
     // (already watch order) unless a tieBreakKey is supplied — used for
-    // favourites, which order by FavouriteRank first (design.md decision 8).
+    // favourites, which order by global rank first (design.md decision 8).
     private static List<int> TiedTopIds<TKey>(
         IEnumerable<SeriesMember> candidates, Func<SeriesMember, TKey> scoreKey, Func<SeriesMember, int>? tieBreakKey = null)
         where TKey : IComparable<TKey>

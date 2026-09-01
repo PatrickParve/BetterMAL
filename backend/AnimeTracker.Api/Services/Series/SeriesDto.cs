@@ -29,7 +29,12 @@ namespace AnimeTracker.Api.Services.Series;
 /// <see cref="Models.SeriesMember.BranchHeadAnimeId"/> (design.md D4): both
 /// null outside the main line and for a trunk entry; a version slot's own
 /// alternatives carry both, the rest of that alternative's branch carries
-/// only <c>BranchHeadAnimeId</c>.</summary>
+/// only <c>BranchHeadAnimeId</c>. <c>GlobalRank</c> is this anime's 1-based
+/// rank in the anime-ranking capability's whole-library ranking — null when
+/// the anime doesn't carry one (unscored, plan-to-watch, or not yet aired,
+/// per <see cref="Services.Ranking.RankBand.Unranked"/>) — always null for a
+/// related entry, which never enters that ranking's tie-break or any other
+/// figure here.</summary>
 public record SeriesEntryDto(
     int AnimeId,
     string Title,
@@ -50,7 +55,8 @@ public record SeriesEntryDto(
     bool IsRelatedEntry,
     bool OpensOwnSeries,
     int? VersionSlotKey,
-    int? BranchHeadAnimeId);
+    int? BranchHeadAnimeId,
+    int? GlobalRank);
 
 /// <summary>One unweighted mean plus the count it was computed over, e.g.
 /// "8.42 · 5 of 6 scored". <c>Value</c> is null when <c>ScoredCount</c> is

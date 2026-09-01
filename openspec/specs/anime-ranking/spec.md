@@ -115,9 +115,11 @@ The system SHALL treat every narrower ranking as a filter over the one ranking, 
 - **THEN** the 40th still appears above the 71st in the filtered ranking
 
 ### Requirement: Every by-my-score ordering reads the ranking
-The system SHALL order by rank wherever anime are put in order by my score, so equal scores are separated by my ranking rather than by title, by popularity, or by insertion order. This SHALL apply at least to my top anime on the profile page, my list sorted by my score, a recap's top 10 and its podium, a recap score board's slots, and the season and year browsers' my-score sort.
+The system SHALL order by rank wherever anime are put in order by my score, so equal scores are separated by my ranking rather than by title, by popularity, or by insertion order. This SHALL apply at least to my top anime on the profile page, my list sorted by my score, a recap's top 10 and its podium, a recap score board's slots, the season and year browsers' my-score sort, and a series page's list of entries tied for my highest score within that series (per the `series-page` capability's "Favourite ordering within a series").
 
 Where such an ordering can include an anime with no rank — an anime I scored but have at Plan to watch, for instance — that anime SHALL be ordered after every ranked anime of the same score, alphabetically by title among other unranked anime of that score.
+
+Unlike the other surfaces this requirement lists, which only ever display the ranking, a series page can also change it: reordering a series' tied favourites repositions the anime within the ranking itself (per the `series-page` capability), not just within that series page's own view. Every ordering this requirement covers SHALL reflect that change exactly as it would a reorder made in the ranking editor.
 
 #### Scenario: Tied scores follow my ranking
 - **WHEN** a list ordered by my score holds three anime I scored 8
@@ -125,11 +127,15 @@ Where such an ordering can include an anime with no rank — an anime I scored b
 
 #### Scenario: One placement shows everywhere
 - **WHEN** I move an anime above another of the same score in the ranking editor
-- **THEN** it appears above that anime in my list sorted by my score, in the recap top 10, on the score board, and in my top anime
+- **THEN** it appears above that anime in my list sorted by my score, in the recap top 10, on the score board, in my top anime, and among any series' tied favourites the two belong to
 
 #### Scenario: An unranked anime in a scored ordering
 - **WHEN** an ordering by my score includes a scored Plan-to-watch anime alongside ranked anime of the same score
 - **THEN** the ranked ones come first and the Plan-to-watch one follows them
+
+#### Scenario: A series-page reorder shows everywhere else too
+- **WHEN** I reorder two entries tied for my highest score on a series page
+- **THEN** the new order is reflected in the ranking editor and in every other ordering this requirement covers, exactly as if the reorder had been made in the ranking editor
 
 ### Requirement: The ranking editor
 The system SHALL provide a ranking editor that arranges one score at a time. The editor SHALL offer a score selector listing every score from 10 down to 1 that holds at least one hand-orderable anime, and SHALL show the selected score's hand-orderable anime in full, in ranking order, each row naming the anime and showing its overall rank.

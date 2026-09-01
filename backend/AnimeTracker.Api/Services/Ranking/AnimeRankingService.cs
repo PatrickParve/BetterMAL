@@ -105,6 +105,33 @@ public class AnimeRankingService(
         await topAnimeSelectionRepository.ReplaceOrderAsync(editedIds, ct);
     }
 
+    public async Task MoveAdjacentAsync(int promotedAnimeId, int demotedAnimeId, CancellationToken ct = default)
+    {
+        var entries = await entryRepository.GetAllAsync(ct);
+        var byId = entries.ToDictionary(e => e.AnimeId);
+        if (!byId.TryGetValue(promotedAnimeId, out var promoted) || !byId.TryGetValue(demotedAnimeId, out var demoted))
+            return;
+        if (promoted.MyScore != demoted.MyScore
+            || RankBandResolver.Resolve(promoted) != RankBand.HandOrdered
+            || RankBandResolver.Resolve(demoted) != RankBand.HandOrdered)
+            return;
+
+        var positionByAnimeId = await LoadPositionMapAsync(ct);
+        var tierMembers = entries.Where(e => e.MyScore == promoted.MyScore && RankBandResolver.Resolve(e) == RankBand.HandOrdered);
+        var tierOrder = AnimeRankingKey.OrderEntries(tierMembers, positionByAnimeId).Select(e => e.AnimeId).ToList();
+
+        // Remove-then-insert-after (not a swap): everyone strictly between
+        // the two original positions shifts by one slot, and demoted lands
+        // immediately after promoted — which is where it needs to be
+        // whichever originally came first, since both directions of the
+        // series-page reorder route through this same call.
+        tierOrder.Remove(demotedAnimeId);
+        var promotedIndex = tierOrder.IndexOf(promotedAnimeId);
+        tierOrder.Insert(promotedIndex + 1, demotedAnimeId);
+
+        await topAnimeSelectionRepository.ReplaceOrderAsync(tierOrder, ct);
+    }
+
     public async Task PlaceLastInTierAsync(int animeId, int score, CancellationToken ct = default)
     {
         var entries = await entryRepository.GetAllAsync(ct);

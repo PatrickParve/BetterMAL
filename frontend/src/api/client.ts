@@ -348,11 +348,15 @@ export function rebuildSeries(animeId: number): Promise<SeriesDto> {
   return fetchJson<SeriesDto>(`/api/series/by-anime/${animeId}/rebuild`, { method: 'POST' })
 }
 
-export function setSeriesFavouriteOrder(seriesId: number, animeIds: number[]): Promise<void> {
-  return fetchVoid(`/api/series/${seriesId}/favourite-order`, {
+// The series page's tied-favourite reorder: moves demotedAnimeId to sit
+// immediately after promotedAnimeId in the whole-library ranking's shared
+// score tier, so the favourite list a series page shows — sorted by that
+// same ranking — agrees with the ranking editor everywhere else it's read.
+export function moveFavouriteAdjacent(promotedAnimeId: number, demotedAnimeId: number): Promise<void> {
+  return fetchVoid('/api/rankings/move-adjacent', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ animeIds }),
+    body: JSON.stringify({ promotedAnimeId, demotedAnimeId }),
   })
 }
 

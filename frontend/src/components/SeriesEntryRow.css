@@ -42,15 +42,6 @@
   border-left-color: var(--status-rewatching);
 }
 
-.series-entry-row__rank {
-  width: 4ch;
-  flex: 0 0 auto;
-  font-weight: 600;
-  color: var(--text-h);
-  text-align: left;
-  font-variant-numeric: tabular-nums;
-}
-
 .series-entry-row__link {
   display: flex;
   align-items: center;

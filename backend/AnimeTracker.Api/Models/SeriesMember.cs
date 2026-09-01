@@ -25,12 +25,6 @@ public class SeriesMember
     /// own series, never a series it is only a boundary of.</summary>
     public bool IsPrimary { get; set; }
 
-    /// <summary>A tie-break hint over whatever the tied-for-my-highest-score
-    /// set currently is, not a stored ordering of a fixed set — an entry that
-    /// drops out of the tie simply keeps an unused rank (design.md decision
-    /// 11). Null means unranked, which sorts after every ranked entry.</summary>
-    public int? FavouriteRank { get; set; }
-
     /// <summary>"Core", "FoldedVersion" or "NeighbourTelling" — this
     /// membership's relationship to the series' story component
     /// (rebuild-series-by-story-component design.md decision D2), round-tripping

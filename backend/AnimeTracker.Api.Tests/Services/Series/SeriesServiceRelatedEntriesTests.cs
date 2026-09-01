@@ -3,6 +3,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.EntityFrameworkCore;
@@ -46,7 +47,8 @@ public class SeriesServiceRelatedEntriesTests
             db,
             new SeriesGraphBuilder(db, new NoOpRefreshService(), new RelationResolver(db), NullLogger<SeriesGraphBuilder>.Instance),
             new RefreshGate(),
-            new FakeEpisodeScheduleService());
+            new FakeEpisodeScheduleService(),
+            new NoOpAnimeRankingService());
 
     [Fact]
     public async Task ARelatedEntryWithNoCachedRowAppearsWithoutMarkingTheSeriesPartial()
@@ -140,6 +142,25 @@ public class SeriesServiceRelatedEntriesTests
         public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<AnimeMetadata> anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+    }
+
+    // These tests don't score anything, so an empty ranking (no entries, no
+    // stored order) is a faithful stand-in — every SeriesEntryDto.GlobalRank
+    // it produces is simply null.
+    private sealed class NoOpAnimeRankingService : IAnimeRankingService
+    {
+        public Task<AnimeRankingSnapshot> GetSnapshotAsync(CancellationToken ct = default) =>
+            Task.FromResult(AnimeRankingSnapshot.Build([], []));
+        public Task<List<AnimeRankingScoreCountDto>> GetScoreCountsAsync(string mediaTypeScope, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<AnimeRankingTierDto?> GetTierAsync(int score, string mediaTypeScope, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task ApplyTierOrderAsync(List<AnimeRankingTierOrderRequest> tiers, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task MoveAdjacentAsync(int promotedAnimeId, int demotedAnimeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task PlaceLastInTierAsync(int animeId, int score, CancellationToken ct = default) =>
             throw new NotImplementedException();
     }
 }

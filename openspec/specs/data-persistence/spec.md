@@ -256,7 +256,7 @@ The system SHALL persist, on each Series record, an optional **chosen title** an
 
 They SHALL live on the Series row rather than on any member, so that a series' identity is independent of which member happens to be its root, and so that a rebuild that changes the root does not change the chosen identity.
 
-They SHALL survive a rebuild of the series, in the same way `SeriesMember.FavouriteRank` does — by being fields the rebuild simply never writes on the row it keeps.
+They SHALL survive a rebuild of the series — the rebuild simply never writes these fields on the row it keeps.
 
 #### Scenario: Defaults are null
 - **WHEN** a series is built for the first time

@@ -1046,17 +1046,11 @@ public class SeriesGraphBuilder(
                 _ => await ResolveFoldedPrimaryAsync(animeId, telling, matchedSeriesId, staleSeriesIdSet, priorRowsByAnimeId, ct),
             };
 
-            // A row already at (target.Id, animeId) is updated in place —
-            // this is also why FavouriteRank survives a rebuild for free:
-            // it's simply never touched here for a surviving membership. A
+            // A row already at (target.Id, animeId) is updated in place. A
             // row that exists only under a *different* series can't be
             // reassigned by an in-place SeriesId update now that SeriesId is
             // part of the composite key — EF refuses to modify a key column
-            // on a tracked entity — so that case is a fresh insert, with
-            // FavouriteRank copied across explicitly so the member's rank
-            // still survives (design.md decision 2/"Favourite ranks survive
-            // the split"), whether that prior row was a Core, FoldedVersion
-            // or NeighbourTelling membership.
+            // on a tracked entity — so that case is a fresh insert instead.
             if (existingByAnimeId.TryGetValue(animeId, out var existing))
             {
                 existing.IsMainLine = isMainLine;
@@ -1069,10 +1063,6 @@ public class SeriesGraphBuilder(
             }
             else
             {
-                var favouriteRank = priorRowsByAnimeId.TryGetValue(animeId, out var priorRows)
-                    ? priorRows.Select(r => r.FavouriteRank).FirstOrDefault(r => r is not null)
-                    : null;
-
                 target.Members.Add(new SeriesMember
                 {
                     AnimeId = animeId,
@@ -1080,7 +1070,6 @@ public class SeriesGraphBuilder(
                     Order = order,
                     RelationGroup = relationGroup,
                     IsPrimary = isPrimary,
-                    FavouriteRank = favouriteRank,
                     MembershipKind = kind.ToString(),
                     VersionSlotKey = versionSlotKey,
                     BranchHeadAnimeId = branchHeadAnimeId,

@@ -40,8 +40,6 @@ public class SeriesControllerBulkBuildTests
             throw new NotImplementedException();
         public Task<SeriesDto> RebuildSeriesAsync(int animeId, CancellationToken ct = default) =>
             throw new NotImplementedException();
-        public Task SetFavouriteOrderAsync(int seriesId, List<int> animeIds, CancellationToken ct = default) =>
-            throw new NotImplementedException();
         public Task<int?> FindSeriesIdAsync(int animeId, CancellationToken ct = default) =>
             throw new NotImplementedException();
     }

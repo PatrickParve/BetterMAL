@@ -44,6 +44,18 @@ public interface IAnimeRankingService
     /// states.</summary>
     Task ApplyTierOrderAsync(List<AnimeRankingTierOrderRequest> tiers, CancellationToken ct = default);
 
+    /// <summary>Repositions <paramref name="demotedAnimeId"/> to sit
+    /// immediately after <paramref name="promotedAnimeId"/> within the score
+    /// tier they share — the series page's tied-favourite reorder
+    /// (polish-... design.md D?): moves only the entry whose position
+    /// disagrees with the newly expressed preference, shifting the members
+    /// between the two, rather than swapping the pair's own (possibly far
+    /// apart) positions and leaving everyone between them untouched. A no-op
+    /// when either anime is unknown, the two don't share a score, or either
+    /// isn't currently hand-orderable — nothing here has a stored position to
+    /// move.</summary>
+    Task MoveAdjacentAsync(int promotedAnimeId, int demotedAnimeId, CancellationToken ct = default);
+
     /// <summary>design.md D6: places <paramref name="animeId"/> at the end of
     /// <paramref name="score"/>'s hand-ordered band — materialising that
     /// tier's full hand-ordered order (placed members, then never-placed

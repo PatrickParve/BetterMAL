@@ -43,7 +43,7 @@ public class SeriesGraphBuilderVersionPersistenceTests
         new(db, new NoOpRefreshService(), new RelationResolver(db), NullLogger<SeriesGraphBuilder>.Instance);
 
     private static SeriesMember Member(int seriesId, int animeId, bool isMainLine, int order,
-        MembershipKind kind = MembershipKind.Core, bool isPrimary = true, int? favouriteRank = null) => new()
+        MembershipKind kind = MembershipKind.Core, bool isPrimary = true) => new()
     {
         SeriesId = seriesId,
         AnimeId = animeId,
@@ -51,7 +51,6 @@ public class SeriesGraphBuilderVersionPersistenceTests
         Order = order,
         IsPrimary = isPrimary,
         MembershipKind = kind.ToString(),
-        FavouriteRank = favouriteRank,
     };
 
     // Clannad (sequel-linked to After Story) with a lone alternative_version
@@ -86,7 +85,7 @@ public class SeriesGraphBuilderVersionPersistenceTests
 
         db.Series.Add(new SeriesEntity { Id = 30, RootAnimeId = movie.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "Movie's Own Title" });
         db.SeriesMembers.AddRange(
-            Member(30, movie.Id, isMainLine: true, order: 0, favouriteRank: 5),
+            Member(30, movie.Id, isMainLine: true, order: 0),
             Member(30, clannad.Id, isMainLine: false, order: 0));
         await db.SaveChangesAsync();
 
@@ -106,7 +105,6 @@ public class SeriesGraphBuilderVersionPersistenceTests
         Assert.False(movieMember.IsMainLine);
         Assert.Equal(nameof(RelationGroup.AlternativeVersion), movieMember.RelationGroup);
         Assert.True(movieMember.IsPrimary); // no Core membership anywhere once the fragments are gone
-        Assert.Equal(5, movieMember.FavouriteRank); // survives the fresh insert under the merged series
     }
 
     // Fullmetal Alchemist 2003 and Brotherhood share no story relation — only

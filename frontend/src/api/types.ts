@@ -631,7 +631,10 @@ export type ResolvedRelationDto = {
 // branchHeadAnimeId mirror the stored SeriesMember columns (design.md D4):
 // both null outside the main line and for a trunk entry; a version slot's own
 // alternatives carry both, the rest of that alternative's branch carries only
-// branchHeadAnimeId.
+// branchHeadAnimeId. globalRank is this anime's 1-based rank in the
+// anime-ranking capability's whole-library ranking — null when it doesn't
+// carry one (unscored, plan-to-watch, not yet aired, or a related entry,
+// which never enters that ranking).
 export type SeriesEntryDto = {
   animeId: number
   title: string
@@ -653,6 +656,7 @@ export type SeriesEntryDto = {
   opensOwnSeries: boolean
   versionSlotKey: number | null
   branchHeadAnimeId: number | null
+  globalRank: number | null
 }
 
 // value is null exactly when scoredCount is 0; otherwise unrounded — render
