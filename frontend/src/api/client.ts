@@ -87,15 +87,42 @@ async function performFetch(input: string, init?: RequestInit): Promise<Response
   return res
 }
 
+// Thrown by fetchJson/fetchVoid on a non-ok response, carrying the `{ "error"
+// ... }` body's message when the response had one (action-failure-notices
+// design D5). `message` falls back to the old "<url> responded with
+// <status>" text, so anything that only reads err.message keeps working, and
+// every existing `catch` that ignores the value entirely is unaffected.
+export class ApiError extends Error {
+  status: number
+  reason: string | null
+
+  constructor(input: string, status: number, reason: string | null) {
+    super(reason ?? `${input} responded with ${status}`)
+    this.status = status
+    this.reason = reason
+  }
+}
+
+async function readErrorReason(res: Response): Promise<string | null> {
+  const text = await res.text()
+  if (!text) return null
+  try {
+    const body = JSON.parse(text) as { error?: unknown }
+    return typeof body.error === 'string' && body.error.length > 0 ? body.error : null
+  } catch {
+    return null
+  }
+}
+
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   const res = await fetchRaw(input, init)
-  if (!res.ok) throw new Error(`${input} responded with ${res.status}`)
+  if (!res.ok) throw new ApiError(input, res.status, await readErrorReason(res))
   return res.json() as Promise<T>
 }
 
 async function fetchVoid(input: string, init?: RequestInit): Promise<void> {
   const res = await fetchRaw(input, init)
-  if (!res.ok) throw new Error(`${input} responded with ${res.status}`)
+  if (!res.ok) throw new ApiError(input, res.status, await readErrorReason(res))
 }
 
 export function getMalAuthStatus(): Promise<MalAuthStatus> {

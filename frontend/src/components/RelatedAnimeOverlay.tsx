@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Modal } from "./Modal.tsx";
 import type { RelatedAnimeDto } from "../api/types.ts";
+import { pickDisplayTitle } from "../utils/anime.ts";
 import "./RelatedAnimeOverlay.css";
 
 type RelatedAnimeOverlayProps = {
@@ -87,7 +88,7 @@ export function RelatedAnimeOverlay({
                       )}
                       <span className="related-anime-overlay__row-text">
                         <span className="related-anime-overlay__row-title">
-                          {relation.title}
+                          {pickDisplayTitle(relation.title, relation.englishTitle)}
                         </span>
                         <span className="related-anime-overlay__row-type">
                           {relation.mediaType

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  ApiError,
   getAnimeDetail,
   refreshAnime,
   refreshAnimePictures,
@@ -21,6 +22,7 @@ import {
   useEpisodeIncrement,
   useSetEpisodesWatched,
 } from "../context/CompletionPromptContext.tsx";
+import { useActionFailure } from "../context/ActionFailureContext.tsx";
 import { useLandscapePicture } from "../hooks/useLandscapePicture.ts";
 import { usePageData } from "../hooks/usePageData.ts";
 import {
@@ -162,6 +164,7 @@ export function AnimeDetailPage() {
   const { openEditor } = useEntryEditor();
   const increment = useEpisodeIncrement();
   const setEpisodesWatched = useSetEpisodesWatched();
+  const reportFailure = useActionFailure();
   const [pictureRef, isLandscapePicture] = useLandscapePicture(detail?.pictureUrl);
 
   // Visit-triggered picture backfill (design D4b) — mirrors the anime's own
@@ -219,6 +222,11 @@ export function AnimeDetailPage() {
     try {
       const saved = await updateEntry(detail.animeId, { status: "Watching" });
       setDetail((prev) => (prev ? { ...prev, entry: saved } : prev));
+    } catch (err) {
+      reportFailure({
+        title: `Couldn't add ${pickDisplayTitle(detail.title, detail.englishTitle)} to watching`,
+        reason: err instanceof ApiError ? err.reason : null,
+      });
     } finally {
       setActionPending(false);
     }
@@ -232,6 +240,11 @@ export function AnimeDetailPage() {
         status: "PlanToWatch",
       });
       setDetail((prev) => (prev ? { ...prev, entry: saved } : prev));
+    } catch (err) {
+      reportFailure({
+        title: `Couldn't add ${pickDisplayTitle(detail.title, detail.englishTitle)} to list`,
+        reason: err instanceof ApiError ? err.reason : null,
+      });
     } finally {
       setActionPending(false);
     }
@@ -363,54 +376,68 @@ export function AnimeDetailPage() {
         <div className="anime-detail-page__top">
           <h1>{pickDisplayTitle(detail.title, detail.englishTitle)}</h1>
 
-          {(hasSeriesRelation || prequel || sequel || parentStory || moreRelations.length > 0) && (
-            <div className="anime-detail-page__related">
-              {hasSeriesRelation && (
-                <Link
-                  to={`/series/${detail.animeId}`}
-                  className="anime-detail-page__related-link"
-                >
-                  Series
-                </Link>
-              )}
-              {parentStory && (
-                <Link
-                  to={`/anime/${parentStory.animeId}`}
-                  className="anime-detail-page__related-link"
-                  title={parentStory.title}
-                >
-                  Main series
-                </Link>
-              )}
-              {moreRelations.length > 0 && (
-                <button
-                  type="button"
-                  className="anime-detail-page__related-link"
-                  onClick={handleOpenRelatedOverlay}
-                >
-                  More
-                </button>
-              )}
-              {prequel && (
-                <Link
-                  to={`/anime/${prequel.animeId}`}
-                  className="anime-detail-page__related-link"
-                  title={prequel.title}
-                >
-                  ← Prequel
-                </Link>
-              )}
-              {sequel && (
-                <Link
-                  to={`/anime/${sequel.animeId}`}
-                  className="anime-detail-page__related-link"
-                  title={sequel.title}
-                >
-                  Sequel →
-                </Link>
-              )}
-            </div>
-          )}
+          <div className="anime-detail-page__related">
+            {hasSeriesRelation && (
+              <Link
+                to={`/series/${detail.animeId}`}
+                className="anime-detail-page__related-link"
+              >
+                Series
+              </Link>
+            )}
+            {parentStory && (
+              <Link
+                to={`/anime/${parentStory.animeId}`}
+                className="anime-detail-page__related-link"
+                title={parentStory.title}
+              >
+                Main series
+              </Link>
+            )}
+            {moreRelations.length > 0 && (
+              <button
+                type="button"
+                className="anime-detail-page__related-link"
+                onClick={handleOpenRelatedOverlay}
+              >
+                More
+              </button>
+            )}
+            {prequel ? (
+              <Link
+                to={`/anime/${prequel.animeId}`}
+                className="anime-detail-page__related-link"
+                title={prequel.title}
+              >
+                ← Prequel
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className="anime-detail-page__related-link anime-detail-page__related-link--disabled"
+                disabled
+              >
+                ← Prequel
+              </button>
+            )}
+            {sequel ? (
+              <Link
+                to={`/anime/${sequel.animeId}`}
+                className="anime-detail-page__related-link"
+                title={sequel.title}
+              >
+                Sequel →
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className="anime-detail-page__related-link anime-detail-page__related-link--disabled"
+                disabled
+              >
+                Sequel →
+              </button>
+            )}
+          </div>
         </div>
 
         {detail.refreshFailed && (

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
+import { DateField } from './DateField.tsx'
 import { Modal } from './Modal.tsx'
-import { deleteEntry, updateEntry } from '../api/client.ts'
+import { ApiError, deleteEntry, updateEntry } from '../api/client.ts'
 import type { EntryEditorTarget, UserAnimeEntryDto, UserAnimeEntryEditRequest, WatchStatus } from '../api/types.ts'
 import { useAnimeRank } from '../context/AnimeRankContext.tsx'
 import { hasAiredEpisodes, isHandOrderable } from '../utils/anime.ts'
@@ -128,8 +129,8 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
       const saved = await updateEntry(animeId, buildRequest())
       onSaved?.(saved)
       onClose()
-    } catch {
-      setError('Could not save changes. Please try again.')
+    } catch (err) {
+      setError(err instanceof ApiError && err.reason ? err.reason : 'Could not save changes. Please try again.')
       setSaving(false)
     }
   }
@@ -162,8 +163,8 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
       onSaved?.(saved)
       setSaving(false)
       openRanking({ animeId, score: saved.myScore ?? undefined })
-    } catch {
-      setError('Could not save changes. Please try again.')
+    } catch (err) {
+      setError(err instanceof ApiError && err.reason ? err.reason : 'Could not save changes. Please try again.')
       setSaving(false)
     }
   }
@@ -175,8 +176,8 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
       await deleteEntry(animeId)
       onDeleted?.()
       onClose()
-    } catch {
-      setError('Could not remove this entry. Please try again.')
+    } catch (err) {
+      setError(err instanceof ApiError && err.reason ? err.reason : 'Could not remove this entry. Please try again.')
       setDeleting(false)
     }
   }
@@ -292,14 +293,21 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
 
           <details className="entry-editor__dates">
             <summary>Dates</summary>
-            <label className="entry-editor__field">
+            {/* A plain div, not a <label> — DateField renders five labelable
+                controls (three selects, two buttons), and a label wrapping
+                more than one implicitly associates with only the first of
+                them (the year select). Clicking the "Start/Finish date" text
+                or a gap between the boxes would then redirect focus to the
+                year select, making it look permanently highlighted. Each
+                control already carries its own aria-label. */}
+            <div className="entry-editor__field">
               <span>Start date</span>
-              <input type="date" value={startedAt} onChange={(event) => setStartedAt(event.target.value)} />
-            </label>
-            <label className="entry-editor__field">
+              <DateField value={startedAt} onChange={setStartedAt} label="start date" idPrefix="entry-editor-start-date" />
+            </div>
+            <div className="entry-editor__field">
               <span>Finish date</span>
-              <input type="date" value={completedAt} onChange={(event) => setCompletedAt(event.target.value)} />
-            </label>
+              <DateField value={completedAt} onChange={setCompletedAt} label="finish date" idPrefix="entry-editor-finish-date" />
+            </div>
           </details>
         </fieldset>
 

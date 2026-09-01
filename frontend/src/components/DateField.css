@@ -1,0 +1,112 @@
+.date-field {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+}
+
+/* Each part is sized to fit only what it can ever hold — a year (4 digits),
+   a month abbreviation (3 letters), a day (2 digits) — instead of stretching
+   evenly across the row (`flex: 1 1 0`), which is what made the row overflow
+   its container. `flex: 0 0 auto` hands sizing back to `width` below; a
+   flex-basis other than `auto` would otherwise govern ahead of it regardless
+   of the shared `.entry-editor__field select { width: 100% }` rule's
+   specificity. The compound class selectors below (each element carries both
+   classes) outrank that shared rule on their own, without reaching into its
+   selector. `appearance: none` drops the browser's own dropdown arrow, whose
+   reserved width isn't part of any of these budgets and would otherwise
+   crowd the text at these widths — centering the value is what signals a
+   dropdown in its place, matching the score select on My List. */
+/* `display: flex` on the select itself (tried first) centred the value in
+   Chromium but broke rendering in Safari, which doesn't support flex/grid
+   layout on a <select>'s own box — so this goes back to plain text alignment
+   for the horizontal axis, and a line-height equal to the control's own
+   content-box height for the vertical one (the classic, universally
+   supported way to centre a single line of text in a fixed-height box,
+   since it doesn't depend on any layout mode support at all). The selector
+   is doubled to out-specificity the shared `.entry-editor__field select`
+   rule's own `height`/`padding` (0,1,1) without an `!important` — matching
+   the width overrides below. */
+.date-field__part.date-field__part {
+  flex: 0 0 auto;
+  min-width: 0;
+  height: var(--entry-editor-control-height, 38px);
+  padding: 0 4px;
+  line-height: calc(var(--entry-editor-control-height, 38px) - 2px);
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  text-align: center;
+  text-align-last: center;
+  cursor: pointer;
+}
+
+.date-field__part.date-field__part--year {
+  width: 4.5em;
+}
+
+.date-field__part.date-field__part--month {
+  width: 3.5em;
+}
+
+.date-field__part.date-field__part--day {
+  width: 3em;
+}
+
+/* Same accent tint every other hoverable control in the app uses (e.g.
+   .season-page__nav button, .pagination__page). */
+.date-field__part:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
+}
+
+.date-field__today,
+.date-field__clear {
+  flex: 0 0 auto;
+  height: var(--entry-editor-control-height, 38px);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  padding: 0 10px;
+  white-space: nowrap;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+/* The recap page's "Yearly" tab (RecapPage.css .family--year) uses the year
+   family's own achromatic palette rather than the app's purple accent, since
+   the button sets a date rather than highlighting a hovered/selected one —
+   its solid gradient-plus-glow treatment is sized for a standalone mode
+   switch, though, so this reuses the same --family-year-* tokens at the
+   tint/outline weight every other button in this popup uses instead. */
+.date-field__today {
+  border-color: var(--family-year-border);
+  background: var(--family-year-bg);
+  color: var(--text-h);
+}
+
+.date-field__today:hover {
+  background: var(--family-year-border);
+}
+
+.date-field__clear {
+  border-color: #e5484d;
+  color: #e5484d;
+  background: transparent;
+}
+
+.date-field__clear:hover:not(:disabled) {
+  background: rgba(229, 72, 77, 0.1);
+}
+
+.date-field__clear:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

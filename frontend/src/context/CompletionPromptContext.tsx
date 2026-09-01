@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import type { IncrementTarget, UserAnimeEntryDto } from '../api/types.ts'
-import { updateEntry } from '../api/client.ts'
+import { ApiError, updateEntry } from '../api/client.ts'
 import { CompletionScoreOverlay } from '../components/CompletionScoreOverlay.tsx'
+import { useActionFailure } from './ActionFailureContext.tsx'
 
 type PromptState = {
   animeId: number
@@ -30,15 +31,23 @@ const CompletionPromptContext = createContext<CompletionPromptContextValue | nul
 // be forgotten at a new call site.
 export function CompletionPromptProvider({ children }: { children: ReactNode }) {
   const [prompt, setPrompt] = useState<PromptState | null>(null)
+  const reportFailure = useActionFailure()
 
-  // Empty deps: closes over nothing but setPrompt, which React guarantees is
-  // stable, so this identity never changes for the life of the app.
+  // Closes over reportFailure alongside setPrompt; both are stable for the
+  // life of the app (reportFailure via ActionFailureProvider's own stable
+  // useCallback chain), so this identity still never changes.
   const setEpisodesWatched = useCallback(async (target: IncrementTarget, value: number) => {
     let saved: UserAnimeEntryDto
     try {
       saved = await updateEntry(target.animeId, { episodesWatched: value })
-    } catch {
-      // Leave the count as-is; the user can retry.
+    } catch (err) {
+      // Leave the count as-is; the notice is what accounts for it
+      // (action-failure-notices: "The system SHALL NOT silently roll an
+      // action back and say nothing").
+      reportFailure({
+        title: `Couldn't update ${target.animeTitle}`,
+        reason: err instanceof ApiError ? err.reason : null,
+      })
       return
     }
     target.onSaved(saved)
@@ -65,7 +74,7 @@ export function CompletionPromptProvider({ children }: { children: ReactNode }) 
       mediaType: target.mediaType,
       onClosed: (saved) => target.onCompleted?.(saved),
     })
-  }, [])
+  }, [reportFailure])
 
   const increment = useCallback(
     (target: IncrementTarget) => setEpisodesWatched(target, target.episodesWatched + 1),

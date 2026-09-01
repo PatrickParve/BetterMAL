@@ -459,9 +459,11 @@ export function SeriesPage() {
   // More-section view state (design.md decision 3): `mineOnly` is the "in my
   // list" filter, on by default; `collapsedGroups` is per-group collapse, all
   // collapsed by default (polish-series-page-more-and-routes design.md
-  // decision 1 — an absent key reads as collapsed); `unfilteredGroups` tracks
-  // groups where "+N more" was used to see past the filter without disabling
-  // it everywhere.
+  // decision 1 — an absent key reads as collapsed) but now also the thing
+  // activating the "in my list" control writes to, opening every group that
+  // holds one of my extras (polish-detail-dates-and-error-messages design.md
+  // D9); `unfilteredGroups` tracks groups where "+N more" was used to see
+  // past the filter without disabling it everywhere.
   // Restorable like the page's other view controls (polish-rewatch-more-
   // and-filters design.md D3): the `pageStateStore` snapshot holds live
   // object references and never serialises, so the `Set` and `Record`
@@ -486,12 +488,6 @@ export function SeriesPage() {
   // naming an anime that is no longer one of that slot's alternatives (task
   // 8.5), the same graceful-staleness pattern selectedMediaTypes above uses.
   const [pick, setPick] = useRestorableState<Record<number, number>>('seriesPick', {})
-  // series-page "A More group's heading opens that group in full"
-  // (design.md D2): the "in my list" control reports itself on only while
-  // the filter is actually in force across every group — opening any one
-  // group in full (via its heading) makes this read off.
-  const filterActive = mineOnly && unfilteredGroups.size === 0
-
   // Scroll-on-open (design.md D4, tasks.md 6.4-6.6): which group's heading
   // was just opened, so a layout effect below can scroll it to the top of
   // the viewport once its newly revealed tiles have been laid out. A plain
@@ -679,17 +675,6 @@ export function SeriesPage() {
     setUnfilteredGroups((prev) => new Set(prev).add(key))
   }
 
-  // design.md D2: filterActive reports whether the filter is actually in
-  // force everywhere, not just the stored intent — so opening one group in
-  // full (D1) immediately reads as "off" here too. This control governs only
-  // what an expanded group shows, never a group's collapsed state: pressing
-  // while active turns the filter off; pressing while inactive turns it on
-  // and drops every per-group filter exemption.
-  function toggleMineOnly() {
-    setMineOnly(!filterActive)
-    setUnfilteredGroups(new Set())
-  }
-
   if (Number.isNaN(animeId)) {
     return <p className="series-page__empty">Anime not found.</p>
   }
@@ -810,6 +795,14 @@ export function SeriesPage() {
     ({ visibleItems, typeAdmittedCount }) => visibleItems.length === typeAdmittedCount,
   )
 
+  // series-page "The control SHALL report which of those two states the
+  // section is in" (design.md D9): reads as on only while the filter is
+  // actually in force everywhere (no per-group exemption) *and* at least one
+  // group is open — the third clause is what makes a freshly opened page,
+  // whose groups are all collapsed, read as off even though `mineOnly`
+  // itself starts true, so the first press does something visible.
+  const filterActive = mineOnly && unfilteredGroups.size === 0 && extrasGroupView.some(({ isCollapsed }) => !isCollapsed)
+
   // Multi-select toggle for the media-type filter row (design.md decision 3):
   // selecting narrows every group to that type, alongside whatever else is
   // already selected; selecting none narrows nothing. Adding a type also
@@ -840,6 +833,35 @@ export function SeriesPage() {
         return next
       })
     }
+  }
+
+  // series-page "Activating the "in my list" control SHALL show my entries"
+  // (design.md D9): activating while off turns the filter on, drops every
+  // per-group exemption, and opens every group holding at least one extra of
+  // mine the media-type filter admits — the same "adding opens every group
+  // holding one" shape toggleMediaType uses above, so the two section
+  // controls behave alike. A group holding none of mine is left collapsed
+  // rather than padding the section with an empty heading. Activating while
+  // on instead collapses every group, leaving `mineOnly` on: turning the
+  // filter fully off is the expand-all control's job, and a group heading's,
+  // not this one's.
+  function toggleMineOnly() {
+    if (filterActive) {
+      const next: Record<string, boolean> = {}
+      extrasGroups.forEach((group, index) => {
+        next[extrasGroupKey(group, index)] = true
+      })
+      setCollapsedGroups(next)
+      return
+    }
+    setMineOnly(true)
+    setUnfilteredGroups(new Set())
+    const next: Record<string, boolean> = {}
+    extrasGroups.forEach((group, index) => {
+      const holdsMine = group.items.some((e) => e.entry != null && typeAdmits(e))
+      next[extrasGroupKey(group, index)] = !holdsMine
+    })
+    setCollapsedGroups(next)
   }
 
   function toggleAllExtrasGroups() {

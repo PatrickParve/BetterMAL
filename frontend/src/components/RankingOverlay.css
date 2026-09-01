@@ -10,13 +10,22 @@
 
 .ranking-overlay__list {
   --ranking-poster-h: 40px;
+  /* A row's outer height: its poster-derived min-height, plus the link's own
+     8px top/bottom padding and 1px top/bottom border — the same pieces
+     `.ranking-overlay__link` below is built from, so the two cannot drift
+     the way a bare vh figure could. */
+  --ranking-row-outer-h: calc(var(--ranking-poster-h) + 16px + 2px);
+  --ranking-row-gap: 6px;
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 60vh;
+  gap: var(--ranking-row-gap);
+  /* Eight whole rows plus the seven gaps between them, so the list ends
+     where a row ends rather than mid-poster (list-recaps/profile-stats "the
+     rankings See all overlay is sized by its rows"). */
+  max-height: calc(8 * var(--ranking-row-outer-h) + 7 * var(--ranking-row-gap));
   overflow-y: auto;
 }
 
@@ -77,19 +86,4 @@
 
 .ranking-overlay__poster-placeholder {
   border: 1px solid var(--border);
-}
-
-.ranking-overlay__buttons {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.ranking-overlay__buttons button {
-  font: inherit;
-  padding: 8px 16px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-h);
-  cursor: pointer;
 }

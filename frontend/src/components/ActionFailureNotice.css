@@ -1,0 +1,55 @@
+.action-failure-notice-stack {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 320px;
+}
+
+.action-failure-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+  color: var(--text-h);
+  font-size: 14px;
+}
+
+.action-failure-notice__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.action-failure-notice__title {
+  font-weight: 600;
+}
+
+.action-failure-notice__reason {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.action-failure-notice__dismiss {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.action-failure-notice__dismiss:hover {
+  color: var(--text-h);
+}

@@ -11,6 +11,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Detail;
 
+// Keyed by related-anime id — the media type and English title an
+// AnimeMetadata row (if any) holds for it, so RelatedAnimeDto.FromEntity can
+// fall back to both from the same cache lookup.
+public record RelatedMetadata(string? MediaType, string? EnglishTitle);
+
 public class AnimeDetailService(
     IAnimeMetadataRepository metadataRepository,
     IMetadataRefreshService refreshService,
@@ -83,8 +88,9 @@ public class AnimeDetailService(
         // Full-detail fetches store each relation's media type directly
         // (AnimeRelatedAnime.MediaType, from related_anime{node{media_type}});
         // this cache lookup is only a fallback for relation rows written
-        // before that column existed.
-        var relatedMediaTypeByAnimeId = await GetMediaTypesAsync(anime.RelatedAnime.Select(r => r.RelatedAnimeId), ct);
+        // before that column existed. The English title has no such direct
+        // storage, so every relation depends on this lookup for it.
+        var relatedMetadataByAnimeId = await GetRelatedMetadataAsync(anime.RelatedAnime.Select(r => r.RelatedAnimeId), ct);
         // Filtered to the primary membership (split-series-by-version task
         // 8.2): the "Series" link always opens this anime's primary series
         // (via the read endpoint's own IsPrimary resolution), so InSeries
@@ -99,7 +105,7 @@ public class AnimeDetailService(
         // pictures").
         var picturesFetchPending = anime.UserEntry is not null && anime.PicturesSyncedAt is null;
 
-        return AnimeDetailDto.FromEntity(anime, episodesAired, nextEpisode, aniListId, relatedMediaTypeByAnimeId, inSeries, refreshFailed, relations, picturesFetchPending);
+        return AnimeDetailDto.FromEntity(anime, episodesAired, nextEpisode, aniListId, relatedMetadataByAnimeId, inSeries, refreshFailed, relations, picturesFetchPending);
     }
 
     private static bool NeedsFullDetailFetch(AnimeMetadata? anime) =>
@@ -107,12 +113,12 @@ public class AnimeDetailService(
         || anime.LastSyncedAt == default
         || DateTimeOffset.UtcNow - anime.LastSyncedAt > RefreshTiers.TtlFor(anime);
 
-    private async Task<Dictionary<int, string?>> GetMediaTypesAsync(IEnumerable<int> animeIds, CancellationToken ct)
+    private async Task<Dictionary<int, RelatedMetadata>> GetRelatedMetadataAsync(IEnumerable<int> animeIds, CancellationToken ct)
     {
         var ids = animeIds.Distinct().ToList();
         return await db.AnimeMetadata.AsNoTracking()
             .Where(m => ids.Contains(m.Id))
-            .ToDictionaryAsync(m => m.Id, m => m.MediaType, ct);
+            .ToDictionaryAsync(m => m.Id, m => new RelatedMetadata(m.MediaType, m.EnglishTitle), ct);
     }
 
     private static NextEpisodeEtaDto? ToEta(DateTimeOffset? nextInstant, DateTimeOffset now)

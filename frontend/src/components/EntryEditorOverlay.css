@@ -43,6 +43,12 @@
   color: var(--text-h);
 }
 
+.entry-editor__field select:hover:not(:disabled),
+.entry-editor__field input:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
 /* "Mine" role (design.md decision 9): a score I've actually set looks like
    the score it sets. The unscored state ("No score") keeps the neutral
    styling above — there's no score to colour. */
@@ -72,12 +78,13 @@
   padding: 10px;
 }
 
-/* The disclosure's own padding and border would otherwise shrink these two
-   controls' 100% width relative to every top-level field — expand back out
-   by exactly that inset (10px padding + 1px border, each side) so they
-   measure the same width as the rest of the form (D7). */
-.entry-editor__dates .entry-editor__field select,
-.entry-editor__dates .entry-editor__field input {
+/* The disclosure's own padding and border would otherwise shrink the row
+   below its 100% width relative to every top-level field — expand back out
+   by exactly that inset (10px padding + 1px border, each side) so it
+   measures the same width as the rest of the form (D7). Applied to the whole
+   DateField wrapper only — its year/month/day parts are sized to their own
+   content (DateField.css), not stretched to fill this expanded width. */
+.entry-editor__dates .entry-editor__field .date-field {
   width: calc(100% + 22px);
   margin-left: -11px;
   margin-right: -11px;
@@ -137,12 +144,28 @@
   cursor: pointer;
 }
 
+/* Cancel is the only button left with no colour of its own — Save, Delete
+   and Rank each get their own hover further down. */
+.entry-editor__buttons button:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
 /* Specificity bumped to beat .entry-editor__buttons button above, which
    would otherwise win on source order and mask these colors entirely. */
 .entry-editor__buttons button.entry-editor__save {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+
+/* Solid buttons (Save, Delete-confirm) keep their own colour on hover
+   rather than picking up the plain-button accent tint above — the same
+   "an active/filled control doesn't change on hover" rule the recap page's
+   filled tabs follow. */
+.entry-editor__buttons button.entry-editor__save:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .entry-editor__buttons button.entry-editor__delete {
@@ -152,14 +175,29 @@
   background: transparent;
 }
 
+.entry-editor__buttons button.entry-editor__delete:hover:not(:disabled) {
+  background: rgba(229, 72, 77, 0.1);
+  border-color: #e5484d;
+}
+
 .entry-editor__buttons button.entry-editor__delete-confirm {
   background: #e5484d;
   border-color: #e5484d;
   color: #fff;
 }
 
+.entry-editor__buttons button.entry-editor__delete-confirm:hover:not(:disabled) {
+  background: #e5484d;
+  border-color: #e5484d;
+}
+
 .entry-editor__buttons button.entry-editor__rank {
   border-color: var(--accent-border);
   color: var(--accent);
   background: transparent;
+}
+
+.entry-editor__buttons button.entry-editor__rank:hover:not(:disabled) {
+  background: var(--accent-bg);
+  border-color: var(--accent);
 }

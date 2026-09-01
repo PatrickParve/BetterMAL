@@ -57,12 +57,6 @@ export function RankingOverlay({ title, rows, onClose, family }: RankingOverlayP
             </li>
           ))}
         </ol>
-
-        <div className="ranking-overlay__buttons">
-          <button type="button" onClick={onClose}>
-            Close
-          </button>
-        </div>
       </div>
     </Modal>
   )

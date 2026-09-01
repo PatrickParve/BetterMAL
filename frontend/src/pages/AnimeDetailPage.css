@@ -54,6 +54,21 @@
   border-color: var(--accent-border);
 }
 
+/* Prequel/sequel controls always render (anime-detail "Prequel and sequel
+   controls are always present") — a relation-less anime gets this dimmed,
+   inert form instead of an omitted control, sized identically so the row
+   never shifts. No hover treatment: `disabled` already keeps it out of the
+   tab order and off pointer interaction. */
+.anime-detail-page__related-link--disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.anime-detail-page__related-link--disabled:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
 /* Refresh failed but the page still rendered from cache (anime-detail spec:
    "A failed data refresh is shown as a failure, not as an empty page") — kept
    visibly distinct from ordinary hint text via the shared danger color. */

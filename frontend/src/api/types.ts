@@ -594,6 +594,7 @@ export type RelatedAnimeDto = {
   pictureUrl: string | null
   mediaType: string | null
   relationType: string
+  englishTitle: string | null
 }
 
 // Mirrors backend Services/Relations/RelationConfidence.cs.

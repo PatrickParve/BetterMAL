@@ -59,7 +59,7 @@ public class UserAnimeEntryEditService(
 
         ApplyEpisodesWatched(request, entry, anime, animeId, originalStatus, today, airedSoFar, hasAired, changes);
         ApplyStatus(request, entry, anime, animeId, originalStatus, today, airedSoFar, hasAired, changes);
-        ApplyDates(request, entry, changes);
+        ApplyDates(request, entry, today, changes);
         ApplyScore(request, entry, animeId, hasAired, changes);
         ApplyRewatchCount(request, entry, animeId, hasAired, changes);
 
@@ -162,7 +162,7 @@ public class UserAnimeEntryEditService(
             return;
 
         if (newEpisodes < 0)
-            throw new ArgumentOutOfRangeException(nameof(request), "Episodes watched cannot be negative.");
+            throw new EntryEditRejectedException("Episodes watched cannot be negative.");
 
         // Cap against what's actually out, not just the eventual total: a
         // still-airing show can't be watched past its aired-so-far count even
@@ -177,7 +177,7 @@ public class UserAnimeEntryEditService(
         {
             if (!hasAired)
                 throw new EpisodesWatchedRequiresAiredEpisodeException(animeId);
-            throw new ArgumentOutOfRangeException(nameof(request), $"Episodes watched cannot exceed the number of episodes available ({cap}).");
+            throw new EntryEditRejectedException($"Episodes watched cannot exceed the number of episodes available ({cap}).");
         }
 
         var previousEpisodesWatched = entry.EpisodesWatched;
@@ -325,9 +325,17 @@ public class UserAnimeEntryEditService(
     // null / entry.CompletedAt ??=), never overwrite one, so a manual value
     // sent alongside a completing edit is untouched by them.
     private static void ApplyDates(
-        UserAnimeEntryEditRequest request, UserAnimeEntry entry,
+        UserAnimeEntryEditRequest request, UserAnimeEntry entry, DateOnly today,
         List<(ActivityChangeType Type, string Detail, int? PreviousEpisodesWatched)> changes)
     {
+        // Neither date may be set into the future — checked against the submitted
+        // values before either is applied, so a request touching only one field
+        // never trips over a pre-existing stored date it didn't send.
+        if (request.HasStartedAt && request.StartedAt > today)
+            throw new EntryEditRejectedException("Start date cannot be in the future.");
+        if (request.HasCompletedAt && request.CompletedAt > today)
+            throw new EntryEditRejectedException("Finish date cannot be in the future.");
+
         if (request.HasStartedAt && request.StartedAt != entry.StartedAt)
         {
             entry.StartedAt = request.StartedAt;
@@ -344,7 +352,7 @@ public class UserAnimeEntryEditService(
         // this catches e.g. a finish date set earlier than a start date left
         // unchanged from a prior edit, not just both dates changed together.
         if (entry.StartedAt is { } start && entry.CompletedAt is { } finish && finish < start)
-            throw new ArgumentOutOfRangeException(nameof(request), "Finish date cannot be earlier than start date.");
+            throw new EntryEditRejectedException("Finish date cannot be earlier than start date.");
     }
 
     private static void ApplyScore(
@@ -355,7 +363,7 @@ public class UserAnimeEntryEditService(
             return;
 
         if (newScore is < 0 or > 10)
-            throw new ArgumentOutOfRangeException(nameof(request), "Score must be between 0 and 10.");
+            throw new EntryEditRejectedException("Score must be between 0 and 10.");
 
         // Clearing back to "no score" (0) always stays possible even with
         // nothing aired, so an entry that already carries one is never trapped.
@@ -374,7 +382,7 @@ public class UserAnimeEntryEditService(
             return;
 
         if (newRewatchCount is < 0 or > 100)
-            throw new ArgumentOutOfRangeException(nameof(request), "Rewatch count must be between 0 and 100.");
+            throw new EntryEditRejectedException("Rewatch count must be between 0 and 100.");
 
         // Clearing back to 0 always stays possible even with nothing aired,
         // so an entry that already carries a rewatch count is never trapped.

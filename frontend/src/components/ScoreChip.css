@@ -25,6 +25,16 @@
 }
 
 .score-chip__value {
+  display: flex;
+  align-items: center;
+  /* A hidden MAL score's reveal control (ScoreValue.css) is a small icon
+     button, shorter than one line of this text — without a floor, this box
+     would shrink to the button's own height, centering it *above* where a
+     revealed number (which fills a full text line) sits, so revealing a
+     score would visibly move it. Locking the row to one text line keeps the
+     icon and the number centered at the same point regardless of which one
+     is showing. */
+  min-height: 1lh;
   font-size: 15px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
