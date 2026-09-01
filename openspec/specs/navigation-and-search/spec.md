@@ -320,8 +320,60 @@ The system SHALL navigate to the series page when a series result is activated, 
 - **WHEN** I click a series card on the search results page
 - **THEN** I am taken to that series' page
 
+### Requirement: Title matching ignores case, spacing, punctuation, and accents
+
+Every comparison the search makes between a query and a title SHALL be made over a **normalized** form of both sides, so that a query which is right about the words finds the title whatever the user did with case, spacing, or punctuation.
+
+Normalization SHALL: lower-case the text, fold accents and other diacritical marks to their base letters, and remove every character that is not a letter or a digit — spaces, hyphens, dashes, colons, slashes, full stops, apostrophes, quotation marks, exclamation and question marks, and any other punctuation or symbol. Letters of every script SHALL be kept, so a title in kana or kanji matches exactly as it does today.
+
+This SHALL govern all three match kinds — **exact equality**, **starts-with**, and **contains** — and SHALL apply everywhere search matches a title: the type-ahead dropdown, the full results page, the local fallback used when the live search fails, and series matching (member titles, member English titles, and a series' chosen title alike). Anime and series SHALL use the one normalization rule, so the two can never disagree about whether a query matches.
+
+Normalization SHALL widen only what counts as a match. Match quality ordering (exact ahead of prefix ahead of contains), popularity ordering within each band, the number of series and anime rows shown, and the background series-build trigger SHALL all be unchanged.
+
+A query that contains no letters or digits at all — punctuation or symbols only — normalizes to nothing, and the system SHALL return no matches for it rather than treating it as matching every title.
+
+The live MyAnimeList search request SHALL keep sending the query as the user typed it; normalization governs the system's own matching, not what a third party is asked. An anime that is neither stored locally nor returned by MyAnimeList for the query is therefore still not found.
+
+#### Scenario: Spacing does not matter
+- **WHEN** I search for "full metal" and *Fullmetal Alchemist* is stored
+- **THEN** it appears in the type-ahead dropdown and on the results page
+
+#### Scenario: Punctuation does not matter
+- **WHEN** I search for "re zero" and *Re:ZERO -Starting Life in Another World-* is stored
+- **THEN** it matches, and so does a search for "rezero" or "Re-Zero"
+
+#### Scenario: A hyphenated title matches without its hyphen
+- **WHEN** I search for "kaguya sama" and *Kaguya-sama: Love is War* is stored
+- **THEN** it matches
+
+#### Scenario: Accents do not matter
+- **WHEN** I search for "kimi ni todoke" and a stored title spells a word with an accented letter
+- **THEN** the accented and unaccented spellings match one another
+
+#### Scenario: A series matches by the same rule
+- **WHEN** a stored series has a member titled "Fullmetal Alchemist: Brotherhood" and I search for "full metal alchemist"
+- **THEN** the series matches and is listed ahead of the anime results, as any matched series is
+
+#### Scenario: A quoted query is exact about the words, not the punctuation
+- **WHEN** I search for `"fullmetal alchemist"` in double quotes
+- **THEN** *Fullmetal Alchemist* matches, and *Fullmetal Alchemist: Brotherhood* does not, because a quoted query still means the whole title rather than part of one
+
+#### Scenario: Ranking is unchanged
+- **WHEN** several titles match a query, some by prefix and some only in the middle
+- **THEN** the prefix matches are still listed first, each band still ordered by popularity with unranked titles last
+
+#### Scenario: A punctuation-only query matches nothing
+- **WHEN** I search for "!!!" or "—"
+- **THEN** no results are returned, rather than every title matching
+
+#### Scenario: A Japanese-script title is unaffected
+- **WHEN** I search using kana or kanji
+- **THEN** the same titles match as before the normalization rule existed
+
 ### Requirement: Type-ahead search, merged local + live ranked by prefix and popularity
-The system SHALL provide a debounced type-ahead search, presented in the navbar's right-hand control group (see "Navbar layout"), that on every query MERGES matches from the local cache with a live MAL search (deduplicated by anime id) rather than short-circuiting on cached matches. It SHALL rank titles whose title or English title STARTS WITH the query ahead of titles that merely CONTAIN the query, order each group by popularity — most popular first, with unranked titles (MAL popularity rank absent or zero) last — and show a dropdown of up to 5 matches with picture and title. A live-search failure SHALL degrade to local matches only rather than erroring. When the query is wrapped in double quotes (`"…"`), the system SHALL instead return only anime whose title or English title EXACTLY equals the quoted text.
+The system SHALL provide a debounced type-ahead search, presented in the navbar's right-hand control group (see "Navbar layout"), that on every query MERGES matches from the local cache with a live MAL search (deduplicated by anime id) rather than short-circuiting on cached matches. It SHALL rank titles whose title or English title STARTS WITH the query ahead of titles that merely CONTAIN the query, order each group by popularity — most popular first, with unranked titles (MAL popularity rank absent or zero) last — and show a dropdown of up to 5 matches with picture and title. A live-search failure SHALL degrade to local matches only rather than erroring. When the query is wrapped in double quotes (`"…"`), the system SHALL instead return only anime whose title or English title EQUALS the quoted text.
+
+Starts-with, contains, and equality SHALL all be evaluated under the normalization the "Title matching ignores case, spacing, punctuation, and accents" requirement defines, so the ranking bands and the quoted-query filter are alike insensitive to case, spacing, punctuation, and accents.
 
 The dropdown's 5 rows are shared with matched series (see "Series appear in search results"): matched series occupy the first rows, up to a maximum of 2, and anime matches fill the rest. When no series matches, all 5 rows are anime, exactly as before.
 
@@ -339,7 +391,7 @@ The dropdown's 5 rows are shared with matched series (see "Series appear in sear
 
 #### Scenario: Exact match with quotes
 - **WHEN** I wrap the query in double quotes
-- **THEN** only anime whose title or English title exactly equals the quoted text are shown
+- **THEN** only anime whose title or English title equals the quoted text — compared under the app's normalization rule — are shown
 
 #### Scenario: Live-search failure is non-fatal
 - **WHEN** the live MAL search fails (network blip or transient error)
@@ -641,7 +693,7 @@ When the live MAL search cannot be reached or fails for a query on the full sear
 
 The locally stored set SHALL be every anime the app holds in its own storage, however it came to be there — anime in my list, anime cached from a season or a top-anime listing, and anime cached from any earlier search or detail view alike. Membership of my list SHALL NOT be a condition.
 
-Matching SHALL follow the same rules the search already uses: a query SHALL match an anime whose title or English title contains it, case-insensitively, and a double-quoted query SHALL match only an anime whose title or English title exactly equals the quoted text.
+Matching SHALL follow the same rules the search already uses: a query SHALL match an anime whose title or English title contains it, and a double-quoted query SHALL match only an anime whose title or English title equals the quoted text — both evaluated under the normalization the "Title matching ignores case, spacing, punctuation, and accents" requirement defines, so the fallback is insensitive to case, spacing, punctuation, and accents exactly as the live path is.
 
 Fallback results SHALL be presented exactly as live results are: the same cards, with picture, title, media type, episode count, and MAL score; the same continuous scroll; the same Type filter, offering only the media types present among the fallback results; and the same result count line.
 
@@ -656,6 +708,10 @@ When the live MAL search succeeds, nothing SHALL change: the results, their orde
 #### Scenario: The live search is unreachable
 - **WHEN** I submit a query and the live MAL search fails
 - **THEN** the page lists the anime stored locally whose title or English title contains the query, presented as ordinary result cards
+
+#### Scenario: The fallback matches loosely too
+- **WHEN** the live search fails and I submit "full metal"
+- **THEN** a locally stored *Fullmetal Alchemist* is among the results
 
 #### Scenario: The fallback says why
 - **WHEN** the fallback has answered my query
@@ -683,7 +739,7 @@ When the live MAL search succeeds, nothing SHALL change: the results, their orde
 
 #### Scenario: An exact-match query against local storage
 - **WHEN** the live search fails and I submit a double-quoted query
-- **THEN** only stored anime whose title or English title exactly equals the quoted text are listed
+- **THEN** only stored anime whose title or English title equals the quoted text under the app's normalization rule are listed
 
 #### Scenario: Series still lead the fallback
 - **WHEN** the fallback answers a query that matches a stored series, under the default order
