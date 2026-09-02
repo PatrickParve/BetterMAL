@@ -22,6 +22,9 @@ public enum SeasonRefreshOutcome
     Fetched,
     [JsonStringEnumMemberName("notListed")]
     NotListed,
+    // Fetched recently enough for the season's own age (SeasonRefreshCadence)
+    // — not "already fetched today"; an old season may go many days between
+    // fetches and still report Skipped.
     [JsonStringEnumMemberName("skipped")]
     Skipped,
     [JsonStringEnumMemberName("failed")]

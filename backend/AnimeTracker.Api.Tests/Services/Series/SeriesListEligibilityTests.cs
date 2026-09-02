@@ -113,7 +113,7 @@ public class SeriesListEligibilityTests
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
 
-        Assert.Empty(index.EligibleSeries());
+        Assert.Empty(index.EligibleSeries([], AnimeRankingSnapshot.Empty));
         Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
     }
 }

@@ -8,6 +8,7 @@ using AnimeTracker.Api.Services.Scheduling;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using SeasonBrowseService = AnimeTracker.Api.Services.Season.SeasonBrowseService;
+using SeasonCalendar = AnimeTracker.Api.Services.Season.SeasonCalendar;
 using SeasonRefreshOutcome = AnimeTracker.Api.Services.Season.SeasonRefreshOutcome;
 using YearRefreshResultDto = AnimeTracker.Api.Services.Season.YearRefreshResultDto;
 
@@ -78,10 +79,112 @@ public class SeasonBrowseServiceTests
         Assert.False(await db.SeasonFetchLogs.AnyAsync(f => f.Year == 2026 && f.Season == "summer"));
     }
 
+    // Turns "N whole years ago" into a (year, season) pair anchored to
+    // today's real current season-quarter, shifted back N full years (4*N
+    // quarters). This lands exactly N whole years old by
+    // SeasonRefreshCadence's reckoning on any day this runs: RefreshAsync
+    // reads DateTimeOffset.UtcNow itself (not an injectable clock), so a
+    // hard-coded year would eventually age out of the tier it was meant to
+    // test. A negative count shifts forward instead, landing on a season
+    // that has not started yet.
+    private static (int Year, string Season) SeasonWholeYearsAgo(int wholeYears)
+    {
+        var (year, season) = SeasonCalendar.GetSeasonFor(DateOnly.FromDateTime(DateTime.UtcNow));
+        return SeasonCalendar.Shift(year, season, -4 * wholeYears);
+    }
+
+    // The age-tiered cadence (SeasonRefreshCadence, tasks.md 2.1): a season's
+    // own age sets how many days must pass before it is stale again. These
+    // mirror the boundary cases SeasonRefreshCadenceTests already covers at
+    // the unit level, but exercised through RefreshAsync end to end.
+    [Theory]
+    [InlineData(1, 2, SeasonRefreshOutcome.Skipped, 0)]
+    [InlineData(1, 3, SeasonRefreshOutcome.Fetched, 1)]
+    [InlineData(3, 4, SeasonRefreshOutcome.Skipped, 0)]
+    [InlineData(3, 5, SeasonRefreshOutcome.Fetched, 1)]
+    [InlineData(8, 9, SeasonRefreshOutcome.Skipped, 0)]
+    [InlineData(8, 10, SeasonRefreshOutcome.Fetched, 1)]
+    public async Task RefreshAsync_AgeTieredIntervalGatesTheRefetch(int wholeYearsOld, int daysSinceLastFetch, SeasonRefreshOutcome expectedOutcome, int expectedMalCallCount)
+    {
+        using var db = CreateDb();
+        var (year, season) = SeasonWholeYearsAgo(wholeYearsOld);
+        db.SeasonFetchLogs.Add(new SeasonFetchLog { Year = year, Season = season, LastFetchedAt = DateTimeOffset.UtcNow.AddDays(-daysSinceLastFetch) });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(edges: []);
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshAsync(year, season);
+
+        Assert.Equal(expectedOutcome, result.Outcome);
+        Assert.Equal(expectedMalCallCount, malClient.FullSeasonCallCount);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_OldSeasonWithNoFetchLogAlwaysFetchesOnFirstVisit()
+    {
+        using var db = CreateDb();
+        var (year, season) = SeasonWholeYearsAgo(8);
+        var malClient = new FakeMalClient(edges: []);
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshAsync(year, season);
+
+        Assert.Equal(SeasonRefreshOutcome.Fetched, result.Outcome);
+        Assert.Equal(1, malClient.FullSeasonCallCount);
+    }
+
+    // Design D8: a future season is age 0 (the daily tier), which is what
+    // lets GetBoundsAsync's forward horizon keep re-probing it every day.
+    [Fact]
+    public async Task RefreshAsync_FutureSeasonStampedYesterdayStillFetchesSoTheHorizonKeepsProbing()
+    {
+        using var db = CreateDb();
+        var (year, season) = SeasonWholeYearsAgo(-1);
+        db.SeasonFetchLogs.Add(new SeasonFetchLog { Year = year, Season = season, LastFetchedAt = DateTimeOffset.UtcNow.AddDays(-1) });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(edges: []);
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshAsync(year, season);
+
+        Assert.Equal(SeasonRefreshOutcome.Fetched, result.Outcome);
+        Assert.Equal(1, malClient.FullSeasonCallCount);
+    }
+
     // RefreshYearAsync's fold (design.md D2, tasks.md 2.4): the four
     // per-season outcomes collapse to one year outcome by precedence
     // Fetched > Skipped > NotListed > Failed.
     private static readonly string[] SeasonsInYearOrder = ["winter", "spring", "summer", "fall"];
+
+    // A year straddling the one-year age boundary (design D9, tasks.md 2.8):
+    // last year's winter/spring/summer are already a year old (3-day
+    // interval) while its fall — the most recently started of the four — is
+    // still under a year old (1-day interval). Stamped alike 2 days ago, the
+    // older three read as fresh and only fall is stale enough to re-fetch.
+    // Anchored to today's real date like SeasonWholeYearsAgo above, so it
+    // reflects whichever of last year's quarters is currently under a year
+    // old rather than a year number that would eventually age out.
+    [Fact]
+    public async Task RefreshYearAsync_StraddlingYearFetchesOnlyTheSeasonUnderItsOwnAgeThreshold()
+    {
+        using var db = CreateDb();
+        var year = DateTime.UtcNow.Year - 1;
+        var lastFetchedAt = DateTimeOffset.UtcNow.AddDays(-2);
+        foreach (var season in SeasonsInYearOrder)
+            db.SeasonFetchLogs.Add(new SeasonFetchLog { Year = year, Season = season, LastFetchedAt = lastFetchedAt });
+        await db.SaveChangesAsync();
+
+        var malClient = new PerSeasonFakeMalClient(new() { ["fall"] = new MalSeasonResponse(Edges: []) });
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshYearAsync(year);
+
+        Assert.Equal(SeasonRefreshOutcome.Fetched, result.Outcome);
+        Assert.Equal(1, malClient.FullSeasonCallCount);
+        Assert.Equal(["fall"], malClient.CalledSeasons);
+    }
 
     [Fact]
     public async Task RefreshYearAsync_OneFetchingThreeAlreadyFetchedTodayFoldsToFetched()

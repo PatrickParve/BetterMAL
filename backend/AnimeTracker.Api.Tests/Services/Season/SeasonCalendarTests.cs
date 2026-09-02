@@ -32,4 +32,19 @@ public class SeasonCalendarTests
         Assert.Equal(year, resultYear);
         Assert.Equal(season, resultSeason);
     }
+
+    [Theory]
+    [InlineData("winter", 1, 1)]
+    [InlineData("spring", 4, 1)]
+    [InlineData("summer", 7, 1)]
+    [InlineData("fall", 10, 1)]
+    public void SeasonStartIsTheFirstDayOfTheQuarterAndRoundTrips(string season, int expectedMonth, int expectedDay)
+    {
+        const int year = 2026;
+
+        var start = SeasonCalendar.SeasonStart(year, season);
+
+        Assert.Equal(new DateOnly(year, expectedMonth, expectedDay), start);
+        Assert.Equal((year, season), SeasonCalendar.GetSeasonFor(start));
+    }
 }

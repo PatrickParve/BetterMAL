@@ -81,7 +81,14 @@ public record RewatchedSectionDto(List<RewatchedEntryDto> Items, string MediaTyp
 /// main-line member count excluding entries that are announced but haven't
 /// started airing — a main-line sequel with zero episodes out doesn't make
 /// the franchise multi-entry yet, so the client's multi-entry filter reads
-/// this instead of <c>MalMain.TotalCount</c>/<c>MineMain.TotalCount</c>.</summary>
+/// this instead of <c>MalMain.TotalCount</c>/<c>MineMain.TotalCount</c>.
+/// <c>MainLineAiredEpisodes</c> and <c>MainLineAverageRank</c>
+/// (tier-season-refresh-and-top-series-order design.md D1) are the two
+/// figures the my-score ranking's tie-break chain reads: the former over the
+/// main line's default combination of version alternatives, the latter — the
+/// mean ranking position over main-line entries that hold a rank, null when
+/// none does — over the whole, unfiltered main line, matching
+/// <c>MineMain</c>'s own scope.</summary>
 public record TopSeriesItemDto(
     int SeriesId,
     int RootAnimeId,
@@ -92,15 +99,18 @@ public record TopSeriesItemDto(
     int MainLineAiredCount,
     SeriesAverageDto MalMain,
     SeriesAverageDto MineMain,
-    bool MalRevealed);
+    bool MalRevealed,
+    int MainLineAiredEpisodes,
+    double? MainLineAverageRank);
 
 /// <summary>Every series with at least one member in my list (design.md
-/// decision 2), ordered by my main-series average descending, then scored
-/// main-line count descending, then raw title case-insensitively — a
-/// sensible default for a client that does nothing with the ranking-basis
-/// control (design.md decision 3/task 3.3). The client re-sorts and filters
-/// this same array locally when the basis is switched (design.md decision
-/// 4).</summary>
+/// decision 2), ordered by the full my-score chain (tier-season-refresh-and-
+/// top-series-order design.md D4): my main-series average descending, then
+/// average ranking position ascending (nulls last), then main-line episodes
+/// aired descending, then raw title case-insensitively — a sensible default
+/// for a client that does nothing with the ranking-basis control. The client
+/// re-sorts this same array locally when the basis is switched, using the
+/// identical chain for the my-score basis (design.md decision 4/D5).</summary>
 public record TopSeriesSectionDto(List<TopSeriesItemDto> Items);
 
 /// <summary>One franchise ranked by "Most rewatched"'s Series scope: display

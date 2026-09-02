@@ -41,9 +41,17 @@ public sealed class SeriesRankingIndex
 
     /// <summary>Every series with at least one member — main line or extra —
     /// in my list (design.md decision 2), each carrying its main-series
-    /// averages and MAL reveal boolean computed over the main line only.
-    /// Unordered; the caller applies whatever ordering it needs.</summary>
-    public List<SeriesRankingResult> EligibleSeries()
+    /// averages and MAL reveal boolean computed over the main line only, plus
+    /// the two figures (tier-season-refresh-and-top-series-order design.md
+    /// D1) the profile's my-score ordering breaks ties on: the average
+    /// ranking position over the whole main line and the main-line episodes
+    /// aired over its default combination — the same figures and the same
+    /// scopes <see cref="ListedSeries"/> reports, shared rather than
+    /// restated. Still applies its own eligibility rules — membership of any
+    /// member, plus the two-aired-main-line-entries coverage rule — which
+    /// this change does not touch. Unordered; the caller applies whatever
+    /// ordering it needs.</summary>
+    public List<SeriesRankingResult> EligibleSeries(Dictionary<int, int> airedEpisodesByAnimeId, AnimeRankingSnapshot ranking)
     {
         var results = new List<SeriesRankingResult>();
 
@@ -87,9 +95,21 @@ public sealed class SeriesRankingIndex
             var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
                 root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.PictureUrl);
 
+            // mainLineAverageRank accompanies mineAverage above and so covers
+            // the same (whole, unfiltered) main line it does. mainLineAired-
+            // Episodes is a card-scale figure and follows the default
+            // combination of version alternatives, as it does on the Series
+            // page — the two figures deliberately use different member sets
+            // (design.md D2).
+            var mainLineAverageRank = MainLineAverageRankOf(mainLine, ranking);
+            var defaultVisibleIds = DefaultVisibleMainLineAnimeIds(mainLine);
+            var scopedMainLine = mainLine.Where(m => defaultVisibleIds.Contains(m.AnimeId)).ToList();
+            var mainLineAiredEpisodes = ListedSeriesMainLineAiredEpisodes(scopedMainLine, airedEpisodesByAnimeId);
+
             results.Add(new SeriesRankingResult(
                 group.Key, root.RootAnimeId, title, englishTitle, pictureUrl,
-                members.Count, mainLineAiredCount, malAverage, mineAverage, malRevealed));
+                members.Count, mainLineAiredCount, malAverage, mineAverage, malRevealed,
+                mainLineAiredEpisodes, mainLineAverageRank));
         }
 
         return results;
@@ -168,8 +188,7 @@ public sealed class SeriesRankingIndex
             // they accompany the score averages (also over the whole main
             // line) and must describe the same member set (design.md D8).
             var mainLineAiredCount = mainLine.Count(m => m.AiringStatus != "not_yet_aired");
-            var mainLineRanks = mainLine.Select(m => ranking.RankOf(m.AnimeId)).Where(r => r is not null).ToList();
-            var mainLineAverageRank = mainLineRanks.Count > 0 ? mainLineRanks.Average(r => r!.Value) : (double?)null;
+            var mainLineAverageRank = MainLineAverageRankOf(mainLine, ranking);
 
             results.Add(new SeriesListItemDto(
                 group.Key, root.RootAnimeId, title, englishTitle, pictureUrl,
@@ -180,6 +199,18 @@ public sealed class SeriesRankingIndex
         }
 
         return results;
+    }
+
+    /// <summary>The mean ranking position over main-line members that hold a
+    /// rank, <c>null</c> when none does (tier-season-refresh-and-top-series-
+    /// order design.md D1) — shared by <see cref="ListedSeries"/> and
+    /// <see cref="EligibleSeries"/> rather than each restating it. Unranked
+    /// members are filtered out before averaging, so they contribute neither
+    /// a rank nor a divisor.</summary>
+    private static double? MainLineAverageRankOf(List<SeriesRankingMemberProjection> mainLine, AnimeRankingSnapshot ranking)
+    {
+        var ranks = mainLine.Select(m => ranking.RankOf(m.AnimeId)).Where(r => r is not null).ToList();
+        return ranks.Count > 0 ? ranks.Average(r => r!.Value) : (double?)null;
     }
 
     /// <summary>The main line's default-combination visible set
@@ -453,9 +484,15 @@ public sealed class SeriesRankingIndex
 
 /// <summary>One series' worth of Top series data: display fields from the
 /// root member, its total member count (main line and extras), its
-/// main-line count that has actually started airing, and its two
-/// main-series averages with the MAL reveal boolean (design.md decision
-/// 5).</summary>
+/// main-line count that has actually started airing, its two main-series
+/// averages with the MAL reveal boolean (design.md decision 5), and the two
+/// figures the profile's my-score ordering breaks ties on
+/// (tier-season-refresh-and-top-series-order design.md D1/D2):
+/// <see cref="MainLineAiredEpisodes"/>, over the main line's default
+/// combination of version alternatives, and <see cref="MainLineAverageRank"/>,
+/// the mean ranking position over the whole main line — <c>null</c> when no
+/// main-line member is ranked. The two deliberately cover different member
+/// sets; see <see cref="SeriesRankingIndex.EligibleSeries"/>.</summary>
 public sealed record SeriesRankingResult(
     int SeriesId,
     int RootAnimeId,
@@ -466,7 +503,9 @@ public sealed record SeriesRankingResult(
     int MainLineAiredCount,
     SeriesAverageDto MalMain,
     SeriesAverageDto MineMain,
-    bool MalRevealed);
+    bool MalRevealed,
+    int MainLineAiredEpisodes,
+    double? MainLineAverageRank);
 
 /// <summary>One series' worth of rewatch-time data: display fields from the
 /// root member and the total rewatch time summed across every member

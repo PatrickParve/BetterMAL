@@ -64,22 +64,65 @@ function topSeriesBasisScoredCount(item: TopSeriesItemDto, basis: TopSeriesBasis
   return basis === 'mine' ? item.mineMain.scoredCount : item.malMain.scoredCount
 }
 
+// Mirrors seriesNullsLast in utils/anime.ts step for step (design.md
+// decision 5) — TopSeriesItemDto and SeriesListItemDto are different
+// records, so this can't literally reuse that helper, but the two are bound
+// by the spec and must move together.
+function topSeriesNullsLast(
+  get: (item: TopSeriesItemDto) => number | null,
+  direction: 'ascending' | 'descending',
+): (a: TopSeriesItemDto, b: TopSeriesItemDto) => number {
+  return (a, b) => {
+    const va = get(a)
+    const vb = get(b)
+    if (va === null && vb === null) return 0
+    if (va === null) return 1
+    if (vb === null) return -1
+    return direction === 'ascending' ? va - vb : vb - va
+  }
+}
+
+// The my-score basis's tie-break chain (design.md decision 5): the same
+// chain as compareMyScoreChain in utils/anime.ts, bound to it by the spec —
+// not by a shared symbol — and must move with SERIES_SORT_COMPARATORS.myScore
+// there. A lower rank number is better, so the rank step is ascending, and a
+// series with no rank sorts after every tied series that has one (no
+// sentinel value stands in for "no rank"). The final tie-break uses the
+// display title, matching the Series page's chain, though neither title is
+// visible on a tile — this settles the rule, not the appearance. The
+// no-my-average branch below is unreachable in practice: rankTopSeries
+// filters those series out before sorting.
+const compareByMineAverage = topSeriesNullsLast((item) => item.mineMain.value, 'descending')
+const compareByAverageRank = topSeriesNullsLast((item) => item.mainLineAverageRank, 'ascending')
+const compareByAiredEpisodes = topSeriesNullsLast((item) => item.mainLineAiredEpisodes, 'descending')
+const compareMyScoreChain = (a: TopSeriesItemDto, b: TopSeriesItemDto): number =>
+  compareByMineAverage(a, b) ||
+  compareByAverageRank(a, b) ||
+  compareByAiredEpisodes(a, b) ||
+  pickDisplayTitle(a.title, a.englishTitle).localeCompare(pickDisplayTitle(b.title, b.englishTitle), undefined, {
+    sensitivity: 'base',
+  })
+
 // Basis toggle re-sorts and re-filters the already-loaded array rather than
-// refetching (design.md decision 4): average descending, then scored
-// main-line count descending (an average earned across more entries places
-// higher), then title case-insensitively. A series with no value under the
+// refetching (design.md decision 4). A series with no value under the
 // selected basis is omitted rather than parked at the end (design.md
-// decision 3).
+// decision 3). The two bases break ties differently: mine uses the
+// Series page's My average chain (average ranking position, then main-line
+// episodes aired, then display title); mal is unchanged — average
+// descending, then scored main-line count descending (an average earned
+// across more entries places higher), then raw title case-insensitively.
 function rankTopSeries(items: TopSeriesItemDto[], basis: TopSeriesBasis): TopSeriesItemDto[] {
-  return items
-    .filter((item) => topSeriesBasisValue(item, basis) !== null)
-    .sort((a, b) => {
-      const valueDiff = topSeriesBasisValue(b, basis)! - topSeriesBasisValue(a, basis)!
-      if (valueDiff !== 0) return valueDiff
-      const countDiff = topSeriesBasisScoredCount(b, basis) - topSeriesBasisScoredCount(a, basis)
-      if (countDiff !== 0) return countDiff
-      return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
-    })
+  const eligible = items.filter((item) => topSeriesBasisValue(item, basis) !== null)
+  if (basis === 'mine') {
+    return eligible.sort(compareMyScoreChain)
+  }
+  return eligible.sort((a, b) => {
+    const valueDiff = topSeriesBasisValue(b, basis)! - topSeriesBasisValue(a, basis)!
+    if (valueDiff !== 0) return valueDiff
+    const countDiff = topSeriesBasisScoredCount(b, basis) - topSeriesBasisScoredCount(a, basis)
+    if (countDiff !== 0) return countDiff
+    return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+  })
 }
 
 // A separate step from rankTopSeries (design.md decision 3) — filtering

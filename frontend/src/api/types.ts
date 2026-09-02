@@ -488,6 +488,11 @@ export type ProfileDto = {
 // malRevealed is the server-computed "may this be shown under 'always show
 // completed scores'" boolean (design.md decision 5) — pass it straight into
 // ScoreValue's `completed` prop.
+// mainLineAiredEpisodes and mainLineAverageRank are the same figures
+// SeriesListItemDto carries: aired-episode count over the main line's
+// default combination of version alternatives, and the mean ranking
+// position over main-line members my rankings cover (null when they cover
+// none). Both are what the my-score basis's tie-break chain sorts on.
 export type TopSeriesItemDto = {
   seriesId: number
   rootAnimeId: number
@@ -496,16 +501,19 @@ export type TopSeriesItemDto = {
   pictureUrl: string | null
   entryCount: number
   mainLineAiredCount: number
+  mainLineAiredEpisodes: number
+  mainLineAverageRank: number | null
   malMain: SeriesAverageDto
   mineMain: SeriesAverageDto
   malRevealed: boolean
 }
 
 // Every series with at least one member in my list (design.md decision 2),
-// pre-ordered by my main-series average descending, then scored main-line
-// count descending, then raw title case-insensitively — the client re-sorts
-// and re-filters this same array locally when the ranking basis is switched
-// (design.md decision 4).
+// pre-ordered by the full my-score chain — my main-series average
+// descending, then average ranking position ascending (nulls last), then
+// main-line episodes aired descending, then raw title case-insensitively —
+// the client re-sorts and re-filters this same array locally when the
+// ranking basis is switched (design.md decision 4).
 export type TopSeriesSectionDto = {
   items: TopSeriesItemDto[]
 }

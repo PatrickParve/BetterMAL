@@ -14,7 +14,8 @@ public class ProfileService(
     ITopAnimeSelectionRepository topAnimeSelectionRepository,
     SeriesRankingLookup seriesRankingLookup,
     ISeriesBuildTrigger seriesBuildTrigger,
-    IEpisodeScheduleService episodeScheduleService) : IProfileService
+    IEpisodeScheduleService episodeScheduleService,
+    IAnimeRankingService rankingService) : IProfileService
 {
     private const int RecentActivityCount = 20;
 
@@ -98,13 +99,29 @@ public class ProfileService(
     {
         var rankingIndex = await seriesRankingLookup.LoadAsync(ct);
 
-        var items = rankingIndex.EligibleSeries()
-            // Base ordering (design.md decision 3/task 3.3): my average
-            // descending (nulls last), then scored main-line count
+        // Resolved the same way SeriesListService.GetSeriesListAsync does
+        // (tier-season-refresh-and-top-series-order design.md D3), so the
+        // two figures below are computed from the same numbers the Series
+        // page's cards carry.
+        var currentlyAiringIds = rankingIndex.CurrentlyAiringMainLineAnimeIds();
+        var airedEpisodesByAnimeId = currentlyAiringIds.Count > 0
+            ? await episodeScheduleService.EpisodesAiredAsOfAsync(currentlyAiringIds, DateTimeOffset.UtcNow, ct)
+            : [];
+        var ranking = await rankingService.GetSnapshotAsync(ct);
+
+        var items = rankingIndex.EligibleSeries(airedEpisodesByAnimeId, ranking)
+            // Base ordering is the full my-score chain (design.md D4), the
+            // same chain series-browser's My average sort uses: my average
+            // descending (nulls last), then average ranking position
+            // ascending (nulls last), then main-line episodes aired
             // descending, then raw title — the client re-sorts/filters this
-            // same array when the basis is switched (design.md decision 4).
-            .OrderByDescending(s => s.MineMain.Value ?? double.NegativeInfinity)
-            .ThenByDescending(s => s.MineMain.ScoredCount)
+            // same array when the basis is switched (design.md decision
+            // 4/D5).
+            .OrderByDescending(s => s.MineMain.Value.HasValue)
+            .ThenByDescending(s => s.MineMain.Value ?? 0)
+            .ThenBy(s => s.MainLineAverageRank.HasValue ? 0 : 1)
+            .ThenBy(s => s.MainLineAverageRank ?? 0)
+            .ThenByDescending(s => s.MainLineAiredEpisodes)
             .ThenBy(s => s.Title, StringComparer.OrdinalIgnoreCase)
             .Select(ToTopSeriesItem)
             .ToList();
@@ -116,7 +133,7 @@ public class ProfileService(
 
     private static TopSeriesItemDto ToTopSeriesItem(SeriesRankingResult s) =>
         new(s.SeriesId, s.RootAnimeId, s.Title, s.EnglishTitle, s.PictureUrl, s.EntryCount, s.MainLineAiredCount,
-            s.MalMain, s.MineMain, s.MalRevealed);
+            s.MalMain, s.MineMain, s.MalRevealed, s.MainLineAiredEpisodes, s.MainLineAverageRank);
 
     // No ScheduleMissingSeriesBuildsAsync call here (design.md D10): the same
     // profile page's Top series read already backfills missing series on

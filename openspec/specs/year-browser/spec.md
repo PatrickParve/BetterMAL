@@ -85,7 +85,9 @@ Until the ceiling is known, the Year page SHALL assume a default that matches MA
 ### Requirement: Cache-first read with visit-triggered refresh of the year's seasons
 The system SHALL render the Year page from the cached listings first, and SHALL refresh that year's four seasons from MAL in the background, updating the page in place once the refresh completes.
 
-Each of the four seasons SHALL be refreshed by the same mechanism a season-page visit uses, and SHALL be subject to the same rules: at most one successful fetch per season per local calendar day, at most one refresh per season in flight at a time, and a failed fetch not counting as the day's fetch. A season already fetched today — whether by this year's refresh, an earlier year visit, or a season-page visit — SHALL NOT be fetched again. Refreshing a year SHALL therefore never cost more MAL requests than visiting its four season pages would have.
+Each of the four seasons SHALL be refreshed by the same mechanism a season-page visit uses, and SHALL be subject to the same rules: at most one successful fetch per season per **that season's own age-based interval** (see the `season-browser` capability), at most one refresh per season in flight at a time, and a failed fetch not counting toward the interval. A season already fetched within its interval — whether by this year's refresh, an earlier year visit, or a season-page visit — SHALL NOT be fetched again. Refreshing a year SHALL therefore never cost more MAL requests than visiting its four season pages would have.
+
+Because a year's four seasons start three months apart, they can fall in **different age tiers**, and a year visit SHALL refresh each season on its own interval rather than treating the year as a single unit. A year may therefore refresh some of its seasons and skip others in the same visit — for instance a year whose fall season is still under a year old while its winter season has passed that boundary. The year SHALL NOT have an interval of its own: there is no year-level fetch stamp, and the year's behaviour is entirely the sum of its four seasons'.
 
 The refresh SHALL be triggered only by a change of the selected year, never by a change of sort or filter, never by a timer or schedule, and never by a user-facing refresh control. Stepping quickly through years with the arrows SHALL refresh only the year settled on.
 
@@ -103,9 +105,17 @@ A failed refresh SHALL leave the cached listing and the displayed page intact an
 - **WHEN** a background refresh is running for the year I am viewing
 - **THEN** the page shows a passive updating indicator, and it disappears when the refresh completes
 
-#### Scenario: Seasons already fetched today are not refetched
-- **WHEN** I open a year whose four seasons were all fetched earlier on the current local day
+#### Scenario: Seasons still fresh for their age are not refetched
+- **WHEN** I open a year whose four seasons were all fetched within their own intervals
 - **THEN** no MAL request is made for any of them and the page is served from the cache
+
+#### Scenario: A year straddling an age boundary refreshes only part of itself
+- **WHEN** I open a year whose fall season started eleven months ago and whose winter season started twenty months ago, and every season was fetched two local days ago
+- **THEN** fall is refreshed, because its interval is one day, and winter, spring, and summer are skipped, because theirs is three days and only two have passed
+
+#### Scenario: An old year costs fewer requests than a recent one
+- **WHEN** I open a year whose four seasons all started more than five years ago and were all fetched six local days ago
+- **THEN** no MAL request is made for any of them, where the same visit to a current year would have refreshed all four
 
 #### Scenario: A season-page visit satisfies the year's refresh
 - **WHEN** I browse summer 2020 on the season page and then open the Year page on 2020 the same day
@@ -123,26 +133,26 @@ A failed refresh SHALL leave the cached listing and the displayed page intact an
 - **WHEN** a year's background refresh fails
 - **THEN** the page keeps showing the cached listings and the failure is not surfaced as a page error
 
-#### Scenario: A failed season does not consume its day
+#### Scenario: A failed season does not consume its interval
 - **WHEN** one of a year's seasons fails to fetch and I open that year again the same day
-- **THEN** that season is retried, because only a successful fetch marks a season as fetched for that day
+- **THEN** that season is retried, because only a successful fetch counts toward its interval
 
 ### Requirement: A year refresh reports one combined outcome
 A year's refresh SHALL report a single outcome, folded from its four seasons' outcomes, so the page can decide what to render without reasoning about seasons it does not display. The fold SHALL be, in order of precedence:
 
 - **fetched** — at least one season fetched anime from MAL;
-- otherwise **skipped** — at least one season was already fetched today;
+- otherwise **skipped** — at least one season was already fresh enough for its age;
 - otherwise **notListed** — MAL reported no listing for any season of the year;
 - otherwise **failed** — every season's fetch failed.
 
-The precedence SHALL make each year outcome mean for a year what the corresponding season outcome means for a season: new data warrants a re-read; a year with any season current today is current, not unlisted and not broken; a year MAL has opened no part of is honestly unlisted; and only a year where nothing at all succeeded is reported as failed.
+The precedence SHALL make each year outcome mean for a year what the corresponding season outcome means for a season: new data warrants a re-read; a year with any season still current is current, not unlisted and not broken; a year MAL has opened no part of is honestly unlisted; and only a year where nothing at all succeeded is reported as failed.
 
 #### Scenario: One season brings new data
-- **WHEN** one of a year's seasons fetches new anime and the other three were already fetched today
+- **WHEN** one of a year's seasons fetches new anime and the other three were still fresh
 - **THEN** the year's outcome is `fetched` and the page re-reads its results
 
 #### Scenario: Nothing to do
-- **WHEN** every season of a year was already fetched today
+- **WHEN** every season of a year was already fetched within its own interval
 - **THEN** the year's outcome is `skipped` and no MAL request is made
 
 #### Scenario: A year MAL has not opened

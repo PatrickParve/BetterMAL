@@ -3,6 +3,7 @@ using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Profile;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.EntityFrameworkCore;
 using SeriesModel = AnimeTracker.Api.Models.Series;
@@ -28,7 +29,8 @@ public class ProfileServiceTopSeriesBackfillTests
             new FakeTopAnimeSelectionRepository(),
             new SeriesRankingLookup(db),
             trigger,
-            new FakeEpisodeScheduleService());
+            new FakeEpisodeScheduleService(),
+            new UnusedAnimeRankingService());
 
     // Drains whatever is already queued, without blocking once the queue is
     // empty — a short per-item timeout stands in for "nothing more to dequeue".
@@ -183,5 +185,24 @@ public class ProfileServiceTopSeriesBackfillTests
             Task.FromResult(new Dictionary<int, int>());
         public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
             Task.FromResult(new Dictionary<int, int>());
+    }
+
+    // The backfill dedupe behaviour under test doesn't order by ranking — a
+    // stub returning the empty ranking is enough
+    // (tier-season-refresh-and-top-series-order task 4.7).
+    private sealed class UnusedAnimeRankingService : IAnimeRankingService
+    {
+        public Task<AnimeRankingSnapshot> GetSnapshotAsync(CancellationToken ct = default) =>
+            Task.FromResult(AnimeRankingSnapshot.Empty);
+        public Task<List<AnimeRankingScoreCountDto>> GetScoreCountsAsync(string mediaTypeScope, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<AnimeRankingTierDto?> GetTierAsync(int score, string mediaTypeScope, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task ApplyTierOrderAsync(List<AnimeRankingTierOrderRequest> tiers, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task MoveAdjacentAsync(int promotedAnimeId, int demotedAnimeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task PlaceLastInTierAsync(int animeId, int score, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 }

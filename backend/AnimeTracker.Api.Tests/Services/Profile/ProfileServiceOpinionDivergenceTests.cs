@@ -3,6 +3,7 @@ using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Profile;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,7 +29,8 @@ public class ProfileServiceOpinionDivergenceTests
             new FakeTopAnimeSelectionRepository(),
             new SeriesRankingLookup(db),
             new FakeSeriesBuildTrigger(),
-            new FakeEpisodeScheduleService());
+            new FakeEpisodeScheduleService(),
+            new UnusedAnimeRankingService());
 
     private static UserAnimeEntry Rated(
         int animeId, string title, int myScore, double malScore, WatchStatus status = WatchStatus.Completed) =>
@@ -210,5 +212,23 @@ public class ProfileServiceOpinionDivergenceTests
             Task.FromResult(new Dictionary<int, int>());
         public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
             Task.FromResult(new Dictionary<int, int>());
+    }
+
+    // Not touched by BuildOpinionDivergence — a stub returning the empty
+    // ranking is enough (tier-season-refresh-and-top-series-order task 4.7).
+    private sealed class UnusedAnimeRankingService : IAnimeRankingService
+    {
+        public Task<AnimeRankingSnapshot> GetSnapshotAsync(CancellationToken ct = default) =>
+            Task.FromResult(AnimeRankingSnapshot.Empty);
+        public Task<List<AnimeRankingScoreCountDto>> GetScoreCountsAsync(string mediaTypeScope, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<AnimeRankingTierDto?> GetTierAsync(int score, string mediaTypeScope, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task ApplyTierOrderAsync(List<AnimeRankingTierOrderRequest> tiers, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task MoveAdjacentAsync(int promotedAnimeId, int demotedAnimeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task PlaceLastInTierAsync(int animeId, int score, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 }

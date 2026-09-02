@@ -11,6 +11,12 @@ public static class SeasonCalendar
 
     public static int GetSeasonIndex(string season) => Array.IndexOf(Order, season);
 
+    /// <summary>The first day of a season's quarter — the date every
+    /// season-age rule (SeasonRefreshCadence) measures from. The inverse-facing
+    /// companion of <see cref="GetSeasonFor"/>, which maps a date to its
+    /// quarter rather than a quarter to its date.</summary>
+    public static DateOnly SeasonStart(int year, string season) => new(year, 3 * GetSeasonIndex(season) + 1, 1);
+
     /// <summary>A single monotonically increasing integer for a (year, season)
     /// point, so seasons can be compared and offset with plain integer
     /// arithmetic instead of juggling year and season-quarter together. Backs

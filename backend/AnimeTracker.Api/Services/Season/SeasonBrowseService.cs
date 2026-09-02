@@ -34,10 +34,14 @@ public class SeasonBrowseService(
         return new SeasonPageDto(year, season, dtoItems, offset, limit, totalCount, lastFetchedAt, hasListing);
     }
 
-    // Fetches at most once per local calendar day, for any season — past,
-    // current, or upcoming alike. Single-flight via RefreshGate: a waiter
-    // re-checks LastFetchedAt inside the lock, so it sees the first refresh's
-    // stamp and skips a second MAL fetch instead of racing it.
+    // Fetched at most once per interval set by the season's own age, measured
+    // from the start of its quarter (SeasonRefreshCadence) — a never-fetched
+    // season always fetches, at any age. A failed fetch never counts, because
+    // only FetchAndCacheAsync writes the stamp and it isn't reached on the
+    // failure path. Single-flight via RefreshGate: a waiter re-checks
+    // LastFetchedAt inside the lock, so it asks the same cadence question and
+    // sees the first refresh's stamp as fresh, skipping a second MAL fetch
+    // instead of racing it.
     public async Task<SeasonRefreshResultDto> RefreshAsync(int year, string season, CancellationToken ct = default)
     {
         using (await refreshGate.LockAsync($"season:{year}:{season}", ct))
@@ -46,7 +50,8 @@ public class SeasonBrowseService(
             var todayLocalDate = broadcastConverter.GetLocalDate(now);
             var lastFetched = await seasonRepository.GetLastFetchedAsync(year, season, ct);
 
-            if (lastFetched is { } fetchedAt && broadcastConverter.GetLocalDate(fetchedAt) == todayLocalDate)
+            if (lastFetched is { } fetchedAt &&
+                SeasonRefreshCadence.IsFresh(year, season, broadcastConverter.GetLocalDate(fetchedAt), todayLocalDate))
                 return new SeasonRefreshResultDto(SeasonRefreshOutcome.Skipped);
 
             try
@@ -110,8 +115,11 @@ public class SeasonBrowseService(
     // A year's own DbContext is scoped per request and not thread-safe, so
     // the four season refreshes below must run one after another rather than
     // concurrently (design D2) — that also means most visits do nothing more
-    // than four cheap "already fetched today" checks, since RefreshAsync's
-    // own once-per-day gate short-circuits before touching MAL.
+    // than four cheap freshness checks, since RefreshAsync's own cadence gate
+    // short-circuits before touching MAL. Looping RefreshAsync over the four
+    // seasons is also what gives a year its per-season intervals with no new
+    // code: each season answers the freshness question on its own age, so a
+    // year straddling an age boundary may fetch some seasons and skip others.
     public async Task<YearRefreshResultDto> RefreshYearAsync(int year, CancellationToken ct = default)
     {
         var outcomes = new List<SeasonRefreshOutcome>();
