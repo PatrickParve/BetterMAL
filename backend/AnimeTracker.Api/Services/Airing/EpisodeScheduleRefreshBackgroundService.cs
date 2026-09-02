@@ -56,7 +56,7 @@ public class EpisodeScheduleRefreshBackgroundService(
         var refreshService = services.GetRequiredService<IEpisodeScheduleRefreshService>();
         var localTimeConverter = services.GetRequiredService<IBroadcastLocalTimeConverter>();
         var scheduleService = services.GetRequiredService<IEpisodeScheduleService>();
-        var reopenService = services.GetRequiredService<ICompletedEntryReopenService>();
+        var airingWatchStatusService = services.GetRequiredService<IAiringWatchStatusService>();
 
         var state = await db.AiringRefreshStates.FirstOrDefaultAsync(ct);
         if (state is null)
@@ -102,17 +102,19 @@ public class EpisodeScheduleRefreshBackgroundService(
         if (uncovered.Count > 0)
             await refreshService.RefreshManyAsync(uncovered, ct);
 
-        // design.md D6 backstop: without this, a Completed entry for a show
-        // nobody opens would never have its reopening pushed to MyAnimeList,
-        // however far behind the aired count grows.
-        var completedAiring = await db.UserAnimeEntries.AsNoTracking()
+        // design.md D6 backstop: without this, an entry for a show nobody
+        // opens would never have its status settled — reopened, or completed
+        // by an AniList-filled total — pushed to MyAnimeList, however far its
+        // aired count moves. Loads every entry (design.md D6/D7's shared
+        // dictionary) rather than a pre-filtered subset, since the two
+        // settle directions select from different subsets.
+        var allEntries = await db.UserAnimeEntries.AsNoTracking()
             .Include(e => e.Anime)
-            .Where(e => e.Status == WatchStatus.Completed && e.Anime.AiringStatus == "currently_airing")
             .ToListAsync(ct);
-        if (completedAiring.Count > 0)
+        if (allEntries.Count > 0)
         {
-            var airedSoFarByAnimeId = await scheduleService.EpisodesAiredAsOfAsync(completedAiring.Select(e => e.Anime).ToList(), now, ct);
-            await reopenService.ReopenAsync(completedAiring, airedSoFarByAnimeId, ct);
+            var airedSoFarByAnimeId = await scheduleService.EpisodesAiredAsOfAsync(allEntries.Select(e => e.Anime).ToList(), now, ct);
+            await airingWatchStatusService.SettleAsync(allEntries, airedSoFarByAnimeId, ct);
         }
     }
 }

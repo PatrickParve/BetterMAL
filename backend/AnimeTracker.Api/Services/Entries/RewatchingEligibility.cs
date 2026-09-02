@@ -9,19 +9,22 @@ namespace AnimeTracker.Api.Services.Entries;
 /// resumed directly, without a detour through Completed.</summary>
 public static class RewatchingEligibility
 {
-    public static bool IsEligible(AnimeMetadata anime, UserAnimeEntry entry) =>
-        AnimeHasFinishedAiring(anime) && HasFinishedOnce(entry);
+    public static bool IsEligible(AnimeMetadata anime, UserAnimeEntry entry, int? episodesAired) =>
+        AnimeHasFinishedAiring(anime, episodesAired) && HasFinishedOnce(entry);
 
-    private static bool AnimeHasFinishedAiring(AnimeMetadata anime) =>
-        anime.AiringStatus is null or "finished_airing";
+    // design.md D3: the shared "every episode has aired" predicate, so a
+    // stale `currently_airing` status no longer blocks a rewatch of a show
+    // that is actually over.
+    private static bool AnimeHasFinishedAiring(AnimeMetadata anime, int? episodesAired) =>
+        AiredEpisodeGate.EverythingHasAired(anime, episodesAired);
 
     private static bool HasFinishedOnce(UserAnimeEntry entry) =>
         entry.CompletedAt is not null || entry.RewatchCount > 0 || entry.Status == WatchStatus.Completed;
 
     /// <summary>Only meaningful when <see cref="IsEligible"/> is false —
     /// names which of the two D0 conditions failed, for the rejection message.</summary>
-    public static string IneligibilityReason(AnimeMetadata anime, UserAnimeEntry entry) =>
-        !AnimeHasFinishedAiring(anime)
-            ? "the anime has not finished airing"
+    public static string IneligibilityReason(AnimeMetadata anime, UserAnimeEntry entry, int? episodesAired) =>
+        !AnimeHasFinishedAiring(anime, episodesAired)
+            ? "the anime has not aired in full"
             : "the anime has never been finished";
 }

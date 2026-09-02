@@ -31,6 +31,37 @@ The system SHALL NOT treat an unknown aired-so-far count as zero, and SHALL NOT 
 - **WHEN** an anime has no recorded airing status and no stored airing rows
 - **THEN** it counts as having aired an episode, rather than being treated as unaired
 
+### Requirement: Whether every episode has aired is resolved one way
+
+The system SHALL resolve "every episode of this anime has aired" through a single shared rule, read by every place that needs the whole run to be out — the completion rules and the rewatching eligibility rule alike. An anime SHALL be treated as having aired in full when **either**:
+
+- MyAnimeList reports its airing status as anything other than currently airing (finished, or not recorded at all); **or**
+- its total episode count is known, its aired-so-far count is known, and the aired-so-far count has reached the total.
+
+The second arm exists because MyAnimeList's airing status is frequently stale — a show routinely still reads as currently airing for weeks after its finale. The aired-so-far count, resolved from stored AniList airing data per the `episode-airing-data` capability, is the fact that does not lag. The rule SHALL be the union of the two arms and never the intersection, so an anime with no stored airing data is judged exactly as it is today, and an anime whose airing data has run past its total is judged on that rather than on a stale status.
+
+This rule SHALL NOT be read where the question is whether *anything* has aired: that stays with "Whether an anime has aired an episode is resolved one way", which is a separate gate with a separate purpose.
+
+#### Scenario: A stale airing status is overruled by the aired count
+
+- **WHEN** MyAnimeList still reports an anime as currently airing, its total is 12, and 12 episodes have aired according to stored airing data
+- **THEN** the anime is treated as having aired in full
+
+#### Scenario: A finished status needs no aired count
+
+- **WHEN** MyAnimeList reports an anime as finished airing and no airing data is stored for it
+- **THEN** the anime is treated as having aired in full
+
+#### Scenario: Still airing with episodes to come
+
+- **WHEN** MyAnimeList reports an anime as currently airing, its total is 12, and 7 episodes have aired
+- **THEN** the anime is not treated as having aired in full
+
+#### Scenario: Still airing with an unknown total
+
+- **WHEN** MyAnimeList reports an anime as currently airing and its total episode count is unknown
+- **THEN** the anime is not treated as having aired in full, because there is no total for the aired count to have reached
+
 ### Requirement: Nothing may be tracked against an anime that has aired no episode
 
 For an anime that has aired no episode, the system SHALL reject every edit that would record having watched, rated, or settled it, whichever surface the edit is made from — the progress row, the entry editor, or the API directly:
@@ -108,7 +139,7 @@ Rewatching means the user has finished the anime at least once and is going thro
 
 The system SHALL permit an entry's status to be set to Rewatching only when **both** of the following hold, and SHALL reject the edit otherwise, leaving the entry unchanged and reporting why:
 
-- **The anime has finished airing.** Its airing status is `finished_airing`, or is not recorded at all. An anime that is `currently_airing` or `not_yet_aired` SHALL be refused — there is no complete run to go through again.
+- **The anime has aired in full**, per "Whether every episode has aired is resolved one way" — its airing status is `finished_airing` or not recorded at all, **or** its total episode count is known and its aired-so-far count has reached that total. An anime with episodes still to come SHALL be refused; there is no complete run to go through again. Reading the shared rule rather than the airing status alone means a run whose every episode has aired is rewatchable even while MyAnimeList still reports it as currently airing, which it routinely does for weeks after a finale.
 - **The user has finished the anime at least once.** This SHALL be tested against the entry's history rather than its present status, and SHALL be satisfied by **any** of: a finish date on the entry, a rewatch count above zero, or a current status of Completed.
 
 Because the second condition looks at history, an entry that has been completed before SHALL be settable to Rewatching from **any** status it currently holds — Watching, On hold, Plan to watch, Dropped, or Completed. A rewatch abandoned partway and parked elsewhere SHALL therefore be resumable without first returning the entry to Completed.
@@ -122,6 +153,11 @@ The entry editor SHALL present the limit rather than letting a rejected save be 
 - **WHEN** I open the editor for a Completed entry whose anime has finished airing
 - **THEN** Rewatching is offered and selecting it is saved
 
+#### Scenario: Rewatching a run whose airing status is stale
+
+- **WHEN** I open the editor for a Completed entry whose anime's total is 12 with all 12 aired, while MyAnimeList still reports it as currently airing
+- **THEN** Rewatching is offered and selecting it is saved, because the anime has aired in full
+
 #### Scenario: Resuming a rewatch from another status
 
 - **WHEN** I open the editor for an entry that has a finish date but whose current status is Watching, On hold, or Dropped
@@ -134,7 +170,7 @@ The entry editor SHALL present the limit rather than letting a rejected save be 
 
 #### Scenario: Not offered for an unfinished anime
 
-- **WHEN** I open the editor for a Completed entry whose anime is currently airing
+- **WHEN** I open the editor for a Completed entry whose anime is currently airing with 7 of 12 episodes aired
 - **THEN** Rewatching is unavailable, and an edit setting it directly is rejected with the entry left unchanged
 
 #### Scenario: Not offered for an anime never finished
@@ -251,13 +287,13 @@ Together with "Watching a rewatch to the end counts it automatically", these SHA
 
 The system SHALL treat Completed as a claim that everything available has been watched, and SHALL NOT leave an entry Completed once that stops being true.
 
-Where an edit lowers a Completed entry's episodes watched below what is available, the system SHALL move that entry out of Completed, keeping the lowered count as entered. It SHALL land in **Rewatching** where that status is permitted for the anime — a count dropping on a finished anime already completed once means it is being watched again — and in **Watching** where it is not.
+Where an edit lowers a Completed entry's episodes watched below its anime's total, the system SHALL move that entry out of Completed, keeping the lowered count as entered. It SHALL land in **Rewatching** where that status is permitted for the anime — a count dropping on an anime already completed once means it is being watched again — and in **Watching** where it is not.
 
 This is distinct from an entry ceasing to be Completed because *more* became available, which always sends it to Watching: the two cases differ in cause, and so in meaning.
 
-- Progress dropped, and the anime has finished airing → **Rewatching** (already finished once; going through it again).
-- Progress dropped, but the anime is still airing → **Watching**, since "Rewatching requires a finished anime the user has finished once" forbids Rewatching there.
-- What is available grew past the progress → **Watching** (new episodes exist; behind on a first viewing).
+- Progress dropped, and the anime has aired in full → **Rewatching** (already finished once; going through it again).
+- Progress dropped on an entry that is Completed while its anime has not aired in full → **Watching**, since "Rewatching requires a finished anime the user has finished once" forbids Rewatching there. Because completion itself now requires the anime to have aired in full, this case is reachable only for an entry recorded under an earlier rule that the re-opening rule has not yet returned to Watching; it is kept so such an entry never lands in an impossible status.
+- The published total grew past the progress → **Watching** (more of the show exists; behind on a first viewing).
 
 #### Scenario: Lowering the count starts a rewatch
 
@@ -269,10 +305,10 @@ This is distinct from an entry ceasing to be Completed because *more* became ava
 - **WHEN** I set a Completed entry's episodes watched to 0 on a finished anime
 - **THEN** its status becomes Rewatching with 0 episodes watched, rather than staying Completed
 
-#### Scenario: Lowering the count on a still-airing anime
+#### Scenario: Lowering the count on an anime not fully aired
 
-- **WHEN** I lower the episodes watched of a Completed entry whose anime is currently airing
-- **THEN** its status becomes Watching rather than Rewatching, because Rewatching is not permitted for an anime that has not finished airing
+- **WHEN** I lower the episodes watched of an entry still recorded as Completed while its anime has not aired in full
+- **THEN** its status becomes Watching rather than Rewatching, because Rewatching is not permitted there
 
 #### Scenario: A count at the full amount stays Completed
 
@@ -282,7 +318,7 @@ This is distinct from an entry ceasing to be Completed because *more* became ava
 #### Scenario: The two causes are distinguished
 
 - **WHEN** a Completed entry stops covering everything available
-- **THEN** it becomes Rewatching if its own progress dropped on a finished anime, and Watching if what is available grew instead
+- **THEN** it becomes Rewatching if its own progress dropped on an anime that has aired in full, and Watching if what is available grew instead
 
 ### Requirement: A rewatch in progress behaves like watching
 
@@ -326,26 +362,25 @@ The system SHALL set `completed_at` to today when an entry becomes Completed —
 
 ### Requirement: Unknown total episodes cannot be completed
 
-The system SHALL display an unknown total as `watched/?` and SHALL allow an entry to be marked Completed only when the system can establish how many episodes there are to have watched:
+The system SHALL display an unknown total as `watched/?`, and SHALL allow an entry to be marked Completed only when both of the following hold:
 
-- For an anime that has **finished airing**, Completed SHALL require a known total episode count. Marking Completed SHALL set episodes watched to that total, mirroring MyAnimeList's own UI.
-- For an anime that is **currently airing**, Completed means having watched every episode out so far. It SHALL require a known aired-so-far episode count, and marking Completed SHALL set episodes watched to that aired-so-far count rather than to the eventual total.
-- For an anime that has **aired no episode**, Completed SHALL be rejected outright, per "Nothing may be tracked against an anime that has aired no episode".
+- the anime's **total episode count is known** — it is the figure Completed claims to have watched, and marking Completed SHALL set episodes watched to it, mirroring MyAnimeList's own UI; and
+- the anime has **aired in full**, per "Whether every episode has aired is resolved one way".
 
-An anime whose airing status is not recorded SHALL be treated as the finished-airing case above, since its total episode count is the only figure available.
+Where either fails, the system SHALL prevent the completion with a reason naming which one failed, and the entry editor SHALL present Completed as unavailable. An anime that has aired no episode SHALL be refused outright, per "Nothing may be tracked against an anime that has aired no episode".
 
-Where the required figure is unknown, the system SHALL prevent the completion and the entry editor SHALL present Completed as unavailable.
+The completion target SHALL be the total in every case, and SHALL never be the aired-so-far count. An entry cannot reach a total that has not aired in any event: episodes watched is already capped at the aired-so-far count wherever one is known, so an entry standing at its total has necessarily watched only aired episodes. Completion therefore needs no separate check that the viewing was legitimate — reaching the total is that check.
 
-Completing a **currently-airing** anime SHALL NOT set a finish date — the anime has not actually finished, so recording one would be false, and the automatic re-opening described by "A completed entry re-opens when a new episode airs" would otherwise leave a stale finish date on an entry that has since returned to Watching. The existing never-overwrite rule continues to apply once a finish date is eligible to be set: the first time an entry is completed while its anime reads as having **finished** airing, its finish date SHALL be filled in as normal, and every completion after that SHALL leave an already-set finish date untouched.
+Automatic completion from the progress row SHALL apply the same two conditions and the same target: an episode-count change that takes episodes watched to the known total of an anime that has aired in full completes the entry. A change that reaches the aired-so-far count of an anime with more to come SHALL complete nothing and SHALL leave the entry Watching, which the `main-dashboard` capability's "A caught-up entry leaves the currently-watching carousel" requirement handles as a display concern rather than a status one. Unlike the explicit edit, the automatic path SHALL be silent when its conditions do not hold rather than reporting a rejection.
 
-This requirement makes Completed reachable for a currently-airing anime, once its aired-so-far count is known — a case the "An entry is Completed only while its progress covers everything available" requirement already accounts for: where such an entry's episodes watched is later lowered below that aired-so-far count, it lands in **Watching**, not Rewatching, because Rewatching requires a finished anime and this one has not finished airing. That is the fallback case that requirement describes for exactly this reason — it exists only because Completed is reachable here on an anime that has not finished airing.
+Because every completion now concerns an anime whose whole run is out, a finish date SHALL always be eligible to be set: an entry with no finish date SHALL have one filled in when it is completed, and an entry that already carries one SHALL keep it untouched. MyAnimeList's airing status SHALL NOT be consulted for this or for any other part of this requirement beyond its role inside the shared aired-in-full rule.
 
-Automatic completion from the progress row mirrors the same fill target: for a **currently-airing** anime it fires when an episode-count change takes episodes watched to the **known aired-so-far count**, exactly as an explicit Completed edit would; for a **finished** anime it continues to require the **known total**. A currently-airing anime with an unknown aired-so-far count simply does not auto-complete (silently, unlike the explicit edit above, which is refused with a reason) — the same way it already didn't when the total was unknown.
+A total episode count MyAnimeList does not publish may still become known from AniList, per the `episode-airing-data` capability. Once known, this requirement reads it as it reads any other total.
 
 #### Scenario: Blocking completion when total unknown
 
 - **WHEN** an anime has finished airing with an unknown total episode count and I attempt to mark it Completed
-- **THEN** the system prevents the completion
+- **THEN** the system prevents the completion with a reason naming the unknown total
 
 #### Scenario: Displaying unknown total
 
@@ -355,42 +390,37 @@ Automatic completion from the progress row mirrors the same fill target: for a *
 #### Scenario: Completing a finished anime fills to the total
 
 - **WHEN** I mark an entry Completed for an anime that has finished airing with a total of 24 episodes
-- **THEN** the entry becomes Completed with 24 episodes watched
+- **THEN** the entry becomes Completed with 24 episodes watched and a finish date
 
-#### Scenario: Completing an airing anime fills to what has aired
+#### Scenario: Completion is refused while episodes are still to come
 
-- **WHEN** I mark an entry Completed for a currently-airing anime with 7 of an eventual 12 episodes aired
-- **THEN** the entry becomes Completed with 7 episodes watched, not 12
+- **WHEN** I attempt to mark an entry Completed for an anime with 7 of an eventual 12 episodes aired
+- **THEN** the system prevents the completion with a reason naming that the anime has not aired in full, and the entry stays as it was
 
-#### Scenario: Blocking completion when the aired count is unknown
+#### Scenario: The final episode completes despite a stale airing status
 
-- **WHEN** an anime is currently airing, its aired-so-far count is unknown, and I attempt to mark it Completed
-- **THEN** the system prevents the completion
+- **WHEN** I use the "+" control to reach episode 12 of a 12-episode anime whose 12 episodes have all aired, while MyAnimeList still reports it as currently airing
+- **THEN** the entry becomes Completed with 12 episodes watched and a finish date
 
-#### Scenario: Watching the latest aired episode completes, without a score prompt
+#### Scenario: Reaching what has aired so far does not complete
 
-- **WHEN** I use the "+" control to reach the last episode aired so far of a currently-airing anime whose total is higher
-- **THEN** the entry becomes Completed with no finish date set, and no completion-score prompt opens, because the anime hasn't actually finished
+- **WHEN** I use the "+" control to reach episode 7 of a 12-episode anime of which 7 have aired
+- **THEN** the entry stays Watching with 7 episodes watched and no finish date is set
 
-#### Scenario: A count drop on a caught-up currently-airing anime returns to Watching
+#### Scenario: An unknown total never auto-completes
 
-- **WHEN** an entry is Completed at the aired-so-far count for a currently-airing anime and I lower episodes watched below that count
-- **THEN** the entry returns to Watching, never Rewatching, per the same fallback described above
+- **WHEN** I use the "+" control on an anime whose total episode count is unknown
+- **THEN** the entry stays Watching, silently, however many episodes it now has watched
 
-#### Scenario: No known aired count means no auto-completion
+#### Scenario: Every completion is eligible for a finish date
 
-- **WHEN** I use the "+" control on a currently-airing anime whose aired-so-far count is unknown
-- **THEN** the entry stays Watching, unlike an explicit Completed edit, which would instead be refused with a reason
+- **WHEN** an entry with no finish date is completed
+- **THEN** its finish date is set, because the anime it concerns has aired in full
 
-#### Scenario: Completing a currently-airing anime sets no finish date
+#### Scenario: An AniList-sourced total makes an entry completable
 
-- **WHEN** I mark an entry Completed for a currently-airing anime with a known aired-so-far count
-- **THEN** the entry becomes Completed and its finish date is left unset
-
-#### Scenario: A finish date is filled in once the anime has actually finished
-
-- **WHEN** an entry with no finish date is completed while its anime reads as having finished airing
-- **THEN** its finish date is set as normal, exactly as for any other completion of a finished anime
+- **WHEN** an anime has aired in full, MyAnimeList publishes no total for it, and AniList reports 12
+- **THEN** the entry may be marked Completed and doing so sets its episodes watched to 12
 
 ### Requirement: Rewatch count is independently editable
 
@@ -721,11 +751,74 @@ Read-only aggregate progress bars are NOT covered by this requirement: the profi
 - **WHEN** my list contains an anime that has aired no episode
 - **THEN** the profile page's whole-list progress bar and the series page's series-wide progress bar render exactly as they did before
 
+### Requirement: A caught-up entry is completed once its full run is known
+
+The system SHALL move a **Watching** entry to **Completed** when its episodes watched has reached its anime's known total episode count and that anime has aired in full — the case where the entry arrived at the figure before the figure was known, so no edit was in flight at the moment it became true.
+
+This is the counterpart of "A completed entry re-opens while more of its anime is to come", and SHALL be evaluated on the same read paths and the same recurring airing schedule, so an entry the user never looks at is still settled, and an entry they do look at already reads as Completed the first time any surface displaying it is read.
+
+It exists chiefly for a total that arrives late. An anime whose total MyAnimeList never published may acquire one from AniList (per the `episode-airing-data` capability) long after the user watched every episode there was; without this rule that entry would sit at Watching against a total it has already met.
+
+The completion SHALL fill in a finish date where the entry has none and SHALL leave an existing one untouched, per "Manually set dates are never overwritten". It SHALL be written to the activity log and queued for MyAnimeList sync like any other status change, and SHALL NOT alter the entry's episodes watched. Applying it again SHALL have no further effect.
+
+It SHALL apply to **Watching** entries only. A Rewatching entry reaching its total is governed by "Watching a rewatch to the end counts it automatically", which additionally raises the rewatch count; a rewatch SHALL NOT be completed by this rule and SHALL NOT have its rewatch count raised by it.
+
+Because this completion is applied by the system rather than by an edit from the progress row, it SHALL NOT open the completion score prompt.
+
+#### Scenario: A late-arriving total completes a caught-up entry
+
+- **WHEN** an entry is Watching at 12 episodes watched against an unknown total, and a refresh then establishes the anime's total as 12 with all 12 aired
+- **THEN** the entry becomes Completed with a finish date, the change is logged and queued for sync, and its episodes watched stays at 12
+
+#### Scenario: The change is visible on the next look
+
+- **WHEN** that total is established and I then open my list, the main dashboard, or the anime's detail page
+- **THEN** the entry already reads as Completed, without waiting for a scheduled pass to have run
+
+#### Scenario: An entry nobody looks at is still completed
+
+- **WHEN** the condition becomes true and no page showing that entry is opened
+- **THEN** the recurring airing schedule records the completion anyway, so it is logged and queued for sync
+
+#### Scenario: Behind the total is not completed
+
+- **WHEN** an entry is Watching at 9 episodes watched and its anime's total is 12
+- **THEN** the entry stays Watching at 9
+
+#### Scenario: An unknown total is not completed
+
+- **WHEN** an entry is Watching and its anime's total episode count is unknown
+- **THEN** the entry stays Watching
+
+#### Scenario: A run not yet fully aired is not completed
+
+- **WHEN** an entry is Watching at 12 episodes watched, its anime's total is 12, but stored airing data reports only 11 aired and MyAnimeList reports the anime as currently airing
+- **THEN** the entry stays Watching, because the anime has not aired in full
+
+#### Scenario: A rewatch is left alone
+
+- **WHEN** a Rewatching entry's episodes watched equals its anime's total
+- **THEN** this rule changes nothing about it, and its rewatch count is not raised
+
+#### Scenario: An existing finish date survives
+
+- **WHEN** a caught-up entry that already carries a finish date is completed by this rule
+- **THEN** its finish date is left exactly as it was
+
+#### Scenario: No score prompt from an automatic completion
+
+- **WHEN** this rule completes an entry while I am looking at the page that triggered it
+- **THEN** no completion score prompt opens
+
 ### Requirement: A completed entry re-opens when a new episode airs
 
-The system SHALL return a Completed entry to Watching when its anime is currently airing and the number of episodes aired so far has grown beyond the entry's episodes watched — the entry is no longer finished, because more of the show now exists than has been seen.
+The system SHALL return a Completed entry to Watching while its anime is still to come: where MyAnimeList reports the anime as currently airing and the entry has **not** watched the anime's known total. Such an entry is not finished — either more has since aired than it has seen, or it was recorded as Completed under an earlier rule that allowed a partial count to count as complete.
 
-An episode counts as aired the moment its stored air instant passes, without any refresh, poll, or user action (see the `episode-airing-data` capability). The re-opening SHALL follow from that directly rather than waiting on a scheduled pass: an entry SHALL already read as Watching the first time any surface displaying it is read after the episode's air instant has passed — my list, the main dashboard, and the anime detail page alike.
+An entry that has watched the full published total SHALL NOT be re-opened, whatever MyAnimeList's airing status says. That is what stops a stale `currently_airing` — routinely still set weeks after a show ends — from repeatedly un-completing a run the user has genuinely finished, and it is why this rule reads the total rather than the aired-so-far count.
+
+An entry whose anime MyAnimeList does not report as currently airing SHALL NOT be re-opened at all, so a list imported from MyAnimeList with entries marked completed at a partial count is left exactly as MyAnimeList holds it.
+
+An episode counts as aired the moment its stored air instant passes, without any refresh, poll, or user action (see the `episode-airing-data` capability), and a total episode count may change on any refresh. The re-opening SHALL follow from either directly rather than waiting on a scheduled pass: an entry SHALL already read as Watching the first time any surface displaying it is read after the condition became true — my list, the main dashboard, and the anime detail page alike.
 
 The system SHALL additionally evaluate the same rule on the recurring airing schedule, so that an entry the user never looks at still has its re-opening recorded and synced.
 
@@ -733,28 +826,36 @@ Either path SHALL treat it as an ordinary status change: written to the activity
 
 The entry's episodes watched SHALL NOT be altered, and its finish date SHALL NOT be cleared — the existing rule that a finish date is never overwritten or cleared automatically continues to apply.
 
-Only an anime that is currently airing SHALL be re-opened this way. An entry for an anime that has finished airing SHALL stay Completed, even where its aired-so-far count reads higher than its cached total episode count.
+The re-opened status SHALL always be Watching, never Rewatching: an anime this rule fires for has episodes still to come, so it has not aired in full, and "Rewatching requires a finished anime the user has finished once" forbids Rewatching there — whatever the entry's rewatch history shows.
 
-The re-opened status SHALL always be Watching, never Rewatching, and this holds without exception: "Rewatching requires a finished anime the user has finished once" permits Rewatching only for an anime that has finished airing, and this rule fires only while the anime is still currently airing — the two conditions cannot hold at once, so Rewatching is never a candidate here, whatever the entry's rewatch history shows.
+#### Scenario: The published total grows past a completed entry
 
-#### Scenario: New episode re-opens a completed entry
-
-- **WHEN** an entry is Completed at 12 episodes watched, its anime is currently airing, and episode 13 airs
+- **WHEN** an entry is Completed at 12 episodes watched, its anime is currently airing, and its total is revised to 24
 - **THEN** the entry's status becomes Watching, the change is logged and queued for sync, and its episodes watched stays at 12
+
+#### Scenario: An entry completed at a partial count is re-opened
+
+- **WHEN** an entry is Completed at 7 episodes watched on a currently-airing anime whose total is 12
+- **THEN** the entry's status becomes Watching with 7 episodes watched, because it has not watched the published total
+
+#### Scenario: A stale airing status does not un-complete a finished run
+
+- **WHEN** an entry is Completed at 12 episodes watched, its anime's total is 12, and MyAnimeList still reports the anime as currently airing
+- **THEN** the entry stays Completed
 
 #### Scenario: The change is visible on the next look, not on the next scheduled pass
 
-- **WHEN** episode 13's stored air instant passes and I then open my list, the main dashboard, or that anime's detail page
+- **WHEN** the condition becomes true and I then open my list, the main dashboard, or that anime's detail page
 - **THEN** the entry already reads as Watching, without waiting for a refresh or a scheduled pass to have run
 
 #### Scenario: A re-opened show reaches the dashboard's currently-watching section
 
-- **WHEN** episode 13's stored air instant passes and the home page is the first place I open
+- **WHEN** the condition becomes true and the home page is the first place I open
 - **THEN** the show appears in Currently watching on that same visit, because it is re-opened before the dashboard selects which entries are Watching — not skipped for still being Completed at the moment the page was built
 
 #### Scenario: An entry nobody looks at is still re-opened
 
-- **WHEN** a new episode airs past a Completed entry's episodes watched and no page showing that entry is opened
+- **WHEN** the condition becomes true and no page showing that entry is opened
 - **THEN** the recurring airing schedule records the change anyway, so it is logged and queued for sync
 
 #### Scenario: Re-opening twice does nothing further
@@ -764,29 +865,33 @@ The re-opened status SHALL always be Watching, never Rewatching, and this holds 
 
 #### Scenario: The finish date survives re-opening
 
-- **WHEN** a Completed entry with a finish date is re-opened by a new episode
+- **WHEN** a Completed entry is re-opened
 - **THEN** its finish date is left exactly as it was
 
 #### Scenario: A finished anime is never re-opened
 
-- **WHEN** a Completed entry's anime has finished airing and its aired-so-far count reads higher than its cached total episode count
+- **WHEN** a Completed entry's anime is not reported as currently airing, whatever its aired-so-far and total counts read
 - **THEN** the entry stays Completed
 
-#### Scenario: Caught-up entries are left alone
+#### Scenario: An imported partial completion is left alone
 
-- **WHEN** a Completed entry's episodes watched already equals its anime's aired-so-far count
-- **THEN** its status is unchanged
+- **WHEN** MyAnimeList holds an entry as completed with 0 episodes watched for an anime it reports as finished airing
+- **THEN** the entry stays Completed and nothing is pushed back to MyAnimeList
 
 ### Requirement: Score prompt on completion via the increment button
-The system SHALL open a score prompt overlay whenever an episode-count change made from the progress row takes an entry into Completed status **with a finish date set** — whether from the "+" button or from editing the count in place — from every place that row appears (the main dashboard's currently-watching carousel, my list rows, the anime detail page, and any later addition). The overlay SHALL show the anime's picture on the left and a score dropdown offering "No score" and the values 1 through 10, pre-selected with the entry's current score.
+The system SHALL open a score prompt overlay whenever an episode-count change made from the progress row takes an entry into Completed status — whether from the "+" button or from editing the count in place — from every place that row appears (the main dashboard's currently-watching carousel, my list rows, the anime detail page, and any later addition). The overlay SHALL show the anime's picture on the left and a score dropdown offering "No score" and the values 1 through 10, pre-selected with the entry's current score.
 
 The overlay SHALL offer three actions: skip, save, and **save and rank**. Save and rank SHALL save the chosen score and then open the ranking editor focused on that anime, so an anime can be finished, scored, and placed in one pass. It SHALL be offered only while the chosen score would leave the entry hand-orderable — with "No score" selected, or for a dropped or short-form anime, saving alone is the only save action offered.
 
-Reaching a currently-airing anime's aired-so-far count completes the entry (per "Unknown total episodes cannot be completed" above) without a finish date, so it SHALL NOT open this prompt — asking for a score on a series that hasn't finished airing would be premature. The prompt SHALL open the first time an entry is completed with a finish date, whether that is a finished anime reaching its total or a currently-airing anime whose finale has aired and been watched once MyAnimeList's own airing status agrees.
+Every completion reachable from the progress row now concerns an anime that has aired in full and carries a finish date, so no finish-date condition is placed on the prompt. In particular the prompt SHALL open for the final episode of a run MyAnimeList still reports as currently airing, since that is a genuine finish. Reaching the aired-so-far count of an anime with episodes still to come completes nothing and SHALL NOT open this prompt.
 
 #### Scenario: Final episode watched from any increment site
 - **WHEN** I press the "+" button on an entry whose episodes-watched thereby reaches the anime's total episode count
 - **THEN** a score prompt overlay opens showing that anime's picture and a score dropdown
+
+#### Scenario: Final episode of a run with a stale airing status
+- **WHEN** I press the "+" button to reach the total of an anime whose episodes have all aired but which MyAnimeList still reports as currently airing
+- **THEN** the score prompt opens, because the entry entered Completed
 
 #### Scenario: Count typed straight to the total
 - **WHEN** I edit an entry's count in place and set it to the anime's total episode count
@@ -808,15 +913,15 @@ Reaching a currently-airing anime's aired-so-far count completes the entry (per 
 - **WHEN** I press the "+" button and episodes-watched stays below the anime's total episode count
 - **THEN** no score prompt opens
 
-#### Scenario: Catching up on a currently-airing anime does not prompt
-- **WHEN** I press the "+" button on a currently-airing anime and episodes-watched thereby reaches the aired-so-far count
-- **THEN** the entry becomes Completed but no score prompt opens, because no finish date was set
+#### Scenario: Catching up on a run still to come does not prompt
+- **WHEN** I press the "+" button and episodes-watched thereby reaches the aired-so-far count of an anime whose total is higher
+- **THEN** the entry stays Watching and no score prompt opens
 
 ### Requirement: Completion prompt fires only on entering Completed
 
-The system SHALL open the completion score prompt only on the transition into Completed status **with a finish date set**, and SHALL NOT open it for an entry that was already Completed before the episode-count change, for an anime whose completion target (total, or aired-so-far count while currently airing) is unknown, for a currently-airing anime's "caught up" completion (which sets no finish date), or when a Rewatching entry finishes and returns to Completed.
+The system SHALL open the completion score prompt only on the transition into Completed status, and SHALL NOT open it for an entry that was already Completed before the episode-count change, for an anime whose total episode count is unknown, for an anime that has not aired in full (where no episode-count change completes anything), when a Rewatching entry finishes and returns to Completed, or when the system itself completes a caught-up entry because its full run became known.
 
-The rewatch exclusion is separate from the finish-date rule above: a rewatch's completion does carry a finish date, since its original one is kept rather than overwritten (per "Watching a rewatch to the end counts it automatically"), so it needs its own carve-out. A rewatch ends with a score the entry has carried since its first viewing, so re-asking for one at the end of every rewatch would be noise rather than a decision; the score stays editable in the editor.
+The rewatch exclusion is separate from the others: a rewatch's completion is a real transition into Completed, so it needs its own carve-out. A rewatch ends with a score the entry has carried since its first viewing, so re-asking for one at the end of every rewatch would be noise rather than a decision; the score stays editable in the editor.
 
 #### Scenario: Rewatch increment on a completed entry
 - **WHEN** I press the "+" button on an entry that is already Completed
@@ -830,13 +935,17 @@ The rewatch exclusion is separate from the finish-date rule above: a rewatch's c
 - **WHEN** I press the "+" button on an anime with an unknown total episode count
 - **THEN** no score prompt opens, because the entry does not auto-complete
 
-#### Scenario: Reaching what's aired on a still-airing anime does not prompt
-- **WHEN** I press the "+" button on a currently-airing anime and episodes-watched reaches the aired-so-far count
-- **THEN** no score prompt opens, because the resulting completion sets no finish date
+#### Scenario: Reaching what's aired on a run still to come does not prompt
+- **WHEN** I press the "+" button and episodes-watched reaches the aired-so-far count of an anime with more episodes to come
+- **THEN** no score prompt opens, because the entry does not enter Completed
 
 #### Scenario: Rewatch finishing does not prompt
 - **WHEN** a Rewatching entry reaches everything available and returns to Completed
 - **THEN** no score prompt opens, and the entry's existing score is unchanged
+
+#### Scenario: A system completion does not prompt
+- **WHEN** a caught-up entry is completed because its total became known while the page was open
+- **THEN** no score prompt opens
 
 ### Requirement: Saving or dismissing the completion score prompt
 The system SHALL save a chosen score through the same entry-edit path as any other score change, so it is logged as activity, queued for MAL sync, and placed in the ranking. Dismissing the prompt — via a skip action, Esc, or a click outside the overlay — SHALL close it and leave the entry's score unchanged. Neither path SHALL undo the completion itself.

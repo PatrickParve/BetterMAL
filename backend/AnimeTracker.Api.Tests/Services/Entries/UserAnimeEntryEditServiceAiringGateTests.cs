@@ -208,45 +208,34 @@ public class UserAnimeEntryEditServiceAiringGateTests
     }
 
     [Fact]
-    public async Task CompletingACurrentlyAiringAnimeFillsToTheAiredCountNotTheTotal()
+    public async Task CompletingAStaleCurrentlyAiringAnimeWhoseAiredCountHasReachedTheTotalCompletesWithAFinishDate()
     {
+        // design.md D4: Completed is decided by episode counts, not MAL's own
+        // (routinely stale) airing status — reaching the total completes the
+        // entry, finish date included, even while AiringStatus still says
+        // currently_airing.
         using var db = CreateDb();
-        await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Watching, episodesWatched: 7, airingStatus: "currently_airing");
+        await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Watching, episodesWatched: 12, airingStatus: "currently_airing");
 
-        var result = await CreateService(db, airedSoFar: 7).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { Status = WatchStatus.Completed });
+        var result = await CreateService(db, airedSoFar: 12).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { Status = WatchStatus.Completed });
 
         Assert.Equal(WatchStatus.Completed, result.Status);
-        Assert.Equal(7, result.EpisodesWatched);
+        Assert.Equal(12, result.EpisodesWatched);
+        Assert.NotNull(result.CompletedAt);
     }
 
     [Fact]
-    public async Task CompletingACurrentlyAiringAnimeSetsNoFinishDate()
+    public async Task ReachingTheAiredSoFarCountOfARunStillToComeLeavesTheEntryWatchingWithNoFinishDate()
     {
-        // The anime hasn't actually finished — Completed here means "caught up
-        // on what's aired," not "done," so no finish date is stamped (unlike
-        // completing a finished anime, covered by CompletingAFinishedAnimeFillsToTheTotal).
-        using var db = CreateDb();
-        await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Watching, episodesWatched: 7, airingStatus: "currently_airing");
-
-        var result = await CreateService(db, airedSoFar: 7).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { Status = WatchStatus.Completed });
-
-        Assert.Equal(WatchStatus.Completed, result.Status);
-        Assert.Null(result.CompletedAt);
-    }
-
-    [Fact]
-    public async Task IncrementingToTheAiredCountAutoCompletesACurrentlyAiringAnime()
-    {
-        // The "+"/set-episodes-watched path auto-completes at the aired-so-far
-        // count for a currently-airing anime, mirroring the explicit Completed
-        // edit's fill target (design.md D4) — reaching what's aired is "caught
-        // up", not just reaching the eventual total.
+        // design.md D4: the completion target is always the total, never the
+        // aired-so-far count — reaching what's aired on a run still to come
+        // is not "done".
         using var db = CreateDb();
         await SeedAsync(db, 1, totalEpisodes: 13, WatchStatus.Watching, episodesWatched: 6, airingStatus: "currently_airing");
 
         var result = await CreateService(db, airedSoFar: 7).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { EpisodesWatched = 7 });
 
-        Assert.Equal(WatchStatus.Completed, result.Status);
+        Assert.Equal(WatchStatus.Watching, result.Status);
         Assert.Equal(7, result.EpisodesWatched);
         Assert.Null(result.CompletedAt);
     }
@@ -264,12 +253,12 @@ public class UserAnimeEntryEditServiceAiringGateTests
     }
 
     [Fact]
-    public async Task LoweringTheCountBelowTheAiredTotalOnACaughtUpCurrentlyAiringAnimeReturnsToWatching()
+    public async Task LoweringTheCountBelowTheTotalOnACompletedCurrentlyAiringAnimeReturnsToWatching()
     {
-        // The strict Completed rule's count-drop fallback (design.md D3),
-        // exercised against the aired-so-far target rather than the total —
-        // always Watching for a currently-airing anime, never Rewatching,
-        // since Rewatching's own eligibility rule requires finished airing.
+        // The strict Completed rule's count-drop fallback (design.md D4) —
+        // always Watching for a currently-airing anime whose run isn't fully
+        // out, never Rewatching, since Rewatching's own eligibility rule
+        // requires EverythingHasAired.
         using var db = CreateDb();
         await SeedAsync(db, 1, totalEpisodes: 13, WatchStatus.Completed, episodesWatched: 7, airingStatus: "currently_airing");
 
@@ -296,32 +285,51 @@ public class UserAnimeEntryEditServiceAiringGateTests
     }
 
     [Fact]
-    public async Task AutoCompletingAtTheTotalWhileStillAiringSetsNoFinishDate()
+    public async Task AutoCompletingAtTheTotalWhileStillAiringSetsAFinishDate()
     {
-        // The episodes-watched "+" path auto-completes at a known total
-        // (unrelated to this gate, unchanged by it) — it shares the same
-        // no-finish-date-while-airing rule as an explicit Completed edit.
+        // design.md D4: reaching the total is proof the whole run is out, so
+        // the increment path stamps a finish date exactly as an explicit
+        // Completed edit does — there is no longer a no-finish-date-while-airing
+        // suppression on either path.
         using var db = CreateDb();
         await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Watching, episodesWatched: 11, airingStatus: "currently_airing");
 
         var result = await CreateService(db, airedSoFar: 12).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { EpisodesWatched = 12 });
 
         Assert.Equal(WatchStatus.Completed, result.Status);
-        Assert.Null(result.CompletedAt);
+        Assert.NotNull(result.CompletedAt);
     }
 
     [Fact]
-    public async Task CompletingACurrentlyAiringAnimeWithAnUnknownAiredCountIsRefused()
+    public async Task CompletingACurrentlyAiringAnimeBeforeItHasFullyAiredIsRefused()
     {
+        // design.md D4: CannotCompleteBeforeFullyAiredException replaces the
+        // old currently-airing-only "aired count unknown" rejection — it
+        // covers both an unknown aired count and a known one still short of
+        // the total.
         using var db = CreateDb();
         await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Watching, episodesWatched: 3, airingStatus: "currently_airing");
 
-        await Assert.ThrowsAsync<CannotCompleteUnknownAiredCountException>(() =>
+        await Assert.ThrowsAsync<CannotCompleteBeforeFullyAiredException>(() =>
             CreateService(db, airedSoFar: null).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { Status = WatchStatus.Completed }));
 
         var stored = await db.UserAnimeEntries.AsNoTracking().SingleAsync(e => e.AnimeId == 1);
         Assert.Equal(WatchStatus.Watching, stored.Status);
         Assert.Equal(3, stored.EpisodesWatched);
+    }
+
+    [Fact]
+    public async Task CompletingACurrentlyAiringAnimeWithAKnownAiredCountStillShortOfTheTotalIsRefused()
+    {
+        using var db = CreateDb();
+        await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Watching, episodesWatched: 7, airingStatus: "currently_airing");
+
+        await Assert.ThrowsAsync<CannotCompleteBeforeFullyAiredException>(() =>
+            CreateService(db, airedSoFar: 7).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { Status = WatchStatus.Completed }));
+
+        var stored = await db.UserAnimeEntries.AsNoTracking().SingleAsync(e => e.AnimeId == 1);
+        Assert.Equal(WatchStatus.Watching, stored.Status);
+        Assert.Equal(7, stored.EpisodesWatched);
     }
 
     [Fact]

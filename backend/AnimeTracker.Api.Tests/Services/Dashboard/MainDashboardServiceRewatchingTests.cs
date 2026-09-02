@@ -13,7 +13,7 @@ namespace AnimeTracker.Api.Tests.Services.Dashboard;
 public class MainDashboardServiceRewatchingTests
 {
     private static MainDashboardService CreateService(List<UserAnimeEntry> entries) =>
-        new(new FakeUserAnimeEntryRepository(entries), new FakeEpisodeScheduleService(), new NullCompletedEntryReopenService(), new FakeBroadcastLocalTimeConverter(), new FakeAnimeUpdateService());
+        new(new FakeUserAnimeEntryRepository(entries), new FakeEpisodeScheduleService(), new NullAiringWatchStatusService(), new FakeBroadcastLocalTimeConverter(), new FakeAnimeUpdateService());
 
     [Fact]
     public async Task ARewatchAppearsInCurrentlyWatchingAlongsideWatching()
@@ -59,9 +59,9 @@ public class MainDashboardServiceRewatchingTests
         Assert.Equal("currently_airing", Assert.Single(dashboard.CurrentlyWatching).AiringStatus);
     }
 
-    private sealed class NullCompletedEntryReopenService : ICompletedEntryReopenService
+    private sealed class NullAiringWatchStatusService : IAiringWatchStatusService
     {
-        public Task ReopenAsync(IReadOnlyCollection<UserAnimeEntry> entries, IReadOnlyDictionary<int, int> airedSoFarByAnimeId, CancellationToken ct = default) =>
+        public Task SettleAsync(IReadOnlyCollection<UserAnimeEntry> entries, IReadOnlyDictionary<int, int> airedSoFarByAnimeId, CancellationToken ct = default) =>
             Task.CompletedTask;
     }
 

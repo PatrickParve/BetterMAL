@@ -76,7 +76,7 @@ builder.Services.AddHostedService<InitialImportBackgroundService>();
 // --- List editing & write-sync ---
 builder.Services.AddSingleton<IEntrySyncScheduler, DebouncedEntrySyncScheduler>();
 builder.Services.AddScoped<IUserAnimeEntryEditService, UserAnimeEntryEditService>();
-builder.Services.AddScoped<ICompletedEntryReopenService, CompletedEntryReopenService>();
+builder.Services.AddScoped<IAiringWatchStatusService, AiringWatchStatusService>();
 
 // --- Write-sync retry & reconciliation ---
 builder.Services.AddScoped<IEntryPushService, EntryPushService>();

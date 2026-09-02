@@ -24,7 +24,7 @@ public class MainDashboardServiceUpdatesTests
         new(
             new FakeUserAnimeEntryRepository(entries),
             new FakeEpisodeScheduleService(),
-            new NullCompletedEntryReopenService(),
+            new NullAiringWatchStatusService(),
             new BroadcastLocalTimeConverter(),
             new AnimeUpdateService(db, new RelationResolver(db), new BroadcastLocalTimeConverter()));
 
@@ -48,9 +48,9 @@ public class MainDashboardServiceUpdatesTests
         Assert.Equal(2, history.Count);
     }
 
-    private sealed class NullCompletedEntryReopenService : ICompletedEntryReopenService
+    private sealed class NullAiringWatchStatusService : IAiringWatchStatusService
     {
-        public Task ReopenAsync(IReadOnlyCollection<UserAnimeEntry> entries, IReadOnlyDictionary<int, int> airedSoFarByAnimeId, CancellationToken ct = default) =>
+        public Task SettleAsync(IReadOnlyCollection<UserAnimeEntry> entries, IReadOnlyDictionary<int, int> airedSoFarByAnimeId, CancellationToken ct = default) =>
             Task.CompletedTask;
     }
 

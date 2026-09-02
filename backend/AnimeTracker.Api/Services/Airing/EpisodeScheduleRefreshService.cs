@@ -152,7 +152,7 @@ public class EpisodeScheduleRefreshService(
 
     private async Task<int> RefreshOneCoreAsync(int animeId, CancellationToken ct)
     {
-        var anime = await db.AnimeMetadata.AsNoTracking().FirstOrDefaultAsync(a => a.Id == animeId, ct);
+        var anime = await db.AnimeMetadata.FirstOrDefaultAsync(a => a.Id == animeId, ct);
         if (anime is null)
             return 0; // the anime itself is gone — nothing to refresh
 
@@ -162,6 +162,7 @@ public class EpisodeScheduleRefreshService(
         int? aniListId = sync?.AniListId;
         string? status = null;
         DateTimeOffset? nextAiringAt = null;
+        int? lookupEpisodes = null;
         // Preserved unless this call makes a fresh lookup below — a
         // subsequent refresh that skips straight to the schedule fetch
         // (aniListId already cached) didn't just re-ask about relations, so
@@ -186,6 +187,7 @@ public class EpisodeScheduleRefreshService(
             aniListId = lookup.AniListId;
             status = lookup.Status;
             nextAiringAt = lookup.NextAiringEpisodeAtUtc;
+            lookupEpisodes = lookup.Episodes;
             // Relations ride along on this same lookup (relation-confidence
             // spec) — free, no extra AniList request.
             await relationStore.ReplaceAsync(animeId, lookup.Relations, ct);
@@ -197,6 +199,15 @@ public class EpisodeScheduleRefreshService(
         var schedule = await aniList.GetAiringScheduleAsync(aniListId.Value, ct);
         status = schedule.Status ?? status;
         nextAiringAt = schedule.NextAiringEpisodeAtUtc ?? nextAiringAt;
+
+        // Schedule first, matching how status/nextAiringAt are already merged
+        // above: the schedule fetch's own Media(id:) selection is the fresher
+        // of the two when both ran this call.
+        var previousTotalEpisodes = anime.TotalEpisodes;
+        anime.AniListTotalEpisodes = schedule.TotalEpisodes ?? lookupEpisodes;
+        anime.ResolveTotalEpisodes();
+        if (previousTotalEpisodes is null && anime.TotalEpisodes is not null)
+            await updateRecorder.RecordAsync(anime, AnimeUpdateKinds.EpisodeCountReleased, default, now, ct);
 
         var rows = schedule.Episodes
             .Select(e => new EpisodeAiring { AnimeId = animeId, Episode = e.Episode, AirsAtUtc = e.AirsAtUtc, FetchedAt = now })

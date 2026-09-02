@@ -137,11 +137,14 @@ public class UserAnimeEntryEditServiceResumeTests
         // never a raise. Raising a Completed entry is impossible without
         // first lowering it (it's already capped at the total), so this
         // covers the drop path landing in Watching rather than Rewatching
-        // when the entry has never actually finished airing.
+        // when the anime has never actually aired in full (aired count 11 of
+        // 12 — refine-sync-status-and-episode-totals design.md D3: a
+        // currently_airing anime whose aired count has *reached* the total is
+        // instead treated as finished, which is covered separately).
         using var db = CreateDb();
-        await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Completed, episodesWatched: 12, airingStatus: "currently_airing");
+        await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Completed, episodesWatched: 11, airingStatus: "currently_airing");
 
-        var result = await CreateService(db, airedSoFar: 12).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { EpisodesWatched = 10 });
+        var result = await CreateService(db, airedSoFar: 11).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { EpisodesWatched = 10 });
 
         Assert.Equal(WatchStatus.Watching, result.Status);
     }

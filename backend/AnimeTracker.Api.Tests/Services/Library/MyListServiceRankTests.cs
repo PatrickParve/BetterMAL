@@ -30,7 +30,7 @@ public class MyListServiceRankTests
         await db.SaveChangesAsync();
 
         var service = new MyListService(
-            new UserAnimeEntryRepository(db), new TopAnimeSelectionRepository(db), new FakeEpisodeScheduleService(), new NoopReopenService());
+            new UserAnimeEntryRepository(db), new TopAnimeSelectionRepository(db), new FakeEpisodeScheduleService(), new NoopAiringWatchStatusService());
 
         var list = await service.GetMyListAsync();
 
@@ -52,9 +52,9 @@ public class MyListServiceRankTests
             Task.FromResult(new Dictionary<int, int>());
     }
 
-    private sealed class NoopReopenService : ICompletedEntryReopenService
+    private sealed class NoopAiringWatchStatusService : IAiringWatchStatusService
     {
-        public Task ReopenAsync(IReadOnlyCollection<UserAnimeEntry> entries, IReadOnlyDictionary<int, int> airedSoFarByAnimeId, CancellationToken ct = default) =>
+        public Task SettleAsync(IReadOnlyCollection<UserAnimeEntry> entries, IReadOnlyDictionary<int, int> airedSoFarByAnimeId, CancellationToken ct = default) =>
             Task.CompletedTask;
     }
 }

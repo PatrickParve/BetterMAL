@@ -102,6 +102,102 @@ public class MalMappingExtensionsTests
         Assert.Equal(syncedAt, anime.PicturesSyncedAt);
     }
 
+    // design.md D8 (refine-sync-status-and-episode-totals tasks.md 1.3/9.9):
+    // ApplyTo/ApplyLeanTo write MalTotalEpisodes rather than TotalEpisodes
+    // directly, then re-derive the effective total through ResolveTotalEpisodes.
+    [Fact]
+    public void ApplyToWritesMalTotalEpisodesAndDerivesTheEffectiveTotal()
+    {
+        var anime = new AnimeMetadata { Id = 1, Title = "T" };
+        var node = NodeWithMainPicture("https://mal/main.jpg");
+        node.NumEpisodes = 24;
+
+        node.ApplyTo(anime, DateTimeOffset.UtcNow);
+
+        Assert.Equal(24, anime.MalTotalEpisodes);
+        Assert.Equal(24, anime.TotalEpisodes);
+    }
+
+    [Fact]
+    public void ApplyToNormalisesAZeroEpisodeCountToNull()
+    {
+        var anime = new AnimeMetadata { Id = 1, Title = "T" };
+        var node = NodeWithMainPicture("https://mal/main.jpg");
+        node.NumEpisodes = 0;
+
+        node.ApplyTo(anime, DateTimeOffset.UtcNow);
+
+        Assert.Null(anime.MalTotalEpisodes);
+        Assert.Null(anime.TotalEpisodes);
+    }
+
+    [Fact]
+    public void ApplyToWithALaterMalTotalSupersedesAPreviouslyFilledAniListTotal()
+    {
+        // design.md D8: MAL wins whenever it has a figure — a MAL total that
+        // arrives after an AniList fallback was already stored supersedes it.
+        var anime = new AnimeMetadata { Id = 1, Title = "T", AniListTotalEpisodes = 12, TotalEpisodes = 12 };
+        var node = NodeWithMainPicture("https://mal/main.jpg");
+        node.NumEpisodes = 24;
+
+        node.ApplyTo(anime, DateTimeOffset.UtcNow);
+
+        Assert.Equal(24, anime.MalTotalEpisodes);
+        Assert.Equal(12, anime.AniListTotalEpisodes); // untouched
+        Assert.Equal(24, anime.TotalEpisodes);
+    }
+
+    [Fact]
+    public void ApplyToReportingNoEpisodeCountDoesNotBlankAPreviouslyFilledAniListTotal()
+    {
+        // design.md D8: a MAL refresh that still reports nothing must not
+        // blank a total AniList already filled in.
+        var anime = new AnimeMetadata { Id = 1, Title = "T", AniListTotalEpisodes = 12, TotalEpisodes = 12 };
+        var node = NodeWithMainPicture("https://mal/main.jpg");
+        node.NumEpisodes = null;
+
+        node.ApplyTo(anime, DateTimeOffset.UtcNow);
+
+        Assert.Null(anime.MalTotalEpisodes);
+        Assert.Equal(12, anime.AniListTotalEpisodes);
+        Assert.Equal(12, anime.TotalEpisodes); // still resolves through AniList's figure
+    }
+
+    [Fact]
+    public void ApplyLeanToWritesMalTotalEpisodesAndDerivesTheEffectiveTotal()
+    {
+        var anime = new AnimeMetadata { Id = 1, Title = "T" };
+        var node = NodeWithMainPicture("https://mal/main.jpg");
+        node.NumEpisodes = 13;
+
+        node.ApplyLeanTo(anime, DateTimeOffset.UtcNow);
+
+        Assert.Equal(13, anime.MalTotalEpisodes);
+        Assert.Equal(13, anime.TotalEpisodes);
+    }
+
+    [Fact]
+    public void ApplyLeanToStillLeavesRichFieldsAlone()
+    {
+        var anime = new AnimeMetadata
+        {
+            Id = 1,
+            Title = "T",
+            Synopsis = "Existing synopsis",
+            Genres = ["Action"],
+            AiringStatus = "finished_airing",
+        };
+        var node = NodeWithMainPicture("https://mal/main.jpg");
+        node.NumEpisodes = 13;
+
+        node.ApplyLeanTo(anime, DateTimeOffset.UtcNow);
+
+        Assert.Equal(13, anime.TotalEpisodes);
+        Assert.Equal("Existing synopsis", anime.Synopsis);
+        Assert.Equal(["Action"], anime.Genres);
+        Assert.Equal("finished_airing", anime.AiringStatus); // rich/detail-only field, untouched by a lean upsert
+    }
+
     [Fact]
     public void PicturesPresentNodeStoresLargeInMalOrderAndStampsTimestamp()
     {

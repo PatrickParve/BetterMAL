@@ -107,7 +107,8 @@ public static class MalMappingExtensions
         target.MediaType = node.MediaType;
         target.AiringStatus = node.Status;
         target.Rating = node.Rating;
-        target.TotalEpisodes = node.NumEpisodes is null or 0 ? null : node.NumEpisodes;
+        target.MalTotalEpisodes = node.NumEpisodes is null or 0 ? null : node.NumEpisodes;
+        target.ResolveTotalEpisodes();
         target.AiredFrom = ParseMalDate(node.StartDate);
         target.AiredTo = ParseMalDate(node.EndDate);
         target.Studio = node.Studios?.FirstOrDefault()?.Name;
@@ -189,7 +190,8 @@ public static class MalMappingExtensions
         target.MalScore = node.Mean;
         target.MediaType = node.MediaType;
         target.Rating = node.Rating;
-        target.TotalEpisodes = node.NumEpisodes is null or 0 ? null : node.NumEpisodes;
+        target.MalTotalEpisodes = node.NumEpisodes is null or 0 ? null : node.NumEpisodes;
+        target.ResolveTotalEpisodes();
         target.PopularityRank = node.Popularity;
         target.Rank = node.Rank;
         target.LastScoreSyncedAt = now;
@@ -208,10 +210,15 @@ public static class MalMappingExtensions
     /// <summary>Copies MAL list-status fields onto an existing user-list entry —
     /// the update-in-place counterpart of <see cref="ToUserAnimeEntry"/>, so a
     /// corrective re-sync can refresh an already-imported entry the same way
-    /// import builds a new one. Does not touch PendingSync — callers guard that.</summary>
+    /// import builds a new one. Does not touch PendingSync — callers guard that.
+    /// Resolves the incoming status against the entry's current one
+    /// (design.md D1) so a local Rewatching entry survives; inert when called
+    /// from <see cref="ToUserAnimeEntry"/>, whose fresh entry defaults to
+    /// Watching rather than Rewatching.</summary>
     public static void ApplyTo(this MalListStatus? status, UserAnimeEntry target, DateTimeOffset now)
     {
-        target.Status = status?.Status?.ToWatchStatus() ?? WatchStatus.PlanToWatch;
+        var remoteStatus = status?.Status?.ToWatchStatus() ?? WatchStatus.PlanToWatch;
+        target.Status = MalStatusResolution.ResolveAgainstLocal(target.Status, remoteStatus);
         target.EpisodesWatched = status?.NumEpisodesWatched ?? 0;
         target.MyScore = status?.Score is null or 0 ? null : status.Score;
         target.StartedAt = ParseMalDate(status?.StartDate);

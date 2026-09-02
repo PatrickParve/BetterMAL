@@ -53,7 +53,7 @@ public class ReconciliationService(
 
             if (!localEntries.TryGetValue(animeId, out var local))
             {
-                diffEntries.Add(ToDiffEntry(animeId, ReconciliationDiffChangeType.Added, remote));
+                diffEntries.Add(ToDiffEntry(animeId, ReconciliationDiffChangeType.Added, remote, remote.Status));
                 added++;
                 continue;
             }
@@ -81,7 +81,11 @@ public class ReconciliationService(
                 continue;
             }
 
-            diffEntries.Add(ToDiffEntry(animeId, ReconciliationDiffChangeType.Updated, remote));
+            // The held diff records the status the entry will end up with
+            // (design.md D2), not MAL's raw `watching` — otherwise accepting a
+            // diff raised by some other field would demote a rewatch.
+            var resolvedStatus = MalStatusResolution.ResolveAgainstLocal(local.Status, remote.Status);
+            diffEntries.Add(ToDiffEntry(animeId, ReconciliationDiffChangeType.Updated, remote, resolvedStatus));
             updated++;
         }
 
@@ -151,7 +155,10 @@ public class ReconciliationService(
                 before = null;
             }
 
-            local.Status = entry.Status;
+            // Re-resolve against the entry as it stands now, not as it stood
+            // when the diff was computed (design.md D2) — it may have become a
+            // rewatch in the meantime, and a stale diff must not demote that.
+            local.Status = MalStatusResolution.ResolveAgainstLocal(local.Status, entry.Status);
             local.EpisodesWatched = entry.EpisodesWatched;
             local.MyScore = entry.MyScore;
             local.StartedAt = entry.StartedAt;
@@ -182,11 +189,11 @@ public class ReconciliationService(
         return true;
     }
 
-    private static PendingReconciliationDiffEntry ToDiffEntry(int animeId, ReconciliationDiffChangeType changeType, UserAnimeEntry remote) => new()
+    private static PendingReconciliationDiffEntry ToDiffEntry(int animeId, ReconciliationDiffChangeType changeType, UserAnimeEntry remote, WatchStatus status) => new()
     {
         AnimeId = animeId,
         ChangeType = changeType,
-        Status = remote.Status,
+        Status = status,
         EpisodesWatched = remote.EpisodesWatched,
         MyScore = remote.MyScore,
         StartedAt = remote.StartedAt,

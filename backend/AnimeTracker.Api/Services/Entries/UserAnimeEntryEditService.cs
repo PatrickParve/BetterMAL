@@ -153,6 +153,12 @@ public class UserAnimeEntryEditService(
         }
     }
 
+    // design.md D4: the one completion gate shared by the automatic
+    // (ApplyEpisodesWatched) and explicit (ApplyStatus) paths, so they can
+    // never disagree about when a run is done.
+    private static bool CanComplete(AnimeMetadata anime, int? airedSoFar, bool hasAired) =>
+        hasAired && anime.TotalEpisodes is not null && AiredEpisodeGate.EverythingHasAired(anime, airedSoFar);
+
     private static void ApplyEpisodesWatched(
         UserAnimeEntryEditRequest request, UserAnimeEntry entry, AnimeMetadata anime, int animeId, WatchStatus originalStatus, DateOnly today,
         int? airedSoFar, bool hasAired,
@@ -190,29 +196,24 @@ public class UserAnimeEntryEditService(
         changes.Add((ActivityChangeType.EpisodeIncremented, ActivityDetail.Episode(newEpisodes), previousEpisodesWatched));
 
         // Unless this same request is already setting a different status explicitly:
-        // For a currently-airing anime "every episode watched" means every
-        // episode aired so far (design.md D4) — the eventual total isn't
-        // reachable yet, and it's also the ceiling ApplyEpisodesWatched's cap
-        // above already enforces. A finished anime keeps using its total.
-        var completionTarget = anime.AiringStatus == "currently_airing" ? airedSoFar : anime.TotalEpisodes;
+        // the completion target is always the anime's total (design.md D4) —
+        // never the aired-so-far count. The cap above already guarantees an
+        // entry can only reach the total once every episode has aired, so
+        // using the total here (rather than a currently-airing-only aired
+        // count) never lets a partial run complete early.
+        var completionTarget = anime.TotalEpisodes;
         if ((request.Status is null || request.Status == originalStatus) && completionTarget is { } target)
         {
             // Watching every episode out marks the show completed, mirroring
-            // MAL's own UI for a finished anime and D4's "caught up" completion
-            // for a currently-airing one. A Rewatching entry reaching the total
-            // is watching a rewatch to the end (design.md D2) — it re-completes
-            // and its rewatch count silently increases by one; D0 guarantees
-            // the anime has finished airing whenever originalStatus is
-            // Rewatching, so `target` is always the real total in that case.
-            if (originalStatus != WatchStatus.Completed && newEpisodes == target)
+            // MAL's own UI. A Rewatching entry reaching the total is watching
+            // a rewatch to the end (design.md D2) — it re-completes and its
+            // rewatch count silently increases by one; D0 guarantees the anime
+            // has finished airing whenever originalStatus is Rewatching, so
+            // `target` is always the real total in that case.
+            if (originalStatus != WatchStatus.Completed && newEpisodes == target && CanComplete(anime, airedSoFar, hasAired))
             {
                 entry.Status = WatchStatus.Completed;
-                // No finish date while the anime is still airing — being caught
-                // up on what's aired isn't "done" (gate-editing-on-aired-
-                // episodes). See ApplyStatus for the matching rule on an
-                // explicit Completed edit.
-                if (anime.AiringStatus != "currently_airing")
-                    entry.CompletedAt ??= today; // never overwrites an existing finish date — see ApplyStatus
+                entry.CompletedAt ??= today; // never overwrites an existing finish date — see ApplyStatus
                 if (originalStatus == WatchStatus.Rewatching)
                     entry.RewatchCount++;
                 changes.Add((ActivityChangeType.Completed, ActivityDetail.Completed, null));
@@ -226,7 +227,7 @@ public class UserAnimeEntryEditService(
             // refuses anything that hasn't finished airing.
             else if (originalStatus == WatchStatus.Completed && newEpisodes < target)
             {
-                entry.Status = RewatchingEligibility.IsEligible(anime, entry) ? WatchStatus.Rewatching : WatchStatus.Watching;
+                entry.Status = RewatchingEligibility.IsEligible(anime, entry, airedSoFar) ? WatchStatus.Rewatching : WatchStatus.Watching;
                 changes.Add((ActivityChangeType.StatusChanged, ActivityDetail.StatusChange(originalStatus, entry.Status), null));
             }
         }
@@ -267,33 +268,19 @@ public class UserAnimeEntryEditService(
 
         if (newStatus == WatchStatus.Completed)
         {
-            // design.md D4: Completed means "watched every episode out". For a
-            // finished anime that's the total; for a currently-airing one it's
-            // the aired-so-far count instead, since the total doesn't exist to
-            // watch yet — and it's also the only value the episodes-watched
-            // ceiling above would let stand.
-            var isCurrentlyAiring = anime.AiringStatus == "currently_airing";
-            int filledEpisodes;
-            if (isCurrentlyAiring)
-            {
-                if (airedSoFar is not { } aired)
-                    throw new CannotCompleteUnknownAiredCountException(animeId);
-                filledEpisodes = aired;
-            }
-            else
-            {
-                if (anime.TotalEpisodes is not { } total)
-                    throw new CannotCompleteUnknownEpisodeCountException(animeId);
-                filledEpisodes = total;
-            }
+            // design.md D4: Completed means every episode of the total has
+            // aired and been watched. An unknown total refuses outright;
+            // a known total that hasn't fully aired yet (CanComplete, which
+            // reads AiredEpisodeGate.EverythingHasAired rather than MAL's own
+            // routinely-stale airing status) refuses too, rather than filling
+            // to the aired-so-far count as "done".
+            if (anime.TotalEpisodes is not { } total)
+                throw new CannotCompleteUnknownEpisodeCountException(animeId);
+            if (!CanComplete(anime, airedSoFar, hasAired))
+                throw new CannotCompleteBeforeFullyAiredException(animeId);
 
-            // A still-airing anime hasn't actually finished — "Completed" here
-            // means caught up on what's aired, not done, so no finish date is
-            // stamped. Once the anime finishes airing, a later completion (here
-            // or via the auto-complete arm above) fills it in normally.
-            if (!isCurrentlyAiring)
-                entry.CompletedAt ??= today; // never overwrites an existing finish date — mirrors the StartedAt rule, and MAL itself keeps the original finish_date across rewatches
-            entry.EpisodesWatched = filledEpisodes; // mirror MAL's own UI, which auto-fills episodes on completion
+            entry.CompletedAt ??= today; // never overwrites an existing finish date — mirrors the StartedAt rule, and MAL itself keeps the original finish_date across rewatches
+            entry.EpisodesWatched = total; // mirror MAL's own UI, which auto-fills episodes on completion
 
             // Ending a rewatch early (design.md D2): choosing Completed while still
             // partway through only counts the rewatch when the user says it does —
@@ -305,8 +292,8 @@ public class UserAnimeEntryEditService(
         }
         else if (newStatus == WatchStatus.Rewatching)
         {
-            if (!RewatchingEligibility.IsEligible(anime, entry))
-                throw new RewatchingNotEligibleException(animeId, RewatchingEligibility.IneligibilityReason(anime, entry));
+            if (!RewatchingEligibility.IsEligible(anime, entry, airedSoFar))
+                throw new RewatchingNotEligibleException(animeId, RewatchingEligibility.IneligibilityReason(anime, entry, airedSoFar));
 
             entry.EpisodesWatched = 0; // entering Rewatching restarts progress (design.md D1); dates/score/rewatch count are left alone
             changes.Add((ActivityChangeType.StatusChanged, ActivityDetail.StatusChange(entry.Status, newStatus), null));

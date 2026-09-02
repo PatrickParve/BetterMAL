@@ -19,15 +19,18 @@ public record AniListRelationsLookup(int AniListId, IReadOnlyList<AniListRelatio
 /// <summary>Result of resolving a MAL id to AniList's own Media id, done once
 /// per anime and then cached (see <see cref="Models.AnimeAiringSync"/>).
 /// Relations ride along on the same request — free, since the media is
-/// already being looked up.</summary>
+/// already being looked up. <paramref name="Episodes"/> is AniList's own
+/// reported total episode count, normalised from 0 to null; it feeds
+/// <c>AnimeMetadata.AniListTotalEpisodes</c> as a fallback when MyAnimeList
+/// publishes none.</summary>
 public record AniListMediaLookup(
-    int AniListId, string? Status, DateTimeOffset? NextAiringEpisodeAtUtc, IReadOnlyList<AniListRelationEdge> Relations);
+    int AniListId, string? Status, DateTimeOffset? NextAiringEpisodeAtUtc, IReadOnlyList<AniListRelationEdge> Relations, int? Episodes);
 
 /// <summary>Result of a full-history schedule fetch for a known AniList id:
-/// every episode AniList reports, plus its current status and next-airing
-/// instant from the same query — no second round-trip needed to compute a
-/// recheck-due time.</summary>
-public record AniListScheduleResult(IReadOnlyList<AniListEpisode> Episodes, string? Status, DateTimeOffset? NextAiringEpisodeAtUtc);
+/// every episode AniList reports, plus its current status, next-airing
+/// instant, and total episode count from the same query — no second
+/// round-trip needed to compute a recheck-due time or a total.</summary>
+public record AniListScheduleResult(IReadOnlyList<AniListEpisode> Episodes, string? Status, DateTimeOffset? NextAiringEpisodeAtUtc, int? TotalEpisodes);
 
 /// <summary>Reads per-episode air dates from AniList's public GraphQL API,
 /// which — unlike MAL — publishes an explicit airing timestamp per episode

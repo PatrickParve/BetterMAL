@@ -20,9 +20,7 @@ public class RewatchingNotEligibleException(int animeId, string reason)
 
 // gate-editing-on-aired-episodes: rejections for edits that would record
 // having watched, rated, or settled an anime that has aired no episode
-// (design.md D1/D5), plus the Completed-fill counterpart of
-// CannotCompleteUnknownEpisodeCountException for a currently-airing anime
-// (design.md D4).
+// (design.md D1/D5).
 
 public class EpisodesWatchedRequiresAiredEpisodeException(int animeId)
     : EntryEditRejectedException("No episode of this anime has aired yet, so episodes watched can't be set above 0.");
@@ -36,5 +34,10 @@ public class ScoreRequiresAiredEpisodeException(int animeId)
 public class RewatchCountRequiresAiredEpisodeException(int animeId)
     : EntryEditRejectedException("No episode of this anime has aired yet, so rewatch count can't be set above 0.");
 
-public class CannotCompleteUnknownAiredCountException(int animeId)
-    : EntryEditRejectedException("This anime is currently airing and how many episodes have aired isn't known, so it can't be marked Completed.");
+// refine-sync-status-and-episode-totals design.md D4: Completed means every
+// episode of the total has aired and been watched, decided by
+// AiredEpisodeGate.EverythingHasAired rather than MAL's own (routinely
+// stale) airing status — this is what's rejected when the run isn't fully
+// out yet, replacing the old currently-airing-only aired-count rejection.
+public class CannotCompleteBeforeFullyAiredException(int animeId)
+    : EntryEditRejectedException("This anime hasn't aired in full yet, so it can't be marked Completed.");

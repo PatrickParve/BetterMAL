@@ -33,7 +33,7 @@ public class AnimeDetailServiceTests
             new AnimeMetadataRepository(db),
             refreshService,
             new FakeEpisodeScheduleService(),
-            new FakeCompletedEntryReopenService(),
+            new FakeAiringWatchStatusService(),
             new RelationResolver(db),
             db,
             new RefreshGate(),
@@ -344,9 +344,9 @@ public class AnimeDetailServiceTests
             Task.FromResult(new Dictionary<int, int>());
     }
 
-    private sealed class FakeCompletedEntryReopenService : ICompletedEntryReopenService
+    private sealed class FakeAiringWatchStatusService : IAiringWatchStatusService
     {
-        public Task ReopenAsync(
+        public Task SettleAsync(
             IReadOnlyCollection<UserAnimeEntry> entries, IReadOnlyDictionary<int, int> airedSoFarByAnimeId, CancellationToken ct = default) =>
             Task.CompletedTask;
     }

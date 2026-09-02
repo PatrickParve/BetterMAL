@@ -20,7 +20,7 @@ public class AnimeDetailService(
     IAnimeMetadataRepository metadataRepository,
     IMetadataRefreshService refreshService,
     IEpisodeScheduleService scheduleService,
-    ICompletedEntryReopenService reopenService,
+    IAiringWatchStatusService airingWatchStatusService,
     IRelationResolver relationResolver,
     AnimeTrackerDbContext db,
     RefreshGate refreshGate,
@@ -70,13 +70,13 @@ public class AnimeDetailService(
         var episodesAired = await scheduleService.EpisodesAiredAsOfAsync(anime, now, ct);
 
         // design.md D6: free here — the aired count above is exactly what
-        // reopening needs, and this page renders only the one entry. The
+        // settling needs, and this page renders only the one entry. The
         // reverse nav isn't Included by GetByIdAsync, so it's set explicitly
         // rather than relying on no-tracking query fixup for it.
         if (anime.UserEntry is { } entry && episodesAired is { } aired)
         {
             entry.Anime = anime;
-            await reopenService.ReopenAsync([entry], new Dictionary<int, int> { [animeId] = aired }, ct);
+            await airingWatchStatusService.SettleAsync([entry], new Dictionary<int, int> { [animeId] = aired }, ct);
         }
 
         var nextEpisode = ToEta(await scheduleService.NextAiringInstantAsync(anime, now, ct), now);

@@ -16,13 +16,27 @@ const STATUS_OPTIONS: { value: WatchStatus; label: string }[] = [
   { value: 'Dropped', label: 'Dropped' },
 ]
 
-// design.md D0: Rewatching is reachable only for an anime that has finished
-// airing, and only for an entry with durable evidence of having finished it
-// at least once — mirrors backend RewatchingEligibility so the option is
+// Mirrors backend Services/Entries/AiredEpisodeGate.cs EverythingHasAired: a
+// union, not a replacement, of MAL's own airing status with the aired-so-far
+// count reaching the total — a stale "currently airing" status is overruled
+// by airing data that has already run to the total, while an anime with
+// incomplete AniList rows still falls back to the status arm.
+function everythingHasAired(airingStatus: string | null, totalEpisodes: number | null, episodesAired: number | null): boolean {
+  return airingStatus !== 'currently_airing' || (totalEpisodes !== null && episodesAired !== null && episodesAired >= totalEpisodes)
+}
+
+// design.md D0: Rewatching is reachable only for an anime that has aired in
+// full, and only for an entry with durable evidence of having finished it at
+// least once — mirrors backend RewatchingEligibility so the option is
 // disabled here before a rejected save is ever attempted.
-function canEnterRewatching(entry: UserAnimeEntryDto | null, airingStatus: string | null): boolean {
+function canEnterRewatching(
+  entry: UserAnimeEntryDto | null,
+  airingStatus: string | null,
+  totalEpisodes: number | null,
+  episodesAired: number | null,
+): boolean {
   if (!entry) return false
-  const animeFinished = airingStatus === null || airingStatus === 'finished_airing'
+  const animeFinished = everythingHasAired(airingStatus, totalEpisodes, episodesAired)
   const finishedOnce = entry.completedAt !== null || entry.rewatchCount > 0 || entry.status === 'Completed'
   return animeFinished && finishedOnce
 }
@@ -71,9 +85,10 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
   const [deleting, setDeleting] = useState(false)
 
   // Mirrors the backend's own completion target (UserAnimeEntryEditService.
-  // ApplyEpisodesWatched): aired-so-far while the anime is still airing,
-  // since the eventual total isn't reachable yet; the total otherwise.
-  const completionTarget = airingStatus === 'currently_airing' ? episodesAired : totalEpisodes
+  // ApplyEpisodesWatched): always the total, unconditionally — the
+  // episodes-watched cap already guarantees an entry can only reach it once
+  // every episode has aired.
+  const completionTarget = totalEpisodes
   const resumes =
     episodesWatched > initialEpisodesWatched &&
     episodesWatched !== completionTarget &&
@@ -81,8 +96,8 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
   const status = statusOverride ?? (resumes ? 'Watching' : initialStatus)
   const episodesRaised = episodesWatched > initialEpisodesWatched
 
-  const canComplete = totalEpisodes !== null
-  const canRewatch = canEnterRewatching(entry, airingStatus)
+  const canComplete = totalEpisodes !== null && everythingHasAired(airingStatus, totalEpisodes, episodesAired)
+  const canRewatch = canEnterRewatching(entry, airingStatus, totalEpisodes, episodesAired)
   // list-editing: nothing may be tracked against an anime that has aired no
   // episode — composes with (doesn't replace) the fill-target and rewatching
   // eligibility checks above, so an option can be unavailable for either

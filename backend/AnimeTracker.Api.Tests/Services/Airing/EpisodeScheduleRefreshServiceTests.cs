@@ -69,7 +69,7 @@ public class EpisodeScheduleRefreshServiceTests
         await db.SaveChangesAsync();
 
         var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
-        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([new AniListEpisode(5, newAirsAt)], "RELEASING", newAirsAt) };
+        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([new AniListEpisode(5, newAirsAt)], "RELEASING", newAirsAt, null) };
         var service = CreateService(db, aniList, episodeAiringRepository);
 
         await service.RefreshOneAsync(1);
@@ -92,7 +92,7 @@ public class EpisodeScheduleRefreshServiceTests
         await db.SaveChangesAsync();
 
         var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
-        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([new AniListEpisode(5, newAirsAt)], "RELEASING", newAirsAt) };
+        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([new AniListEpisode(5, newAirsAt)], "RELEASING", newAirsAt, null) };
         var service = CreateService(db, aniList, episodeAiringRepository);
 
         await service.RefreshOneAsync(1);
@@ -111,7 +111,7 @@ public class EpisodeScheduleRefreshServiceTests
         await db.SaveChangesAsync();
 
         var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
-        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([new AniListEpisode(3, newAirsAt)], "RELEASING", null) };
+        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([new AniListEpisode(3, newAirsAt)], "RELEASING", null, null) };
         var service = CreateService(db, aniList, episodeAiringRepository);
 
         await service.RefreshOneAsync(1);
@@ -140,7 +140,7 @@ public class EpisodeScheduleRefreshServiceTests
                     new AniListEpisode(6, AtNoonUtc(TodayUtc.AddDays(17)) + week),
                     new AniListEpisode(7, AtNoonUtc(TodayUtc.AddDays(24)) + week),
                 ],
-                "RELEASING", AtNoonUtc(TodayUtc.AddDays(17)) + week),
+                "RELEASING", AtNoonUtc(TodayUtc.AddDays(17)) + week, null),
         };
         var service = CreateService(db, aniList, episodeAiringRepository);
 
@@ -159,7 +159,7 @@ public class EpisodeScheduleRefreshServiceTests
 
         var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
         var newAirsAt = AtNoonUtc(TodayUtc.AddDays(10));
-        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([new AniListEpisode(1, newAirsAt)], "NOT_YET_RELEASED", newAirsAt) };
+        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([new AniListEpisode(1, newAirsAt)], "NOT_YET_RELEASED", newAirsAt, null) };
         var service = CreateService(db, aniList, episodeAiringRepository);
 
         await service.RefreshOneAsync(1);
@@ -183,8 +183,8 @@ public class EpisodeScheduleRefreshServiceTests
         var newAirsAt = AtNoonUtc(TodayUtc.AddDays(-395)); // MAL/AniList tidying old history
         var aniList = new FakeAniListClient
         {
-            Lookup = new AniListMediaLookup(999, "FINISHED", null, []),
-            Schedule = new AniListScheduleResult([new AniListEpisode(1, newAirsAt)], "FINISHED", null),
+            Lookup = new AniListMediaLookup(999, "FINISHED", null, [], null),
+            Schedule = new AniListScheduleResult([new AniListEpisode(1, newAirsAt)], "FINISHED", null, null),
         };
         var service = CreateService(db, aniList, episodeAiringRepository);
 
@@ -193,10 +193,72 @@ public class EpisodeScheduleRefreshServiceTests
         Assert.Empty(await db.AnimeUpdates.ToListAsync());
     }
 
+    // design.md D9/D10 (refine-sync-status-and-episode-totals tasks.md
+    // 7.1-7.3/9.8): AniList's total fills an unknown MAL total, MAL still wins
+    // when it has one, and the fill records exactly one EpisodeCountReleased.
+    [Fact]
+    public async Task AnAniListTotalFillsAnUnknownMalTotalAndRecordsOneEpisodeCountReleased()
+    {
+        using var db = CreateDb();
+        await SeedAnimeAsync(db, 1, "currently_airing"); // MalTotalEpisodes/TotalEpisodes both null
+
+        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
+        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([], "RELEASING", null, 12) };
+        var service = CreateService(db, aniList, episodeAiringRepository);
+
+        await service.RefreshOneAsync(1);
+
+        var anime = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
+        Assert.Equal(12, anime.AniListTotalEpisodes);
+        Assert.Equal(12, anime.TotalEpisodes);
+
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal(AnimeUpdateKinds.EpisodeCountReleased, update.Kinds);
+    }
+
+    [Fact]
+    public async Task AKnownMalTotalWinsOverAniListsAndRecordsNoUpdate()
+    {
+        using var db = CreateDb();
+        await SeedAnimeAsync(db, 1, "currently_airing");
+        var anime = await db.AnimeMetadata.SingleAsync(a => a.Id == 1);
+        anime.MalTotalEpisodes = 24;
+        anime.ResolveTotalEpisodes();
+        await db.SaveChangesAsync();
+
+        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
+        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([], "RELEASING", null, 12) };
+        var service = CreateService(db, aniList, episodeAiringRepository);
+
+        await service.RefreshOneAsync(1);
+
+        var stored = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
+        Assert.Equal(12, stored.AniListTotalEpisodes); // stored regardless
+        Assert.Equal(24, stored.TotalEpisodes); // MAL still wins
+
+        Assert.Empty(await db.AnimeUpdates.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ASecondRefreshOverAnAlreadyKnownTotalRecordsNoSecondUpdate()
+    {
+        using var db = CreateDb();
+        await SeedAnimeAsync(db, 1, "currently_airing");
+
+        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
+        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([], "RELEASING", null, 12) };
+        var service = CreateService(db, aniList, episodeAiringRepository);
+
+        await service.RefreshOneAsync(1);
+        await service.RefreshOneAsync(1);
+
+        Assert.Single(await db.AnimeUpdates.ToListAsync());
+    }
+
     private sealed class FakeAniListClient : IAniListClient
     {
         public AniListMediaLookup? Lookup { get; set; }
-        public AniListScheduleResult Schedule { get; set; } = new([], null, null);
+        public AniListScheduleResult Schedule { get; set; } = new([], null, null, null);
 
         public Task<AniListMediaLookup?> LookupByMalIdAsync(int malId, CancellationToken ct = default) =>
             Lookup is not null ? Task.FromResult<AniListMediaLookup?>(Lookup) : throw new NotImplementedException();

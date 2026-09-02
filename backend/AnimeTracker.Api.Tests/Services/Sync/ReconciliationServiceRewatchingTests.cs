@@ -108,6 +108,56 @@ public class ReconciliationServiceRewatchingTests
         Assert.Equal(7, diffEntry.EpisodesWatched);
     }
 
+    // design.md D2: the held diff records the status the entry will end up
+    // with (Rewatching), not MAL's raw watching — otherwise accepting a diff
+    // raised by some other field would demote the rewatch. Recorded here at
+    // the diff-review layer; AcceptPendingDiffAsync's own re-resolution is
+    // covered separately below.
+    [Fact]
+    public async Task AcceptingADiffRaisedByAnotherFieldKeepsTheEntryRewatching()
+    {
+        using var db = CreateDb();
+        await SeedLocalAsync(db, WatchStatus.Rewatching, episodesWatched: 5, rewatchCount: 2);
+        var malClient = new FakeMalClient([RemoteEdge("watching", episodesWatched: 7, rewatchCount: 2)]);
+        var service = new ReconciliationService(malClient, db, NullLogger<ReconciliationService>.Instance);
+        await service.RunAsync();
+
+        var accepted = await service.AcceptPendingDiffAsync();
+
+        Assert.True(accepted);
+        var stored = await db.UserAnimeEntries.AsNoTracking().SingleAsync(e => e.AnimeId == 1);
+        Assert.Equal(WatchStatus.Rewatching, stored.Status);
+        Assert.Equal(7, stored.EpisodesWatched);
+    }
+
+    // design.md D2: AcceptPendingDiffAsync re-resolves against the entry as it
+    // stands at accept time, not as it stood when the diff was computed — a
+    // diff computed before the entry became a rewatch must not demote it.
+    [Fact]
+    public async Task ADiffComputedBeforeTheEntryBecameARewatchDoesNotDemoteItOnAccept()
+    {
+        using var db = CreateDb();
+        // Computed while the entry was still plain Watching, against a
+        // remote that differs on episodes — a genuine diff at compute time.
+        await SeedLocalAsync(db, WatchStatus.Watching, episodesWatched: 5);
+        var malClient = new FakeMalClient([RemoteEdge("watching", episodesWatched: 9)]);
+        var service = new ReconciliationService(malClient, db, NullLogger<ReconciliationService>.Instance);
+        await service.RunAsync();
+
+        // The entry becomes a rewatch after the diff was computed, but before
+        // it's reviewed and accepted.
+        var entry = await db.UserAnimeEntries.SingleAsync(e => e.AnimeId == 1);
+        entry.Status = WatchStatus.Rewatching;
+        await db.SaveChangesAsync();
+
+        var accepted = await service.AcceptPendingDiffAsync();
+
+        Assert.True(accepted);
+        var stored = await db.UserAnimeEntries.AsNoTracking().SingleAsync(e => e.AnimeId == 1);
+        Assert.Equal(WatchStatus.Rewatching, stored.Status);
+        Assert.Equal(9, stored.EpisodesWatched);
+    }
+
     private sealed class FakeMalClient(List<MalUserAnimeListEdge> edges) : IMalClient
     {
         public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(CancellationToken ct = default) =>

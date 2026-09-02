@@ -11,7 +11,7 @@ namespace AnimeTracker.Api.Services.Dashboard;
 public class MainDashboardService(
     IUserAnimeEntryRepository entryRepository,
     IEpisodeScheduleService scheduleService,
-    ICompletedEntryReopenService reopenService,
+    IAiringWatchStatusService airingWatchStatusService,
     IBroadcastLocalTimeConverter broadcastConverter,
     IAnimeUpdateService animeUpdateService) : IMainDashboardService
 {
@@ -23,18 +23,18 @@ public class MainDashboardService(
         var entries = await entryRepository.GetAllAsync(ct);
         var now = DateTimeOffset.UtcNow;
 
-        // design.md D6: must run before the Watching/Rewatching filter below
-        // — a still-Completed entry discarded by that filter first would
-        // never be reopened, and would never reach Currently watching however
-        // often the page is opened. Not free like the other read paths: this
-        // one resolves aired counts only for the Completed-and-airing subset,
-        // in one bulk query, since nothing else here needs them.
-        var completedAiring = entries.Where(e => e.Status == WatchStatus.Completed && e.Anime.AiringStatus == "currently_airing").ToList();
-        if (completedAiring.Count > 0)
-        {
-            var airedSoFarByAnimeId = await scheduleService.EpisodesAiredAsOfAsync(completedAiring.Select(e => e.Anime).ToList(), now, ct);
-            await reopenService.ReopenAsync(completedAiring, airedSoFarByAnimeId, ct);
-        }
+        // design.md D7: resolved once in bulk for the whole list, rather than
+        // per card inside the DTO loop below — SettleAsync's completion
+        // direction, the caught-up filter below, and the carousel's own
+        // episodesAired field all read this same dictionary.
+        var airedSoFarByAnimeId = await scheduleService.EpisodesAiredAsOfAsync(entries.Select(e => e.Anime).ToList(), now, ct);
+
+        // design.md D6: must run before the Watching/Rewatching selection
+        // below — a still-Completed entry read first would never reach
+        // Currently watching however often the page is opened, and a
+        // Watching entry that just reached its total (the AniList-fallback
+        // case) needs to complete before the caught-up filter sees it.
+        await airingWatchStatusService.SettleAsync(entries, airedSoFarByAnimeId, ct);
 
         // "Airing today" is a local-calendar concept; ResolveForDate expects a
         // local reference date, so derive today in the broadcast-local zone
@@ -45,8 +45,18 @@ public class MainDashboardService(
         var currentlyWatching = new List<CurrentlyWatchingItemDto>();
         // main-dashboard: Rewatching entries are runs in progress just like
         // Watching ones (design.md D5), so they share this section and its
-        // ordering rather than being grouped separately.
-        foreach (var e in OrderCurrentlyWatching(entries.Where(e => e.Status is WatchStatus.Watching or WatchStatus.Rewatching)))
+        // ordering rather than being grouped separately. design.md D7: an
+        // entry that has watched everything aired so far has nothing to
+        // watch right now — no airing-status condition belongs here, since a
+        // stale status would only reintroduce the lag EverythingHasAired
+        // exists to route around. `>=` so an entry ahead of the app's aired
+        // figure isn't shown as caught up; `a > 0` so an unresolved aired
+        // count never hides an entry. An entry that has watched its full run
+        // never reaches this filter — SettleAsync (or the edit path) already
+        // moved it to Completed above.
+        var caughtUp = entries.Where(e => e.Status is WatchStatus.Watching or WatchStatus.Rewatching
+            && !(airedSoFarByAnimeId.TryGetValue(e.AnimeId, out var a) && a > 0 && e.EpisodesWatched >= a));
+        foreach (var e in OrderCurrentlyWatching(caughtUp))
         {
             currentlyWatching.Add(new CurrentlyWatchingItemDto(
                 e.AnimeId,
@@ -55,7 +65,7 @@ public class MainDashboardService(
                 e.Anime.PictureUrl,
                 e.EpisodesWatched,
                 e.Anime.TotalEpisodes,
-                await scheduleService.EpisodesAiredAsOfAsync(e.Anime, now, ct),
+                airedSoFarByAnimeId.TryGetValue(e.AnimeId, out var aired) ? aired : null,
                 e.Anime.AiringStatus == "currently_airing",
                 ToEta(await scheduleService.NextAiringInstantAsync(e.Anime, now, ct), now),
                 e.Status,

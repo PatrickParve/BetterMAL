@@ -9,7 +9,7 @@ public class MyListService(
     IUserAnimeEntryRepository entryRepository,
     ITopAnimeSelectionRepository topAnimeSelectionRepository,
     IEpisodeScheduleService scheduleService,
-    ICompletedEntryReopenService reopenService) : IMyListService
+    IAiringWatchStatusService airingWatchStatusService) : IMyListService
 {
     public async Task<List<MyListItemDto>> GetMyListAsync(CancellationToken ct = default)
     {
@@ -22,15 +22,15 @@ public class MyListService(
         var storedOrder = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
         var snapshot = AnimeRankingSnapshot.Build(entries, storedOrder);
 
-        // Resolved for every entry regardless, so reopening a Completed one
-        // (design.md D6) costs nothing extra here beyond the lookup this page
-        // already needed for its own EpisodesAired column.
+        // Resolved for every entry regardless, so settling one (design.md D6)
+        // costs nothing extra here beyond the lookup this page already needed
+        // for its own EpisodesAired column.
         var airedSoFarByAnimeId = new Dictionary<int, int>();
         foreach (var e in entries)
             if (await scheduleService.EpisodesAiredAsOfAsync(e.Anime, now, ct) is { } aired)
                 airedSoFarByAnimeId[e.AnimeId] = aired;
 
-        await reopenService.ReopenAsync(entries, airedSoFarByAnimeId, ct);
+        await airingWatchStatusService.SettleAsync(entries, airedSoFarByAnimeId, ct);
 
         var items = new List<MyListItemDto>();
         foreach (var e in entries)
