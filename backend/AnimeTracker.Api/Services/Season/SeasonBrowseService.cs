@@ -21,17 +21,15 @@ public class SeasonBrowseService(
     // four seasons in this order (design D2).
     private static readonly string[] SeasonsInYearOrder = ["winter", "spring", "summer", "fall"];
 
-    public async Task<SeasonPageDto> GetPageAsync(int year, string season, string sortKey, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default)
+    public async Task<SeasonPageDto> GetPageAsync(int year, string season, bool hideHentai, CancellationToken ct = default)
     {
-        var (items, totalCount) = await seasonRepository.GetPageAsync(year, season, ParseSort(sortKey), includeMyList, hideHentai, types, offset, limit, ct);
-        var dtoItems = items
-            .Select(i => new AnimeBrowseItemDto(i.AnimeId, i.Title, i.EnglishTitle, i.PictureUrl, i.TotalEpisodes, i.MediaType, i.MalScore, i.PopularityRank, i.MyScore, i.InMyList))
-            .ToList();
+        var items = await seasonRepository.GetListingAsync(year, season, hideHentai, ct);
+        var dtoItems = items.Select(ToDto).ToList();
 
         var lastFetchedAt = await seasonRepository.GetLastFetchedAsync(year, season, ct);
         var hasListing = await seasonRepository.HasListingAsync(year, season, ct);
 
-        return new SeasonPageDto(year, season, dtoItems, offset, limit, totalCount, lastFetchedAt, hasListing);
+        return new SeasonPageDto(year, season, dtoItems, dtoItems.Count, lastFetchedAt, hasListing);
     }
 
     // Fetched at most once per interval set by the season's own age, measured
@@ -97,19 +95,17 @@ public class SeasonBrowseService(
         return new SeasonBoundsDto(ceiling.Year, ceiling.Season);
     }
 
-    public async Task<YearPageDto> GetYearPageAsync(int year, string sortKey, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default)
+    public async Task<YearPageDto> GetYearPageAsync(int year, bool hideHentai, CancellationToken ct = default)
     {
         var points = SeasonsInYearOrder.Select(season => (year, season)).ToList();
 
-        var (items, totalCount) = await seasonRepository.GetPageAsync(points, ParseSort(sortKey), includeMyList, hideHentai, types, offset, limit, ct);
-        var dtoItems = items
-            .Select(i => new AnimeBrowseItemDto(i.AnimeId, i.Title, i.EnglishTitle, i.PictureUrl, i.TotalEpisodes, i.MediaType, i.MalScore, i.PopularityRank, i.MyScore, i.InMyList))
-            .ToList();
+        var items = await seasonRepository.GetListingAsync(points, hideHentai, ct);
+        var dtoItems = items.Select(ToDto).ToList();
 
         var hasListing = await seasonRepository.HasListingAsync(points, ct);
         var lastFetchedAt = await GetLatestFetchedAtAsync(points, ct);
 
-        return new YearPageDto(year, dtoItems, offset, limit, totalCount, lastFetchedAt, hasListing);
+        return new YearPageDto(year, dtoItems, dtoItems.Count, lastFetchedAt, hasListing);
     }
 
     // A year's own DbContext is scoped per request and not thread-safe, so
@@ -246,11 +242,7 @@ public class SeasonBrowseService(
         await db.SaveChangesAsync(ct);
     }
 
-    private static SeasonSortKey ParseSort(string sortKey) => sortKey switch
-    {
-        "malScore" => SeasonSortKey.MalScore,
-        "myScore" => SeasonSortKey.MyScore,
-        "alphabetical" => SeasonSortKey.Alphabetical,
-        _ => SeasonSortKey.Popularity,
-    };
+    private static AnimeBrowseItemDto ToDto(SeasonAnimeItem i) => new(
+        i.AnimeId, i.Title, i.EnglishTitle, i.PictureUrl, i.TotalEpisodes, i.MediaType, i.MalScore, i.PopularityRank, i.MyScore, i.InMyList,
+        new BrowseSortOrderDto(i.SortOrder.Popularity, i.SortOrder.MalScore, i.SortOrder.Alphabetical, i.SortOrder.MyScore));
 }

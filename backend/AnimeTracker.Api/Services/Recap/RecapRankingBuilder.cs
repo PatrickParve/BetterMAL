@@ -54,7 +54,7 @@ public static class RecapRankingBuilder
 
         return ranked
             .Select(c => new RecapSeasonRankingDto(
-                c.Year, c.Season, c.Scored.Count, Math.Round(c.Weighted, 2), TopPosters(c.Scored)))
+                c.Year, c.Season, c.Scored.Count, Math.Round(c.Weighted, 2), TopPosters(c.Scored), c.Histogram[1..]))
             .ToList();
     }
 
@@ -79,7 +79,7 @@ public static class RecapRankingBuilder
 
         return ranked
             .Select(c => new RecapYearRankingDto(
-                c.Year, c.Scored.Count, Math.Round(c.Weighted, 2), TopPosters(c.Scored)))
+                c.Year, c.Scored.Count, Math.Round(c.Weighted, 2), TopPosters(c.Scored), c.Histogram[1..]))
             .ToList();
     }
 

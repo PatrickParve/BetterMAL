@@ -128,6 +128,59 @@ public class ProfileServiceFavouriteSeasonsAndYearsTests
         Assert.Empty(profile.FavouriteYears);
     }
 
+    // ScoreCounts (design.md D5, tasks.md 11.4): the profile's favourite
+    // seasons/years read the same histogram a recap covering the same period
+    // reports, so the score filter's counts can't disagree between the two
+    // surfaces.
+    [Fact]
+    public async Task ASeasonsScoreCountsAgreeWithARecapCoveringIt()
+    {
+        using var db = CreateDb();
+        List<UserAnimeEntry> entries =
+        [
+            Entry(1, new DateOnly(2019, 11, 1), 8),
+            Entry(2, new DateOnly(2019, 11, 15), 9),
+            Entry(3, new DateOnly(2019, 11, 20), 9),
+            Entry(4, new DateOnly(2021, 4, 1), 6),
+        ];
+
+        var profile = await CreateService(db, entries).GetProfileAsync();
+
+        var globalMean = RecapRankingBuilder.ScoredMean(entries)!.Value;
+        var recapPeriod = RecapPeriod.MultiYear(2019, 2019);
+        var recapRanking = RecapRankingBuilder.BuildSeasonRanking(
+            entries.Where(e => e.Anime.AiredFrom!.Value.Year == 2019).ToList(), recapPeriod, globalMean);
+
+        var fall2019 = profile.FavouriteSeasons.Single(s => s.Year == 2019 && s.Season == "fall");
+        var recapFall2019 = recapRanking.Single(s => s.Year == 2019 && s.Season == "fall");
+        Assert.Equal(recapFall2019.ScoreCounts, fall2019.ScoreCounts);
+        Assert.Equal(2, fall2019.ScoreCounts[8]); // two 9s
+        Assert.Equal(1, fall2019.ScoreCounts[7]); // one 8
+    }
+
+    [Fact]
+    public async Task AYearsScoreCountsAgreeWithARecapCoveringIt()
+    {
+        using var db = CreateDb();
+        List<UserAnimeEntry> entries =
+        [
+            Entry(1, new DateOnly(2020, 3, 1), 10),
+            Entry(2, new DateOnly(2020, 4, 1), 10),
+            Entry(3, new DateOnly(2020, 6, 1), 6),
+            Entry(4, new DateOnly(2023, 3, 1), 7),
+        ];
+
+        var profile = await CreateService(db, entries).GetProfileAsync();
+
+        var globalMean = RecapRankingBuilder.ScoredMean(entries)!.Value;
+        var recapRanking = RecapRankingBuilder.BuildYearRanking(entries, RecapPeriod.MultiYear(2020, 2023), globalMean);
+
+        var year2020 = profile.FavouriteYears.Single(y => y.Year == 2020);
+        var recapYear2020 = recapRanking.Single(y => y.Year == 2020);
+        Assert.Equal(recapYear2020.ScoreCounts, year2020.ScoreCounts);
+        Assert.Equal(2, year2020.ScoreCounts[9]); // two 10s
+    }
+
     [Fact]
     public async Task EveryRankedRowCarriesPosters()
     {

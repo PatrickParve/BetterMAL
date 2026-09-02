@@ -400,4 +400,59 @@ public class RecapRankingBuilderTests
         Assert.Equal(2022, year.Year);
         Assert.Null(year.Season);
     }
+
+    // ScoreCounts (design.md D5, tasks.md 4.1-4.2, 11.3): ten ascending
+    // counts — index 0 is score 1, index 9 is score 10 — read straight off
+    // the same histogram the tie-break above already uses, so a group's
+    // reported counts can never disagree with what actually decided its
+    // ranking position.
+    [Fact]
+    public void ScoreCountsAreTenAscendingCountsMatchingTheScoredEntries_Season()
+    {
+        var group = Group(1, new DateOnly(2022, 1, 15), 10, 10, 7, 5, 5, 5);
+
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(group, RecapPeriod.Yearly(2022), globalMean: 5.0);
+
+        var row = Assert.Single(ranking);
+        Assert.Equal(10, row.ScoreCounts.Count);
+        Assert.Equal(0, row.ScoreCounts[0]); // score 1
+        Assert.Equal(3, row.ScoreCounts[4]); // score 5
+        Assert.Equal(0, row.ScoreCounts[5]); // score 6 — nobody gave it
+        Assert.Equal(1, row.ScoreCounts[6]); // score 7
+        Assert.Equal(2, row.ScoreCounts[9]); // score 10
+        Assert.Equal(6, row.ScoreCounts.Sum());
+    }
+
+    [Fact]
+    public void ScoreCountsAreTenAscendingCountsMatchingTheScoredEntries_Year()
+    {
+        var group = Group(1, new DateOnly(2022, 6, 1), 9, 9, 9, 4);
+
+        var ranking = RecapRankingBuilder.BuildYearRanking(group, RecapPeriod.Yearly(2022), globalMean: 5.0);
+
+        var row = Assert.Single(ranking);
+        Assert.Equal(10, row.ScoreCounts.Count);
+        Assert.Equal(1, row.ScoreCounts[3]); // score 4
+        Assert.Equal(3, row.ScoreCounts[8]); // score 9
+        Assert.Equal(4, row.ScoreCounts.Sum());
+    }
+
+    // The count that decides a tie (the 10 column, per
+    // EqualScoreAndCountSeparatedAtTenPrefersMoreTens_Season above) must be
+    // exactly what the winning row's own ScoreCounts reports — the DTO and
+    // the tie-break can't drift apart because both read the same histogram.
+    [Fact]
+    public void TheHistogramColumnThatDecidesATieMatchesTheWinningRowsReportedScoreCounts()
+    {
+        var moreTens = Group(1, new DateOnly(2022, 1, 15), 10, 10, 6, 6, 3); // winter, two 10s
+        var fewerTens = Group(100, new DateOnly(2022, 4, 15), 10, 7, 7, 7, 4); // spring, one 10
+        var included = moreTens.Concat(fewerTens).ToList();
+
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 5.0);
+
+        Assert.Equal("winter", ranking[0].Season);
+        Assert.Equal(2, ranking[0].ScoreCounts[9]);
+        Assert.Equal("spring", ranking[1].Season);
+        Assert.Equal(1, ranking[1].ScoreCounts[9]);
+    }
 }

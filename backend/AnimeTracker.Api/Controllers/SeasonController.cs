@@ -8,26 +8,23 @@ public class SeasonController(ISeasonBrowseService seasonBrowseService) : Contro
 {
     private static readonly HashSet<string> ValidSeasons = ["winter", "spring", "summer", "fall"];
 
-    /// <summary>One page of a season's full anime listing (not just my list),
-    /// read from the cache only — never calls MAL. Pair with the refresh
-    /// endpoint below to bring the cache up to date.</summary>
+    /// <summary>A season's whole anime listing (not just my list), read from
+    /// the cache only — never calls MAL. A season holds a few hundred anime
+    /// at most, so one read serves the page for as long as it's open; sort
+    /// and the page's other filters are applied client-side to what this
+    /// returns. Pair with the refresh endpoint below to bring the cache up to
+    /// date.</summary>
     [HttpGet("api/season/{year:int}/{season}")]
     public async Task<IActionResult> GetPage(
         int year,
         string season,
-        [FromQuery] string sort = "popularity",
-        [FromQuery] bool includeMyList = true,
         [FromQuery] bool hideHentai = false,
-        [FromQuery] string? type = null,
-        [FromQuery] int offset = 0,
-        [FromQuery] int limit = 24,
         CancellationToken ct = default)
     {
         if (!ValidSeasons.Contains(season))
             return BadRequest(new { error = $"Unknown season '{season}'." });
 
-        var types = string.IsNullOrWhiteSpace(type) ? null : type.Split(',', StringSplitOptions.RemoveEmptyEntries);
-        var page = await seasonBrowseService.GetPageAsync(year, season, sort, includeMyList, hideHentai, types, offset, Math.Clamp(limit, 1, 100), ct);
+        var page = await seasonBrowseService.GetPageAsync(year, season, hideHentai, ct);
         return Ok(page);
     }
 

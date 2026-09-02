@@ -6,71 +6,37 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AnimeTracker.Api.Tests.Controllers;
 
-// YearController (tasks.md 3.1-3.3): mirrors SeasonController's own
-// parameter handling exactly — the same sort/includeMyList/hideHentai/type/
-// offset/limit query parameters, the same comma-split of type, and the same
-// limit clamp — plus the refresh outcome's camelCase wire format.
+// YearController (design D1, tasks.md 1.7): mirrors SeasonController's own
+// parameter handling exactly — hideHentai is the only query parameter left
+// once sort/includeMyList/type/offset/limit moved client-side (design D3).
 public class YearControllerTests
 {
-    private static YearPageDto EmptyPage(int year, int offset, int limit) =>
-        new(year, [], offset, limit, TotalCount: 0, LastFetchedAt: null, HasListing: false);
+    private static YearPageDto EmptyPage(int year) =>
+        new(year, [], TotalCount: 0, LastFetchedAt: null, HasListing: false);
 
     [Fact]
-    public async Task GetPage_PassesParametersThroughToTheService()
+    public async Task GetPage_PassesHideHentaiThroughToTheService()
     {
         var service = new RecordingSeasonBrowseService();
         var controller = new YearController(service);
 
-        await controller.GetPage(2020, sort: "malScore", includeMyList: false, hideHentai: true, type: null, offset: 12, limit: 30, ct: CancellationToken.None);
+        await controller.GetPage(2020, hideHentai: true, ct: CancellationToken.None);
 
         var request = Assert.Single(service.PageRequests);
         Assert.Equal(2020, request.Year);
-        Assert.Equal("malScore", request.SortKey);
-        Assert.False(request.IncludeMyList);
         Assert.True(request.HideHentai);
-        Assert.Null(request.Types);
-        Assert.Equal(12, request.Offset);
-        Assert.Equal(30, request.Limit);
     }
 
     [Fact]
-    public async Task GetPage_SplitsTheTypeParameterOnCommas()
+    public async Task GetPage_DefaultsHideHentaiToFalse()
     {
         var service = new RecordingSeasonBrowseService();
         var controller = new YearController(service);
 
-        await controller.GetPage(2020, type: "tv,movie,unknown", ct: CancellationToken.None);
+        await controller.GetPage(2020, ct: CancellationToken.None);
 
         var request = Assert.Single(service.PageRequests);
-        Assert.Equal(["tv", "movie", "unknown"], request.Types);
-    }
-
-    [Fact]
-    public async Task GetPage_BlankTypeParameterIsTreatedAsNoFilter()
-    {
-        var service = new RecordingSeasonBrowseService();
-        var controller = new YearController(service);
-
-        await controller.GetPage(2020, type: "  ", ct: CancellationToken.None);
-
-        var request = Assert.Single(service.PageRequests);
-        Assert.Null(request.Types);
-    }
-
-    [Theory]
-    [InlineData(0, 1)]
-    [InlineData(-5, 1)]
-    [InlineData(500, 100)]
-    [InlineData(24, 24)]
-    public async Task GetPage_ClampsTheLimitToBetweenOneAndOneHundred(int requested, int expected)
-    {
-        var service = new RecordingSeasonBrowseService();
-        var controller = new YearController(service);
-
-        await controller.GetPage(2020, limit: requested, ct: CancellationToken.None);
-
-        var request = Assert.Single(service.PageRequests);
-        Assert.Equal(expected, request.Limit);
+        Assert.False(request.HideHentai);
     }
 
     [Fact]
@@ -118,17 +84,17 @@ public class YearControllerTests
         Assert.Equal($$"""{"outcome":"{{expectedWireValue}}"}""", json);
     }
 
-    private sealed record PageRequest(int Year, string SortKey, bool IncludeMyList, bool HideHentai, IReadOnlyCollection<string>? Types, int Offset, int Limit);
+    private sealed record PageRequest(int Year, bool HideHentai);
 
     private sealed class RecordingSeasonBrowseService : ISeasonBrowseService
     {
         public List<PageRequest> PageRequests { get; } = [];
         public List<int> RefreshRequests { get; } = [];
 
-        public Task<YearPageDto> GetYearPageAsync(int year, string sortKey, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default)
+        public Task<YearPageDto> GetYearPageAsync(int year, bool hideHentai, CancellationToken ct = default)
         {
-            PageRequests.Add(new PageRequest(year, sortKey, includeMyList, hideHentai, types, offset, limit));
-            return Task.FromResult(EmptyPage(year, offset, limit));
+            PageRequests.Add(new PageRequest(year, hideHentai));
+            return Task.FromResult(EmptyPage(year));
         }
 
         public Task<YearRefreshResultDto> RefreshYearAsync(int year, CancellationToken ct = default)
@@ -137,7 +103,7 @@ public class YearControllerTests
             return Task.FromResult(new YearRefreshResultDto(SeasonRefreshOutcome.Skipped));
         }
 
-        public Task<SeasonPageDto> GetPageAsync(int year, string season, string sortKey, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default) =>
+        public Task<SeasonPageDto> GetPageAsync(int year, string season, bool hideHentai, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<SeasonRefreshResultDto> RefreshAsync(int year, string season, CancellationToken ct = default) =>
             throw new NotImplementedException();

@@ -6,8 +6,8 @@ import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
 import { FilterMultiSelect, type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
-import { useLatestRequest } from '../hooks/useLatestRequest.ts'
 import { usePageData } from '../hooks/usePageData.ts'
+import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { MEDIA_TYPE_ORDER, mediaTypeLabel, seasonPointIndex, shiftSeason } from '../utils/anime.ts'
 import './SeasonPage.css'
 
@@ -71,16 +71,20 @@ function isSortKey(value: string | null): value is SortKey {
 }
 
 // Season page: all anime airing in the selected season (not just my list),
-// with a sort/filter control and hand-rolled infinite scroll via an
+// with a sort/filter control and a client-side reveal via an
 // IntersectionObserver sentinel below the grid. Year/season/sort/inMyList
 // live in the URL (not component state) so the selection survives
 // back-navigation from an anime detail page, and default to the current
 // season when absent.
 //
-// Reads and refreshes are two separate effects (design §4): reading from
-// cache is instant and re-runs on any sort/filter/season change, while the
-// MAL refresh is debounced and keyed on season alone, so changing sort or
-// the "in my list" filter never triggers a MAL fetch.
+// Reads and refreshes are two separate effects: reading from cache is
+// instant and runs once per season/hideHentai combination (usePageData's own
+// key, which loads the season's whole listing in one read — design D1),
+// while the MAL refresh is debounced and keyed on season alone. Sort, the
+// type filter, and the in-my-list filter never trigger a read at all — they
+// act on the already-loaded listing in place, and the ordering itself is a
+// per-item key the server computed rather than a rule reimplemented here
+// (design D2, D3).
 export function SeasonPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const fallback = useMemo(currentSeasonTarget, [])
@@ -98,25 +102,14 @@ export function SeasonPage() {
   const typeFilter = typeParam ? typeParam.split(',').filter(Boolean) : []
   const { hideHentai } = useContentFilter()
 
-  // Keyed on season/year alone: a different season is a different history
-  // snapshot, so restoring one restores its data regardless of which sort or
-  // filter was active when it was left (D5). Sort/filter changes within the
-  // same season are handled below via `reload`, not a second key.
-  const seasonKey = `season:${year}/${season}`
-  const {
-    data: seasonData,
-    setData: setSeasonData,
-    loading,
-    reload,
-  } = usePageData<SeasonReadState>(seasonKey, () =>
-    getSeasonPage(year, season, {
-      sort,
-      includeMyList: inMyList,
-      hideHentai,
-      types: typeFilter,
-      offset: 0,
-      limit: PAGE_SIZE,
-    }).then((page) => ({
+  // Keyed on season/year/hideHentai: those are the only things a read
+  // depends on now that sort and the two page filters act on the already-
+  // loaded listing (design D1-D3). A different key is a different history
+  // snapshot, so restoring one restores its own whole listing regardless of
+  // which sort or filter was active when it was left.
+  const seasonKey = `season:${year}/${season}:${hideHentai}`
+  const { data: seasonData, setData: setSeasonData } = usePageData<SeasonReadState>(seasonKey, () =>
+    getSeasonPage(year, season, { hideHentai }).then((page) => ({
       items: page.items,
       totalCount: page.totalCount,
       lastFetchedAt: page.lastFetchedAt,
@@ -124,11 +117,9 @@ export function SeasonPage() {
     })),
   )
   const items = seasonData?.items ?? []
-  const totalCount = seasonData?.totalCount ?? 0
   const lastFetchedAt = seasonData?.lastFetchedAt ?? null
   const hasListing = seasonData?.hasListing ?? false
 
-  const [loadingMore, setLoadingMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   // The refresh outcome for the season currently being viewed, reset the
   // moment the season changes (below) so one season's outcome can never
@@ -136,8 +127,6 @@ export function SeasonPage() {
   // refresh attempt for this season has settled.
   const [refreshOutcome, setRefreshOutcome] = useState<'fetched' | 'notListed' | 'skipped' | 'failed' | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const { start, current, isLatest } = useLatestRequest()
-  const isLoading = loading || loadingMore
 
   // The navigable ceiling — the furthest season selectable. Seeded with the
   // same current+2 default the server falls back to (task 7.1), so nothing
@@ -162,32 +151,37 @@ export function SeasonPage() {
     }
   }, [])
 
-  // Read by the debounced refresh effect and the infinite-scroll effect so
-  // they re-read with whatever sort, filter, and loaded-page-count are
-  // current when they actually run, not whatever was current when they were
-  // scheduled.
-  const sortRef = useRef(sort)
-  sortRef.current = sort
-  const inMyListRef = useRef(inMyList)
-  inMyListRef.current = inMyList
+  // Read by the debounced refresh effect so it re-reads with whatever
+  // hideHentai is current when it actually runs, not whatever was current
+  // when it was scheduled.
   const hideHentaiRef = useRef(hideHentai)
   hideHentaiRef.current = hideHentai
-  const typeFilterRef = useRef(typeFilter)
-  typeFilterRef.current = typeFilter
-  const seenTypesRef = useRef<{ key: string; types: Set<string>; hasUnknown: boolean }>({
-    key: seasonKey,
-    types: new Set<string>(),
-    hasUnknown: false,
-  })
-  const itemsLengthRef = useRef(items.length)
-  itemsLengthRef.current = items.length
   const lastFetchedAtRef = useRef(lastFetchedAt)
   lastFetchedAtRef.current = lastFetchedAt
-  const reloadRef = useRef(reload)
-  reloadRef.current = reload
 
-  const hasMore = items.length < totalCount
-  const firstUnwatchedIndex = sort === 'myScore' ? items.findIndex((item) => item.myScore === null) : -1
+  // Filtered by the in-my-list and type controls, then sorted by the
+  // server-computed sortOrder for the active sort — an integer compare on a
+  // precomputed key, so no ordering rule (the my-score banding, the
+  // alphabetical collation) is ever reimplemented here (design D3).
+  const displayed = useMemo(() => {
+    const filtered = items.filter((item) => {
+      if (!inMyList && item.inMyList) return false
+      if (typeFilter.length > 0 && !typeFilter.includes(item.mediaType ?? 'unknown')) return false
+      return true
+    })
+    return [...filtered].sort((a, b) => (a.sortOrder?.[sort] ?? 0) - (b.sortOrder?.[sort] ?? 0))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, inMyList, sort, typeParam])
+
+  // A view control restored like every other (useRestorableState), not plain
+  // useState: it resets to PAGE_SIZE on a fresh visit, and a sort or filter
+  // change already is one — each goes through setSearchParams, which mints a
+  // new history entry, so this reseeds under its new location key with no
+  // code resetting it explicitly (task 2.8).
+  const [visibleCount, setVisibleCount] = useRestorableState('visibleCount', PAGE_SIZE)
+  const visibleItems = displayed.slice(0, visibleCount)
+
+  const firstUnwatchedIndex = sort === 'myScore' ? displayed.findIndex((item) => item.myScore === null) : -1
 
   // The page's terminal states, in the order design.md decision 5 specifies
   // (task 8.3): the grid takes priority whenever there's anything to show;
@@ -195,7 +189,7 @@ export function SeasonPage() {
   // out); otherwise the season has never been cached, so it's either still
   // loading or its first fetch has settled and produced nothing.
   const terminalState: 'grid' | 'filtersEmpty' | 'notListed' | 'loading' | 'loadFailed' =
-    items.length > 0
+    displayed.length > 0
       ? 'grid'
       : lastFetchedAt !== null && hasListing
         ? 'filtersEmpty'
@@ -227,31 +221,22 @@ export function SeasonPage() {
     return SEASON_ORDER.filter((option) => SEASON_ORDER.indexOf(option) <= ceilingIndex || option === season)
   }, [year, season, ceiling.year, ceiling.season])
 
-  // Type filter options: every media type seen across this season's loaded
-  // pages, mirroring MyListPage's presentTypes/hasUnknownType (D6) but
-  // accumulated rather than a one-shot read of `items` — the filter runs
-  // server-side, so once a type is selected `items` only ever contains that
-  // type again, and a naive re-derivation from `items` alone would make every
-  // other type disappear from the picker the moment one is chosen. Reset when
-  // the season itself changes; mutated directly during render (not an effect)
-  // so newly discovered types are reflected in the same pass that loaded them.
-  if (seenTypesRef.current.key !== seasonKey) {
-    seenTypesRef.current = { key: seasonKey, types: new Set<string>(), hasUnknown: false }
-  }
-  for (const item of items) {
-    if (item.mediaType) seenTypesRef.current.types.add(item.mediaType)
-    else seenTypesRef.current.hasUnknown = true
-  }
-
+  // Every media type present in the whole loaded listing — filtering is
+  // client-side now, so selecting one type can no longer hide the others
+  // from this picker; no accumulation workaround is needed.
   const typeOptions = useMemo(() => {
-    const { types: presentTypes, hasUnknown: hasUnknownType } = seenTypesRef.current
+    const presentTypes = new Set<string>()
+    let hasUnknownType = false
+    for (const item of items) {
+      if (item.mediaType) presentTypes.add(item.mediaType)
+      else hasUnknownType = true
+    }
     const options: FilterMultiSelectOption[] = MEDIA_TYPE_ORDER.filter((value) => presentTypes.has(value)).map(
       (value) => ({ value, label: mediaTypeLabel(value) }),
     )
     if (hasUnknownType) options.push({ value: 'unknown', label: 'Unknown' })
     return options
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, seasonKey])
+  }, [items])
 
   function setTarget(next: { year: number; season: SeasonName }) {
     setSearchParams((prev) => {
@@ -288,29 +273,6 @@ export function SeasonPage() {
     })
   }
 
-  // Any parameter the cache-first read below depends on invalidates
-  // in-flight background-refresh/load-more requests started before the
-  // change (mirroring the generation guard usePageData applies to its own
-  // load internally, for the two fetches that sit outside it).
-  useEffect(() => {
-    start()
-  }, [seasonKey, sort, inMyList, hideHentai, typeParam])
-
-  // Sort/filter changed within the same season: the season's initial or
-  // restored load is already covered by usePageData itself (above), so this
-  // only fires on a later change, reusing `reload`'s own generation guard
-  // rather than opening a second, independently-raced fetch. Read through a
-  // ref so a season change (which gives `reload` a new identity) doesn't
-  // also retrigger this effect.
-  const isFirstFilterRun = useRef(true)
-  useEffect(() => {
-    if (isFirstFilterRun.current) {
-      isFirstFilterRun.current = false
-      return
-    }
-    reloadRef.current()
-  }, [sort, inMyList, hideHentai, typeParam])
-
   // The outcome from a stale season must never decide this season's render
   // (task 8.1) — reset the instant the season changes, ahead of the debounced
   // refresh effect below settling for whichever season is landed on.
@@ -329,11 +291,6 @@ export function SeasonPage() {
     const [yearPart, seasonPart] = debouncedSeasonKey.split('/')
     const targetYear = Number(yearPart)
     const targetSeason = seasonPart as SeasonName
-    // Captured now, at the moment this season's refresh starts (the effect
-    // above already bumped it for this same season) — not after
-    // refreshSeason resolves, so a slow refresh whose season has since been
-    // navigated away from is still correctly recognized as stale.
-    const requestId = current()
 
     let cancelled = false
     setRefreshing(true)
@@ -348,22 +305,17 @@ export function SeasonPage() {
         // tab has nothing cached itself — the cross-tab race where another
         // tab's fetch landed between this tab's own cache read and its
         // refresh call. Never on failed: the cached page, if any, is left
-        // exactly as it is (design.md decision 5).
+        // exactly as it is (design.md decision 5). Since the whole listing
+        // is read at once, this re-read can never leave the grid showing
+        // fewer anime than it was showing (design D1).
         const shouldReread =
           result.outcome === 'fetched' ||
           result.outcome === 'notListed' ||
           (result.outcome === 'skipped' && lastFetchedAtRef.current === null)
         if (!shouldReread) return undefined
 
-        return getSeasonPage(targetYear, targetSeason, {
-          sort: sortRef.current,
-          includeMyList: inMyListRef.current,
-          hideHentai: hideHentaiRef.current,
-          types: typeFilterRef.current,
-          offset: 0,
-          limit: Math.max(itemsLengthRef.current, PAGE_SIZE),
-        }).then((page) => {
-          if (cancelled || !isLatest(requestId)) return
+        return getSeasonPage(targetYear, targetSeason, { hideHentai: hideHentaiRef.current }).then((page) => {
+          if (cancelled) return
           setSeasonData({
             items: page.items,
             totalCount: page.totalCount,
@@ -386,46 +338,23 @@ export function SeasonPage() {
     }
   }, [debouncedSeasonKey])
 
-  // Infinite scroll: load the next page once the sentinel enters view.
+  // Reveal more of the already-loaded, already-filtered-and-sorted listing
+  // once the sentinel enters view — no network call. The reveal is
+  // load-bearing rather than decorative: the whole season is already loaded,
+  // and slicing to visibleCount is what keeps a several-hundred-card season
+  // from rendering (and painting every poster) in one go.
   useEffect(() => {
     const node = sentinelRef.current
     if (!node) return
 
     const observer = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting) loadMore()
+      if (entries[0]?.isIntersecting) {
+        setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, displayed.length))
+      }
     })
     observer.observe(node)
     return () => observer.disconnect()
-
-    function loadMore() {
-      if (isLoading || !hasMore) return
-      const requestId = current()
-      setLoadingMore(true)
-      getSeasonPage(year, season, {
-        sort,
-        includeMyList: inMyList,
-        hideHentai,
-        types: typeFilter,
-        offset: items.length,
-        limit: PAGE_SIZE,
-      })
-        .then((page) => {
-          if (!isLatest(requestId)) return
-          setSeasonData((prev) =>
-            prev ? { ...prev, items: [...prev.items, ...page.items], totalCount: page.totalCount } : prev,
-          )
-        })
-        .catch(() => {})
-        .finally(() => {
-          // Unconditional: a superseded request must still clear the
-          // in-flight flag or a param change (sort/filter) that invalidates
-          // it mid-request leaves `loadingMore` stuck true forever, silently
-          // blocking every future scroll-triggered load. Only *applying* a
-          // stale result to state is gated by isLatest, in the .then above.
-          setLoadingMore(false)
-        })
-    }
-  }, [items, isLoading, hasMore, year, season, sort, inMyList, hideHentai, typeParam])
+  }, [displayed, setVisibleCount])
 
   return (
     <div className="season-page">
@@ -521,7 +450,7 @@ export function SeasonPage() {
 
       {terminalState === 'grid' && (
         <div className="season-page__grid">
-          {items.map((item, index) => (
+          {visibleItems.map((item, index) => (
             <Fragment key={item.animeId}>
               {index === firstUnwatchedIndex && index > 0 && <div className="season-page__divider">Unwatched</div>}
               <AnimeCard
@@ -546,7 +475,7 @@ export function SeasonPage() {
       )}
 
       <div ref={sentinelRef} className="season-page__sentinel" />
-      {(terminalState === 'loading' || loadingMore) && <p className="season-page__loading">Loading…</p>}
+      {terminalState === 'loading' && <p className="season-page__loading">Loading…</p>}
     </div>
   )
 }

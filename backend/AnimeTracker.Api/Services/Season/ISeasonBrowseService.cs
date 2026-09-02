@@ -6,9 +6,9 @@ namespace AnimeTracker.Api.Services.Season;
 /// user-facing control, and runs at most once per season per local day.</summary>
 public interface ISeasonBrowseService
 {
-    /// <summary>Repository-only read — never calls MAL. Returns the page plus
-    /// when this season was last fetched (null if never).</summary>
-    Task<SeasonPageDto> GetPageAsync(int year, string season, string sortKey, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default);
+    /// <summary>Repository-only read — never calls MAL. Returns the season's
+    /// whole listing plus when it was last fetched (null if never).</summary>
+    Task<SeasonPageDto> GetPageAsync(int year, string season, bool hideHentai, CancellationToken ct = default);
 
     /// <summary>Fetches this season from MAL if it hasn't already been fetched
     /// successfully today, subject to a per-season single-flight guard.
@@ -20,9 +20,8 @@ public interface ISeasonBrowseService
     Task<SeasonBoundsDto> GetBoundsAsync(CancellationToken ct = default);
 
     /// <summary>Repository-only read of a year — the union of its four
-    /// seasons' listings, sorted, filtered, and paged as one. Never calls
-    /// MAL.</summary>
-    Task<YearPageDto> GetYearPageAsync(int year, string sortKey, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default);
+    /// seasons' whole listings, as one. Never calls MAL.</summary>
+    Task<YearPageDto> GetYearPageAsync(int year, bool hideHentai, CancellationToken ct = default);
 
     /// <summary>Refreshes a year's four seasons from MAL, sequentially and
     /// subject to each season's own once-per-day/single-flight rules (design

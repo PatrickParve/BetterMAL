@@ -10,7 +10,7 @@ namespace AnimeTracker.Api.Services.Season;
 // mean the same thing to the user); LastFetchedAt set with HasListing true
 // but Items empty means the cached listing exists but nothing matches the
 // current filters.
-public record SeasonPageDto(int Year, string Season, List<AnimeBrowseItemDto> Items, int Offset, int Limit, int TotalCount, DateTimeOffset? LastFetchedAt, bool HasListing);
+public record SeasonPageDto(int Year, string Season, List<AnimeBrowseItemDto> Items, int TotalCount, DateTimeOffset? LastFetchedAt, bool HasListing);
 
 // Camel-cased on the wire via JsonStringEnumMemberName below — the global
 // JsonStringEnumConverter registered in Program.cs defaults to each member's
@@ -42,6 +42,6 @@ public record SeasonBoundsDto(int LatestYear, string LatestSeason);
 // only when no season of the year has ever been fetched) — the client's
 // never-cached loading state keys off this exactly as SeasonPageDto's does
 // (design D5/D4's "four terminal states").
-public record YearPageDto(int Year, List<AnimeBrowseItemDto> Items, int Offset, int Limit, int TotalCount, DateTimeOffset? LastFetchedAt, bool HasListing);
+public record YearPageDto(int Year, List<AnimeBrowseItemDto> Items, int TotalCount, DateTimeOffset? LastFetchedAt, bool HasListing);
 
 public record YearRefreshResultDto(SeasonRefreshOutcome Outcome);

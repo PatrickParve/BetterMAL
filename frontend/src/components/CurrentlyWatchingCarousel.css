@@ -9,6 +9,15 @@
   display: flex;
   justify-content: safe center;
   gap: 16px;
+  /* Safari-only: .anime-card::before sits at inset: -6px, outside the card's
+     border box, and Safari computes the hover-state repaint rect from that
+     border box — so on mouseleave the -6px overhang keeps its last paint,
+     leaving a line under the card. Promoting the track (not the pseudo-
+     element) to its own layer invalidates the whole scrollport as a unit on
+     repaint. One layer per carousel is free; the same card also renders in
+     the Season/Year grids, where promoting the pseudo-element would mint a
+     compositing layer per card. */
+  transform: translateZ(0);
   /* border-box makes this the scrollport width, not the content width: five
      160px cards + four 16px gaps + two 6px hover reserves (one per edge).
      Content-box here would let the scrollport run 12px past the 5th card's

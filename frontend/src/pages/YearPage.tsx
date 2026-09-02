@@ -7,8 +7,8 @@ import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
 import { FilterMultiSelect, type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
-import { useLatestRequest } from '../hooks/useLatestRequest.ts'
 import { usePageData } from '../hooks/usePageData.ts'
+import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { MEDIA_TYPE_ORDER, mediaTypeLabel, shiftSeason } from '../utils/anime.ts'
 import { EARLIEST_YEAR, FUTURE_SEASON_WINDOW } from './SeasonPage.tsx'
 import './YearPage.css'
@@ -16,12 +16,14 @@ import './YearPage.css'
 // Year page: every anime MAL classifies under any of the selected year's four
 // seasons, combined into one grid (add-year-browser design D1 — the union is
 // resolved server-side, not merged here). Its effect structure deliberately
-// mirrors SeasonPage's: the two-effect split (cache-first read vs. debounced
-// MAL refresh), the useLatestRequest generation guard, the accumulated
-// type-option set, and the four-way terminal state were each a bug at some
-// point on the season page (design D4) and are reproduced here rather than
+// mirrors SeasonPage's: the two-effect split (cache-first whole-listing read
+// vs. debounced MAL refresh) and the four-way terminal state were each a bug
+// at some point on the season page and are reproduced here rather than
 // reinvented, sharing EARLIEST_YEAR/FUTURE_SEASON_WINDOW with it so the two
-// pages' horizons can never drift apart.
+// pages' horizons can never drift apart. Sort, the type filter, and the
+// in-my-list filter never trigger a read — they act on the already-loaded
+// listing in place, sorting by the server-computed sortOrder key rather than
+// reimplementing any ordering rule (design D2, D3).
 
 interface YearReadState {
   items: AnimeBrowseItemDto[]
@@ -69,25 +71,14 @@ export function YearPage() {
   const typeFilter = typeParam ? typeParam.split(',').filter(Boolean) : []
   const { hideHentai } = useContentFilter()
 
-  // Keyed on the year alone (design D5): a different year is a different
-  // history snapshot, restored with whatever it held regardless of which
-  // sort or filter was active when it was left. Sort/filter changes within
-  // one year go through `reload`, not a second key.
-  const yearKey = `year:${year}`
-  const {
-    data: yearData,
-    setData: setYearData,
-    loading,
-    reload,
-  } = usePageData<YearReadState>(yearKey, () =>
-    getYearPage(year, {
-      sort,
-      includeMyList: inMyList,
-      hideHentai,
-      types: typeFilter,
-      offset: 0,
-      limit: PAGE_SIZE,
-    }).then((page) => ({
+  // Keyed on year/hideHentai: those are the only things a read depends on
+  // now that sort and the two page filters act on the already-loaded listing
+  // (design D1-D3). A different key is a different history snapshot,
+  // restored with its own whole listing regardless of which sort or filter
+  // was active when it was left.
+  const yearKey = `year:${year}:${hideHentai}`
+  const { data: yearData, setData: setYearData } = usePageData<YearReadState>(yearKey, () =>
+    getYearPage(year, { hideHentai }).then((page) => ({
       items: page.items,
       totalCount: page.totalCount,
       lastFetchedAt: page.lastFetchedAt,
@@ -95,11 +86,9 @@ export function YearPage() {
     })),
   )
   const items = yearData?.items ?? []
-  const totalCount = yearData?.totalCount ?? 0
   const lastFetchedAt = yearData?.lastFetchedAt ?? null
   const hasListing = yearData?.hasListing ?? false
 
-  const [loadingMore, setLoadingMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   // The refresh outcome for the year currently being viewed, reset the
   // moment the year changes (below) so one year's outcome can never decide
@@ -107,8 +96,6 @@ export function YearPage() {
   // this year has settled.
   const [refreshOutcome, setRefreshOutcome] = useState<'fetched' | 'notListed' | 'skipped' | 'failed' | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const { start, current, isLatest } = useLatestRequest()
-  const isLoading = loading || loadingMore
 
   // The navigable ceiling — the furthest year selectable. Seeded with the
   // year of the same current+2 default the season page seeds (design D3),
@@ -133,32 +120,37 @@ export function YearPage() {
     }
   }, [])
 
-  // Read by the debounced refresh effect and the infinite-scroll effect so
-  // they re-read with whatever sort, filter, and loaded-page-count are
-  // current when they actually run, not whatever was current when they were
-  // scheduled.
-  const sortRef = useRef(sort)
-  sortRef.current = sort
-  const inMyListRef = useRef(inMyList)
-  inMyListRef.current = inMyList
+  // Read by the debounced refresh effect so it re-reads with whatever
+  // hideHentai is current when it actually runs, not whatever was current
+  // when it was scheduled.
   const hideHentaiRef = useRef(hideHentai)
   hideHentaiRef.current = hideHentai
-  const typeFilterRef = useRef(typeFilter)
-  typeFilterRef.current = typeFilter
-  const seenTypesRef = useRef<{ key: string; types: Set<string>; hasUnknown: boolean }>({
-    key: yearKey,
-    types: new Set<string>(),
-    hasUnknown: false,
-  })
-  const itemsLengthRef = useRef(items.length)
-  itemsLengthRef.current = items.length
   const lastFetchedAtRef = useRef(lastFetchedAt)
   lastFetchedAtRef.current = lastFetchedAt
-  const reloadRef = useRef(reload)
-  reloadRef.current = reload
 
-  const hasMore = items.length < totalCount
-  const firstUnwatchedIndex = sort === 'myScore' ? items.findIndex((item) => item.myScore === null) : -1
+  // Filtered by the in-my-list and type controls, then sorted by the
+  // server-computed sortOrder for the active sort — an integer compare on a
+  // precomputed key, so no ordering rule (the my-score banding, the
+  // alphabetical collation) is ever reimplemented here (design D3).
+  const displayed = useMemo(() => {
+    const filtered = items.filter((item) => {
+      if (!inMyList && item.inMyList) return false
+      if (typeFilter.length > 0 && !typeFilter.includes(item.mediaType ?? 'unknown')) return false
+      return true
+    })
+    return [...filtered].sort((a, b) => (a.sortOrder?.[sort] ?? 0) - (b.sortOrder?.[sort] ?? 0))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, inMyList, sort, typeParam])
+
+  // A view control restored like every other (useRestorableState), not plain
+  // useState: it resets to PAGE_SIZE on a fresh visit, and a sort or filter
+  // change already is one — each goes through setSearchParams, which mints a
+  // new history entry, so this reseeds under its new location key with no
+  // code resetting it explicitly (task 2.8).
+  const [visibleCount, setVisibleCount] = useRestorableState('visibleCount', PAGE_SIZE)
+  const visibleItems = displayed.slice(0, visibleCount)
+
+  const firstUnwatchedIndex = sort === 'myScore' ? displayed.findIndex((item) => item.myScore === null) : -1
 
   // The page's terminal states, in the season page's own order (tasks.md
   // 5.5): the grid takes priority whenever there's anything to show;
@@ -166,7 +158,7 @@ export function YearPage() {
   // out); otherwise the year has never been cached, so it's either still
   // loading or its first fetch has settled and produced nothing.
   const terminalState: 'grid' | 'filtersEmpty' | 'notListed' | 'loading' | 'loadFailed' =
-    items.length > 0
+    displayed.length > 0
       ? 'grid'
       : lastFetchedAt !== null && hasListing
         ? 'filtersEmpty'
@@ -185,31 +177,22 @@ export function YearPage() {
     return Array.from({ length: latest - earliest + 1 }, (_, i) => latest - i)
   }, [year, ceiling])
 
-  // Type filter options: every media type seen across this year's loaded
-  // pages, accumulated rather than a one-shot read of `items` — the filter
-  // runs server-side, so once a type is selected `items` only ever contains
-  // that type again, and a naive re-derivation from `items` alone would make
-  // every other type disappear from the picker the moment one is chosen.
-  // Reset when the year itself changes; mutated directly during render (not
-  // an effect) so newly discovered types are reflected in the same pass that
-  // loaded them.
-  if (seenTypesRef.current.key !== yearKey) {
-    seenTypesRef.current = { key: yearKey, types: new Set<string>(), hasUnknown: false }
-  }
-  for (const item of items) {
-    if (item.mediaType) seenTypesRef.current.types.add(item.mediaType)
-    else seenTypesRef.current.hasUnknown = true
-  }
-
+  // Every media type present in the whole loaded listing — filtering is
+  // client-side now, so selecting one type can no longer hide the others
+  // from this picker; no accumulation workaround is needed.
   const typeOptions = useMemo(() => {
-    const { types: presentTypes, hasUnknown: hasUnknownType } = seenTypesRef.current
+    const presentTypes = new Set<string>()
+    let hasUnknownType = false
+    for (const item of items) {
+      if (item.mediaType) presentTypes.add(item.mediaType)
+      else hasUnknownType = true
+    }
     const options: FilterMultiSelectOption[] = MEDIA_TYPE_ORDER.filter((value) => presentTypes.has(value)).map(
       (value) => ({ value, label: mediaTypeLabel(value) }),
     )
     if (hasUnknownType) options.push({ value: 'unknown', label: 'Unknown' })
     return options
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, yearKey])
+  }, [items])
 
   function setYear(next: number) {
     setSearchParams((prev) => {
@@ -245,29 +228,6 @@ export function YearPage() {
     })
   }
 
-  // Any parameter the cache-first read below depends on invalidates
-  // in-flight background-refresh/load-more requests started before the
-  // change (mirroring the generation guard usePageData applies to its own
-  // load internally, for the two fetches that sit outside it).
-  useEffect(() => {
-    start()
-  }, [yearKey, sort, inMyList, hideHentai, typeParam])
-
-  // Sort/filter changed within the same year: the year's initial or restored
-  // load is already covered by usePageData itself (above), so this only
-  // fires on a later change, reusing `reload`'s own generation guard rather
-  // than opening a second, independently-raced fetch. Read through a ref so
-  // a year change (which gives `reload` a new identity) doesn't also
-  // retrigger this effect.
-  const isFirstFilterRun = useRef(true)
-  useEffect(() => {
-    if (isFirstFilterRun.current) {
-      isFirstFilterRun.current = false
-      return
-    }
-    reloadRef.current()
-  }, [sort, inMyList, hideHentai, typeParam])
-
   // The outcome from a stale year must never decide this year's render —
   // reset the instant the year changes, ahead of the debounced refresh
   // effect below settling for whichever year is landed on.
@@ -284,11 +244,6 @@ export function YearPage() {
 
   useEffect(() => {
     const targetYear = debouncedYear
-    // Captured now, at the moment this year's refresh starts (the effect
-    // above already bumped it for this same year) — not after refreshYear
-    // resolves, so a slow refresh whose year has since been navigated away
-    // from is still correctly recognized as stale.
-    const requestId = current()
 
     let cancelled = false
     setRefreshing(true)
@@ -303,22 +258,17 @@ export function YearPage() {
         // has nothing cached itself — the cross-tab race where another tab's
         // fetch landed between this tab's own cache read and its refresh
         // call. Never on failed: the cached page, if any, is left exactly as
-        // it is.
+        // it is. Since the whole listing is read at once, this re-read can
+        // never leave the grid showing fewer anime than it was showing
+        // (design D1).
         const shouldReread =
           result.outcome === 'fetched' ||
           result.outcome === 'notListed' ||
           (result.outcome === 'skipped' && lastFetchedAtRef.current === null)
         if (!shouldReread) return undefined
 
-        return getYearPage(targetYear, {
-          sort: sortRef.current,
-          includeMyList: inMyListRef.current,
-          hideHentai: hideHentaiRef.current,
-          types: typeFilterRef.current,
-          offset: 0,
-          limit: Math.max(itemsLengthRef.current, PAGE_SIZE),
-        }).then((page) => {
-          if (cancelled || !isLatest(requestId)) return
+        return getYearPage(targetYear, { hideHentai: hideHentaiRef.current }).then((page) => {
+          if (cancelled) return
           setYearData({
             items: page.items,
             totalCount: page.totalCount,
@@ -341,46 +291,23 @@ export function YearPage() {
     }
   }, [debouncedYear])
 
-  // Infinite scroll: load the next page once the sentinel enters view.
+  // Reveal more of the already-loaded, already-filtered-and-sorted listing
+  // once the sentinel enters view — no network call. The reveal is
+  // load-bearing rather than decorative: the whole year is already loaded,
+  // and slicing to visibleCount is what keeps a 1,200-card year from
+  // rendering (and painting every poster) in one go.
   useEffect(() => {
     const node = sentinelRef.current
     if (!node) return
 
     const observer = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting) loadMore()
+      if (entries[0]?.isIntersecting) {
+        setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, displayed.length))
+      }
     })
     observer.observe(node)
     return () => observer.disconnect()
-
-    function loadMore() {
-      if (isLoading || !hasMore) return
-      const requestId = current()
-      setLoadingMore(true)
-      getYearPage(year, {
-        sort,
-        includeMyList: inMyList,
-        hideHentai,
-        types: typeFilter,
-        offset: items.length,
-        limit: PAGE_SIZE,
-      })
-        .then((page) => {
-          if (!isLatest(requestId)) return
-          setYearData((prev) =>
-            prev ? { ...prev, items: [...prev.items, ...page.items], totalCount: page.totalCount } : prev,
-          )
-        })
-        .catch(() => {})
-        .finally(() => {
-          // Unconditional: a superseded request must still clear the
-          // in-flight flag or a param change (sort/filter) that invalidates
-          // it mid-request leaves `loadingMore` stuck true forever, silently
-          // blocking every future scroll-triggered load. Only *applying* a
-          // stale result to state is gated by isLatest, in the .then above.
-          setLoadingMore(false)
-        })
-    }
-  }, [items, isLoading, hasMore, year, sort, inMyList, hideHentai, typeParam])
+  }, [displayed, setVisibleCount])
 
   return (
     <div className="year-page">
@@ -446,7 +373,7 @@ export function YearPage() {
 
       {terminalState === 'grid' && (
         <div className="year-page__grid">
-          {items.map((item, index) => (
+          {visibleItems.map((item, index) => (
             <Fragment key={item.animeId}>
               {index === firstUnwatchedIndex && index > 0 && <div className="year-page__divider">Unwatched</div>}
               <AnimeCard
@@ -469,7 +396,7 @@ export function YearPage() {
       )}
 
       <div ref={sentinelRef} className="year-page__sentinel" />
-      {(terminalState === 'loading' || loadingMore) && <p className="year-page__loading">Loading…</p>}
+      {terminalState === 'loading' && <p className="year-page__loading">Loading…</p>}
     </div>
   )
 }

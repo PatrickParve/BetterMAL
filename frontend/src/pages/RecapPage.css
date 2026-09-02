@@ -87,6 +87,17 @@
   flex-wrap: wrap;
 }
 
+/* Groups the filter toggle with the season/year link so `.recap-page__controls`
+   always sees two children under space-between — otherwise a yearly recap's
+   three children put the time filter in the middle instead of beside
+   "Browse the year". */
+.recap-page__controls-trailing {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
 .recap-page__period-controls {
   display: flex;
   align-items: center;
@@ -857,9 +868,13 @@ a.recap-page__stat--link:focus-visible {
   white-space: nowrap;
 }
 
+/* padding-inline-end here, not on the row: the row's own padding also
+   positions the rank and poster, and only the score should move in from
+   the border. */
 .recap-top-ten-row__score {
   flex: 0 0 auto;
   font-weight: 600;
+  padding-inline-end: 6px;
 }
 
 .recap-page__see-all {

@@ -5,13 +5,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Tests.Data.Repositories;
 
-// SeasonRepository's point-set overloads (design.md D1, tasks.md 1.1-1.5):
-// GetPageAsync/HasListingAsync generalised from a single (year, season) to a
-// set of them, so the year page's four-season read is one query rather than
-// four merged in memory. The single-point overloads are exercised
-// indirectly here too, since they now delegate straight into the point-set
-// ones (task 1.3) — the regression signal for that is the full existing
-// suite (task 1.6), not duplicated here.
+// SeasonRepository's listing read (design.md D1/D3, tasks.md 1.1-1.3, 11.1,
+// 11.2): GetListingAsync now returns a season's or year's *whole* listing —
+// no offset/limit/sort/includeMyList/type arguments, since paging and the
+// two page filters moved client-side and sorting moved to a per-item
+// SortOrder key. These tests assert the four SortOrder positions reproduce
+// exactly the orderings the old server-side sort used to produce (so the
+// move to keys cannot silently reorder anything), and that those positions
+// are dense, order-preserving-under-filtering indices.
 public class SeasonRepositoryTests
 {
     private static readonly (int Year, string Season)[] Year2020 =
@@ -47,8 +48,11 @@ public class SeasonRepositoryTests
     private static void List(AnimeTrackerDbContext db, int animeId, int year, string season) =>
         db.SeasonAnimeListings.Add(new SeasonAnimeListing { Year = year, Season = season, AnimeId = animeId });
 
+    private static List<int> OrderBy(List<SeasonAnimeItem> items, Func<SeasonSortOrder, int> key) =>
+        items.OrderBy(i => key(i.SortOrder)).Select(i => i.AnimeId).ToList();
+
     [Fact]
-    public async Task FourPointReadReturnsTheUnionWithNoDuplicates()
+    public async Task FullListingReturnsTheUnionWithNoDuplicates()
     {
         using var db = CreateDb();
         Seed(db, 1, "Winter show");
@@ -64,12 +68,28 @@ public class SeasonRepositoryTests
         await db.SaveChangesAsync();
         var repository = new SeasonRepository(db);
 
-        var (items, totalCount) = await repository.GetPageAsync(
-            Year2020, SeasonSortKey.Alphabetical, includeMyList: true, hideHentai: false, types: null, offset: 0, limit: 100);
+        var items = await repository.GetListingAsync(Year2020, hideHentai: false);
 
-        Assert.Equal(4, totalCount);
         Assert.Equal([1, 2, 3, 4], items.Select(i => i.AnimeId).OrderBy(i => i));
         Assert.Equal(4, items.Select(i => i.AnimeId).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task HideHentaiExcludesOnlyRatingRxAndNeverAnUnratedAnime()
+    {
+        using var db = CreateDb();
+        Seed(db, 1, "Explicit", rating: "rx");
+        Seed(db, 2, "Mature", rating: "r+");
+        Seed(db, 3, "Unrated", rating: null);
+        List(db, 1, 2020, "winter");
+        List(db, 2, 2020, "spring");
+        List(db, 3, 2020, "summer");
+        await db.SaveChangesAsync();
+        var repository = new SeasonRepository(db);
+
+        var items = await repository.GetListingAsync(Year2020, hideHentai: true);
+
+        Assert.Equal([2, 3], items.Select(i => i.AnimeId).OrderBy(i => i));
     }
 
     [Fact]
@@ -87,10 +107,9 @@ public class SeasonRepositoryTests
         await db.SaveChangesAsync();
         var repository = new SeasonRepository(db);
 
-        var (items, _) = await repository.GetPageAsync(
-            Year2020, SeasonSortKey.Popularity, includeMyList: true, hideHentai: false, types: null, offset: 0, limit: 100);
+        var items = await repository.GetListingAsync(Year2020, hideHentai: false);
 
-        Assert.Equal([2, 1, 3, 4], items.Select(i => i.AnimeId));
+        Assert.Equal([2, 1, 3, 4], OrderBy(items, s => s.Popularity));
     }
 
     [Fact]
@@ -108,10 +127,9 @@ public class SeasonRepositoryTests
         await db.SaveChangesAsync();
         var repository = new SeasonRepository(db);
 
-        var (items, _) = await repository.GetPageAsync(
-            Year2020, SeasonSortKey.MalScore, includeMyList: true, hideHentai: false, types: null, offset: 0, limit: 100);
+        var items = await repository.GetListingAsync(Year2020, hideHentai: false);
 
-        Assert.Equal([2, 1, 4, 3], items.Select(i => i.AnimeId));
+        Assert.Equal([2, 1, 4, 3], OrderBy(items, s => s.MalScore));
     }
 
     [Fact]
@@ -127,10 +145,9 @@ public class SeasonRepositoryTests
         await db.SaveChangesAsync();
         var repository = new SeasonRepository(db);
 
-        var (items, _) = await repository.GetPageAsync(
-            Year2020, SeasonSortKey.Alphabetical, includeMyList: true, hideHentai: false, types: null, offset: 0, limit: 100);
+        var items = await repository.GetListingAsync(Year2020, hideHentai: false);
 
-        Assert.Equal(["Alpha", "Mike", "Zeta"], items.Select(i => i.Title));
+        Assert.Equal(["Alpha", "Mike", "Zeta"], items.OrderBy(i => i.SortOrder.Alphabetical).Select(i => i.Title));
     }
 
     [Fact]
@@ -150,19 +167,17 @@ public class SeasonRepositoryTests
         await db.SaveChangesAsync();
         var repository = new SeasonRepository(db);
 
-        var (items, _) = await repository.GetPageAsync(
-            Year2020, SeasonSortKey.MyScore, includeMyList: true, hideHentai: false, types: null, offset: 0, limit: 100);
+        var items = await repository.GetListingAsync(Year2020, hideHentai: false);
 
         // Scored anime first by descending score, then every unscored anime
         // falls through to the unranked-last popularity ordering.
-        Assert.Equal([2, 1, 3, 4], items.Select(i => i.AnimeId));
+        Assert.Equal([2, 1, 3, 4], OrderBy(items, s => s.MyScore));
     }
 
     // anime-ranking capability read into the season/year my-score sort
-    // (design.md D3, tasks.md 3.6/3.7): equal scores broken by the ranking's
-    // stored position rather than popularity, dropped members banded below
-    // hand-ordered ones of the same score, and the grouping/order holding
-    // across paged loads.
+    // (design.md D3): equal scores broken by the ranking's stored position
+    // rather than popularity, dropped members banded below hand-ordered ones
+    // of the same score.
     [Fact]
     public async Task MyScoreSortBreaksTiedScoresByStoredRankingPosition()
     {
@@ -178,10 +193,9 @@ public class SeasonRepositoryTests
         await db.SaveChangesAsync();
         var repository = new SeasonRepository(db);
 
-        var (items, _) = await repository.GetPageAsync(
-            Year2020, SeasonSortKey.MyScore, includeMyList: true, hideHentai: false, types: null, offset: 0, limit: 100);
+        var items = await repository.GetListingAsync(Year2020, hideHentai: false);
 
-        Assert.Equal([2, 1], items.Select(i => i.AnimeId));
+        Assert.Equal([2, 1], OrderBy(items, s => s.MyScore));
     }
 
     [Fact]
@@ -197,80 +211,63 @@ public class SeasonRepositoryTests
         await db.SaveChangesAsync();
         var repository = new SeasonRepository(db);
 
-        var (items, _) = await repository.GetPageAsync(
-            Year2020, SeasonSortKey.MyScore, includeMyList: true, hideHentai: false, types: null, offset: 0, limit: 100);
+        var items = await repository.GetListingAsync(Year2020, hideHentai: false);
 
         // The dropped anime's title would sort first alphabetically, but its
         // band puts it after the hand-ordered one regardless.
-        Assert.Equal([2, 1], items.Select(i => i.AnimeId));
+        Assert.Equal([2, 1], OrderBy(items, s => s.MyScore));
     }
 
+    // tasks.md 11.2: the four SortOrder fields are dense positions (0..n-1,
+    // one per item, no gaps or repeats) in a total order over the whole
+    // listing — the property that lets the client re-sort a filtered subset
+    // without disturbing relative order.
     [Fact]
-    public async Task MyScoreSortHoldsItsOrderAcrossPagedLoads()
+    public async Task SortOrderPositionsAreDenseOverTheWholeListing()
     {
         using var db = CreateDb();
-        for (var i = 1; i <= 4; i++)
-        {
-            var anime = Seed(db, i, $"Scored {i:00}", popularityRank: i);
-            db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = i, Anime = anime, MyScore = 10 - i }); // descending scores 9,8,7,6
-            db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = i, Anime = anime, Position = 4 - i, SelectedAt = DateTimeOffset.UtcNow });
+        for (var i = 1; i <= 6; i++)
+            Seed(db, i, $"Show {i:00}", popularityRank: i, malScore: i);
+        foreach (var i in Enumerable.Range(1, 6))
             List(db, i, 2020, "winter");
-        }
         await db.SaveChangesAsync();
         var repository = new SeasonRepository(db);
 
-        var (singlePage, _) = await repository.GetPageAsync(
-            Year2020, SeasonSortKey.MyScore, includeMyList: true, hideHentai: false, types: null, offset: 0, limit: 100);
-        var (firstPage, _) = await repository.GetPageAsync(
-            Year2020, SeasonSortKey.MyScore, includeMyList: true, hideHentai: false, types: null, offset: 0, limit: 2);
-        var (secondPage, _) = await repository.GetPageAsync(
-            Year2020, SeasonSortKey.MyScore, includeMyList: true, hideHentai: false, types: null, offset: 2, limit: 2);
+        var items = await repository.GetListingAsync(Year2020, hideHentai: false);
 
-        Assert.Equal(singlePage.Select(i => i.AnimeId), firstPage.Select(i => i.AnimeId).Concat(secondPage.Select(i => i.AnimeId)));
+        var expected = Enumerable.Range(0, 6).OrderBy(i => i).ToList();
+        Assert.Equal(expected, items.Select(i => i.SortOrder.Popularity).OrderBy(p => p));
+        Assert.Equal(expected, items.Select(i => i.SortOrder.MalScore).OrderBy(p => p));
+        Assert.Equal(expected, items.Select(i => i.SortOrder.Alphabetical).OrderBy(p => p));
+        Assert.Equal(expected, items.Select(i => i.SortOrder.MyScore).OrderBy(p => p));
     }
 
+    // tasks.md 11.2: removing items from the listing (what the client's type/
+    // in-my-list filters do) preserves the relative order of what's left,
+    // under every sort — no ordering rule needs to be reapplied client-side.
     [Fact]
-    public async Task TotalCountIsComputedAfterFilters()
+    public async Task FilteringItemsOutPreservesRelativeOrderUnderEverySort()
     {
         using var db = CreateDb();
-        Seed(db, 1, "Movie", mediaType: "movie");
-        Seed(db, 2, "TV", mediaType: "tv");
-        Seed(db, 3, "Another movie", mediaType: "movie");
-        List(db, 1, 2020, "winter");
-        List(db, 2, 2020, "spring");
-        List(db, 3, 2020, "summer");
+        Seed(db, 1, "Charlie", popularityRank: 3, malScore: 3);
+        Seed(db, 2, "Alpha", popularityRank: 1, malScore: 1);
+        Seed(db, 3, "Delta", popularityRank: 4, malScore: 4);
+        Seed(db, 4, "Bravo", popularityRank: 2, malScore: 2);
+        foreach (var i in Enumerable.Range(1, 4))
+            List(db, i, 2020, "winter");
         await db.SaveChangesAsync();
         var repository = new SeasonRepository(db);
 
-        var (items, totalCount) = await repository.GetPageAsync(
-            Year2020, SeasonSortKey.Alphabetical, includeMyList: true, hideHentai: false, types: ["movie"], offset: 0, limit: 100);
+        var items = await repository.GetListingAsync(Year2020, hideHentai: false);
+        var fullPopularityOrder = OrderBy(items, s => s.Popularity);
+        var fullAlphabeticalOrder = items.OrderBy(i => i.SortOrder.Alphabetical).Select(i => i.AnimeId).ToList();
 
-        Assert.Equal(2, totalCount);
-        Assert.Equal(2, items.Count);
-    }
+        // Simulate a client-side filter dropping anime 4 (Bravo) out of the
+        // already-loaded listing.
+        var filtered = items.Where(i => i.AnimeId != 4).ToList();
 
-    [Fact]
-    public async Task SkipAndTakePageContinuouslyAcrossThePointSet()
-    {
-        using var db = CreateDb();
-        Seed(db, 1, "A", popularityRank: 1);
-        Seed(db, 2, "B", popularityRank: 2);
-        Seed(db, 3, "C", popularityRank: 3);
-        Seed(db, 4, "D", popularityRank: 4);
-        List(db, 1, 2020, "winter");
-        List(db, 2, 2020, "spring");
-        List(db, 3, 2020, "summer");
-        List(db, 4, 2020, "fall");
-        await db.SaveChangesAsync();
-        var repository = new SeasonRepository(db);
-
-        var (firstPage, _) = await repository.GetPageAsync(
-            Year2020, SeasonSortKey.Popularity, includeMyList: true, hideHentai: false, types: null, offset: 0, limit: 2);
-        var (secondPage, _) = await repository.GetPageAsync(
-            Year2020, SeasonSortKey.Popularity, includeMyList: true, hideHentai: false, types: null, offset: 2, limit: 2);
-
-        Assert.Equal([1, 2], firstPage.Select(i => i.AnimeId));
-        Assert.Equal([3, 4], secondPage.Select(i => i.AnimeId));
+        Assert.Equal(fullPopularityOrder.Where(id => id != 4), OrderBy(filtered, s => s.Popularity));
+        Assert.Equal(fullAlphabeticalOrder.Where(id => id != 4), filtered.OrderBy(i => i.SortOrder.Alphabetical).Select(i => i.AnimeId));
     }
 
     [Fact]

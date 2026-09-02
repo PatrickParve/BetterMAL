@@ -216,6 +216,16 @@ export type AiringWeekDto = {
   days: AiringDayDto[]
 }
 
+// An anime's index within each of the season browser's four orderings over
+// the whole listing it came from (design D3) — only the season and year
+// listing reads populate AnimeBrowseItemDto.sortOrder; search leaves it null.
+export type BrowseSortOrderDto = {
+  popularity: number
+  malScore: number
+  alphabetical: number
+  myScore: number
+}
+
 // Shared shape for a browsable (not-yet-in-my-list-scoped) anime card, used by
 // both the season page and the search page.
 export type AnimeBrowseItemDto = {
@@ -229,14 +239,13 @@ export type AnimeBrowseItemDto = {
   popularityRank: number | null
   myScore: number | null
   inMyList: boolean
+  sortOrder: BrowseSortOrderDto | null
 }
 
 export type SeasonPageDto = {
   year: number
   season: string
   items: AnimeBrowseItemDto[]
-  offset: number
-  limit: number
   totalCount: number
   lastFetchedAt: string | null
   hasListing: boolean
@@ -254,8 +263,6 @@ export type SeasonBoundsDto = {
 export type YearPageDto = {
   year: number
   items: AnimeBrowseItemDto[]
-  offset: number
-  limit: number
   totalCount: number
   lastFetchedAt: string | null
   hasListing: boolean
@@ -969,13 +976,16 @@ export type RecapRankingPosterDto = {
   pictureUrl: string | null
 }
 
-// topPosters carries every row, not only the leader's.
+// topPosters carries every row, not only the leader's. scoreCounts is the
+// ranking's own tie-break histogram, ten counts in ascending score order —
+// index 0 is score 1, index 9 is score 10.
 export type RecapSeasonRankingDto = {
   year: number
   season: string
   scoredCount: number
   weightedScore: number
   topPosters: RecapRankingPosterDto[]
+  scoreCounts: number[]
 }
 
 export type RecapYearRankingDto = {
@@ -983,6 +993,7 @@ export type RecapYearRankingDto = {
   scoredCount: number
   weightedScore: number
   topPosters: RecapRankingPosterDto[]
+  scoreCounts: number[]
 }
 
 // One ranked season or year, largest time watched first — `season` is null

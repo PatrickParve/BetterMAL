@@ -28,7 +28,7 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
   // Guards against out-of-order resolution: a key can change again (a new
   // season, a fast-typed search) before an in-flight load for the previous
   // key has resolved, and that stale response must not clobber what's
-  // current — the same class of race `useLatestRequest` guards elsewhere.
+  // current.
   const generationRef = useRef(0)
 
   // Tracks which generation is currently responsible for clearing `loading`

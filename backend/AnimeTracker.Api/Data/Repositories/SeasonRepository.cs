@@ -15,9 +15,9 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
             .Select(f => (DateTimeOffset?)f.LastFetchedAt)
             .FirstOrDefaultAsync(ct);
 
-    // Unfiltered on purpose — GetPageAsync's TotalCount is computed after the
-    // type/hentai/in-my-list filters, so a type filter could make a season
-    // that genuinely has a MAL listing look unlisted.
+    // Unfiltered on purpose — GetListingAsync's result is filtered by
+    // hideHentai, so trusting its emptiness here would make a hentai-only
+    // season that genuinely has a MAL listing look unlisted.
     public Task<bool> HasListingAsync(int year, string season, CancellationToken ct = default) =>
         HasListingAsync([(year, season)], ct);
 
@@ -66,15 +66,15 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
         return new SeasonHorizonInputs(resultPoints, latest);
     }
 
-    public Task<(List<SeasonAnimeItem> Items, int TotalCount)> GetPageAsync(
-        int year, string season, SeasonSortKey sort, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default) =>
-        GetPageAsync([(year, season)], sort, includeMyList, hideHentai, types, offset, limit, ct);
+    public Task<List<SeasonAnimeItem>> GetListingAsync(
+        int year, string season, bool hideHentai, CancellationToken ct = default) =>
+        GetListingAsync([(year, season)], hideHentai, ct);
 
     // A year is passed as its four (year, season) points (design D1); the
-    // ordering, filtering, counting, and paging rules below are identical
-    // whatever the point count.
-    public async Task<(List<SeasonAnimeItem> Items, int TotalCount)> GetPageAsync(
-        IReadOnlyCollection<(int Year, string Season)> points, SeasonSortKey sort, bool includeMyList, bool hideHentai, IReadOnlyCollection<string>? types, int offset, int limit, CancellationToken ct = default)
+    // ordering and filtering rules below are identical whatever the point
+    // count.
+    public async Task<List<SeasonAnimeItem>> GetListingAsync(
+        IReadOnlyCollection<(int Year, string Season)> points, bool hideHentai, CancellationToken ct = default)
     {
         var (year, seasons) = SplitPoints(points);
 
@@ -93,27 +93,15 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
         var query = db.SeasonAnimeListings.AsNoTracking()
             .Where(l => l.Year == year && seasons.Contains(l.Season));
 
-        if (!includeMyList)
-            query = query.Where(l => l.Anime.UserEntry == null);
-
         // EF translates `!=` against a non-null constant with C# null semantics,
         // emitting `("Rating" IS NULL OR "Rating" <> 'rx')` — a not-yet-rated
         // anime is never hidden on suspicion, only a confirmed "rx" is excluded.
+        // The in-my-list and type filters that used to live here are now
+        // applied client-side (design D3) — hideHentai stays server-side
+        // because it reads a field (MAL's rating) the browse DTO doesn't
+        // carry to the client.
         if (hideHentai)
             query = query.Where(l => l.Anime.Rating != HentaiRating);
-
-        if (types is { Count: > 0 })
-        {
-            // "unknown" (an untyped anime) can't be matched by Contains against
-            // MediaType's real values, so it needs its own null check — mirrors
-            // the client-side `item.mediaType ?? 'unknown'` convention used by
-            // My List's and Search's type filters.
-            var includeUnknown = types.Contains("unknown");
-            var knownTypes = types.Where(t => t != "unknown").ToArray();
-            query = query.Where(l =>
-                (includeUnknown && l.Anime.MediaType == null) ||
-                (l.Anime.MediaType != null && knownTypes.Contains(l.Anime.MediaType)));
-        }
 
         var projected = query.Select(l => new
         {
@@ -131,63 +119,92 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
             Status = l.Anime.UserEntry != null ? (WatchStatus?)l.Anime.UserEntry.Status : null,
         });
 
-        var totalCount = await projected.CountAsync(ct);
+        var items = await projected.ToListAsync(ct);
 
-        projected = sort switch
-        {
-            SeasonSortKey.MalScore => projected.OrderByDescending(a => a.MalScore ?? -1).ThenBy(a => a.Title),
-            // Scored anime first (highest score down), then every unscored anime
-            // falls through to the same unranked-last popularity ordering as the
-            // popularity sort (the client renders the "Unwatched" divider between
-            // the two groups). Equal scores are broken by the anime-ranking
-            // capability's ordering rule (design.md D3): band ascending, then
-            // stored position ascending within the hand-ordered band, then —
-            // for anime the ranking doesn't cover (band 3: dropped's
-            // hand-ordered peers rank above it, but a still-scored plan-to-
-            // watch or unaired anime lands in band 3 here) — the same
-            // unranked-last popularity fallback the plain popularity sort
-            // uses, per the season-browser capability. This inlines
-            // Services/Ranking/AnimeRankingKey's rule rather than calling it,
-            // since EF cannot translate a call into shared C# logic and this
-            // query's shape isn't IQueryable<UserAnimeEntry> to begin with —
-            // the two must move together.
-            SeasonSortKey.MyScore =>
-                (from a in projected
-                 join p in db.TopAnimeSelections.AsNoTracking() on a.Id equals p.AnimeId into positionJoin
-                 from p in positionJoin.DefaultIfEmpty()
-                 select new
-                 {
-                     a,
-                     Position = (int?)p.Position,
-                     Band = a.MyScore == null || a.Status == WatchStatus.PlanToWatch || a.AiringStatus == "not_yet_aired" ? 3
-                         : a.Status == WatchStatus.Dropped ? 2
-                         : (a.MediaType == "music" || a.MediaType == "cm" || a.MediaType == "pv") ? 1
-                         : 0,
-                 })
-                .OrderBy(x => x.a.MyScore == null ? 1 : 0)
-                .ThenByDescending(x => x.a.MyScore)
-                .ThenBy(x => x.Band)
-                .ThenBy(x => x.Band == 0 ? (x.Position ?? int.MaxValue) : int.MaxValue)
-                .ThenBy(x => x.Band == 3 ? (x.a.PopularityRank == null || x.a.PopularityRank == 0 ? 1 : 0) : 0)
-                .ThenBy(x => x.Band == 3 ? x.a.PopularityRank : null)
-                .ThenBy(x => x.a.Title)
-                .Select(x => x.a),
-            SeasonSortKey.Alphabetical => projected.OrderBy(a => a.Title),
+        // The four orderings below are deliberately left in SQL and run as
+        // id-only projections rather than reimplemented over `items` in C#
+        // (design D3): they carry the anime-ranking capability's banding and
+        // Postgres's own title collation, and shipping each as a per-item
+        // position is what lets the client re-sort its already-loaded
+        // listing without a second copy of either rule.
+        var popularityIds = await projected
             // PopularityRank 0/null means "unranked" on MAL — sort those last, then
             // by ascending rank (1 = most popular), then title.
-            _ => projected
-                .OrderBy(a => a.PopularityRank == null || a.PopularityRank == 0 ? 1 : 0)
-                .ThenBy(a => a.PopularityRank)
-                .ThenBy(a => a.Title),
-        };
+            .OrderBy(a => a.PopularityRank == null || a.PopularityRank == 0 ? 1 : 0)
+            .ThenBy(a => a.PopularityRank)
+            .ThenBy(a => a.Title)
+            .Select(a => a.Id)
+            .ToListAsync(ct);
 
-        var page = await projected.Skip(offset).Take(limit).ToListAsync(ct);
+        var malScoreIds = await projected
+            .OrderByDescending(a => a.MalScore ?? -1)
+            .ThenBy(a => a.Title)
+            .Select(a => a.Id)
+            .ToListAsync(ct);
 
-        var items = page
-            .Select(a => new SeasonAnimeItem(a.Id, a.Title, a.EnglishTitle, a.PictureUrl, a.TotalEpisodes, a.MediaType, a.MalScore, a.PopularityRank, a.MyScore, a.InMyList))
+        var alphabeticalIds = await projected
+            .OrderBy(a => a.Title)
+            .Select(a => a.Id)
+            .ToListAsync(ct);
+
+        // Scored anime first (highest score down), then every unscored anime
+        // falls through to the same unranked-last popularity ordering as the
+        // popularity sort (the client renders the "Unwatched" divider between
+        // the two groups). Equal scores are broken by the anime-ranking
+        // capability's ordering rule (design.md D3): band ascending, then
+        // stored position ascending within the hand-ordered band, then —
+        // for anime the ranking doesn't cover (band 3: dropped's
+        // hand-ordered peers rank above it, but a still-scored plan-to-
+        // watch or unaired anime lands in band 3 here) — the same
+        // unranked-last popularity fallback the plain popularity sort
+        // uses, per the season-browser capability. This inlines
+        // Services/Ranking/AnimeRankingKey's rule rather than calling it,
+        // since EF cannot translate a call into shared C# logic and this
+        // query's shape isn't IQueryable<UserAnimeEntry> to begin with —
+        // the two must move together.
+        var myScoreIds = await (from a in projected
+             join p in db.TopAnimeSelections.AsNoTracking() on a.Id equals p.AnimeId into positionJoin
+             from p in positionJoin.DefaultIfEmpty()
+             select new
+             {
+                 a,
+                 Position = (int?)p.Position,
+                 Band = a.MyScore == null || a.Status == WatchStatus.PlanToWatch || a.AiringStatus == "not_yet_aired" ? 3
+                     : a.Status == WatchStatus.Dropped ? 2
+                     : (a.MediaType == "music" || a.MediaType == "cm" || a.MediaType == "pv") ? 1
+                     : 0,
+             })
+            .OrderBy(x => x.a.MyScore == null ? 1 : 0)
+            .ThenByDescending(x => x.a.MyScore)
+            .ThenBy(x => x.Band)
+            .ThenBy(x => x.Band == 0 ? (x.Position ?? int.MaxValue) : int.MaxValue)
+            .ThenBy(x => x.Band == 3 ? (x.a.PopularityRank == null || x.a.PopularityRank == 0 ? 1 : 0) : 0)
+            .ThenBy(x => x.Band == 3 ? x.a.PopularityRank : null)
+            .ThenBy(x => x.a.Title)
+            .Select(x => x.a.Id)
+            .ToListAsync(ct);
+
+        var popularityPositions = ToPositionMap(popularityIds);
+        var malScorePositions = ToPositionMap(malScoreIds);
+        var alphabeticalPositions = ToPositionMap(alphabeticalIds);
+        var myScorePositions = ToPositionMap(myScoreIds);
+
+        return items
+            .Select(a => new SeasonAnimeItem(
+                a.Id, a.Title, a.EnglishTitle, a.PictureUrl, a.TotalEpisodes, a.MediaType, a.MalScore, a.PopularityRank, a.MyScore, a.InMyList,
+                new SeasonSortOrder(popularityPositions[a.Id], malScorePositions[a.Id], alphabeticalPositions[a.Id], myScorePositions[a.Id])))
             .ToList();
+    }
 
-        return (items, totalCount);
+    // Positions in a total order over the whole listing (design D3): index 0
+    // is first under that ordering, and removing items from the listing
+    // client-side preserves the relative order of what's left.
+    private static Dictionary<int, int> ToPositionMap(List<int> orderedIds)
+    {
+        var positions = new Dictionary<int, int>(orderedIds.Count);
+        for (var i = 0; i < orderedIds.Count; i++)
+            positions[orderedIds[i]] = i;
+        return positions;
     }
 
     // Every point set this repository is ever asked for shares one year — a

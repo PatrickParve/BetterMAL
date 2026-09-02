@@ -927,9 +927,11 @@ export function RecapPage() {
 
       <div className="recap-page__controls">
         {renderPeriodControls()}
-        {renderFilterToggle()}
-        {renderSeasonPageLink()}
-        {renderYearPageLink()}
+        <div className="recap-page__controls-trailing">
+          {renderFilterToggle()}
+          {renderSeasonPageLink()}
+          {renderYearPageLink()}
+        </div>
       </div>
 
       {loading && !displayedRecap && <p className="recap-page__loading">Loading&hellip;</p>}

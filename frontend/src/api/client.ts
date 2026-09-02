@@ -183,23 +183,9 @@ export function getAiringWeek(week?: string): Promise<AiringWeekDto> {
 export function getSeasonPage(
   year: number,
   season: string,
-  params: {
-    sort: string
-    includeMyList: boolean
-    hideHentai: boolean
-    types?: string[]
-    offset: number
-    limit: number
-  },
+  params: { hideHentai: boolean },
 ): Promise<SeasonPageDto> {
-  const query = new URLSearchParams({
-    sort: params.sort,
-    includeMyList: String(params.includeMyList),
-    hideHentai: String(params.hideHentai),
-    offset: String(params.offset),
-    limit: String(params.limit),
-  })
-  if (params.types && params.types.length > 0) query.set('type', params.types.join(','))
+  const query = new URLSearchParams({ hideHentai: String(params.hideHentai) })
   return fetchJson<SeasonPageDto>(`/api/season/${year}/${season}?${query.toString()}`)
 }
 
@@ -213,23 +199,9 @@ export function getSeasonBounds(): Promise<SeasonBoundsDto> {
 
 export function getYearPage(
   year: number,
-  params: {
-    sort: string
-    includeMyList: boolean
-    hideHentai: boolean
-    types?: string[]
-    offset: number
-    limit: number
-  },
+  params: { hideHentai: boolean },
 ): Promise<YearPageDto> {
-  const query = new URLSearchParams({
-    sort: params.sort,
-    includeMyList: String(params.includeMyList),
-    hideHentai: String(params.hideHentai),
-    offset: String(params.offset),
-    limit: String(params.limit),
-  })
-  if (params.types && params.types.length > 0) query.set('type', params.types.join(','))
+  const query = new URLSearchParams({ hideHentai: String(params.hideHentai) })
   return fetchJson<YearPageDto>(`/api/year/${year}?${query.toString()}`)
 }
 

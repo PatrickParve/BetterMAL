@@ -90,6 +90,98 @@
   border: 1px solid var(--border);
 }
 
+/* The favourites score filter (polish-favourites-filters-and-browse-scroll
+   design.md decision D7/D8) — deliberately mirrors .profile-media-tabs__tab
+   on the same page: neutral at rest, family-tinted on hover, family-tinted
+   with a coloured label when selected, an outline from --fam-from on focus,
+   and no size change between any of those states. */
+.ranking-score-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ranking-score-filter__label {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.ranking-score-filter__button {
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.ranking-score-filter__button:hover {
+  color: var(--text-h);
+  background: var(--fam-bg);
+  border-color: var(--fam-border);
+}
+
+.ranking-score-filter__button--selected {
+  color: var(--fam-from);
+  background: var(--fam-bg);
+  border-color: var(--fam-border);
+}
+
+.ranking-score-filter__button:focus-visible {
+  outline: 2px solid var(--fam-from);
+  outline-offset: 2px;
+}
+
+/* Per-tier classes re-point --fam-* at the tier tokens the recap page's
+   rating distribution uses, mapped by the same scoreTier() it calls — so a
+   score's colour here can never disagree with its colour there. --fam-to is
+   set alongside --fam-from even though this control never reads a gradient,
+   so nothing here is left stale if a future caller reads --fam-to too. The
+   10 button therefore ends up flat rather than the distribution's own
+   sheen gradient, and 6/5 share silver, 4 through 1 share bronze, exactly
+   as the distribution's rows do. */
+.ranking-score-filter__button--tier-apex {
+  --fam-from: var(--tier-apex);
+  --fam-to: var(--tier-apex);
+  --fam-bg: var(--tier-apex-bg);
+  --fam-border: var(--tier-apex-border);
+}
+.ranking-score-filter__button--tier-red {
+  --fam-from: var(--tier-red);
+  --fam-to: var(--tier-red);
+  --fam-bg: var(--tier-red-bg);
+  --fam-border: var(--tier-red-border);
+}
+.ranking-score-filter__button--tier-blue {
+  --fam-from: var(--tier-blue);
+  --fam-to: var(--tier-blue);
+  --fam-bg: var(--tier-blue-bg);
+  --fam-border: var(--tier-blue-border);
+}
+.ranking-score-filter__button--tier-gold {
+  --fam-from: var(--medal-gold);
+  --fam-to: var(--medal-gold);
+  --fam-bg: var(--medal-gold-bg);
+  --fam-border: var(--medal-gold-border);
+}
+.ranking-score-filter__button--tier-silver {
+  --fam-from: var(--medal-silver);
+  --fam-to: var(--medal-silver);
+  --fam-bg: var(--medal-silver-bg);
+  --fam-border: var(--medal-silver-border);
+}
+.ranking-score-filter__button--tier-bronze {
+  --fam-from: var(--medal-bronze);
+  --fam-to: var(--medal-bronze);
+  --fam-bg: var(--medal-bronze-bg);
+  --fam-border: var(--medal-bronze-border);
+}
+
 .recap-page__see-all-ranks {
   align-self: flex-start;
   font: inherit;

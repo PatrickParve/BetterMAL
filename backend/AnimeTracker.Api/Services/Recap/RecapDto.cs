@@ -49,13 +49,17 @@ public record RecapRankingPosterDto(int AnimeId, string Title, string? PictureUr
 /// Bayesian average (design.md decision "Bayesian ranking of seasons and
 /// years"), rounded for display; <c>ScoredCount</c> is <c>v</c> in that
 /// formula. <c>TopPosters</c> carries every row, not only the leader's
-/// (polish-recap-page design.md decision 3).</summary>
+/// (polish-recap-page design.md decision 3). <c>ScoreCounts</c> is the same
+/// score-by-score histogram the ranking's own tie-break reads, ten counts in
+/// ascending score order — index 0 is score 1, index 9 is score 10
+/// (polish-favourites-filters-and-browse-scroll design.md decision D5).</summary>
 public record RecapSeasonRankingDto(
     int Year,
     string Season,
     int ScoredCount,
     double WeightedScore,
-    List<RecapRankingPosterDto> TopPosters);
+    List<RecapRankingPosterDto> TopPosters,
+    IReadOnlyList<int> ScoreCounts);
 
 /// <summary>One ranked year, best first — same shape and rules as <see
 /// cref="RecapSeasonRankingDto"/> one level up the calendar.</summary>
@@ -63,7 +67,8 @@ public record RecapYearRankingDto(
     int Year,
     int ScoredCount,
     double WeightedScore,
-    List<RecapRankingPosterDto> TopPosters);
+    List<RecapRankingPosterDto> TopPosters,
+    IReadOnlyList<int> ScoreCounts);
 
 /// <summary>One ranked season or year, largest time watched first (design.md
 /// decision 7). One DTO serves both levels: <c>Season</c> is null at the

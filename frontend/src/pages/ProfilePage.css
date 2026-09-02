@@ -58,6 +58,12 @@
   }
 }
 
+/* Scoped here, not on ProgressBar itself, because this is the app's only whole-list bar
+   and ProgressBar is shared with the dashboard, my list, and the detail page. */
+.profile-page__episode-progress .progress-bar__label {
+  font-size: 18px;
+}
+
 .profile-page__episode-progress-note {
   margin: 0;
   font-size: 12px;
