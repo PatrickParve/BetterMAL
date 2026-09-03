@@ -108,10 +108,19 @@
   opacity: 0.75;
 }
 
+/* min-width sized to the widest label (All) rather than a fixed width
+   (design.md D7) — a floor a label can never be clipped by, while shorter
+   labels (1, 10) still land at the same rendered width since it's the same
+   floor plus the same padding on every button. It sits on this base rule
+   rather than on any state (:hover/--selected/:focus-visible below), so "no
+   state changes a button's size" still holds. Padding is trimmed from the
+   original 12px so digits aren't padded well past the floor. */
 .ranking-score-filter__button {
   font: inherit;
   font-size: 13px;
-  padding: 5px 12px;
+  min-width: 34px;
+  padding: 5px 8px;
+  text-align: center;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--bg);

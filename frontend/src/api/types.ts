@@ -976,15 +976,26 @@ export type RecapRankingPosterDto = {
   pictureUrl: string | null
 }
 
-// topPosters carries every row, not only the leader's. scoreCounts is the
-// ranking's own tie-break histogram, ten counts in ascending score order —
-// index 0 is score 1, index 9 is score 10.
+// One score's best three anime of a group, in my ranking's order.
+export type RecapRankingScorePostersDto = {
+  score: number
+  posters: RecapRankingPosterDto[]
+}
+
+// postersByScore is sparse — one entry per score the group actually holds,
+// ordered from 10 down, each carrying that score's best three anime in my
+// ranking's order. The All posters are not shipped separately: they are the
+// first three read from the top of this list, which is the group's best
+// three overall because the buckets are already score-ordered and each
+// holds its own score's best (refine-ranking-posters-and-score-filters
+// design.md D2). scoreCounts is the ranking's own tie-break histogram, ten
+// counts in ascending score order — index 0 is score 1, index 9 is score 10.
 export type RecapSeasonRankingDto = {
   year: number
   season: string
   scoredCount: number
   weightedScore: number
-  topPosters: RecapRankingPosterDto[]
+  postersByScore: RecapRankingScorePostersDto[]
   scoreCounts: number[]
 }
 
@@ -992,7 +1003,7 @@ export type RecapYearRankingDto = {
   year: number
   scoredCount: number
   weightedScore: number
-  topPosters: RecapRankingPosterDto[]
+  postersByScore: RecapRankingScorePostersDto[]
   scoreCounts: number[]
 }
 

@@ -27,8 +27,9 @@ import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOve
 import {
   describeSeasonRanking,
   describeYearRanking,
+  offeredScores,
+  rankByScoreCount,
   RankingSection,
-  scoreCountAt,
 } from '../components/RankingSection.tsx'
 import { ScoreDistribution } from '../components/ScoreDistribution.tsx'
 import { TruncatedTitle } from '../components/TruncatedTitle.tsx'
@@ -135,27 +136,6 @@ function rankTopSeries(items: TopSeriesItemDto[], basis: TopSeriesBasis): TopSer
 // all" and "how they're ordered" stay independently readable.
 function filterMultiEntry(items: TopSeriesItemDto[]): TopSeriesItemDto[] {
   return items.filter((item) => mainLineEntryCount(item) > 1)
-}
-
-// The favourites score filter (design.md decision D6): the backend already
-// returns each ranking in full rank order — weighted score, then scored
-// count, then the histogram from 10 down, then newest first — so a
-// 10-down-to-1 offered list and a stable sort by "count of the selected
-// score, descending" resolve every tie in exactly that same order, with no
-// second copy of CompareGroups on the client. This relies on
-// Array.prototype.sort's stability (guaranteed since ES2019); if it is ever
-// replaced by a hand-rolled comparator, ties will stop falling back to the
-// backend's own order and may come out arbitrary instead.
-function offeredScores(rows: { scoreCounts: number[] }[]): number[] {
-  const scores: number[] = []
-  for (let score = 10; score >= 1; score--) {
-    if (rows.some((row) => scoreCountAt(row, score) > 0)) scores.push(score)
-  }
-  return scores
-}
-
-function rankByScoreCount<T extends { scoreCounts: number[] }>(rows: T[], score: number): T[] {
-  return rows.filter((row) => scoreCountAt(row, score) > 0).sort((a, b) => scoreCountAt(b, score) - scoreCountAt(a, score))
 }
 
 // The tooltip carries only the "N of M scored" counts, never the averages
@@ -900,13 +880,7 @@ export function ProfilePage() {
                       describeYearRanking(row, favouriteYearsScore),
                     )
               }
-              onSeeAll={(overlay) =>
-                setRankingOverlay(
-                  favouriteYearsScore === null
-                    ? overlay
-                    : { ...overlay, title: `${overlay.title} — with most ${favouriteYearsScore}s` },
-                )
-              }
+              onSeeAll={setRankingOverlay}
               family="year"
               scoreFilter={{
                 scores: offeredFavouriteYearScores,
@@ -926,13 +900,7 @@ export function ProfilePage() {
                       describeSeasonRanking(row, favouriteSeasonsScore),
                     )
               }
-              onSeeAll={(overlay) =>
-                setRankingOverlay(
-                  favouriteSeasonsScore === null
-                    ? overlay
-                    : { ...overlay, title: `${overlay.title} — with most ${favouriteSeasonsScore}s` },
-                )
-              }
+              onSeeAll={setRankingOverlay}
               family="season"
               scoreFilter={{
                 scores: offeredFavouriteSeasonScores,

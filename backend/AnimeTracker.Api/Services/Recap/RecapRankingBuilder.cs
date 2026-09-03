@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Season;
 using AnimeTracker.Api.Services.Watching;
 
@@ -31,7 +32,7 @@ public static class RecapRankingBuilder
     }
 
     public static List<RecapSeasonRankingDto> BuildSeasonRanking(
-        List<UserAnimeEntry> airedIncluded, RecapPeriod period, double globalMean)
+        List<UserAnimeEntry> airedIncluded, RecapPeriod period, double globalMean, AnimeRankingSnapshot rankingSnapshot)
     {
         var byPoint = airedIncluded.ToLookup(e => SeasonCalendar.GetSeasonFor(e.Anime.AiredFrom!.Value));
 
@@ -54,12 +55,13 @@ public static class RecapRankingBuilder
 
         return ranked
             .Select(c => new RecapSeasonRankingDto(
-                c.Year, c.Season, c.Scored.Count, Math.Round(c.Weighted, 2), TopPosters(c.Scored), c.Histogram[1..]))
+                c.Year, c.Season, c.Scored.Count, Math.Round(c.Weighted, 2),
+                PostersByScore(c.Scored, rankingSnapshot), c.Histogram[1..]))
             .ToList();
     }
 
     public static List<RecapYearRankingDto> BuildYearRanking(
-        List<UserAnimeEntry> airedIncluded, RecapPeriod period, double globalMean)
+        List<UserAnimeEntry> airedIncluded, RecapPeriod period, double globalMean, AnimeRankingSnapshot rankingSnapshot)
     {
         var byYear = airedIncluded.ToLookup(e => e.Anime.AiredFrom!.Value.Year);
 
@@ -79,7 +81,8 @@ public static class RecapRankingBuilder
 
         return ranked
             .Select(c => new RecapYearRankingDto(
-                c.Year, c.Scored.Count, Math.Round(c.Weighted, 2), TopPosters(c.Scored), c.Histogram[1..]))
+                c.Year, c.Scored.Count, Math.Round(c.Weighted, 2),
+                PostersByScore(c.Scored, rankingSnapshot), c.Histogram[1..]))
             .ToList();
     }
 
@@ -141,13 +144,38 @@ public static class RecapRankingBuilder
         return (double)v / (v + trustThreshold) * r + (double)trustThreshold / (v + trustThreshold) * globalMean;
     }
 
-    private static List<RecapRankingPosterDto> TopPosters(List<UserAnimeEntry> scored) =>
+    // design.md D1: ordering by rank alone already gives score-descending
+    // order, because AnimeRankingKey compares score before anything else —
+    // so the old OrderByDescending(MyScore) that opened this comparator is
+    // gone, and grouping by score first (below) only splits that same order
+    // into buckets. What the old ThenBy(Title) also did — settling which of
+    // two anime I scored the same wins a poster slot — is now settled by
+    // where I actually placed them, the app's one answer to that question
+    // everywhere else it's asked. An anime the ranking does not cover (a
+    // scored Plan-to-watch or not-yet-aired anime, which RankBandResolver
+    // leaves outside the ranking) sorts after every ranked anime of its
+    // score — RankOf returns null for it, and OrderBy's default nullable
+    // comparer treats null as *less than* every rank, which is nulls-first,
+    // the wrong way round; NullsLast substitutes int.MaxValue for a null
+    // rank so it sorts after every real one — then by title, then by id,
+    // the same nulls-last convention RecapPage.compareByRankThenTitle
+    // applies on the client.
+    private static List<RecapRankingScorePostersDto> PostersByScore(
+        List<UserAnimeEntry> scored, AnimeRankingSnapshot rankingSnapshot) =>
         scored
-            .OrderByDescending(e => e.MyScore!.Value)
-            .ThenBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase)
-            .Take(PosterCount)
-            .Select(e => new RecapRankingPosterDto(e.AnimeId, e.Anime.Title, e.Anime.PictureUrl))
+            .GroupBy(e => e.MyScore!.Value)
+            .OrderByDescending(g => g.Key)
+            .Select(g => new RecapRankingScorePostersDto(
+                g.Key,
+                g.OrderBy(e => NullsLast(rankingSnapshot.RankOf(e.AnimeId)))
+                    .ThenBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(e => e.AnimeId)
+                    .Take(PosterCount)
+                    .Select(e => new RecapRankingPosterDto(e.AnimeId, e.Anime.Title, e.Anime.PictureUrl))
+                    .ToList()))
             .ToList();
+
+    private static int NullsLast(int? rank) => rank ?? int.MaxValue;
 
     // D7/D8: unlike the score rankings, no scored-anime requirement — a group
     // is ranked whenever it has any time watched at all, and ties break by

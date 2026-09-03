@@ -117,6 +117,16 @@
   color: var(--text);
 }
 
+/* A native select sizes to its widest present option, so this control
+   changed width period to period depending on whether that period's list
+   happened to include a "TV special" entry. min-width fixes it to what
+   "TV special" — the longest label mediaTypeLabel ever produces — needs,
+   so the control holds its size across periods whether or not that
+   period's own options reach that width. */
+.recap-page__type-select {
+  min-width: 110px;
+}
+
 .recap-page__period-sep {
   color: var(--text);
   opacity: 0.6;
@@ -862,7 +872,25 @@ a.recap-page__stat--link:focus-visible {
   border: 1px solid var(--border);
 }
 
+/* flex: 1 1 auto so the title fills whatever the link leaves it after the
+   poster, running right up to the score rather than stopping short and
+   leaving a dead gap — but flex-shrink alone doesn't bound the row's own
+   *intrinsic* size: .recap-page__lead's first column is a bare 1fr, which
+   (per the grid spec) sizes to its content's max-content width unless
+   something caps it, so one very long, unwrapped title could inflate that
+   column and shift the stats column beside it. max-width is that cap: a
+   generous 50ch so ordinary long titles still reach the score in full,
+   while an outlier title still truncates instead of resizing the section.
+   min-width: 0 is what lets the title shrink below its own text's width on
+   narrow rows instead of pushing the row wider; the score stays a separate
+   flex item pinned at the row's trailing edge (below) and the link keeps
+   flex: 1 1 auto, so rank, poster, score column, and row height are all
+   unchanged. The existing overflow/text-overflow/white-space and the row's
+   native title tooltip are untouched. */
 .recap-top-ten-row__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 50ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

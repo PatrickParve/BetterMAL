@@ -53,7 +53,7 @@ public class RecapService(
             .ToList();
 
         var (seasonRanking, yearRanking, seasonTimeRanking, yearTimeRanking) =
-            BuildRankings(included, period, effectiveFilter, wholeList);
+            BuildRankings(included, period, effectiveFilter, wholeList, rankingSnapshot);
 
         return new RecapDto(
             period.Mode, period.StartYear, period.EndYear, period.Season, effectiveFilter,
@@ -69,19 +69,25 @@ public class RecapService(
     // but not the score rankings' global-mean requirement, since they don't
     // need a scored anime anywhere to be meaningful — so that guard is
     // scoped to the score rankings alone.
+    // rankingSnapshot is the whole-list snapshot built above, not a
+    // period-scoped one — a poster's placement is its place in my whole
+    // ranking, matching how MyRank is already resolved for ToRow.
     private static (
         List<RecapSeasonRankingDto> Season, List<RecapYearRankingDto> Year,
         List<RecapTimeRankingDto> SeasonTime, List<RecapTimeRankingDto> YearTime) BuildRankings(
-        List<UserAnimeEntry> included, RecapPeriod period, string effectiveFilter, List<UserAnimeEntry> wholeList)
+        List<UserAnimeEntry> included, RecapPeriod period, string effectiveFilter, List<UserAnimeEntry> wholeList,
+        AnimeRankingSnapshot rankingSnapshot)
     {
         var rankingEligible = effectiveFilter == RecapTimeFilter.Aired && period.Mode != RecapMode.Season;
         if (!rankingEligible)
             return ([], [], [], []);
 
         var globalMean = RecapRankingBuilder.ScoredMean(wholeList);
-        var seasonRanking = globalMean is { } sm ? RecapRankingBuilder.BuildSeasonRanking(included, period, sm) : [];
+        var seasonRanking = globalMean is { } sm
+            ? RecapRankingBuilder.BuildSeasonRanking(included, period, sm, rankingSnapshot)
+            : [];
         var yearRanking = period.Mode == RecapMode.MultiYear && globalMean is { } ym
-            ? RecapRankingBuilder.BuildYearRanking(included, period, ym)
+            ? RecapRankingBuilder.BuildYearRanking(included, period, ym, rankingSnapshot)
             : [];
 
         var seasonTimeRanking = RecapRankingBuilder.BuildSeasonTimeRanking(included, period);

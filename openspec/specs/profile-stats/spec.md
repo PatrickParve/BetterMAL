@@ -1404,7 +1404,7 @@ Both rankings SHALL rank on the same Bayesian weighted average the recap page's 
 
 Ties SHALL be resolved by the identical sequence the recap page's rankings apply, as set out in the `list-recaps` capability: the weighted score at full precision rather than at the two decimals displayed, so a higher score is never overruled; then, only for scores that are exactly equal, the number of scored anime; then a score-by-score comparison from 10 down to 1 where the group holding more anime at the highest differing score ranks first; and finally recency — the newer season or year ahead of the older. The order SHALL be stable across reloads, and a season's or year's rank relative to another SHALL be the same here as on a recap covering both.
 
-Each ranked row SHALL show its rank, its name (season and year, or the year), how many of my anime it was computed over, and the weighted score it was ranked on. **Every** ranked row SHALL additionally show the posters of my three highest-scored anime from that season or year — fewer when fewer qualify — rather than only the top-ranked row, so each row is illustrated, both inline and in the overlay. Following a row SHALL open the recap for that season or year. Rows SHALL follow the shared ranking-row height the `list-recaps` capability defines, so a row with fewer posters than another still stands the same height.
+Each ranked row SHALL show its rank, its name (season and year, or the year), how many of my anime it was computed over, and the weighted score it was ranked on. **Every** ranked row SHALL additionally show the posters of three of my anime from that season or year — fewer when fewer qualify — rather than only the top-ranked row, so each row is illustrated, both inline and in the overlay. Which three, and in what order, SHALL follow the rule the `list-recaps` capability's "Top three posters for every ranked season and year" sets out: my ranking's order, best-ranked leftmost, so two anime I scored the same are separated by where I placed them rather than by their titles. Following a row SHALL open the recap for that season or year. Rows SHALL follow the shared ranking-row height the `list-recaps` capability defines, so a row with fewer posters than another still stands the same height.
 
 At most five rows SHALL be shown in each ranking. When more than five qualify, that ranking SHALL offer a control that opens an overlay listing every qualifying season or year in rank order — the same overlay treatment the recap page's rankings use.
 
@@ -1458,7 +1458,11 @@ When neither ranking has a single qualifying group — nothing I scored carries 
 
 #### Scenario: Every row is illustrated
 - **WHEN** a ranking shows five rows
-- **THEN** each of the five shows the posters of my three highest-scored anime from that season or year
+- **THEN** each of the five shows the posters of three of my anime from that season or year
+
+#### Scenario: My ranking picks and orders the three
+- **WHEN** a ranked year holds five anime I scored 9 and none higher
+- **THEN** the three I rank highest are shown, best-ranked leftmost, rather than the three whose titles come first alphabetically
 
 #### Scenario: The overlay is illustrated too
 - **WHEN** I open the overlay listing every qualifying season or year
@@ -1493,13 +1497,17 @@ A score SHALL be offered only when at least one group in that ranking holds at l
 
 Selecting a score N SHALL re-rank that ranking by **how many anime I scored N** each group holds, most first, and SHALL omit every group holding none. Groups tied on that count SHALL be ordered by the identical sequence the unfiltered ranking applies — the weighted score at full precision, then the number of scored anime, then a score-by-score comparison from 10 down to 1, then the newer group ahead of the older — so the order is stable across reloads and never arbitrary. Ranks SHALL be numbered from one down the re-ranked order rather than carrying over the positions the groups held under **All**.
 
-Everything else about a ranked row SHALL be unchanged under a score selection: its name, its posters, its row height, and where following it leads. Its supporting figures SHALL name the count it was ranked on alongside how many of my anime the group was computed over, so the row states why it placed where it did.
+A row's name, its height, and where following it leads SHALL be unchanged under a score selection. Its supporting figures SHALL name the count it was ranked on alongside how many of my anime the group was computed over, so the row states why it placed where it did. Its **posters** SHALL be drawn from the selected score alone — the three anime of that score the group holds that I rank highest, best-ranked leftmost, per the `list-recaps` capability's "Top three posters for every ranked season and year" — so a row's illustration agrees with the figure it was ranked on rather than showing the group's highest-scored anime regardless of the selection. Returning to **All** SHALL return every row's posters to the group's three best overall.
 
 The five-row cap and the "See all" overlay SHALL apply to the re-ranked ranking: at most five rows are shown, the overlay lists every group the selection keeps, in the selected order, and the overlay SHALL name the selection it is showing. A selection that leaves five or fewer groups SHALL offer no overlay control, exactly as an unfiltered ranking of that size does not.
 
 Each score button SHALL wear the colour its score carries in the recap page's rating distribution — the same score-tier colours, so a score is the same colour wherever it is shown — on pointer hover, on keyboard focus, and while it is the selection. At rest and unselected it SHALL be neutral. The **All** button SHALL wear its section's own colour family — the year family in Favourite years, the season family in Favourite seasons — rather than a score tier, since it names no score. No state SHALL change a button's size, so the control row SHALL NOT reflow as the pointer moves along it.
 
+Every button in the control SHALL occupy **the same width**, whatever its label: a one-digit score, a two-digit score, and **All** SHALL be equally wide, with each label centred in its button, so the strip reads as an even row rather than stepping in and out with the digit count. The shared width SHALL be a floor rather than a fixed size, so a label that would not fit is never clipped.
+
 A selection SHALL be part of the profile page's restorable state per the `page-state-restoration` capability: it SHALL be restored on a back/forward navigation and SHALL open on **All** on a fresh visit. A restored selection naming a score the reloaded ranking no longer offers SHALL fall back to **All** rather than showing an empty ranking.
+
+The same control SHALL be offered by the recap page's own season and year rankings, per the `list-recaps` capability, with the presentation rules above applying identically there. Only the mechanism that carries the selection differs: the recap page carries its selections in the page URL alongside its period, where this page carries its own in restorable state.
 
 #### Scenario: The control is offered under each title
 - **WHEN** the profile page shows Favourite years and Favourite seasons
@@ -1533,9 +1541,17 @@ A selection SHALL be part of the profile page's restorable state per the `page-s
 - **WHEN** a year is shown under a selection of 10
 - **THEN** its row states how many anime I scored 10 it holds, alongside how many of my anime it was computed over
 
+#### Scenario: A row is illustrated by the selected score
+- **WHEN** I select 8 in Favourite years and a shown year holds anime I scored 10, 9, and 8
+- **THEN** that row's posters are the 8s I rank highest, not its 10s and 9s
+
+#### Scenario: All restores the group's own best
+- **WHEN** I return Favourite years to All
+- **THEN** every row shows the three anime I rank highest from that year again, whatever their scores
+
 #### Scenario: The overlay follows the selection
 - **WHEN** I select 8 in Favourite seasons and open its "See all" overlay
-- **THEN** the overlay lists every season holding an 8, in the selected order, and names the selection it is showing
+- **THEN** the overlay lists every season holding an 8, in the selected order, names the selection it is showing, and illustrates each row with that season's 8s
 
 #### Scenario: No overlay when the selection leaves few groups
 - **WHEN** a selected score is held by only three years
@@ -1552,6 +1568,14 @@ A selection SHALL be part of the profile page's restorable state per the `page-s
 #### Scenario: All wears its section's family
 - **WHEN** I hover the All button in Favourite seasons
 - **THEN** it highlights in the season family's colour rather than in a score tier's
+
+#### Scenario: One-digit and two-digit buttons match
+- **WHEN** a ranking offers buttons for 10 down to 1
+- **THEN** the 1 button is exactly as wide as the 10 button, and both are as wide as All
+
+#### Scenario: Labels are centred
+- **WHEN** I look along the row of score buttons
+- **THEN** each numeral sits centred in its button rather than against one edge
 
 #### Scenario: The control row does not reflow
 - **WHEN** I move the pointer along a ranking's score buttons

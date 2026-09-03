@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Recap;
 
 namespace AnimeTracker.Api.Tests.Services.Recap;
@@ -51,7 +52,7 @@ public class RecapRankingBuilderTests
             .ToList();
         var included = new List<UserAnimeEntry> { thin }.Concat(wellCovered).ToList();
 
-        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 7.4);
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 7.4, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         Assert.Equal(2, ranking.Count);
         Assert.Equal("spring", ranking[0].Season);
@@ -65,7 +66,7 @@ public class RecapRankingBuilderTests
             .Select(id => Entry(id, new DateOnly(2022, 4, 15), myScore: 9))
             .ToList();
 
-        var ranking = RecapRankingBuilder.BuildSeasonRanking(wellCovered, RecapPeriod.Yearly(2022), globalMean: 5.0);
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(wellCovered, RecapPeriod.Yearly(2022), globalMean: 5.0, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         var spring = Assert.Single(ranking);
         Assert.True(Math.Abs(spring.WeightedScore - 9.0) <= 0.5, $"Expected close to 9.0, was {spring.WeightedScore}");
@@ -78,8 +79,8 @@ public class RecapRankingBuilderTests
             .Select(id => Entry(id, new DateOnly(2019, 11, 1), myScore: 7))
             .ToList();
 
-        var viaYearly = RecapRankingBuilder.BuildSeasonRanking(fall2019, RecapPeriod.Yearly(2019), globalMean: 6.5);
-        var viaMultiYear = RecapRankingBuilder.BuildSeasonRanking(fall2019, RecapPeriod.MultiYear(2011, 2020), globalMean: 6.5);
+        var viaYearly = RecapRankingBuilder.BuildSeasonRanking(fall2019, RecapPeriod.Yearly(2019), globalMean: 6.5, rankingSnapshot: AnimeRankingSnapshot.Empty);
+        var viaMultiYear = RecapRankingBuilder.BuildSeasonRanking(fall2019, RecapPeriod.MultiYear(2011, 2020), globalMean: 6.5, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         var yearlyResult = Assert.Single(viaYearly);
         var multiYearResult = Assert.Single(viaMultiYear);
@@ -95,8 +96,8 @@ public class RecapRankingBuilderTests
             .ToList();
         var period = RecapPeriod.Yearly(2022);
 
-        var seasonRanking = RecapRankingBuilder.BuildSeasonRanking(tenInOneSeason, period, globalMean: 5.0);
-        var yearRanking = RecapRankingBuilder.BuildYearRanking(tenInOneSeason, period, globalMean: 5.0);
+        var seasonRanking = RecapRankingBuilder.BuildSeasonRanking(tenInOneSeason, period, globalMean: 5.0, rankingSnapshot: AnimeRankingSnapshot.Empty);
+        var yearRanking = RecapRankingBuilder.BuildYearRanking(tenInOneSeason, period, globalMean: 5.0, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         var season = Assert.Single(seasonRanking);
         var year = Assert.Single(yearRanking);
@@ -120,27 +121,97 @@ public class RecapRankingBuilderTests
             Status = WatchStatus.Watching,
         };
 
-        var ranking = RecapRankingBuilder.BuildSeasonRanking([unscored], RecapPeriod.Yearly(2022), globalMean: 5.0);
+        var ranking = RecapRankingBuilder.BuildSeasonRanking([unscored], RecapPeriod.Yearly(2022), globalMean: 5.0, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         Assert.Empty(ranking);
     }
 
+    // design.md D2/tasks.md 4.2: every ranked row has at least one bucket, no
+    // bucket holds more than three, and reading three from the top of the
+    // buckets — the same rule describeSeasonRanking/postersFor use on the
+    // client for the All case — yields the group's three best.
     [Fact]
-    public void EveryRankedRowCarriesPosters()
+    public void EveryRankedRowCarriesPostersByScoreBuckets()
     {
         var winner = Enumerable.Range(1, 5).Select(id => Entry(id, new DateOnly(2022, 4, 15), myScore: 10)).ToList();
         var runnerUp = Enumerable.Range(6, 5).Select(id => Entry(id, new DateOnly(2022, 1, 15), myScore: 3)).ToList();
         var included = winner.Concat(runnerUp).ToList();
+        var snapshot = AnimeRankingSnapshot.Build(included, storedOrder: []);
 
-        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 5.0);
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 5.0, rankingSnapshot: snapshot);
 
         Assert.Equal(2, ranking.Count);
         Assert.Equal("spring", ranking[0].Season);
-        Assert.NotEmpty(ranking[0].TopPosters);
-        Assert.True(ranking[0].TopPosters.Count <= 3);
+        Assert.NotEmpty(ranking[0].PostersByScore);
+        Assert.All(ranking[0].PostersByScore, bucket => Assert.True(bucket.Posters.Count <= 3));
+        // No stored order, so the tie at score 10 falls back to title —
+        // ids 1-3 (titles "Anime 001".."Anime 003") win the three slots.
+        Assert.Equal([1, 2, 3], ranking[0].PostersByScore.SelectMany(b => b.Posters).Take(3).Select(p => p.AnimeId));
+
         Assert.Equal("winter", ranking[1].Season);
-        Assert.NotEmpty(ranking[1].TopPosters);
-        Assert.True(ranking[1].TopPosters.Count <= 3);
+        Assert.NotEmpty(ranking[1].PostersByScore);
+        Assert.All(ranking[1].PostersByScore, bucket => Assert.True(bucket.Posters.Count <= 3));
+    }
+
+    // design.md D1/tasks.md 4.3: my ranking, not title, breaks a within-score
+    // tie — a stored order that disagrees with title order still wins.
+    [Fact]
+    public void MyRankingBreaksAWithinScoreTieRatherThanTitle()
+    {
+        var group = Group(1, new DateOnly(2022, 4, 15), 8, 8, 8, 8); // ids 1-4, titles "Anime 001".."Anime 004"
+        var snapshot = AnimeRankingSnapshot.Build(group, storedOrder: [4, 1, 3, 2]);
+
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(group, RecapPeriod.Yearly(2022), globalMean: 5.0, rankingSnapshot: snapshot);
+
+        var row = Assert.Single(ranking);
+        var bucket = Assert.Single(row.PostersByScore);
+        Assert.Equal(8, bucket.Score);
+        Assert.Equal([4, 1, 3], bucket.Posters.Select(p => p.AnimeId));
+    }
+
+    // design.md D1/tasks.md 4.4: a scored Plan-to-watch anime is scored (so
+    // it's counted and histogrammed) but RankBandResolver leaves it outside
+    // the ranking, so it sorts after every ranked anime of its score and is
+    // dropped once three ranked ones already fill the bucket.
+    [Fact]
+    public void AScoredButUnrankedAnimeSortsLastAndIsDroppedWhenThreeRankedFillTheBucket()
+    {
+        var ranked = Group(1, new DateOnly(2022, 4, 15), 8, 8, 8); // ids 1-3, all hand-ordered
+        var unranked = new UserAnimeEntry
+        {
+            AnimeId = 4,
+            Anime = new AnimeMetadata { Id = 4, Title = "Anime 004", AiredFrom = new DateOnly(2022, 4, 15) },
+            MyScore = 8,
+            Status = WatchStatus.PlanToWatch,
+        };
+        var group = ranked.Append(unranked).ToList();
+        var snapshot = AnimeRankingSnapshot.Build(group, storedOrder: []);
+
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(group, RecapPeriod.Yearly(2022), globalMean: 5.0, rankingSnapshot: snapshot);
+
+        var row = Assert.Single(ranking);
+        Assert.Equal(4, row.ScoredCount); // the unranked anime still counts toward the group's scored count
+        var bucket = Assert.Single(row.PostersByScore);
+        Assert.Equal(3, bucket.Posters.Count);
+        Assert.Equal([1, 2, 3], bucket.Posters.Select(p => p.AnimeId));
+        Assert.DoesNotContain(bucket.Posters, p => p.AnimeId == 4);
+    }
+
+    // design.md D2/tasks.md 4.5: the buckets carry one entry per score the
+    // group actually holds, descending from 10, with no entry for a score it
+    // doesn't hold.
+    [Fact]
+    public void PostersByScoreBucketsAreSparseAndScoreDescending()
+    {
+        var group = Group(1, new DateOnly(2022, 4, 15), 10, 8, 8);
+        var snapshot = AnimeRankingSnapshot.Build(group, storedOrder: []);
+
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(group, RecapPeriod.Yearly(2022), globalMean: 5.0, rankingSnapshot: snapshot);
+
+        var row = Assert.Single(ranking);
+        Assert.Equal(2, row.PostersByScore.Count);
+        Assert.Equal(10, row.PostersByScore[0].Score);
+        Assert.Equal(8, row.PostersByScore[1].Score);
     }
 
     // Extended tie-break (tasks.md 6.6-6.7, design.md decision 6): weighted
@@ -159,7 +230,7 @@ public class RecapRankingBuilderTests
         var thinnerCoverage = Group(100, new DateOnly(2022, 4, 15), 7, 7, 8, 8); // spring, v=4, avg 7.5
         var included = betterCovered.Concat(thinnerCoverage).ToList();
 
-        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 7.5);
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 7.5, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         Assert.Equal(2, ranking.Count);
         Assert.Equal(ranking[0].WeightedScore, ranking[1].WeightedScore);
@@ -178,7 +249,7 @@ public class RecapRankingBuilderTests
             .ToList();
         var included = betterCovered.Concat(thinnerCoverage).ToList();
 
-        var ranking = RecapRankingBuilder.BuildYearRanking(included, RecapPeriod.MultiYear(2021, 2022), globalMean: 7.5);
+        var ranking = RecapRankingBuilder.BuildYearRanking(included, RecapPeriod.MultiYear(2021, 2022), globalMean: 7.5, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         Assert.Equal(2, ranking.Count);
         Assert.Equal(ranking[0].WeightedScore, ranking[1].WeightedScore);
@@ -193,7 +264,7 @@ public class RecapRankingBuilderTests
         var fewerTens = Group(100, new DateOnly(2022, 4, 15), 10, 7, 7, 7, 4); // spring, one 10
         var included = moreTens.Concat(fewerTens).ToList();
 
-        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 5.0);
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 5.0, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         Assert.Equal(2, ranking.Count);
         Assert.Equal(ranking[0].WeightedScore, ranking[1].WeightedScore);
@@ -209,7 +280,7 @@ public class RecapRankingBuilderTests
         var fewerTens = Group(100, new DateOnly(2022, 6, 1), 10, 7, 7, 7, 4);
         var included = moreTens.Concat(fewerTens).ToList();
 
-        var ranking = RecapRankingBuilder.BuildYearRanking(included, RecapPeriod.MultiYear(2021, 2022), globalMean: 5.0);
+        var ranking = RecapRankingBuilder.BuildYearRanking(included, RecapPeriod.MultiYear(2021, 2022), globalMean: 5.0, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         Assert.Equal(2, ranking.Count);
         Assert.Equal(ranking[0].WeightedScore, ranking[1].WeightedScore);
@@ -225,7 +296,7 @@ public class RecapRankingBuilderTests
         var fewerEights = Group(100, new DateOnly(2022, 4, 15), 10, 10, 9, 9, 8, 8, 5, 5); // spring, two 8s
         var included = moreEights.Concat(fewerEights).ToList();
 
-        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 5.0);
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 5.0, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         Assert.Equal(2, ranking.Count);
         Assert.Equal(ranking[0].WeightedScore, ranking[1].WeightedScore);
@@ -241,7 +312,7 @@ public class RecapRankingBuilderTests
         var fewerEights = Group(100, new DateOnly(2022, 6, 1), 10, 10, 9, 9, 8, 8, 5, 5);
         var included = moreEights.Concat(fewerEights).ToList();
 
-        var ranking = RecapRankingBuilder.BuildYearRanking(included, RecapPeriod.MultiYear(2021, 2022), globalMean: 5.0);
+        var ranking = RecapRankingBuilder.BuildYearRanking(included, RecapPeriod.MultiYear(2021, 2022), globalMean: 5.0, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         Assert.Equal(2, ranking.Count);
         Assert.Equal(ranking[0].WeightedScore, ranking[1].WeightedScore);
@@ -256,7 +327,7 @@ public class RecapRankingBuilderTests
         var older = Group(1, new DateOnly(2022, 1, 15), 9, 9, 7, 7, 5, 5); // winter
         var newer = Group(100, new DateOnly(2022, 4, 15), 9, 9, 7, 7, 5, 5); // spring, same histogram
 
-        var ranking = RecapRankingBuilder.BuildSeasonRanking(older.Concat(newer).ToList(), RecapPeriod.Yearly(2022), globalMean: 5.0);
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(older.Concat(newer).ToList(), RecapPeriod.Yearly(2022), globalMean: 5.0, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         Assert.Equal(2, ranking.Count);
         Assert.Equal(ranking[0].WeightedScore, ranking[1].WeightedScore);
@@ -271,7 +342,7 @@ public class RecapRankingBuilderTests
         var older = Group(1, new DateOnly(2021, 6, 1), 9, 9, 7, 7, 5, 5);
         var newer = Group(100, new DateOnly(2022, 6, 1), 9, 9, 7, 7, 5, 5);
 
-        var ranking = RecapRankingBuilder.BuildYearRanking(older.Concat(newer).ToList(), RecapPeriod.MultiYear(2021, 2022), globalMean: 5.0);
+        var ranking = RecapRankingBuilder.BuildYearRanking(older.Concat(newer).ToList(), RecapPeriod.MultiYear(2021, 2022), globalMean: 5.0, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         Assert.Equal(2, ranking.Count);
         Assert.Equal(ranking[0].WeightedScore, ranking[1].WeightedScore);
@@ -294,7 +365,7 @@ public class RecapRankingBuilderTests
         var smallerButHigherScoring = Group(100, new DateOnly(2022, 4, 15), 8, 8, 8, 8, 8, 8, 10);
         var included = largerButLowerScoring.Concat(smallerButHigherScoring).ToList();
 
-        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 7.0);
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 7.0, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         Assert.Equal(2, ranking.Count);
         Assert.Equal(7.75, ranking[0].WeightedScore);
@@ -411,7 +482,7 @@ public class RecapRankingBuilderTests
     {
         var group = Group(1, new DateOnly(2022, 1, 15), 10, 10, 7, 5, 5, 5);
 
-        var ranking = RecapRankingBuilder.BuildSeasonRanking(group, RecapPeriod.Yearly(2022), globalMean: 5.0);
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(group, RecapPeriod.Yearly(2022), globalMean: 5.0, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         var row = Assert.Single(ranking);
         Assert.Equal(10, row.ScoreCounts.Count);
@@ -428,7 +499,7 @@ public class RecapRankingBuilderTests
     {
         var group = Group(1, new DateOnly(2022, 6, 1), 9, 9, 9, 4);
 
-        var ranking = RecapRankingBuilder.BuildYearRanking(group, RecapPeriod.Yearly(2022), globalMean: 5.0);
+        var ranking = RecapRankingBuilder.BuildYearRanking(group, RecapPeriod.Yearly(2022), globalMean: 5.0, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         var row = Assert.Single(ranking);
         Assert.Equal(10, row.ScoreCounts.Count);
@@ -448,7 +519,7 @@ public class RecapRankingBuilderTests
         var fewerTens = Group(100, new DateOnly(2022, 4, 15), 10, 7, 7, 7, 4); // spring, one 10
         var included = moreTens.Concat(fewerTens).ToList();
 
-        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 5.0);
+        var ranking = RecapRankingBuilder.BuildSeasonRanking(included, RecapPeriod.Yearly(2022), globalMean: 5.0, rankingSnapshot: AnimeRankingSnapshot.Empty);
 
         Assert.Equal("winter", ranking[0].Season);
         Assert.Equal(2, ranking[0].ScoreCounts[9]);

@@ -60,14 +60,20 @@ public class ProfileService(
             .ToList();
         var airedCounts = await episodeScheduleService.EpisodesAiredAsOfAsync(undeterminedTotalAnime, DateTimeOffset.UtcNow, ct);
 
+        // refine-ranking-posters-and-score-filters design.md D6: built once
+        // here and passed to both BuildTopAnimeSection and
+        // BuildFavouriteSeasonsAndYears so this read doesn't order the whole
+        // list twice.
+        var rankingSnapshot = AnimeRankingSnapshot.Build(entries, orderedAnimeIds);
+
         var (theyLikedItIDidnt, iLikedItTheyDidnt) = BuildOpinionDivergence(entries);
-        var (favouriteSeasons, favouriteYears) = BuildFavouriteSeasonsAndYears(entries);
+        var (favouriteSeasons, favouriteYears) = BuildFavouriteSeasonsAndYears(entries, rankingSnapshot);
 
         return new ProfileDto(
             BuildStats(entries),
             BuildEpisodeProgress(entries, airedCounts),
             BuildActivityFeed(recentActivityWindow),
-            BuildTopAnimeSection(entries, orderedAnimeIds, TopAnimeMediaTypeScope.All),
+            BuildTopAnimeSection(entries, rankingSnapshot, TopAnimeMediaTypeScope.All),
             BuildRewatchedSection(entries, TopAnimeMediaTypeScope.All),
             BuildScoreDistribution(entries),
             theyLikedItIDidnt,
@@ -86,7 +92,8 @@ public class ProfileService(
     {
         var entries = await entryRepository.GetAllAsync(ct);
         var orderedAnimeIds = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
-        return BuildTopAnimeSection(entries, orderedAnimeIds, mediaType);
+        var rankingSnapshot = AnimeRankingSnapshot.Build(entries, orderedAnimeIds);
+        return BuildTopAnimeSection(entries, rankingSnapshot, mediaType);
     }
 
     public async Task<RewatchedSectionDto> GetRewatchedSectionAsync(string mediaType, CancellationToken ct = default)
@@ -385,7 +392,7 @@ public class ProfileService(
     // mean — so a season's/year's weighted score here is byte-identical to
     // the score a recap covering it reports.
     private static (List<RecapSeasonRankingDto> Seasons, List<RecapYearRankingDto> Years) BuildFavouriteSeasonsAndYears(
-        List<UserAnimeEntry> entries)
+        List<UserAnimeEntry> entries, AnimeRankingSnapshot rankingSnapshot)
     {
         var airDated = entries.Where(e => e.Anime.AiredFrom is not null).ToList();
         if (airDated.Count == 0)
@@ -399,8 +406,8 @@ public class ProfileService(
         var period = RecapPeriod.MultiYear(years.Min(), years.Max());
 
         return (
-            RecapRankingBuilder.BuildSeasonRanking(airDated, period, mean),
-            RecapRankingBuilder.BuildYearRanking(airDated, period, mean));
+            RecapRankingBuilder.BuildSeasonRanking(airDated, period, mean, rankingSnapshot),
+            RecapRankingBuilder.BuildYearRanking(airDated, period, mean, rankingSnapshot));
     }
 
     // All score-10 anime are shown uncapped; if that's fewer than 10, fill the
@@ -416,10 +423,8 @@ public class ProfileService(
     // alone (design.md D8). Tiers that can never reach the list (score
     // dominance) are omitted entirely. An anime the ranking excludes
     // outright — unscored, plan-to-watch, or unaired — never appears here.
-    private static TopAnimeSectionDto BuildTopAnimeSection(List<UserAnimeEntry> entries, List<int> orderedAnimeIds, string mediaType)
+    private static TopAnimeSectionDto BuildTopAnimeSection(List<UserAnimeEntry> entries, AnimeRankingSnapshot snapshot, string mediaType)
     {
-        var snapshot = AnimeRankingSnapshot.Build(entries, orderedAnimeIds);
-
         var tierGroups = snapshot.RankedEntries
             .Where(e => TopAnimeMediaTypeScope.Matches(mediaType, e.Anime.MediaType))
             .GroupBy(e => e.MyScore!.Value)

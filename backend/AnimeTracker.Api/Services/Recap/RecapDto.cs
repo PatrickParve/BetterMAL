@@ -45,20 +45,35 @@ public record RecapStatsDto(
 /// 3).</summary>
 public record RecapRankingPosterDto(int AnimeId, string Title, string? PictureUrl);
 
+/// <summary>One score's best three anime of a group, in my ranking's order
+/// (refine-ranking-posters-and-score-filters design.md D1/D2).</summary>
+public record RecapRankingScorePostersDto(int Score, List<RecapRankingPosterDto> Posters);
+
 /// <summary>One ranked season, best first. <c>WeightedScore</c> is the
 /// Bayesian average (design.md decision "Bayesian ranking of seasons and
 /// years"), rounded for display; <c>ScoredCount</c> is <c>v</c> in that
-/// formula. <c>TopPosters</c> carries every row, not only the leader's
-/// (polish-recap-page design.md decision 3). <c>ScoreCounts</c> is the same
-/// score-by-score histogram the ranking's own tie-break reads, ten counts in
-/// ascending score order — index 0 is score 1, index 9 is score 10
-/// (polish-favourites-filters-and-browse-scroll design.md decision D5).</summary>
+/// formula. <c>PostersByScore</c> is sparse — one entry per score the group
+/// actually holds, ordered from 10 down, each carrying that score's best
+/// three anime in my ranking's order — rather than a full ten-slot array,
+/// since a group holding one score would otherwise ship nine empty slots and
+/// the client never iterates by index. The **All** posters are deliberately
+/// *not* shipped as a separate list: they are the first three read from the
+/// top of this list, which is exactly the group's best three overall because
+/// the buckets are already score-ordered and each holds its own score's
+/// best. Reading them from the buckets rather than shipping a second list is
+/// what keeps the filtered and unfiltered posters from ever disagreeing
+/// (refine-ranking-posters-and-score-filters design.md D2). <c>ScoreCounts</c>
+/// is unchanged and still carries *full* counts, which a three-capped bucket
+/// cannot supply — it is the same score-by-score histogram the ranking's own
+/// tie-break reads, ten counts in ascending score order — index 0 is score
+/// 1, index 9 is score 10 (polish-favourites-filters-and-browse-scroll
+/// design.md decision D5).</summary>
 public record RecapSeasonRankingDto(
     int Year,
     string Season,
     int ScoredCount,
     double WeightedScore,
-    List<RecapRankingPosterDto> TopPosters,
+    List<RecapRankingScorePostersDto> PostersByScore,
     IReadOnlyList<int> ScoreCounts);
 
 /// <summary>One ranked year, best first — same shape and rules as <see
@@ -67,7 +82,7 @@ public record RecapYearRankingDto(
     int Year,
     int ScoredCount,
     double WeightedScore,
-    List<RecapRankingPosterDto> TopPosters,
+    List<RecapRankingScorePostersDto> PostersByScore,
     IReadOnlyList<int> ScoreCounts);
 
 /// <summary>One ranked season or year, largest time watched first (design.md
@@ -79,8 +94,11 @@ public record RecapYearRankingDto(
 /// hold any scored anime to be ranked here — only watched ones.
 /// <c>TopPosters</c> is empty for every row at the season level; at the year
 /// level it carries the leader's posters (three highest-scored anime, picked
-/// by episodes watched rather than score) and is empty below rank
-/// one.</summary>
+/// by episodes watched rather than score) and is empty below rank one.
+/// Deliberately not bucketed by score like the score rankings' <c>
+/// PostersByScore</c>: the time rankings rank on seconds watched, not
+/// scores, and pick their leader's posters by episodes watched
+/// (refine-ranking-posters-and-score-filters design.md Non-Goals).</summary>
 public record RecapTimeRankingDto(
     int Year,
     string? Season,

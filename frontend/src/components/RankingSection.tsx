@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
-import type { RecapSeasonRankingDto, RecapYearRankingDto } from '../api/types.ts'
+import type { RecapRankingPosterDto, RecapRankingScorePostersDto, RecapSeasonRankingDto, RecapYearRankingDto } from '../api/types.ts'
 import { scoreTier, seasonLabel } from '../utils/anime.ts'
 import type { RankingOverlayRow } from './RankingOverlay.tsx'
 import './RankingSection.css'
@@ -14,6 +14,52 @@ export function scoreCountAt(row: { scoreCounts: number[] }, score: number): num
   return row.scoreCounts[score - 1]
 }
 
+// The favourites score filter (design.md decision D6): the backend already
+// returns each ranking in full rank order — weighted score, then scored
+// count, then the histogram from 10 down, then newest first — so a
+// 10-down-to-1 offered list and a stable sort by "count of the selected
+// score, descending" resolve every tie in exactly that same order, with no
+// second copy of CompareGroups on the client. This relies on
+// Array.prototype.sort's stability (guaranteed since ES2019); if it is ever
+// replaced by a hand-rolled comparator, ties will stop falling back to the
+// backend's own order and may come out arbitrary instead. Shared by
+// RecapPage and ProfilePage (design.md D4) so there is one implementation of
+// the filter, not a copy per page.
+export function offeredScores(rows: { scoreCounts: number[] }[]): number[] {
+  const scores: number[] = []
+  for (let score = 10; score >= 1; score--) {
+    if (rows.some((row) => scoreCountAt(row, score) > 0)) scores.push(score)
+  }
+  return scores
+}
+
+export function rankByScoreCount<T extends { scoreCounts: number[] }>(rows: T[], score: number): T[] {
+  return rows.filter((row) => scoreCountAt(row, score) > 0).sort((a, b) => scoreCountAt(b, score) - scoreCountAt(a, score))
+}
+
+// Picks a row's posters by my ranking, not by title (design.md D1) — the
+// group's three best anime, either overall or at a selected score. Without a
+// score, the posters are the first three read from the top of
+// postersByScore, which is exactly the group's best three overall because
+// the buckets are already score-ordered and each holds its own score's best
+// — there is no separate "All" list that could disagree (design.md D2).
+// With a score, that score's own bucket — empty only when the group holds
+// none of it, which cannot happen for a row the filter kept.
+function postersFor(
+  row: { postersByScore: RecapRankingScorePostersDto[] },
+  selectedScore?: number,
+): RecapRankingPosterDto[] {
+  if (selectedScore !== undefined) {
+    return row.postersByScore.find((bucket) => bucket.score === selectedScore)?.posters ?? []
+  }
+  const posters: RecapRankingPosterDto[] = []
+  for (const bucket of row.postersByScore) {
+    posters.push(...bucket.posters)
+    if (posters.length >= 3) break
+  }
+  return posters.slice(0, 3)
+}
+
 // One mapping per ranking DTO, shared by its inline five-row list and its
 // overlay (design.md decision 6/8) — the two representations of a ranking
 // read from the same describe() call, so they cannot drift. Shared by
@@ -21,7 +67,11 @@ export function scoreCountAt(row: { scoreCounts: number[] }, score: number): num
 // year's row always renders identically on both pages. An optional
 // `selectedScore` (polish-favourites-filters-and-browse-scroll design.md
 // decision D7) states what the row was ranked on when a favourites score
-// filter is active; RecapPage's four callers never pass one.
+// filter is active. Never pass either function to `.map` point-free —
+// `Array.prototype.map` hands each row's index as the second argument, which
+// this parameter would silently accept as `selectedScore` and mislabel every
+// row (refine-ranking-posters-and-score-filters design.md "A live defect").
+// Every call site must be an explicit arrow.
 export function describeSeasonRanking(row: RecapSeasonRankingDto, selectedScore?: number): RankingOverlayRow {
   return {
     key: `${row.year}-${row.season}`,
@@ -31,7 +81,7 @@ export function describeSeasonRanking(row: RecapSeasonRankingDto, selectedScore?
         ? `${row.scoredCount} scored · ${row.weightedScore.toFixed(2)}`
         : `${scoreCountAt(row, selectedScore)} × ${selectedScore} · ${row.scoredCount} scored`,
     to: `/recap?mode=season&year=${row.year}&season=${row.season}`,
-    posters: row.topPosters,
+    posters: postersFor(row, selectedScore),
   }
 }
 
@@ -44,7 +94,7 @@ export function describeYearRanking(row: RecapYearRankingDto, selectedScore?: nu
         ? `${row.scoredCount} scored · ${row.weightedScore.toFixed(2)}`
         : `${scoreCountAt(row, selectedScore)} × ${selectedScore} · ${row.scoredCount} scored`,
     to: `/recap?mode=yearly&year=${row.year}&filter=aired`,
-    posters: row.topPosters,
+    posters: postersFor(row, selectedScore),
   }
 }
 
@@ -157,16 +207,26 @@ type RankingSectionProps = {
 // The caller decides the family rather than it being inferred from `title`,
 // so a reworded heading can never silently lose its colour. `scoreFilter` is
 // optional (design.md decision D7): rendered between the title and the rows
-// only when given, so RecapPage's four rankings are untouched.
+// only when given, so RecapPage's four rankings are untouched. When given,
+// the "See all" overlay's title also gains the "— with most Ns" suffix
+// (design.md D4) — composed here, since this is the one place that already
+// holds both `title` and `scoreFilter.selected`, so both callers' `onSeeAll`
+// reduce to their plain overlay setter.
 export function RankingSection({ title, noun, rows, onSeeAll, style, family, scoreFilter }: RankingSectionProps) {
   const visible = rows.slice(0, VISIBLE_RANK_COUNT)
+  const overlayTitle =
+    scoreFilter && scoreFilter.selected !== null ? `${title} — with most ${scoreFilter.selected}s` : title
   return (
     <section className={family ? `recap-page__section family--${family}` : 'recap-page__section'} style={style}>
       <h2 className={family ? 'section-band' : undefined}>{title}</h2>
       {scoreFilter && renderScoreFilter(noun, scoreFilter)}
       {renderRankingRows(visible)}
       {rows.length > VISIBLE_RANK_COUNT && (
-        <button type="button" className="recap-page__see-all-ranks" onClick={() => onSeeAll({ title, rows, family })}>
+        <button
+          type="button"
+          className="recap-page__see-all-ranks"
+          onClick={() => onSeeAll({ title: overlayTitle, rows, family })}
+        >
           See all {rows.length} {noun}
         </button>
       )}

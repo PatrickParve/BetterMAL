@@ -14,7 +14,13 @@ import {
   type ScoreDistributionBucketDto,
 } from '../api/types.ts'
 import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
-import { describeSeasonRanking, describeYearRanking, RankingSection } from '../components/RankingSection.tsx'
+import {
+  describeSeasonRanking,
+  describeYearRanking,
+  offeredScores,
+  rankByScoreCount,
+  RankingSection,
+} from '../components/RankingSection.tsx'
 import { ScoreBoardOverlay, type ScoreBoardGroup } from '../components/ScoreBoardOverlay.tsx'
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreDistribution } from '../components/ScoreDistribution.tsx'
@@ -102,6 +108,16 @@ function currentSeasonName(): RecapSeasonName {
   return RECAP_SEASONS[Math.floor(new Date().getMonth() / 3)]
 }
 
+// The recap's two score-ranking filter selections (design D5): URL
+// parameters, like every other recap control, so a filtered ranking is
+// linkable and survives a reload. Anything outside 1-10 — missing,
+// non-numeric, out of range — reads as null (All) rather than erroring.
+function parseScoreParam(value: string | null): number | null {
+  if (value === null) return null
+  const n = Number(value)
+  return Number.isInteger(n) && n >= 1 && n <= 10 ? n : null
+}
+
 // Bounds always widen to include whatever's actually selected (mirrors
 // SeasonPage's yearOptions) — a URL-addressed year outside the normal
 // 1960-current window (or an as-yet-unreached future one) still has a
@@ -176,6 +192,8 @@ export function RecapPage() {
   const filterParam = searchParams.get('filter')
   const basisParam = searchParams.get('basis')
   const typeParam = searchParams.get('type')
+  const seasonScoreParam = searchParams.get('seasonScore')
+  const yearScoreParam = searchParams.get('yearScore')
 
   const startYear =
     mode === 'multiYear'
@@ -248,6 +266,18 @@ export function RecapPage() {
 
   const scoreGroups = useMemo(() => (displayedRecap ? scoreGroupsOf(displayedRecap.items) : []), [displayedRecap])
   const scoreBuckets: ScoreDistributionBucketDto[] = scoreGroups.map((g) => ({ score: g.score, count: g.items.length }))
+
+  // The score filter's offered buttons and effective selections (design D5):
+  // a selection naming a score the displayed ranking does not offer reads as
+  // All without being cleared from the URL, so stepping to another period
+  // that offers it again restores the selection rather than silently
+  // dropping it.
+  const offeredSeasonScores = displayedRecap ? offeredScores(displayedRecap.seasonRanking) : []
+  const offeredYearScores = displayedRecap ? offeredScores(displayedRecap.yearRanking) : []
+  const parsedSeasonScore = parseScoreParam(seasonScoreParam)
+  const seasonScore = parsedSeasonScore !== null && offeredSeasonScores.includes(parsedSeasonScore) ? parsedSeasonScore : null
+  const parsedYearScore = parseScoreParam(yearScoreParam)
+  const yearScore = parsedYearScore !== null && offeredYearScores.includes(parsedYearScore) ? parsedYearScore : null
 
   // `options.keepScroll` (design.md decision 5/7) is opt-in per call site:
   // the ranking-basis toggle, the media-type select, every period control
@@ -824,10 +854,20 @@ export function RecapPage() {
       <RankingSection
         title="Season ranking"
         noun="seasons"
-        rows={recap.seasonRanking.map(describeSeasonRanking)}
+        rows={
+          seasonScore === null
+            ? recap.seasonRanking.map((row) => describeSeasonRanking(row))
+            : rankByScoreCount(recap.seasonRanking, seasonScore).map((row) => describeSeasonRanking(row, seasonScore))
+        }
         onSeeAll={setOverlay}
         style={style}
         family="season"
+        scoreFilter={{
+          scores: offeredSeasonScores,
+          selected: seasonScore,
+          onSelect: (score) =>
+            updateParams({ seasonScore: score === null ? null : String(score) }, { keepScroll: true }),
+        }}
       />
     )
   }
@@ -852,10 +892,19 @@ export function RecapPage() {
       <RankingSection
         title="Year ranking"
         noun="years"
-        rows={recap.yearRanking.map(describeYearRanking)}
+        rows={
+          yearScore === null
+            ? recap.yearRanking.map((row) => describeYearRanking(row))
+            : rankByScoreCount(recap.yearRanking, yearScore).map((row) => describeYearRanking(row, yearScore))
+        }
         onSeeAll={setOverlay}
         style={style}
         family="year"
+        scoreFilter={{
+          scores: offeredYearScores,
+          selected: yearScore,
+          onSelect: (score) => updateParams({ yearScore: score === null ? null : String(score) }, { keepScroll: true }),
+        }}
       />
     )
   }
@@ -888,13 +937,13 @@ export function RecapPage() {
   // to one column when only one side has anything to show.
   function renderRankings(recap: RecapDto) {
     if (mode === 'yearly') {
-      const seasonScore = renderSeasonRankingSection(recap)
+      const seasonRanking = renderSeasonRankingSection(recap)
       const seasonTime = renderSeasonTimeRankingSection(recap)
-      if (!seasonScore && !seasonTime) return null
-      const single = !seasonScore || !seasonTime
+      if (!seasonRanking && !seasonTime) return null
+      const single = !seasonRanking || !seasonTime
       return (
         <div className={single ? 'recap-page__rankings recap-page__rankings--single' : 'recap-page__rankings'}>
-          {seasonScore}
+          {seasonRanking}
           {seasonTime}
         </div>
       )

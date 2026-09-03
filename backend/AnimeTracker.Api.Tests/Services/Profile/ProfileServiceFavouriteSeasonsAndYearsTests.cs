@@ -58,8 +58,9 @@ public class ProfileServiceFavouriteSeasonsAndYearsTests
 
         var globalMean = RecapRankingBuilder.ScoredMean(entries)!.Value;
         var recapPeriod = RecapPeriod.MultiYear(2019, 2019);
+        var snapshot = AnimeRankingSnapshot.Build(entries, storedOrder: []);
         var recapRanking = RecapRankingBuilder.BuildSeasonRanking(
-            entries.Where(e => e.Anime.AiredFrom!.Value.Year == 2019).ToList(), recapPeriod, globalMean);
+            entries.Where(e => e.Anime.AiredFrom!.Value.Year == 2019).ToList(), recapPeriod, globalMean, snapshot);
 
         var fall2019 = profile.FavouriteSeasons.Single(s => s.Year == 2019 && s.Season == "fall");
         var recapFall2019 = recapRanking.Single(s => s.Year == 2019 && s.Season == "fall");
@@ -92,7 +93,8 @@ public class ProfileServiceFavouriteSeasonsAndYearsTests
         var profile = await CreateService(db, entries).GetProfileAsync();
 
         var globalMean = RecapRankingBuilder.ScoredMean(entries)!.Value;
-        var recapRanking = RecapRankingBuilder.BuildYearRanking(entries, RecapPeriod.MultiYear(2020, 2023), globalMean);
+        var snapshot = AnimeRankingSnapshot.Build(entries, storedOrder: []);
+        var recapRanking = RecapRankingBuilder.BuildYearRanking(entries, RecapPeriod.MultiYear(2020, 2023), globalMean, snapshot);
 
         Assert.Equal(2, profile.FavouriteYears.Count);
         Assert.Equal(recapRanking.Select(y => y.Year), profile.FavouriteYears.Select(y => y.Year));
@@ -148,8 +150,9 @@ public class ProfileServiceFavouriteSeasonsAndYearsTests
 
         var globalMean = RecapRankingBuilder.ScoredMean(entries)!.Value;
         var recapPeriod = RecapPeriod.MultiYear(2019, 2019);
+        var snapshot = AnimeRankingSnapshot.Build(entries, storedOrder: []);
         var recapRanking = RecapRankingBuilder.BuildSeasonRanking(
-            entries.Where(e => e.Anime.AiredFrom!.Value.Year == 2019).ToList(), recapPeriod, globalMean);
+            entries.Where(e => e.Anime.AiredFrom!.Value.Year == 2019).ToList(), recapPeriod, globalMean, snapshot);
 
         var fall2019 = profile.FavouriteSeasons.Single(s => s.Year == 2019 && s.Season == "fall");
         var recapFall2019 = recapRanking.Single(s => s.Year == 2019 && s.Season == "fall");
@@ -173,7 +176,8 @@ public class ProfileServiceFavouriteSeasonsAndYearsTests
         var profile = await CreateService(db, entries).GetProfileAsync();
 
         var globalMean = RecapRankingBuilder.ScoredMean(entries)!.Value;
-        var recapRanking = RecapRankingBuilder.BuildYearRanking(entries, RecapPeriod.MultiYear(2020, 2023), globalMean);
+        var snapshot = AnimeRankingSnapshot.Build(entries, storedOrder: []);
+        var recapRanking = RecapRankingBuilder.BuildYearRanking(entries, RecapPeriod.MultiYear(2020, 2023), globalMean, snapshot);
 
         var year2020 = profile.FavouriteYears.Single(y => y.Year == 2020);
         var recapYear2020 = recapRanking.Single(y => y.Year == 2020);
@@ -181,8 +185,11 @@ public class ProfileServiceFavouriteSeasonsAndYearsTests
         Assert.Equal(2, year2020.ScoreCounts[9]); // two 10s
     }
 
+    // design.md D1/D2, tasks.md 4.7: the profile's favourites posters follow
+    // PostersByScore the same way its weighted score and score counts already
+    // do — agreeing byte-for-byte with a recap covering the same year.
     [Fact]
-    public async Task EveryRankedRowCarriesPosters()
+    public async Task EveryRankedRowCarriesPostersAgreeingWithARecapCoveringTheSameYear()
     {
         using var db = CreateDb();
         List<UserAnimeEntry> entries =
@@ -195,8 +202,18 @@ public class ProfileServiceFavouriteSeasonsAndYearsTests
         var profile = await CreateService(db, entries).GetProfileAsync();
 
         Assert.Equal(2, profile.FavouriteYears.Count);
-        Assert.NotEmpty(profile.FavouriteYears[0].TopPosters);
-        Assert.NotEmpty(profile.FavouriteYears[1].TopPosters);
+        Assert.NotEmpty(profile.FavouriteYears[0].PostersByScore);
+        Assert.NotEmpty(profile.FavouriteYears[1].PostersByScore);
+
+        var globalMean = RecapRankingBuilder.ScoredMean(entries)!.Value;
+        var snapshot = AnimeRankingSnapshot.Build(entries, storedOrder: []);
+        var recapRanking = RecapRankingBuilder.BuildYearRanking(entries, RecapPeriod.MultiYear(2021, 2022), globalMean, snapshot);
+
+        var year2022 = profile.FavouriteYears.Single(y => y.Year == 2022);
+        var recapYear2022 = recapRanking.Single(y => y.Year == 2022);
+        Assert.Equal(
+            recapYear2022.PostersByScore.SelectMany(b => b.Posters).Select(p => p.AnimeId),
+            year2022.PostersByScore.SelectMany(b => b.Posters).Select(p => p.AnimeId));
     }
 
     [Fact]
