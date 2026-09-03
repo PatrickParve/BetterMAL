@@ -36,6 +36,13 @@ public class AnimeUpdateService(
         [WatchStatus.Rewatching] = "Rewatching",
     };
 
+    // anime-updates spec, "The updates menu shows the last 30 days, newest
+    // first" — a rule of this feed, not of whichever surface reads it.
+    private static readonly TimeSpan RecentWindow = TimeSpan.FromDays(30);
+
+    public Task<List<AnimeUpdateDto>> GetRecentAsync(CancellationToken ct = default) =>
+        GetRecentAsync(DateTimeOffset.UtcNow - RecentWindow, ct);
+
     public async Task<List<AnimeUpdateDto>> GetRecentAsync(DateTimeOffset since, CancellationToken ct = default)
     {
         var updates = await Query()

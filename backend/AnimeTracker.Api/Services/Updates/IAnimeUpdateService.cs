@@ -9,6 +9,10 @@ namespace AnimeTracker.Api.Services.Updates;
 /// so the two can never disagree about which updates exist.</summary>
 public interface IAnimeUpdateService
 {
+    /// <summary>Every eligible update detected within the last-30-days
+    /// window (anime-updates spec), newest first.</summary>
+    Task<List<AnimeUpdateDto>> GetRecentAsync(CancellationToken ct = default);
+
     /// <summary>Every eligible update detected at or after
     /// <paramref name="since"/>, newest first.</summary>
     Task<List<AnimeUpdateDto>> GetRecentAsync(DateTimeOffset since, CancellationToken ct = default);

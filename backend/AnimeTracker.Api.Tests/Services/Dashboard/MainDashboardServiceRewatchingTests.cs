@@ -4,7 +4,6 @@ using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Scheduling;
-using AnimeTracker.Api.Services.Updates;
 
 namespace AnimeTracker.Api.Tests.Services.Dashboard;
 
@@ -13,7 +12,7 @@ namespace AnimeTracker.Api.Tests.Services.Dashboard;
 public class MainDashboardServiceRewatchingTests
 {
     private static MainDashboardService CreateService(List<UserAnimeEntry> entries) =>
-        new(new FakeUserAnimeEntryRepository(entries), new FakeEpisodeScheduleService(), new NullAiringWatchStatusService(), new FakeBroadcastLocalTimeConverter(), new FakeAnimeUpdateService());
+        new(new FakeUserAnimeEntryRepository(entries), new FakeEpisodeScheduleService(), new NullAiringWatchStatusService(), new FakeBroadcastLocalTimeConverter());
 
     [Fact]
     public async Task ARewatchAppearsInCurrentlyWatchingAlongsideWatching()
@@ -97,13 +96,5 @@ public class MainDashboardServiceRewatchingTests
             new(localDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         public (DayOfWeek LocalDayOfWeek, TimeOnly LocalTime) ConvertBroadcastSlot(DayOfWeek jstDayOfWeek, TimeOnly jstTime, DateTimeOffset referenceUtc) =>
             (jstDayOfWeek, jstTime);
-    }
-
-    private sealed class FakeAnimeUpdateService : IAnimeUpdateService
-    {
-        public Task<List<AnimeUpdateDto>> GetRecentAsync(DateTimeOffset since, CancellationToken ct = default) =>
-            Task.FromResult(new List<AnimeUpdateDto>());
-        public Task<List<AnimeUpdateDto>> GetHistoryAsync(CancellationToken ct = default) =>
-            Task.FromResult(new List<AnimeUpdateDto>());
     }
 }

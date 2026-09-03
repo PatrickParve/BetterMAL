@@ -173,6 +173,10 @@ export function getUpdatesHistory(): Promise<AnimeUpdateDto[]> {
   return fetchJson<AnimeUpdateDto[]>('/api/updates/history')
 }
 
+export function getRecentUpdates(): Promise<AnimeUpdateDto[]> {
+  return fetchJson<AnimeUpdateDto[]>('/api/updates/recent')
+}
+
 // `week` is any ISO date (yyyy-MM-dd) inside the desired week; omit for the
 // current week.
 export function getAiringWeek(week?: string): Promise<AiringWeekDto> {

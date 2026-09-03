@@ -1,5 +1,4 @@
 using AnimeTracker.Api.Models;
-using AnimeTracker.Api.Services.Updates;
 
 namespace AnimeTracker.Api.Services.Dashboard;
 
@@ -45,5 +44,4 @@ public record CurrentSeasonItemDto(
 public record MainDashboardDto(
     List<CurrentlyWatchingItemDto> CurrentlyWatching,
     List<AiringTodayItemDto> AiringToday,
-    List<CurrentSeasonItemDto> CurrentSeason,
-    List<AnimeUpdateDto> Updates);
+    List<CurrentSeasonItemDto> CurrentSeason);

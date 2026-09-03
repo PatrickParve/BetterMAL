@@ -2,7 +2,6 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  --history-row-h: 78px;
 }
 
 .updates-history__header {
@@ -105,106 +104,40 @@
   padding: 8px;
 }
 
+/* Each row is now a shared UpdateCard (design.md D6) — no per-row markup,
+   no fixed row height, and rows size to their own content (no
+   overflow: hidden, no single-line ellipsis). max-height is applied inline
+   by useCappedCardHeight, measured from the first three rendered cards the
+   same way the navbar dropdown sizes itself (design.md D5), replacing the
+   old `calc(5 * (row-h + 2px) + 4 * 6px)` and, later, a flat 60vh guess —
+   neither followed the cards' own rendered height, so the row at the cap
+   boundary could end up cut off partway rather than ending clean.
+
+   overflow-x: hidden is a defensive guard against a card ever rendering
+   wider than this list again (it did, before `.update-card` had
+   box-sizing: border-box — see UpdateCard.css).
+
+   overflow-y is scrollable with the scrollbar hidden, same as the navbar
+   dropdown's list — opted out of the shared `.scroll-y` utility rather
+   than fighting its specificity. */
 .updates-history__list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: calc(5 * (var(--history-row-h) + 2px) + 4 * 6px);
-}
-
-.updates-history__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 8px 0 0;
-  min-height: var(--history-row-h);
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
-.updates-history__row:hover,
-.updates-history__row:focus-within {
-  background: var(--accent-bg);
-  border-color: var(--accent-border);
-}
-
-.updates-history__link {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1 1 auto;
-  min-width: 0;
-  color: inherit;
-  text-decoration: none;
-}
-
-.updates-history__link:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.updates-history__picture {
-  width: 57px;
-  height: 78px;
-  object-fit: cover;
-  background: var(--code-bg);
-  flex: 0 0 auto;
-}
-
-.updates-history__picture--placeholder {
-  border: 1px solid var(--border);
-}
-
-.updates-history__info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.updates-history__row-title {
-  min-width: 0;
-  color: var(--text-h);
-  font-weight: 500;
-}
-
-.updates-history__detail {
-  display: flex;
-  align-items: center;
+  /* Matches useCappedCardHeight's own LIST_GAP_PX — the hook measures this
+     gap into its height calculation, so a mismatch here would leave the
+     third card's bottom edge a few pixels short of (or past) the list's
+     computed max-height. */
   gap: 8px;
-  min-width: 0;
-  font-size: 13px;
-  color: var(--text);
-  opacity: 0.85;
-  font-variant-numeric: tabular-nums;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
 }
 
-.updates-history__detail-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-.updates-history__reason {
-  font-size: 12px;
-  color: var(--text);
-  opacity: 0.7;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.updates-history__timestamp {
-  font-size: 12px;
-  color: var(--text);
-  opacity: 0.7;
-  white-space: nowrap;
-  flex: 0 0 auto;
+.updates-history__list::-webkit-scrollbar {
+  display: none;
 }
 
 .updates-history__empty {

@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Modal } from './Modal.tsx'
-import { TruncatedTitle } from './TruncatedTitle.tsx'
-import { buildHeadline, formatShortDate } from './UpdatesSection.tsx'
-import { getUpdatesHistory } from '../api/client.ts'
-import type { AnimeUpdateDto } from '../api/types.ts'
-import { formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
+import { Modal } from '../Modal.tsx'
+import { UpdateCard } from './UpdateCard.tsx'
+import { useCappedCardHeight } from './useCappedCardHeight.ts'
+import { getUpdatesHistory } from '../../api/client.ts'
+import type { AnimeUpdateDto } from '../../api/types.ts'
 import './UpdatesHistoryOverlay.css'
 
 type UpdatesHistoryOverlayProps = {
@@ -23,7 +21,9 @@ function toLocalDateString(timestamp: string): string {
 // The whole updates log (anime-updates spec, "The updates history is
 // searchable and date-filterable") — modelled on EditHistoryOverlay: fetched
 // fresh on open, then a title search and a from/to date range filter that
-// one fetch locally.
+// one fetch locally. Each row renders through the shared UpdateCard (design.md
+// D6) rather than its own markup, so the history reads identically to the
+// navbar dropdown.
 export function UpdatesHistoryOverlay({ onClose }: UpdatesHistoryOverlayProps) {
   const [history, setHistory] = useState<AnimeUpdateDto[]>([])
   const [loading, setLoading] = useState(true)
@@ -65,6 +65,13 @@ export function UpdatesHistoryOverlay({ onClose }: UpdatesHistoryOverlayProps) {
     setFromDate('')
     setToDate('')
   }
+
+  // Same exact-fit sizing the navbar dropdown uses (design.md D5): a static
+  // vh-based cap left the third card cut off partway however many cards
+  // happened to fit at that height, since it wasn't measured from the
+  // cards themselves. Capping to the same three-card count keeps the two
+  // surfaces' opening heights consistent.
+  const { listRef, maxHeight: listMaxHeight } = useCappedCardHeight(filteredHistory.length)
 
   return (
     <Modal onClose={onClose} labelledBy="updates-history-title" className="modal--wide">
@@ -121,30 +128,14 @@ export function UpdatesHistoryOverlay({ onClose }: UpdatesHistoryOverlayProps) {
           <p className="updates-history__empty">No updates match these filters.</p>
         ) : (
           <div className="updates-history__list-frame">
-            <ul className="updates-history__list scroll-y">
+            <ul
+              className="updates-history__list"
+              ref={listRef}
+              style={listMaxHeight !== undefined ? { maxHeight: listMaxHeight } : undefined}
+            >
               {filteredHistory.map((item) => (
-                <li key={item.id} className="updates-history__row">
-                  <Link to={`/anime/${item.animeId}`} className="updates-history__link" onClick={onClose}>
-                    {item.pictureUrl ? (
-                      <img src={item.pictureUrl} alt="" className="updates-history__picture" />
-                    ) : (
-                      <div className="updates-history__picture updates-history__picture--placeholder" aria-hidden="true" />
-                    )}
-                    <span className="updates-history__info">
-                      <TruncatedTitle
-                        title={pickDisplayTitle(item.title, item.englishTitle)}
-                        lines={2}
-                        className="updates-history__row-title"
-                      />
-                      <span className="updates-history__detail">
-                        <span className="updates-history__detail-text">{buildHeadline(item)}</span>
-                        {item.totalEpisodes !== null && <span>{item.totalEpisodes} episodes</span>}
-                        {item.airedFrom !== null && <span>{formatShortDate(item.airedFrom)}</span>}
-                      </span>
-                      <span className="updates-history__reason">{item.reason}</span>
-                    </span>
-                  </Link>
-                  <span className="updates-history__timestamp">{formatTimestamp(item.detectedAt)}</span>
+                <li key={item.id}>
+                  <UpdateCard item={item} variant="history" onNavigate={onClose} />
                 </li>
               ))}
             </ul>

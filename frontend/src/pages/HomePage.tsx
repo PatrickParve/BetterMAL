@@ -5,7 +5,6 @@ import { usePageData } from '../hooks/usePageData.ts'
 import { CurrentlyWatchingCarousel } from '../components/CurrentlyWatchingCarousel.tsx'
 import { AiringTodayList } from '../components/AiringTodayList.tsx'
 import { CurrentSeasonSection } from '../components/CurrentSeasonSection.tsx'
-import { UpdatesSection } from '../components/UpdatesSection.tsx'
 import './HomePage.css'
 
 export function HomePage() {
@@ -43,7 +42,6 @@ export function HomePage() {
         // finished state, a server-computed regrouping no mutation response describes.
         onCompleted={reload}
       />
-      <UpdatesSection items={dashboard.updates} />
       <div className="home-page__row">
         <div className="home-page__aside">
           <AiringTodayList items={dashboard.airingToday} />

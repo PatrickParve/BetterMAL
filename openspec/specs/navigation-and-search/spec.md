@@ -8,11 +8,13 @@ The system SHALL provide a navbar with two groups of controls: a left group of p
 
 The left group's links SHALL be, in order: **Home, My List, Series, Recap, Top, Season, Year, Airing**. Series SHALL sit directly to the right of My List and Recap directly to the right of Series, since both are views over the same list — Series grouping it into franchises and Recap slicing it by period. Year SHALL sit directly to the right of Season, since the two browse the same listings at different grains.
 
-The right group's controls SHALL be, in order from left to right: **the search field, the hide/unhide MAL-score toggle, Profile, and the Settings (gear icon) button** — so Settings sits at the navbar's far right edge, Profile immediately to its left, then the score toggle, then the search field. Read right-to-left from the edge, the order is Settings, Profile, score toggle, search field.
+The right group's controls SHALL be, in order from left to right: **the search field, the hide/unhide MAL-score toggle, the Updates control, Profile, and the Settings (gear icon) button** — so Settings sits at the navbar's far right edge, Profile immediately to its left, then Updates, then the score toggle, then the search field. Read right-to-left from the edge, the order is Settings, Profile, Updates, score toggle, search field.
 
-Every control SHALL keep the behaviour, hover treatment, and accessible labelling it has today; only the ordering and the search field's group membership change. The search field SHALL keep its own width within the right group rather than being squeezed to the width of a button, and its type-ahead dropdown SHALL stay anchored beneath the field in its new position.
+The Updates control belongs to the right group rather than the left because it opens a menu over the current page instead of navigating to one, and because it carries per-user state as the other right-group controls do. It SHALL be an icon button of the same size **and resting appearance** as the Settings gear — plain, with no persistent background of its own — rather than reading as a separately-boxed control; it SHALL open and close the updates dropdown the `anime-updates` capability specifies, and its open state SHALL be exposed to assistive technology. Opening it SHALL NOT navigate anywhere or disturb the page behind it.
 
-At window widths too narrow for one row, the navbar MAY wrap the search field onto its own row, and SHALL keep the two groups' internal orderings when it does.
+Every other control SHALL keep the behaviour, hover treatment, and accessible labelling it has today; only the ordering, the new Updates control, and the search field's group membership change. The search field SHALL keep its own width within the right group rather than being squeezed to the width of a button, and its type-ahead dropdown SHALL stay anchored beneath the field in its new position.
+
+At window widths too narrow for one row, the navbar MAY wrap the search field onto its own row, and SHALL keep the two groups' internal orderings when it does. The updates dropdown SHALL stay anchored beneath its own control and within the window at every width the app supports, rather than overflowing the window's right edge.
 
 #### Scenario: Navigating via the navbar
 - **WHEN** I click a navbar button
@@ -36,7 +38,19 @@ At window widths too narrow for one row, the navbar MAY wrap the search field on
 
 #### Scenario: Right group order
 - **WHEN** the navbar renders
-- **THEN** its right controls read search field, score toggle, Profile, Settings from left to right, with Settings at the far right edge
+- **THEN** its right controls read search field, score toggle, Updates, Profile, Settings from left to right, with Settings at the far right edge
+
+#### Scenario: Opening the updates menu
+- **WHEN** I click the navbar's Updates control on any page
+- **THEN** its dropdown opens beneath it over the current page, and I stay on that page
+
+#### Scenario: The Updates control reads like its neighbours
+- **WHEN** the Updates control is at rest, neither hovered nor open
+- **THEN** it shows no background of its own, matching Profile and the Settings gear rather than standing out as a boxed control
+
+#### Scenario: The updates dropdown stays within the window
+- **WHEN** I open the updates dropdown at a narrow window width
+- **THEN** it is anchored beneath its control and fully within the window rather than clipped at the window's right edge
 
 #### Scenario: The search field is not centred
 - **WHEN** the navbar renders at a width wide enough for one row

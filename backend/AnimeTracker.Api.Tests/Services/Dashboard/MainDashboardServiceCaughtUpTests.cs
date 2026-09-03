@@ -4,7 +4,6 @@ using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Scheduling;
-using AnimeTracker.Api.Services.Updates;
 
 namespace AnimeTracker.Api.Tests.Services.Dashboard;
 
@@ -17,7 +16,7 @@ public class MainDashboardServiceCaughtUpTests
 {
     private static MainDashboardService CreateService(List<UserAnimeEntry> entries, Dictionary<int, int> airedSoFarByAnimeId) =>
         new(new FakeUserAnimeEntryRepository(entries), new FakeEpisodeScheduleService(airedSoFarByAnimeId),
-            new NullAiringWatchStatusService(), new FakeBroadcastLocalTimeConverter(), new FakeAnimeUpdateService());
+            new NullAiringWatchStatusService(), new FakeBroadcastLocalTimeConverter());
 
     private static UserAnimeEntry Entry(int animeId, WatchStatus status, int episodesWatched, string? airingStatus = "currently_airing") =>
         new()
@@ -124,13 +123,5 @@ public class MainDashboardServiceCaughtUpTests
         public DateTimeOffset LocalMidnightUtc(DateOnly localDate) => new(localDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         public (DayOfWeek LocalDayOfWeek, TimeOnly LocalTime) ConvertBroadcastSlot(DayOfWeek jstDayOfWeek, TimeOnly jstTime, DateTimeOffset referenceUtc) =>
             (jstDayOfWeek, jstTime);
-    }
-
-    private sealed class FakeAnimeUpdateService : IAnimeUpdateService
-    {
-        public Task<List<AnimeUpdateDto>> GetRecentAsync(DateTimeOffset since, CancellationToken ct = default) =>
-            Task.FromResult(new List<AnimeUpdateDto>());
-        public Task<List<AnimeUpdateDto>> GetHistoryAsync(CancellationToken ct = default) =>
-            Task.FromResult(new List<AnimeUpdateDto>());
     }
 }

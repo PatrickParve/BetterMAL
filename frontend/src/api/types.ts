@@ -191,7 +191,6 @@ export type MainDashboardDto = {
   currentlyWatching: CurrentlyWatchingItemDto[]
   airingToday: AiringTodayItemDto[]
   currentSeason: CurrentSeasonItemDto[]
-  updates: AnimeUpdateDto[]
 }
 
 export type AiringSlotDto = {

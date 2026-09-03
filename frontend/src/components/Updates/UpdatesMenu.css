@@ -1,0 +1,135 @@
+.updates-menu {
+  position: relative;
+}
+
+/* Same navbar-control-h box as the Settings gear (design.md D9). Settings
+   is a NavLink (an anchor, no native chrome), but this is a real <button> —
+   without an explicit `background: none` it picks up the browser's default
+   button face, which is what made it look like a separate gray pill instead
+   of matching the rest of the navbar's plain icon controls. */
+.updates-menu__button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--navbar-control-h);
+  height: var(--navbar-control-h);
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text);
+}
+
+.updates-menu__button:hover {
+  color: var(--text-h);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+/* The dot is one carrier of "unseen" — the accessible name states it too,
+   so appearance alone doesn't carry the fact (anime-updates, "signals
+   unseen news"). */
+.updates-menu__dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1.5px solid var(--bg);
+}
+
+/* Absolutely positioned under the button and right-aligned to the navbar
+   edge so it can never overflow the window's right side; a dropdown, not
+   one of the app's Modal overlays, so it doesn't lock the page behind it
+   (design.md D8). Below .modal-backdrop's z-index: 100, so opening the
+   history (a real Modal) over it never fights for a stacking layer. */
+.updates-menu__dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(420px, calc(100vw - 24px));
+  z-index: 50;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.updates-menu__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.updates-menu__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+/* Same secondary-button look as the history overlay's own Clear control
+   (UpdatesHistoryOverlay.css) — plain text color, not the purple accent, so
+   it reads as one of the app's ordinary buttons rather than a call to
+   action. */
+.updates-menu__history-button {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.updates-menu__history-button:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.updates-menu__empty {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.7;
+  padding: 12px 4px;
+  margin: 0;
+}
+
+/* max-height is applied inline by useCappedCardHeight, measured from the
+   capped set of rendered cards rather than assumed (design.md D5) — this
+   gap (8px) is what that hook adds between them, so keep the two in sync.
+   overscroll-behavior: contain keeps reaching the end of this list from
+   scrolling the page behind the dropdown (navigation-and-search's rule for
+   the app's scrolling regions). */
+/* overflow-x: hidden is a defensive guard against a card ever rendering
+   wider than this list again (it did, before `.update-card` had
+   box-sizing: border-box — see UpdateCard.css) — this list is never meant
+   to scroll sideways.
+
+   overflow-y is scrollable but the scrollbar itself is hidden — a compact
+   dropdown reads cleaner without one, and scrolling still works by wheel,
+   trackpad, or touch either way. This opts out of the app's shared
+   `.scroll-y` utility (which does the opposite: it forces a visible thin
+   scrollbar) rather than fighting its specificity. */
+.updates-menu__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.updates-menu__list::-webkit-scrollbar {
+  display: none;
+}

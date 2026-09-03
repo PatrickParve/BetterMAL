@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { SearchBar } from '../SearchBar.tsx'
+import { UpdatesMenu } from '../Updates/UpdatesMenu.tsx'
 import { useScoreVisibility } from '../../context/ScoreVisibilityContext.tsx'
 import './Navbar.css'
 
@@ -74,6 +75,7 @@ export function Navbar() {
               <EyeIcon />
             </span>
           </button>
+          <UpdatesMenu />
           <NavLink to="/profile" className={linkClassName}>
             Profile
           </NavLink>

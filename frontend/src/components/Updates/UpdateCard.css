@@ -1,0 +1,122 @@
+.update-card {
+  --update-card-picture-max-w: 170px;
+  --update-card-picture-max-h: 168px;
+  --update-card-picture-placeholder-w: 96px;
+
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  /* The app has no global box-sizing reset — every component that combines
+     width: 100% with its own padding/border sets this itself (see
+     SearchBar.css, CurrentlyWatchingCarousel.css, …). Without it, this
+     card's 8px padding and 1px border added 18px on top of its 100% width
+     in every measurement taken while chasing a horizontal-scroll report —
+     the picture sizing and the list's scrollbar gutter were both innocent;
+     this was the actual cause. */
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Same surface + border hover/focus treatment UpdatesSection's card used
+   (navigation-and-search's card convention), carried over unchanged. */
+.update-card:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.update-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Bounded on both axes by flat pixel values — never a percentage, never a
+   value computed from the container's own size — and drawn at its own
+   proportions within that box (design.md D4): a portrait poster is
+   height-bound and renders tall and narrow, a landscape or panorama picture
+   is width-bound and renders short and wide, so the card's height adjusts
+   to the picture rather than the other way around.
+
+   Percentage bounds are what broke this before: a percentage `max-width` on
+   an `<img>` used directly as a flex item is resolved against its own
+   intrinsic size in WebKit's flex-basis calculation before the percentage
+   is applied, so the picture can render at native pixel size regardless of
+   what the percentage said and push the card wider than its container. A
+   literal `max-width`/`max-height` in px has no such ambiguity — it's an
+   absolute clamp with nothing to resolve against — so the card's total
+   width can never depend on the picture's own size, in any browser.
+   `object-fit: contain` only guards the pathological case (a picture too
+   tall or too wide even for this box), letterboxing rather than
+   stretching or overflowing once a cap is hit. */
+.update-card__picture {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: var(--update-card-picture-max-w);
+  max-height: var(--update-card-picture-max-h);
+  object-fit: contain;
+  border-radius: 4px;
+  background: var(--code-bg);
+  flex: 0 0 auto;
+}
+
+/* No picture: a 2:3 box at a modest fixed width, so the card doesn't
+   collapse to a text-only row. */
+.update-card__picture--placeholder {
+  width: var(--update-card-picture-placeholder-w);
+  height: calc(var(--update-card-picture-placeholder-w) * 3 / 2);
+  border: 1px solid var(--border);
+}
+
+.update-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.update-card__title {
+  color: var(--text-h);
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.update-card__title--full {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  white-space: normal;
+}
+
+.update-card__timestamp {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text);
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.update-card__line {
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.update-card__line--fact {
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+.update-card__reason {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.7;
+  white-space: normal;
+}
