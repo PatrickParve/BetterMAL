@@ -325,12 +325,11 @@
 }
 
 .settings-diff-row__picture {
-  width: 32px;
-  height: 44px;
-  object-fit: cover;
+  /* Geometry lives in the shared .row-picture rule (RowPicture.css,
+     artwork-presentation) — this just sets the box that rule reads. */
+  --row-picture-w: 32px;
+  --row-picture-h: 44px;
   border-radius: 4px;
-  background: var(--code-bg);
-  flex: 0 0 auto;
 }
 
 .settings-diff-row__picture--placeholder {
@@ -417,12 +416,12 @@
   color: var(--text-h);
 }
 
-.settings-refresh-picker__dropdown img {
-  width: 24px;
-  height: 32px;
-  object-fit: cover;
+.settings-refresh-picker__thumb {
+  /* Geometry lives in the shared .row-picture rule (RowPicture.css,
+     artwork-presentation) — this just sets the box that rule reads. */
+  --row-picture-w: 24px;
+  --row-picture-h: 32px;
   border-radius: 3px;
-  flex: 0 0 auto;
 }
 
 .settings-refresh-picker__button {

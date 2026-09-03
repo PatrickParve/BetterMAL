@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { Modal } from './Modal.tsx'
+import { RowPicture } from './RowPicture.tsx'
 import { getRanking, putTopAnimeOrder } from '../api/client.ts'
 import type { AnimeRankingScoreDto, TopAnimeMediaType, TopAnimeSectionDto } from '../api/types.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
@@ -82,11 +83,7 @@ function resolveTargetIndex(clientX: number, clientY: number, tierIndex: number,
 }
 
 function MemberPicture({ member }: { member: Member }) {
-  return member.pictureUrl ? (
-    <img src={member.pictureUrl} alt="" className="anime-rank__picture" />
-  ) : (
-    <div className="anime-rank__picture anime-rank__picture--placeholder" aria-hidden="true" />
-  )
+  return <RowPicture src={member.pictureUrl} className="anime-rank__picture" />
 }
 
 function toEditableTiers(section: TopAnimeSectionDto): EditableTier[] {

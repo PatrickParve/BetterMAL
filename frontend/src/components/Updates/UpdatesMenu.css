@@ -27,6 +27,27 @@
   border-color: var(--accent-border);
 }
 
+/* Marks the bell while its dropdown, or the history overlay opened from it,
+   is on screen — the same treatment a navbar page control carries for its
+   own page (navigation-and-search, design.md D6), so the panel hanging
+   under it still reads as this button's. */
+.updates-menu__button--open {
+  color: var(--text-h);
+  background: var(--accent-bg);
+  border-color: var(--accent);
+}
+
+/* `:hover` and `--open` alone tie in specificity (one class each), but a
+   combined `:hover` pseudo-class counts as a class of its own — so
+   `.updates-menu__button:hover` (two classes) outranks
+   `.updates-menu__button--open` (one) regardless of source order, and would
+   win back the soft hover border on an open-and-hovered bell. This rule
+   matches that same two-class specificity, so which one wins is source
+   order again — and it comes after (same fix Navbar.css carries twice). */
+.updates-menu__button--open:hover {
+  border-color: var(--accent);
+}
+
 /* The dot is one carrier of "unseen" — the accessible name states it too,
    so appearance alone doesn't carry the fact (anime-updates, "signals
    unseen news"). */

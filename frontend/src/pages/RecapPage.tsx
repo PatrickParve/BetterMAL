@@ -14,6 +14,7 @@ import {
   type ScoreDistributionBucketDto,
 } from '../api/types.ts'
 import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
+import { RowPicture } from '../components/RowPicture.tsx'
 import {
   describeSeasonRanking,
   describeYearRanking,
@@ -634,11 +635,7 @@ export function RecapPage() {
     return (
       <li key={take.animeId} className={malLikedMore ? 'recap-hot-take family--mal' : 'recap-hot-take family--mine'}>
         <Link to={`/anime/${take.animeId}`} className="recap-hot-take__link">
-          {take.pictureUrl ? (
-            <img src={take.pictureUrl} alt="" className="recap-hot-take__picture" />
-          ) : (
-            <div className="recap-hot-take__picture recap-hot-take__picture--placeholder" aria-hidden="true" />
-          )}
+          <RowPicture src={take.pictureUrl} className="recap-hot-take__picture" />
           <span className="recap-hot-take__title" title={pickDisplayTitle(take.title, take.englishTitle)}>
             {pickDisplayTitle(take.title, take.englishTitle)}
           </span>
@@ -811,11 +808,7 @@ export function RecapPage() {
                   <li key={item.animeId} className="recap-top-ten-row">
                     <span className="recap-top-ten-row__rank">#{index + 6}</span>
                     <Link to={`/anime/${item.animeId}`} className="recap-top-ten-row__link">
-                      {item.pictureUrl ? (
-                        <img src={item.pictureUrl} alt="" className="recap-top-ten-row__picture" />
-                      ) : (
-                        <div className="recap-top-ten-row__picture recap-top-ten-row__picture--placeholder" aria-hidden="true" />
-                      )}
+                      <RowPicture src={item.pictureUrl} className="recap-top-ten-row__picture" />
                       <span className="recap-top-ten-row__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
                         {pickDisplayTitle(item.title, item.englishTitle)}
                       </span>

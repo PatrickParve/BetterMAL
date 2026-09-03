@@ -416,12 +416,9 @@ a.recap-page__stat--link:focus-visible {
 }
 
 .recap-hot-take__picture {
-  width: 40px;
-  height: 56px;
-  object-fit: cover;
+  --row-picture-w: 40px;
+  --row-picture-h: 56px;
   border-radius: 6px;
-  background: var(--code-bg);
-  flex: 0 0 auto;
 }
 
 .recap-hot-take__picture--placeholder {
@@ -860,12 +857,9 @@ a.recap-page__stat--link:focus-visible {
 }
 
 .recap-top-ten-row__picture {
-  width: 40px;
-  height: 56px;
-  object-fit: cover;
+  --row-picture-w: 40px;
+  --row-picture-h: 56px;
   border-radius: 6px;
-  background: var(--code-bg);
-  flex: 0 0 auto;
 }
 
 .recap-top-ten-row__picture--placeholder {

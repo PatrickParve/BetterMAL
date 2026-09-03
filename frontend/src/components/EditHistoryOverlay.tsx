@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { MalOriginTag } from './MalOriginTag.tsx'
 import { Modal } from './Modal.tsx'
+import { RowPicture } from './RowPicture.tsx'
 import { TruncatedTitle } from './TruncatedTitle.tsx'
 import { getActivityHistory } from '../api/client.ts'
 import type { ActivityFeedItemDto } from '../api/types.ts'
@@ -124,11 +125,7 @@ export function EditHistoryOverlay({ onClose }: EditHistoryOverlayProps) {
               {filteredHistory.map((item) => (
                 <li key={item.id} className="edit-history__row">
                   <Link to={`/anime/${item.animeId}`} className="edit-history__link" onClick={onClose}>
-                    {item.pictureUrl ? (
-                      <img src={item.pictureUrl} alt="" className="edit-history__picture" />
-                    ) : (
-                      <div className="edit-history__picture edit-history__picture--placeholder" aria-hidden="true" />
-                    )}
+                    <RowPicture src={item.pictureUrl} className="edit-history__picture" />
                     <span className="edit-history__info">
                       <TruncatedTitle
                         title={pickDisplayTitle(item.animeTitle, item.animeEnglishTitle)}

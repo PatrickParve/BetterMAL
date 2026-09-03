@@ -705,7 +705,9 @@ The active border SHALL be visually stronger than the border a control shows on 
 
 The Settings gear SHALL be marked this way when the settings page is being viewed, like every other navbar page control.
 
-The score toggle is not a page control and SHALL NOT gain an active state.
+The updates control opens a panel rather than a page, and SHALL be marked with this same treatment while what it opened is on screen, on the terms the `anime-updates` capability sets out. It is therefore not an exception to the rule that a navbar control shows where you are; it answers to its panel rather than to the route.
+
+The score toggle is not a page control, opens nothing, and SHALL remain the one navbar control that is never marked.
 
 #### Scenario: The current page's link is bordered
 
@@ -727,10 +729,15 @@ The score toggle is not a page control and SHALL NOT gain an active state.
 - **WHEN** I move the pointer over the navbar control for the page I am already on
 - **THEN** it shows the hover state while keeping its stronger active border
 
+#### Scenario: The updates control is marked by its panel
+
+- **WHEN** the updates dropdown is open
+- **THEN** the updates control carries the same marking a navbar page control carries for its page, without any page having changed
+
 #### Scenario: The score toggle gains nothing
 
 - **WHEN** the navbar renders on any page
-- **THEN** the hide/unhide score toggle shows no active-page treatment
+- **THEN** the hide/unhide score toggle shows no active-page treatment, whatever else in the navbar is marked
 
 ### Requirement: Search results fall back to locally stored anime when the live search fails
 When the live MAL search cannot be reached or fails for a query on the full search results page, the system SHALL search the anime it has stored locally instead of returning nothing, and SHALL present those matches as the page's results.

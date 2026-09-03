@@ -153,12 +153,9 @@
 }
 
 .airing-slot__thumb {
-  width: 52px;
-  height: 72px;
-  object-fit: cover;
+  --row-picture-w: 52px;
+  --row-picture-h: 72px;
   border-radius: 6px;
-  background: var(--code-bg);
-  flex: 0 0 auto;
 }
 
 .airing-slot__thumb--placeholder {

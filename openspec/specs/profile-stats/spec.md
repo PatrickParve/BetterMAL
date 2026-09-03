@@ -94,6 +94,10 @@ The system SHALL render the poster in every profile list row — "Latest updates
 
 A poster SHALL keep the proportions of the poster art at whatever height its row has: where a list sets its own row height, the poster's width SHALL follow that height rather than staying at a width fixed for some other row height.
 
+Where the anime's displayed picture is **at least as wide as it is tall**, the row SHALL draw it whole at its own proportions on the terms the `artwork-presentation` capability sets out: the row keeps its height, the picture takes the width its proportions give it at that height up to that capability's bound, and the row's title and everything after it begin further along by that extra width. A portrait poster keeps exactly the box described above, and no row's height changes in either case — so a list showing eight whole rows still shows eight whole rows, and a feed sized to five rows still holds five.
+
+This requirement governs the profile's **list rows** only. The poster **strips** in "My top anime", "Most rewatched" and "Top series" are not list rows and SHALL keep the fixed tile size their own requirements set, cropping to it as they do today.
+
 #### Scenario: Poster fills a latest-updates row
 - **WHEN** the Latest updates box renders a row
 - **THEN** that row's poster touches the row's top, bottom, and leading edges with no gap
@@ -113,6 +117,18 @@ A poster SHALL keep the proportions of the poster art at whatever height its row
 #### Scenario: A poster never sets the row height
 - **WHEN** any of these rows renders its poster
 - **THEN** the row occupies the height its list gives it, and no box grows to accommodate the image's intrinsic size
+
+#### Scenario: A landscape picture is drawn landscape
+- **WHEN** a Latest updates, edit-history, or divergence row's anime has a displayed picture wider than it is tall
+- **THEN** the whole picture is shown at the row's height and at its own width there, with no part cropped away
+
+#### Scenario: Landscape artwork does not change how many rows fit
+- **WHEN** a list holding landscape artwork renders
+- **THEN** it shows the same number of whole rows it shows without it, each at the same height
+
+#### Scenario: The poster strips are unaffected
+- **WHEN** "My top anime", "Most rewatched" or "Top series" holds an anime with landscape artwork
+- **THEN** every tile in that strip is still the same fixed size, cropped to it as before
 
 ### Requirement: Latest updates activity feed
 The system SHALL show a "Latest updates" feed built from the ActivityLog, most recent first, scrollable within its box, containing only: anime added to the list (any status), episode-count increases, completions, score changes, rewatch-count changes, and anime removed from the list. The feed SHALL NOT show episode-count decreases, status changes other than completion, drops, or start/finish date changes.

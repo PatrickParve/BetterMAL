@@ -24,6 +24,7 @@ import type {
   SeriesBulkBuildStatusDto,
   SyncStatusDto,
 } from '../api/types.ts'
+import { RowPicture } from '../components/RowPicture.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { useAnimeSearch } from '../hooks/useAnimeSearch.ts'
@@ -401,14 +402,7 @@ export function SettingsPage() {
             <ul className="settings-diff-list">
               {diff.entries.map((entry) => (
                 <li key={entry.animeId} className="settings-diff-row">
-                  {entry.pictureUrl ? (
-                    <img src={entry.pictureUrl} alt="" className="settings-diff-row__picture" />
-                  ) : (
-                    <div
-                      className="settings-diff-row__picture settings-diff-row__picture--placeholder"
-                      aria-hidden="true"
-                    />
-                  )}
+                  <RowPicture src={entry.pictureUrl} className="settings-diff-row__picture" />
                   <span className="settings-diff-row__title" title={entry.title}>
                     {entry.title}
                   </span>
@@ -573,7 +567,7 @@ function AnimeRefreshPicker() {
             {results.map((result) => (
               <li key={result.id}>
                 <button type="button" onClick={() => pick(result)}>
-                  {result.pictureUrl && <img src={result.pictureUrl} alt="" />}
+                  {result.pictureUrl && <RowPicture src={result.pictureUrl} className="settings-refresh-picker__thumb" />}
                   <span>{pickDisplayTitle(result.title, result.englishTitle)}</span>
                 </button>
               </li>

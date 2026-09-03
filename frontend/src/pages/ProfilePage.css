@@ -198,8 +198,8 @@
 }
 
 .activity-feed .profile-list-row__picture {
-  height: var(--activity-row-h);
-  width: calc(var(--activity-row-h) * 41 / 56);
+  --row-picture-h: var(--activity-row-h);
+  --row-picture-w: calc(var(--activity-row-h) * 41 / 56);
 }
 
 .profile-list-row {
@@ -235,15 +235,10 @@
 }
 
 .profile-list-row__picture {
-  /* Widened along with the row's full-bleed height (56px) to keep the
-     poster's original ~32:44 proportions instead of being cropped narrower —
-     fixed, not aspect-ratio: combining aspect-ratio with flex stretch here
-     inflated the row to the image's intrinsic size instead of clamping it. */
-  width: 41px;
-  height: 56px;
-  object-fit: cover;
-  background: var(--code-bg);
-  flex: 0 0 auto;
+  /* Geometry lives in the shared .row-picture rule (RowPicture.css,
+     artwork-presentation) — this just sets the box that rule reads. */
+  --row-picture-w: 41px;
+  --row-picture-h: 56px;
 }
 
 .profile-list-row__picture--placeholder {

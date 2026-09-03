@@ -17,16 +17,19 @@ export type LandscapePictureRef = (node: HTMLImageElement | null) => void
 // node, which is where the reset happens — otherwise one anime's landscape
 // picture could stay landscape for a beat while the next anime's portrait
 // picture is still loading in.
-export function useLandscapePicture(src: string | null | undefined): [LandscapePictureRef, boolean] {
-  const [isLandscape, setIsLandscape] = useState(false)
+function useOrientationPicture(
+  src: string | null | undefined,
+  isMatch: (node: HTMLImageElement) => boolean,
+): [LandscapePictureRef, boolean] {
+  const [matches, setMatches] = useState(false)
 
   const ref = useCallback<LandscapePictureRef>(
     (node) => {
       if (!node) return
-      setIsLandscape(false)
+      setMatches(false)
 
       function checkOrientation() {
-        setIsLandscape(node!.naturalWidth > node!.naturalHeight)
+        setMatches(isMatch(node!))
       }
 
       if (node.complete) {
@@ -36,8 +39,25 @@ export function useLandscapePicture(src: string | null | undefined): [LandscapeP
       node.addEventListener('load', checkOrientation)
       return () => node.removeEventListener('load', checkOrientation)
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [src],
   )
 
-  return [ref, isLandscape]
+  return [ref, matches]
+}
+
+export function useLandscapePicture(src: string | null | undefined): [LandscapePictureRef, boolean] {
+  return useOrientationPicture(src, (node) => node.naturalWidth > node.naturalHeight)
+}
+
+// The row/thumbnail variant (artwork-presentation, design D4): a square
+// picture reads as "wide" here, unlike useLandscapePicture above, because a
+// square picture cropped into a portrait slot is a real crop and
+// artwork-selection already says a square picture SHALL be drawn square.
+// Kept as a separate export sharing the same implementation rather than as a
+// change to useLandscapePicture's own `>` comparison, so the four surfaces
+// already using that hook (detail page, series header, timeline cards, More
+// tiles) are untouched.
+export function useWidePicture(src: string | null | undefined): [LandscapePictureRef, boolean] {
+  return useOrientationPicture(src, (node) => node.naturalWidth >= node.naturalHeight)
 }

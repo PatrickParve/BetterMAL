@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { AiringTodayItemDto } from '../api/types.ts'
+import { RowPicture } from './RowPicture.tsx'
 import { pickDisplayTitle } from '../utils/anime.ts'
 import './AiringTodayList.css'
 
@@ -24,11 +25,7 @@ export function AiringTodayList({ items }: AiringTodayListProps) {
           {items.map((item) => (
             <li key={item.animeId}>
               <Link to={`/anime/${item.animeId}`} className="airing-today__row">
-                {item.pictureUrl ? (
-                  <img src={item.pictureUrl} alt="" className="airing-today__thumb" />
-                ) : (
-                  <div className="airing-today__thumb airing-today__thumb--placeholder" aria-hidden="true" />
-                )}
+                <RowPicture src={item.pictureUrl} className="airing-today__thumb" />
                 <span className="airing-today__text">
                   <span className="airing-today__meta">
                     {item.localTime}

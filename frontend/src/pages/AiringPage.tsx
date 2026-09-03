@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from 'react-router-dom'
 import { getAiringWeek } from '../api/client.ts'
 import type { AiringSlotDto, AiringWeekDto } from '../api/types.ts'
+import { RowPicture } from '../components/RowPicture.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
 import './AiringPage.css'
@@ -184,11 +185,7 @@ export function AiringPage() {
                         <Link to={`/anime/${slot.animeId}`} className="airing-slot">
                           <span className="airing-slot__time">{slot.localTime}</span>
                           <span className="airing-slot__body">
-                            {slot.pictureUrl ? (
-                              <img src={slot.pictureUrl} alt="" className="airing-slot__thumb" />
-                            ) : (
-                              <div className="airing-slot__thumb airing-slot__thumb--placeholder" aria-hidden="true" />
-                            )}
+                            <RowPicture src={slot.pictureUrl} className="airing-slot__thumb" />
                             <span className="airing-slot__info">
                               <span className="airing-slot__title">{pickDisplayTitle(slot.title, slot.englishTitle)}</span>
                               <span className="airing-slot__episode">{formatEpisodeLabel(slot)}</span>

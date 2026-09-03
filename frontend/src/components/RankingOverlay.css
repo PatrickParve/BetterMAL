@@ -74,13 +74,12 @@
   flex: 0 0 auto;
 }
 
-.ranking-overlay__posters img,
-.ranking-overlay__poster-placeholder {
-  width: 28px;
-  height: var(--ranking-poster-h);
-  object-fit: cover;
+.ranking-overlay__poster {
+  /* Geometry (other than the radius, which is genuinely its own) lives in
+     the shared .row-picture rule (RowPicture.css, artwork-presentation). */
+  --row-picture-w: 28px;
+  --row-picture-h: var(--ranking-poster-h);
   border-radius: 4px;
-  background: var(--code-bg);
 }
 
 .ranking-overlay__poster-placeholder {

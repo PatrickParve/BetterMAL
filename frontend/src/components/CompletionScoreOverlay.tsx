@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Modal } from './Modal.tsx'
+import { RowPicture } from './RowPicture.tsx'
 import { updateEntry } from '../api/client.ts'
 import type { UserAnimeEntryDto } from '../api/types.ts'
 import { useAnimeRank } from '../context/AnimeRankContext.tsx'
@@ -84,11 +85,7 @@ export function CompletionScoreOverlay({
   return (
     <Modal onClose={() => onClose(null)} labelledBy="completion-score-title">
       <div className="completion-score">
-        {pictureUrl ? (
-          <img src={pictureUrl} alt="" className="completion-score__picture" />
-        ) : (
-          <div className="completion-score__picture completion-score__picture--placeholder" aria-hidden="true" />
-        )}
+        <RowPicture src={pictureUrl} className="completion-score__picture" />
         <div className="completion-score__body">
           <h2 id="completion-score-title" className="completion-score__title">
             {animeTitle}

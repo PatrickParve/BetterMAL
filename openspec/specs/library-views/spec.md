@@ -60,6 +60,8 @@ The system SHALL render the poster in a my-list row and a top-anime row flush wi
 
 Rows SHALL keep the height they have without the change: the row does not grow to the poster's natural aspect ratio, so adopting this layout does not lengthen the page. The poster's width MAY grow along with its height to avoid cropping the image more tightly than before. A row whose anime has no picture SHALL render its placeholder at the same full-height size, so rows with and without a picture stay aligned.
 
+Where the anime's displayed picture is **at least as wide as it is tall**, the row SHALL draw it whole at its own proportions on the terms the `artwork-presentation` capability sets out: the row's height is unchanged, the picture takes the width its proportions give it at that height up to that capability's bound, and the row's title and everything after it begin further along by that extra width. This is the one case in which two rows' posters differ in width; a portrait poster keeps exactly the box described above, and the row's height, its progress, score, and edit columns, and its status stripe are unchanged in every case.
+
 #### Scenario: Poster fills a my-list row
 - **WHEN** the my-list page renders a row in grouped (unranked) view
 - **THEN** that row's poster touches the row's top and bottom edges, with a small fixed gap between the status-colour stripe and the poster's leading edge
@@ -75,6 +77,14 @@ Rows SHALL keep the height they have without the change: the row does not grow t
 #### Scenario: Missing picture keeps the row aligned
 - **WHEN** a row's anime has no poster picture
 - **THEN** its placeholder occupies the same full-height area, keeping the row's content aligned with its neighbours
+
+#### Scenario: A landscape picture is drawn landscape
+- **WHEN** a my-list or top-anime row's anime has a displayed picture wider than it is tall
+- **THEN** the whole picture is shown at the row's height and at its own width there, with no part cropped away, and the row's title begins after it
+
+#### Scenario: A landscape row is no taller than its neighbours
+- **WHEN** a list mixes portrait and landscape artwork
+- **THEN** every row stands the same height, and only the width of the landscape rows' pictures differs
 
 ### Requirement: Rank numbers when sorted by score
 The system SHALL show rank numbers (e.g. `#1`) on the left of my-list entries when the list is flat — that is, when grouping by status is off — and the primary sort key is anything other than Alphabetical, since a rank against an alphabetical ordering carries no meaning. A grouped list SHALL NOT show rank numbers. In flat mode the system SHALL show a single header line naming the active status filter (or "All") above the list.

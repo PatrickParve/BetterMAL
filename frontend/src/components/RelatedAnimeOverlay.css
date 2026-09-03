@@ -50,12 +50,9 @@
 }
 
 .related-anime-overlay__thumb {
-  width: 40px;
-  height: 56px;
-  object-fit: cover;
+  --row-picture-w: 40px;
+  --row-picture-h: 56px;
   border-radius: 6px;
-  background: var(--code-bg);
-  flex: 0 0 auto;
 }
 
 .related-anime-overlay__thumb--placeholder {

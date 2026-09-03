@@ -308,12 +308,11 @@
 }
 
 .anime-rank__picture {
-  width: 32px;
-  height: 44px;
-  object-fit: cover;
+  /* Geometry (other than the radius, which is genuinely its own) lives in
+     the shared .row-picture rule (RowPicture.css, artwork-presentation). */
+  --row-picture-w: 32px;
+  --row-picture-h: 44px;
   border-radius: 4px;
-  background: var(--code-bg);
-  flex: 0 0 auto;
 }
 
 .anime-rank__picture--placeholder {

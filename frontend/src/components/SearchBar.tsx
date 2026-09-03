@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAnimeSearch } from '../hooks/useAnimeSearch.ts'
 import { useClickOutside } from '../hooks/useClickOutside.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
+import { RowPicture } from './RowPicture.tsx'
 import { SeriesBadge } from './SeriesBadge.tsx'
 import './SearchBar.css'
 
@@ -78,7 +79,7 @@ export function SearchBar() {
                   className="search-bar__result search-bar__result--series"
                   onClick={() => goToSeries(result.rootAnimeId)}
                 >
-                  {result.pictureUrl && <img src={result.pictureUrl} alt="" className="search-bar__thumb" />}
+                  {result.pictureUrl && <RowPicture src={result.pictureUrl} className="search-bar__thumb" />}
                   <span className="search-bar__result-text">
                     <span className="search-bar__result-title">{pickDisplayTitle(result.title, result.englishTitle)}</span>
                     <SeriesBadge entryCount={result.entryCount} />
@@ -88,7 +89,7 @@ export function SearchBar() {
             ) : (
               <li key={`anime-${result.id}`}>
                 <button type="button" className="search-bar__result" onClick={() => goToAnime(result.id)}>
-                  {result.pictureUrl && <img src={result.pictureUrl} alt="" className="search-bar__thumb" />}
+                  {result.pictureUrl && <RowPicture src={result.pictureUrl} className="search-bar__thumb" />}
                   <span>{pickDisplayTitle(result.title, result.englishTitle)}</span>
                 </button>
               </li>

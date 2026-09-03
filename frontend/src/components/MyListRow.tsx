@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import type { MyListItemDto } from '../api/types.ts'
 import { airingStatusShortLabel, hasAiredEpisodes, isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_CLASS } from '../utils/anime.ts'
 import { ProgressBar } from './ProgressBar.tsx'
+import { RowPicture } from './RowPicture.tsx'
 import { ScoreValue } from './ScoreValue.tsx'
 
 const SCORE_OPTIONS = Array.from({ length: 10 }, (_, i) => i + 1)
@@ -45,11 +46,7 @@ export const MyListRow = memo(function MyListRow({
     <li className={`my-list-row my-list-row--${STATUS_CLASS[item.entry.status]}`}>
       {rank !== undefined && <span className="my-list-row__rank">#{rank}</span>}
       <Link to={`/anime/${item.animeId}`} className="my-list-row__link">
-        {item.pictureUrl ? (
-          <img src={item.pictureUrl} alt="" className="my-list-row__picture" />
-        ) : (
-          <div className="my-list-row__picture my-list-row__picture--placeholder" aria-hidden="true" />
-        )}
+        <RowPicture src={item.pictureUrl} className="my-list-row__picture" />
         <span className="my-list-row__info">
           <span className="my-list-row__title" title={displayTitle}>
             {displayTitle}

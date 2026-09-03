@@ -29,12 +29,9 @@
 }
 
 .airing-today__thumb {
-  width: 72px;
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
+  --row-picture-w: 72px;
+  --row-picture-h: 108px;
   border-radius: 4px;
-  background: var(--code-bg);
-  flex: 0 0 auto;
 }
 
 .airing-today__thumb--placeholder {

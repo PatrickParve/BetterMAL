@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Modal } from './Modal.tsx'
+import { RowPicture } from './RowPicture.tsx'
 import { TruncatedTitle } from './TruncatedTitle.tsx'
 import type { UnresolvedEpisodeEntryDto } from '../api/types.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
@@ -34,11 +35,7 @@ export function UnresolvedEpisodesOverlay({ entries, onClose }: UnresolvedEpisod
             {entries.map((entry) => (
               <li key={entry.animeId} className="unresolved-episodes__row">
                 <Link to={`/anime/${entry.animeId}`} className="unresolved-episodes__link" onClick={onClose}>
-                  {entry.pictureUrl ? (
-                    <img src={entry.pictureUrl} alt="" className="unresolved-episodes__picture" />
-                  ) : (
-                    <div className="unresolved-episodes__picture unresolved-episodes__picture--placeholder" aria-hidden="true" />
-                  )}
+                  <RowPicture src={entry.pictureUrl} className="unresolved-episodes__picture" />
                   <span className="unresolved-episodes__info">
                     <TruncatedTitle
                       title={pickDisplayTitle(entry.title, entry.englishTitle)}

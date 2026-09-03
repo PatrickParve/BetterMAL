@@ -1,0 +1,39 @@
+/* Shared row/thumbnail picture geometry (artwork-presentation, design D2).
+   Each caller sets --row-picture-w / --row-picture-h to the box it already
+   uses; only .row-picture--wide's width is ever free, so the slot's height
+   — and every row height, list length, and row-derived overlay height — is
+   arithmetically untouched by which picture happens to load. */
+.row-picture {
+  display: block;
+  width: var(--row-picture-w);
+  height: var(--row-picture-h);
+  object-fit: cover;
+  background: var(--code-bg);
+  flex: 0 0 auto;
+}
+
+/* The cap is 16/9 of the slot's own height, not a flat pixel figure, so it
+   scales with whichever slot is asking (128px for a 72px row, 57px for a
+   32px one) and so a 16:9 key visual — the single most common wide format —
+   lands exactly on the cap with nothing left over. It's a calc() over a
+   px-valued custom property rather than a percentage on purpose: a
+   percentage max-width on an <img> used directly as a flex item is resolved
+   against the image's own intrinsic size in WebKit's flex-basis pass before
+   the percentage applies, which lets the picture render at native size and
+   push the row wider than its container (UpdateCard.css hit this first). A
+   calc() of pixels has nothing to resolve against, so it can't happen here.
+   object-fit: contain is only the guard for artwork wider than the cap —
+   shrunk whole rather than cropped, never letterboxed into a box of a
+   different shape. */
+.row-picture--wide {
+  width: auto;
+  max-width: calc(var(--row-picture-h) * 16 / 9);
+  object-fit: contain;
+}
+
+/* No unique declarations: .row-picture already gives the placeholder div
+   its box and background. This class exists only as the stable selector
+   each caller's own <class>--placeholder rule (a border, usually) attaches
+   next to. */
+.row-picture--placeholder {
+}

@@ -94,11 +94,10 @@
 }
 
 .unresolved-episodes__picture {
-  width: 57px;
-  height: 78px;
-  object-fit: cover;
-  background: var(--code-bg);
-  flex: 0 0 auto;
+  /* Geometry lives in the shared .row-picture rule (RowPicture.css,
+     artwork-presentation) — this just sets the box that rule reads. */
+  --row-picture-w: 57px;
+  --row-picture-h: 78px;
 }
 
 .unresolved-episodes__picture--placeholder {

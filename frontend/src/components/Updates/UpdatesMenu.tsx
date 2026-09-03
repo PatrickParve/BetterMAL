@@ -72,7 +72,7 @@ export function UpdatesMenu() {
       <button
         type="button"
         ref={buttonRef}
-        className="updates-menu__button"
+        className={'updates-menu__button' + (open || historyOpen ? ' updates-menu__button--open' : '')}
         aria-expanded={open}
         aria-label={accessibleLabel}
         onClick={handleToggle}

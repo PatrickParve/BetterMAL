@@ -162,15 +162,10 @@
 }
 
 .edit-history__picture {
-  /* Widened along with the row's full-bleed height (78px) to keep the
-     poster's original ~48:66 proportions instead of being cropped narrower —
-     fixed, not aspect-ratio: combining aspect-ratio with flex stretch here
-     inflated the row to the image's intrinsic size instead of clamping it. */
-  width: 57px;
-  height: 78px;
-  object-fit: cover;
-  background: var(--code-bg);
-  flex: 0 0 auto;
+  /* Geometry lives in the shared .row-picture rule (RowPicture.css,
+     artwork-presentation) — this just sets the box that rule reads. */
+  --row-picture-w: 57px;
+  --row-picture-h: 78px;
 }
 
 .edit-history__picture--placeholder {

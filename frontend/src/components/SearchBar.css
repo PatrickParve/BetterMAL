@@ -107,11 +107,11 @@
 }
 
 .search-bar__thumb {
-  width: 28px;
-  height: 40px;
-  object-fit: cover;
+  /* Geometry lives in the shared .row-picture rule (RowPicture.css,
+     artwork-presentation) — this just sets the box that rule reads. */
+  --row-picture-w: 28px;
+  --row-picture-h: 40px;
   border-radius: 4px;
-  flex-shrink: 0;
 }
 
 .search-bar__result-text {

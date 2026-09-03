@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Modal } from "./Modal.tsx";
+import { RowPicture } from "./RowPicture.tsx";
 import type { RelatedAnimeDto } from "../api/types.ts";
 import { pickDisplayTitle } from "../utils/anime.ts";
 import "./RelatedAnimeOverlay.css";
@@ -74,18 +75,10 @@ export function RelatedAnimeOverlay({
                       className="related-anime-overlay__row"
                       onClick={onClose}
                     >
-                      {relation.pictureUrl ? (
-                        <img
-                          src={relation.pictureUrl}
-                          alt=""
-                          className="related-anime-overlay__thumb"
-                        />
-                      ) : (
-                        <div
-                          className="related-anime-overlay__thumb related-anime-overlay__thumb--placeholder"
-                          aria-hidden="true"
-                        />
-                      )}
+                      <RowPicture
+                        src={relation.pictureUrl}
+                        className="related-anime-overlay__thumb"
+                      />
                       <span className="related-anime-overlay__row-text">
                         <span className="related-anime-overlay__row-title">
                           {pickDisplayTitle(relation.title, relation.englishTitle)}

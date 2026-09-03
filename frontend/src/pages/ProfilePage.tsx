@@ -24,6 +24,7 @@ import { EditHistoryOverlay } from '../components/EditHistoryOverlay.tsx'
 import { MalOriginTag } from '../components/MalOriginTag.tsx'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
+import { RowPicture } from '../components/RowPicture.tsx'
 import {
   describeSeasonRanking,
   describeYearRanking,
@@ -272,11 +273,7 @@ function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
       {items.map((item) => (
         <li key={item.animeId} className="profile-list-row">
           <Link to={`/anime/${item.animeId}`} className="profile-list-row__link">
-            {item.pictureUrl ? (
-              <img src={item.pictureUrl} alt="" className="profile-list-row__picture" />
-            ) : (
-              <div className="profile-list-row__picture profile-list-row__picture--placeholder" aria-hidden="true" />
-            )}
+            <RowPicture src={item.pictureUrl} className="profile-list-row__picture" />
             <span className="profile-list-row__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
               {pickDisplayTitle(item.title, item.englishTitle)}
             </span>
@@ -500,14 +497,7 @@ export function ProfilePage() {
               {profile.recentActivity.map((item) => (
                 <li key={item.id} className="profile-list-row">
                   <Link to={`/anime/${item.animeId}`} className="profile-list-row__link">
-                    {item.pictureUrl ? (
-                      <img src={item.pictureUrl} alt="" className="profile-list-row__picture" />
-                    ) : (
-                      <div
-                        className="profile-list-row__picture profile-list-row__picture--placeholder"
-                        aria-hidden="true"
-                      />
-                    )}
+                    <RowPicture src={item.pictureUrl} className="profile-list-row__picture" />
                     <span className="profile-list-row__info">
                       <TruncatedTitle
                         title={pickDisplayTitle(item.animeTitle, item.animeEnglishTitle)}

@@ -79,11 +79,11 @@
 }
 
 .recap-ranking-row__poster {
-  width: 30px;
-  height: var(--ranking-poster-h);
-  object-fit: cover;
+  /* Geometry (other than the radius, which is genuinely its own) lives in
+     the shared .row-picture rule (RowPicture.css, artwork-presentation). */
+  --row-picture-w: 30px;
+  --row-picture-h: var(--ranking-poster-h);
   border-radius: 4px;
-  background: var(--code-bg);
 }
 
 .recap-ranking-row__poster--placeholder {

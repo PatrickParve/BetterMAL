@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import type { RecapRankingPosterDto, RecapRankingScorePostersDto, RecapSeasonRankingDto, RecapYearRankingDto } from '../api/types.ts'
 import { scoreTier, seasonLabel } from '../utils/anime.ts'
 import type { RankingOverlayRow } from './RankingOverlay.tsx'
+import { RowPicture } from './RowPicture.tsx'
 import './RankingSection.css'
 
 // Reads scoreCounts at a score's own index (index 0 is score 1, index 9 is
@@ -107,13 +108,9 @@ function renderPosters(posters: RankingOverlayRow['posters']) {
   if (posters.length === 0) return null
   return (
     <span className="recap-ranking-row__posters">
-      {posters.map((p) =>
-        p.pictureUrl ? (
-          <img key={p.animeId} src={p.pictureUrl} alt="" title={p.title} className="recap-ranking-row__poster" />
-        ) : (
-          <span key={p.animeId} className="recap-ranking-row__poster recap-ranking-row__poster--placeholder" title={p.title} />
-        ),
-      )}
+      {posters.map((p) => (
+        <RowPicture key={p.animeId} src={p.pictureUrl} className="recap-ranking-row__poster" title={p.title} />
+      ))}
     </span>
   )
 }

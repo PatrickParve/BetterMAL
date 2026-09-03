@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Modal } from './Modal.tsx'
+import { RowPicture } from './RowPicture.tsx'
 import './RankingOverlay.css'
 
 export type RankingOverlayRow = {
@@ -44,13 +45,15 @@ export function RankingOverlay({ title, rows, onClose, family }: RankingOverlayP
                 <span className="ranking-overlay__meta">{row.meta}</span>
                 {row.posters.length > 0 && (
                   <span className="ranking-overlay__posters">
-                    {row.posters.map((p) =>
-                      p.pictureUrl ? (
-                        <img key={p.animeId} src={p.pictureUrl} alt="" title={p.title} />
-                      ) : (
-                        <span key={p.animeId} className="ranking-overlay__poster-placeholder" title={p.title} />
-                      ),
-                    )}
+                    {row.posters.map((p) => (
+                      <RowPicture
+                        key={p.animeId}
+                        src={p.pictureUrl}
+                        className="ranking-overlay__poster"
+                        title={p.title}
+                        placeholderClassName="ranking-overlay__poster-placeholder"
+                      />
+                    ))}
                   </span>
                 )}
               </Link>

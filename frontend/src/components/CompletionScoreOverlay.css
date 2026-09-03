@@ -4,12 +4,9 @@
 }
 
 .completion-score__picture {
-  width: 96px;
-  height: 136px;
-  object-fit: cover;
+  --row-picture-w: 96px;
+  --row-picture-h: 136px;
   border-radius: 6px;
-  background: var(--code-bg);
-  flex: 0 0 auto;
 }
 
 .completion-score__picture--placeholder {

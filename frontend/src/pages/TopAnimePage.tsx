@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { getTopAnime, updateEntry } from '../api/client.ts'
 import { TOP_ANIME_RANKING_TYPES, type TopAnimeItemDto, type TopAnimeRankingType } from '../api/types.ts'
 import { Pagination } from '../components/Pagination.tsx'
+import { RowPicture } from '../components/RowPicture.tsx'
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
@@ -339,11 +340,7 @@ export function TopAnimePage() {
                 <li key={item.animeId} className="top-anime-row">
                   <span className="top-anime-row__rank">#{item.rank}</span>
                   <Link to={`/anime/${item.animeId}`} className="top-anime-row__link">
-                    {item.pictureUrl ? (
-                      <img src={item.pictureUrl} alt="" className="top-anime-row__picture" />
-                    ) : (
-                      <div className="top-anime-row__picture top-anime-row__picture--placeholder" aria-hidden="true" />
-                    )}
+                    <RowPicture src={item.pictureUrl} className="top-anime-row__picture" />
                     <span className="top-anime-row__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
                       {pickDisplayTitle(item.title, item.englishTitle)}
                     </span>
