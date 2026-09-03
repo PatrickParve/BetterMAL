@@ -14,12 +14,13 @@ import './SearchBar.css'
 export function SearchBar() {
   const [query, setQuery] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const { results, open, setOpen } = useAnimeSearch(query)
+  const { results, open, dismiss, reopen } = useAnimeSearch(query)
 
-  useClickOutside(containerRef, () => setOpen(false))
+  useClickOutside(containerRef, dismiss)
 
   // Keep the input in sync with the URL while on the search page itself, so a
   // reload or a direct link (e.g. /search?q=foo) shows the term that's live.
@@ -29,13 +30,13 @@ export function SearchBar() {
   }, [location.pathname, urlQuery])
 
   function goToAnime(id: number) {
-    setOpen(false)
+    dismiss()
     setQuery('')
     navigate(`/anime/${id}`)
   }
 
   function goToSeries(rootAnimeId: number) {
-    setOpen(false)
+    dismiss()
     setQuery('')
     navigate(`/series/${rootAnimeId}`)
   }
@@ -43,22 +44,24 @@ export function SearchBar() {
   function submitSearch() {
     const q = query.trim()
     if (q.length === 0) return
-    setOpen(false)
+    dismiss()
+    inputRef.current?.blur()
     navigate(`/search?q=${encodeURIComponent(q)}`)
   }
 
   return (
     <div className="search-bar" ref={containerRef}>
       <input
+        ref={inputRef}
         type="search"
         className="search-bar__input"
         placeholder="Search anime…"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        onFocus={() => results.length > 0 && setOpen(true)}
+        onFocus={() => results.length > 0 && reopen()}
         onKeyDown={(event) => {
           if (event.key === 'Enter') submitSearch()
-          if (event.key === 'Escape') setOpen(false)
+          if (event.key === 'Escape') dismiss()
         }}
         aria-label="Search anime"
       />

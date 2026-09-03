@@ -35,7 +35,7 @@ export function RankingOverlay({ title, rows, onClose, family }: RankingOverlayP
           {title}
         </h2>
 
-        <ol className="ranking-overlay__list">
+        <ol className="ranking-overlay__list scroll-hidden">
           {rows.map((row, index) => (
             <li key={row.key} className="ranking-overlay__row">
               <Link to={row.to} className="ranking-overlay__link" onClick={onClose}>

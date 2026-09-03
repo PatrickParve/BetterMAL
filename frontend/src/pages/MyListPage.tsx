@@ -81,13 +81,13 @@ const AIRING_STATUS_FIRST_OPTIONS: { value: AiringStatus; label: string }[] = [
 // D6, tasks.md 5.2).
 type FocusSeed = {
   status: StatusFilter
-  typeFilter: string[]
+  typeFilter: string[] | null
   scoreFilter: ScoreFilter
   startedFilter: boolean
 }
 
 function parseFocus(token: string | null): FocusSeed {
-  const none: FocusSeed = { status: [], typeFilter: [], scoreFilter: 'any', startedFilter: false }
+  const none: FocusSeed = { status: [], typeFilter: null, scoreFilter: 'any', startedFilter: false }
   switch (token) {
     case 'completed':
       return { ...none, status: ['Completed'] }
@@ -171,8 +171,8 @@ export function MyListPage() {
   // back-navigation within a live session. A new key makes that unreachable.
   const [statusFilters, setStatusFilters] = useRestorableState<StatusFilter>('statusFilters', focusSeed.status)
   const [query, setQuery] = useRestorableState('query', '')
-  const [typeFilter, setTypeFilter] = useRestorableState<string[]>('typeFilter', focusSeed.typeFilter)
-  const [airingFilter, setAiringFilter] = useRestorableState<string[]>('airingFilter', [])
+  const [typeFilter, setTypeFilter] = useRestorableState<string[] | null>('typeFilter', focusSeed.typeFilter)
+  const [airingFilter, setAiringFilter] = useRestorableState<string[] | null>('airingFilter', null)
   const [scoreFilter, setScoreFilter] = useRestorableState<ScoreFilter>('scoreFilter', focusSeed.scoreFilter)
   const [startedFilter, setStartedFilter] = useRestorableState('startedFilter', focusSeed.startedFilter)
   const [sort, setSort] = useRestorableState<SortKey>('sort', 'alphabetical')
@@ -461,8 +461,8 @@ export function MyListPage() {
         const englishMatch = item.englishTitle ? item.englishTitle.toLowerCase().includes(needle) : false
         if (!titleMatch && !englishMatch) return false
       }
-      if (typeFilter.length > 0 && !typeFilter.includes(item.mediaType ?? 'unknown')) return false
-      if (airingFilter.length > 0 && !airingFilter.includes(item.airingStatus ?? 'unknown')) return false
+      if (typeFilter !== null && !typeFilter.includes(item.mediaType ?? 'unknown')) return false
+      if (airingFilter !== null && !airingFilter.includes(item.airingStatus ?? 'unknown')) return false
       if (scoreFilter === 'rated' && item.entry.myScore == null) return false
       if (scoreFilter === 'unrated' && item.entry.myScore != null) return false
       if (scoreFilter !== 'any' && scoreFilter !== 'rated' && scoreFilter !== 'unrated' && item.entry.myScore !== Number(scoreFilter))
@@ -504,8 +504,8 @@ export function MyListPage() {
   const isNarrowed = derived.shown !== derived.total
   const isOffDefault =
     query !== '' ||
-    typeFilter.length > 0 ||
-    airingFilter.length > 0 ||
+    typeFilter !== null ||
+    airingFilter !== null ||
     scoreFilter !== 'any' ||
     startedFilter ||
     sort !== 'alphabetical' ||
@@ -523,8 +523,8 @@ export function MyListPage() {
 
   function clearFilters() {
     setQuery('')
-    setTypeFilter([])
-    setAiringFilter([])
+    setTypeFilter(null)
+    setAiringFilter(null)
     setScoreFilter('any')
     setStartedFilter(false)
     setSort('alphabetical')
@@ -546,7 +546,7 @@ export function MyListPage() {
   // The airing badge shows on every row while the airing filter is doing
   // something or airing status is the primary sort — Plan-to-watch rows
   // always show it regardless (D11), handled per-row below.
-  const airingBadgeActive = airingFilter.length > 0 || sort === 'airingStatus'
+  const airingBadgeActive = airingFilter !== null || sort === 'airingStatus'
 
   function renderRow(item: MyListItemDto, rank?: number) {
     return (

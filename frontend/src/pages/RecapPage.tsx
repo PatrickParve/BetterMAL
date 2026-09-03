@@ -26,6 +26,7 @@ import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreDistribution } from '../components/ScoreDistribution.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
+import { useRestorableState } from '../hooks/useRestorableState.ts'
 import {
   formatRuntime,
   MEDIA_TYPE_ORDER,
@@ -176,11 +177,14 @@ export function RecapPage() {
     rows: RankingOverlayRow[]
     family?: 'year' | 'season'
   } | null>(null)
-  // The score board (design.md decision 5): page-local state opened from
-  // the distribution's section header, matching `overlay` above — no URL
+  // The score board (design.md decision 6/D7): opened from the
+  // distribution's section header, matching `overlay` above — still no URL
   // parameter and no history entry, so back still leaves the recap exactly
-  // as it does with the board closed.
-  const [boardOpen, setBoardOpen] = useState(false)
+  // as it does with the board closed. What's new is that it's recorded in
+  // the history entry's snapshot, so a restore rebuilds the page with the
+  // board open again, as a new overlay over it, rather than the board
+  // surviving the navigation.
+  const [boardOpen, setBoardOpen] = useRestorableState<boolean>('scoreBoard', false)
 
   const modeParam = searchParams.get('mode')
   const mode: RecapMode = isRecapMode(modeParam) ? modeParam : 'yearly'

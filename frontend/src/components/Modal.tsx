@@ -8,12 +8,18 @@ type ModalProps = {
   children: ReactNode
   labelledBy?: string
   className?: string
+  // Forwarded to the `.modal` box itself, which is the box's own scroll
+  // container (`overflow-y: auto`) — the score board attaches its restorable
+  // scroll offset here. Making the board its own scroll container instead
+  // (as `.modal--rank` does) was rejected: it would move the header out of
+  // the scroll flow.
+  contentRef?: (el: HTMLDivElement | null) => void
 }
 
 // Generic "opens on top of the page, closes on Esc/click-outside" overlay —
 // shared by the entry editor and any future overlay (edit-history, top-anime
 // selection) that needs the same open/close behavior.
-export function Modal({ onClose, children, labelledBy, className }: ModalProps) {
+export function Modal({ onClose, children, labelledBy, className, contentRef }: ModalProps) {
   useScrollLock()
 
   const onCloseRef = useRef(onClose)
@@ -54,7 +60,13 @@ export function Modal({ onClose, children, labelledBy, className }: ModalProps) 
 
   return (
     <div className="modal-backdrop" onMouseDown={handleBackdropClick}>
-      <div className={className ? `modal ${className}` : 'modal'} role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
+      <div
+        ref={contentRef}
+        className={className ? `modal ${className}` : 'modal'}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={labelledBy}
+      >
         {children}
       </div>
     </div>

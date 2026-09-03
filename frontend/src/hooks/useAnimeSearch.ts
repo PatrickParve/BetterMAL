@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { searchAnime } from '../api/client.ts'
 import type { AnimeSearchResult } from '../api/types.ts'
 import { useDebouncedValue } from './useDebouncedValue.ts'
@@ -11,6 +11,11 @@ export function useAnimeSearch(query: string, debounceMs = 250) {
   const [results, setResults] = useState<AnimeSearchResult[]>([])
   const [open, setOpen] = useState(false)
   const debouncedQuery = useDebouncedValue(query.trim(), debounceMs)
+  // The query a caller last dismissed the dropdown for (submit, Escape, or
+  // click-outside), so a response already in flight at that moment can't
+  // reopen it. Scoped to that one query, not sticky: typing changes the
+  // debounced query, so the next response opens normally.
+  const dismissedQueryRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (debouncedQuery.length === 0) {
@@ -23,7 +28,7 @@ export function useAnimeSearch(query: string, debounceMs = 250) {
     searchAnime(debouncedQuery, controller.signal)
       .then((matches) => {
         setResults(matches)
-        setOpen(true)
+        if (dismissedQueryRef.current !== debouncedQuery) setOpen(true)
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return
@@ -33,5 +38,14 @@ export function useAnimeSearch(query: string, debounceMs = 250) {
     return () => controller.abort()
   }, [debouncedQuery])
 
-  return { results, open, setOpen }
+  function dismiss() {
+    dismissedQueryRef.current = debouncedQuery
+    setOpen(false)
+  }
+
+  function reopen() {
+    setOpen(true)
+  }
+
+  return { results, open, dismiss, reopen }
 }

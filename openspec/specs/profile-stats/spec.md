@@ -383,20 +383,38 @@ The "Latest updates" box's list SHALL fill the box down to its bottom edge rathe
 - **WHEN** the profile page's top row is taller than the latest-updates list's contents would otherwise occupy
 - **THEN** the list's scroll area extends to the bottom of its box, leaving no empty gap beneath it
 
-### Requirement: Scrollbars sit beside scrollable content
-Every scrollable list on the profile page and in its overlays — the "Latest updates" feed, both opinion-divergence lists, and the full edit-history list — SHALL lay out its scrollbar beside the rows rather than over them, so no row's right-hand edge, border, or content is covered by the scrollbar.
+### Requirement: Profile lists and the rankings overlay show no scrollbar
+The scrollable vertical lists on the profile page and in its overlays SHALL NOT render a visible scrollbar, in any browser, whether or not they overflow — the rows are the content, and a bar drawn beside them inside an already-small box reads as chrome.
 
-#### Scenario: Feed scrollbar does not cover rows
-- **WHEN** the "Latest updates" feed has more rows than fit and shows a scrollbar
-- **THEN** the scrollbar sits beside the rows and no row is drawn underneath it
+This SHALL apply to the "Latest updates" feed, both opinion-divergence lists ("They liked it, I didn't" and "I liked it, they didn't"), the full edit-history overlay's list, and the list in the rankings "See all" overlay — which, being the same overlay the recap page's rankings open, SHALL therefore show no scrollbar there either, for Season ranking, Year ranking, Seasons by time watched, and Years by time watched alike.
 
-#### Scenario: Divergence scrollbar does not cover rows
-- **WHEN** an opinion-divergence list has more rows than fit and shows a scrollbar
-- **THEN** the scrollbar sits beside the rows and no row is drawn underneath it
+Hiding the scrollbar SHALL cost none of these lists any scrolling: a list holding more rows than fit SHALL still scroll by wheel, trackpad, keyboard, and drag exactly as it does today, and every row it holds SHALL remain reachable.
 
-#### Scenario: History scrollbar does not cover rows
-- **WHEN** the full edit-history overlay shows a scrollbar
-- **THEN** the scrollbar sits beside the rows and no row is drawn underneath it
+No gutter SHALL be reserved where the scrollbar was: the width it occupied SHALL be given back to the rows.
+
+#### Scenario: No bar beside the feed
+- **WHEN** the "Latest updates" feed holds more rows than fit
+- **THEN** no scrollbar is drawn beside or over its rows, at rest or while scrolling
+
+#### Scenario: No bar in the divergence lists
+- **WHEN** an opinion-divergence list holds more than ten anime
+- **THEN** no scrollbar is drawn beside its rows
+
+#### Scenario: No bar in the edit-history overlay
+- **WHEN** the full edit-history overlay holds more rows than fit
+- **THEN** no scrollbar is drawn beside its rows
+
+#### Scenario: No bar in a "See all" overlay
+- **WHEN** I open the "See all" overlay on a ranking holding more than eight rows, from the profile page or from the recap page
+- **THEN** no scrollbar is drawn beside its rows
+
+#### Scenario: Scrolling still works
+- **WHEN** I make a wheel gesture over any of these lists, or drag inside it
+- **THEN** it scrolls exactly as it did when it had a scrollbar, and its last row is reachable
+
+#### Scenario: The rows take the gutter back
+- **WHEN** one of these lists is drawn without its scrollbar
+- **THEN** its rows extend to the edge the scrollbar's gutter used to hold, with no empty strip beside them
 
 ### Requirement: Profile lists show whole rows only
 The "Latest updates" feed SHALL show exactly five rows at rest, with no part of a sixth row visible beneath them. Each opinion-divergence list SHALL show at most ten rows at rest, with no part of an eleventh visible beneath them; a list with fewer than ten rows SHALL show what it has without reserving space for the rest.
@@ -894,7 +912,7 @@ The "My top anime", "Top series", and "Most rewatched" strips SHALL NOT render a
 
 Hiding the scrollbar SHALL NOT cost the strips any scrolling: a strip that holds more entries than fit SHALL still scroll by wheel gesture and by dragging it, exactly as it does today.
 
-This SHALL apply to the poster strips only. The profile page's vertical lists — the "Latest updates" feed and the full edit-history overlay — SHALL keep their scrollbars beside their rows.
+The profile page's vertical lists SHALL be drawn without a scrollbar for the same reason, under "Profile lists and the rankings overlay show no scrollbar".
 
 #### Scenario: No bar under the posters
 - **WHEN** a strip holds more entries than fit across it
@@ -904,9 +922,9 @@ This SHALL apply to the poster strips only. The profile page's vertical lists �
 - **WHEN** I drag an overflowing strip, or make a horizontal wheel gesture over it
 - **THEN** it scrolls exactly as it did when it had a scrollbar
 
-#### Scenario: Vertical lists keep theirs
+#### Scenario: Vertical lists are drawn the same way
 - **WHEN** the "Latest updates" feed has more rows than fit
-- **THEN** it still shows its scrollbar beside its rows
+- **THEN** it too is drawn without a scrollbar
 
 ### Requirement: All-anime score distribution
 The system SHALL show a count of anime per score/rating value plus the overall mean score, rendered as a bar per score value alongside its count and that score's share of all my rated anime.

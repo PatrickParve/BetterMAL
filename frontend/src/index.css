@@ -352,6 +352,19 @@ code {
   width: 8px;
 }
 
+/* The deliberate opposite of .scroll-y, not a modifier of it — scrollable
+   with the scrollbar hidden rather than forced visible. Layering the two
+   (adding this on top of .scroll-y) is the wrong move; see UpdatesMenu.css's
+   note on why a list picks one or the other. */
+.scroll-hidden {
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.scroll-hidden::-webkit-scrollbar {
+  display: none;
+}
+
 /* App-wide score colour-only density (design.md decision 8): the value
    alone, colour-keyed and tabular, with no chip around it — used in dense
    rows of cells (MyListRow, TopAnimePage, ProfilePage's divergence lines)

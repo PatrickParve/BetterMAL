@@ -36,9 +36,8 @@ import { TruncatedTitle } from '../components/TruncatedTitle.tsx'
 import { UnresolvedEpisodesOverlay } from '../components/UnresolvedEpisodesOverlay.tsx'
 import { useAnimeRank } from '../context/AnimeRankContext.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
+import { useRestorableScroll } from '../hooks/useRestorableScroll.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
-import { usePageState } from '../state/PageStateContext.tsx'
-import * as pageStateStore from '../state/pageStateStore.ts'
 import { formatRewatchTime, formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
 import './ProfilePage.css'
 
@@ -202,34 +201,19 @@ function formatStatValue(key: keyof ProfileDto['stats'], value: number | null): 
   return String(value)
 }
 
-// Drag-to-scroll plus scroll-offset restoration for a horizontal poster
-// strip: a mouse-down on the strip starts tracking, mouse-move scrolls it and
-// flags a drag once the pointer has moved past a small threshold, and
-// onItemClick suppresses the resulting navigation click so a drag doesn't
-// also open the tile. `restoreKey` identifies this strip's section (and, for
-// sections with a view control, the control's current value) so its offset
-// is recorded and restored independently of the page's other strips
-// (design.md decision 3).
+// Drag-to-scroll for a horizontal poster strip: a mouse-down on the strip
+// starts tracking, mouse-move scrolls it and flags a drag once the pointer
+// has moved past a small threshold, and onItemClick suppresses the
+// resulting navigation click so a drag doesn't also open the tile. Scroll
+// offset recording and restoration is `useRestorableScroll`'s; this composes
+// that hook's ref callback with its own. `restoreKey` identifies this
+// strip's section (and, for sections with a view control, the control's
+// current value) so its offset is recorded and restored independently of
+// the page's other strips (design.md decision 3).
 function useStripScroll(restoreKey: string) {
   const elRef = useRef<HTMLDivElement | null>(null)
   const drag = useRef({ isDown: false, startX: 0, scrollLeft: 0, dragged: false })
-  const { key, isRestore, snapshot } = usePageState()
-
-  // Read by the ref callback below, which — unlike an effect keyed on
-  // `restoreKey` — only runs when React actually attaches or detaches the
-  // strip's DOM node. A strip whose section is still loading on first mount
-  // (topAnime/rewatched, held empty until their fetch resolves) attaches
-  // that node later, on a render an effect with an unrelated dependency list
-  // would never repeat for; refs sidestep that by always being current
-  // whenever the callback next fires.
-  const keyRef = useRef(key)
-  keyRef.current = key
-  const restoreKeyRef = useRef(restoreKey)
-  restoreKeyRef.current = restoreKey
-  const isRestoreRef = useRef(isRestore)
-  isRestoreRef.current = isRestore
-  const snapshotRef = useRef(snapshot)
-  snapshotRef.current = snapshot
+  const scrollRef = useRestorableScroll(restoreKey, 'horizontal')
 
   function onMouseDown(event: React.MouseEvent<HTMLDivElement>) {
     const el = elRef.current
@@ -262,65 +246,15 @@ function useStripScroll(restoreKey: string) {
   // conditional rendering above), so "the DOM node exists" isn't something
   // an effect dependency list can express — the callback fires exactly when
   // React attaches or detaches the node, whatever render that happens on.
-  const setRef = useCallback((el: HTMLDivElement | null) => {
-    elRef.current = el
-    if (!el) return
-    const node = el
-
-    // Recorded synchronously, same reasoning as the page's own scroll
-    // position (useScrollRestoration decision 1).
-    function onScroll() {
-      pageStateStore.putStripScroll(keyRef.current, restoreKeyRef.current, node.scrollLeft)
-    }
-    node.addEventListener('scroll', onScroll, { passive: true })
-
-    // Applied on a restore only, once the strip's tiles are laid out —
-    // usePageData seeds restored data synchronously, so on the first paint
-    // of a restore the tiles are already in the DOM and the offset is
-    // reachable. A cheap analogue of the page-level retry loop, without a
-    // timer: a ResizeObserver re-applies the offset if the strip was too
-    // narrow to reach it when first measured, and stops for good once it's
-    // reached or the user scrolls the strip themselves. On a fresh visit
-    // this does nothing, leaving the strip at its start.
-    let observer: ResizeObserver | undefined
-    let onUserInput: (() => void) | undefined
-
-    if (isRestoreRef.current) {
-      const target = snapshotRef.current.strips.get(restoreKeyRef.current)
-      if (target !== undefined) {
-        let done = false
-        let stopped = false
-
-        const attempt = () => {
-          if (done || stopped) return
-          const reachable = node.scrollWidth - node.clientWidth >= target
-          node.scrollLeft = target
-          if (reachable) done = true
-        }
-        attempt()
-
-        observer = new ResizeObserver(() => attempt())
-        observer.observe(node)
-
-        onUserInput = () => {
-          stopped = true
-        }
-        node.addEventListener('wheel', onUserInput, { passive: true })
-        node.addEventListener('touchstart', onUserInput, { passive: true })
-        node.addEventListener('mousedown', onUserInput)
-      }
-    }
-
-    return () => {
-      node.removeEventListener('scroll', onScroll)
-      observer?.disconnect()
-      if (onUserInput) {
-        node.removeEventListener('wheel', onUserInput)
-        node.removeEventListener('touchstart', onUserInput)
-        node.removeEventListener('mousedown', onUserInput)
-      }
-    }
-  }, [])
+  // Both this strip's own ref and useRestorableScroll's run on the same
+  // attach/detach.
+  const setRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      elRef.current = el
+      scrollRef(el)
+    },
+    [scrollRef],
+  )
 
   return {
     ref: setRef,
@@ -334,7 +268,7 @@ function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
     return <p className="profile-page__section-empty">Nothing here yet.</p>
   }
   return (
-    <ul className="divergence-list scroll-y">
+    <ul className="divergence-list scroll-hidden">
       {items.map((item) => (
         <li key={item.animeId} className="profile-list-row">
           <Link to={`/anime/${item.animeId}`} className="profile-list-row__link">
@@ -562,7 +496,7 @@ export function ProfilePage() {
           {profile.recentActivity.length === 0 ? (
             <p className="profile-page__section-empty">No activity yet.</p>
           ) : (
-            <ul className="activity-feed scroll-y">
+            <ul className="activity-feed scroll-hidden">
               {profile.recentActivity.map((item) => (
                 <li key={item.id} className="profile-list-row">
                   <Link to={`/anime/${item.animeId}`} className="profile-list-row__link">

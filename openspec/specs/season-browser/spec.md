@@ -335,7 +335,11 @@ The filter SHALL be applied to the season's already-loaded listing rather than t
 - **THEN** the checkbox is still unchecked and the filtered results are shown
 
 ### Requirement: Season type filter
-The system SHALL provide a multi-select Type filter beside the season sort control, using the same control and display labels as My List's type filter, offering only the media types actually present in the season. Selecting one or more types SHALL restrict the season results, and the count the page reports, to matching types; with none selected, no type restriction applies. The selection state SHALL be part of the page's URL state so it survives back-navigation.
+The system SHALL provide a multi-select Type filter beside the season sort control, using the same control and display labels as My List's type filter, offering only the media types actually present in the season. Selecting one or more types SHALL restrict the season results, and the count the page reports, to matching types.
+
+The filter SHALL distinguish **All** from **None** as the `page-header-design` capability defines: on **All** — its state on a fresh visit — no type restriction applies; on **None**, no anime passes the type filter and the page SHALL report that no anime match the current filters, using the same message it shows when other filters exclude everything rather than reporting that the season has no listing.
+
+The selection state SHALL be part of the page's URL state so it survives back-navigation, and **All**, **None**, and a partial selection SHALL each be distinctly representable there: a URL that names no type filter at all SHALL mean **All**, so links made before this distinction existed continue to mean what they meant.
 
 The filter SHALL be applied to the season's already-loaded listing rather than through a read, so it takes effect immediately with no loading state. The types it offers SHALL be derived from the whole listing, not from what the current selection leaves visible, so selecting one type SHALL NOT remove the others from the picker. Toggling the filter SHALL count as a fresh view of the page, returning the grid to the top on its first screenful.
 
@@ -359,13 +363,25 @@ The filter SHALL be applied to the season's already-loaded listing rather than t
 - **WHEN** I change the type selection on a season that is already loaded
 - **THEN** the grid updates immediately with no read and no loading state
 
-#### Scenario: Clearing the type filter
-- **WHEN** no type is selected in the season page's type filter
+#### Scenario: All applies no type restriction
+- **WHEN** the season page's type filter is on All
 - **THEN** entries of every type are shown
+
+#### Scenario: None empties the grid and says so
+- **WHEN** I press **None** in the season page's type filter
+- **THEN** no cards are shown and the page reports that no anime match the current filters, rather than that the season is not listed
+
+#### Scenario: A link with no type filter means All
+- **WHEN** I open a season page from a link whose address names no type filter
+- **THEN** the type filter is on All and anime of every type are shown
 
 #### Scenario: Filter persists through back-navigation
 - **WHEN** I select a type, open an anime, then press the browser Back button
 - **THEN** the same type selection is still applied and the filtered results are shown
+
+#### Scenario: None persists through back-navigation
+- **WHEN** I press **None**, navigate away, and press the browser Back button
+- **THEN** the filter is still on **None** rather than back on All
 
 ### Requirement: Infinite scroll
 The season page SHALL load the selected season's **whole** listing — every anime the cache holds for it under the selected sort and filters — in a single read, and SHALL reveal that listing progressively as it is scrolled, adding a screenful at a time. Nothing SHALL cap how many of the season's anime can be reached: scrolling to the end of the grid SHALL reach the last anime the season holds.

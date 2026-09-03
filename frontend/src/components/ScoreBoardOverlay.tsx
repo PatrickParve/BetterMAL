@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type FocusEvent, type MouseEvent as 
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import type { RecapRowDto } from '../api/types.ts'
+import { useRestorableScroll } from '../hooks/useRestorableScroll.ts'
 import { mediaTypeLabel, pickDisplayTitle, scoreTier } from '../utils/anime.ts'
 import { Modal } from './Modal.tsx'
 import './ScoreBoardOverlay.css'
@@ -28,6 +29,7 @@ export function ScoreBoardOverlay({ title, groups, onClose }: ScoreBoardOverlayP
   const [card, setCard] = useState<CardTarget>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   const [cardPosition, setCardPosition] = useState<{ left: number; top: number } | null>(null)
+  const scrollRef = useRestorableScroll('scoreBoard', 'vertical')
 
   // Runs before paint so the card's first visible frame is already clamped
   // to the viewport (mirrors TruncatedTitle's tooltip). Portalled rather
@@ -64,7 +66,7 @@ export function ScoreBoardOverlay({ title, groups, onClose }: ScoreBoardOverlayP
   }
 
   return (
-    <Modal onClose={onClose} labelledBy="score-board-title" className="modal--board">
+    <Modal onClose={onClose} labelledBy="score-board-title" className="modal--board" contentRef={scrollRef}>
       <div className="score-board">
         <div className="score-board__header">
           <h2 id="score-board-title" className="score-board__title">
@@ -96,7 +98,6 @@ export function ScoreBoardOverlay({ title, groups, onClose }: ScoreBoardOverlayP
                           to={`/anime/${item.animeId}`}
                           className="score-board__tile"
                           aria-label={displayTitle}
-                          onClick={onClose}
                           onMouseEnter={(e: ReactMouseEvent<HTMLAnchorElement>) =>
                             showCard(item, group.score, e.currentTarget)
                           }

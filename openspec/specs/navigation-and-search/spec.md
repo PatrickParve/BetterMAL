@@ -443,7 +443,9 @@ A series card SHALL NOT show a MAL score in that slot: its badge line already oc
 
 Results SHALL be loaded with continuous (infinite) scroll rather than numbered pages: an initial chunk renders immediately and further chunks are appended automatically as the user scrolls toward the end of the loaded results, with no pagination controls anywhere on the page. Sorting SHALL be applied server-side across the whole candidate result set before it is chunked, so the order is global rather than per-chunk and an item never moves between chunks as more load. Changing the sort SHALL reset the accumulated results to the first chunk. Series cards SHALL all be shown up front rather than participating in chunked reveal.
 
-The system SHALL provide a multi-select Type filter on the search results page, using the same control and display labels as My List's type filter, offering only the media types actually present among the currently loaded candidate results. Selecting one or more types SHALL immediately narrow the displayed anime cards to matching types, applied over the already-loaded candidate set without issuing a new search request. With no type selected, no type restriction applies. The result count line SHALL reflect the type-filtered anime count rather than the full unfiltered candidate count. Series cards SHALL be unaffected by the type filter and SHALL continue to be shown under the default relevance order regardless of which types are selected, since a series is not itself a single media-typed row.
+The system SHALL provide a multi-select Type filter on the search results page, using the same control and display labels as My List's type filter, offering only the media types actually present among the currently loaded candidate results. Selecting one or more types SHALL immediately narrow the displayed anime cards to matching types, applied over the already-loaded candidate set without issuing a new search request. The filter SHALL distinguish **All** from **None** as the `page-header-design` capability defines: on **All** — its state on a fresh visit — no type restriction applies; on **None**, no anime card passes the filter. **All**, **None**, and a partial selection SHALL each be distinctly representable in the page's URL state, with a URL naming no type filter meaning **All**. The result count line SHALL reflect the type-filtered anime count rather than the full unfiltered candidate count. Series cards SHALL be unaffected by the type filter and SHALL continue to be shown under the default relevance order regardless of which types are selected, since a series is not itself a single media-typed row.
+
+When the type filter leaves no anime card to show but the query itself matched anime, the page SHALL say that no anime match the current filters rather than showing an empty grid in silence or reporting that nothing was found for the query. Any series cards the query matched SHALL still be listed alongside that message, since the type filter does not apply to them.
 
 #### Scenario: Viewing full results for a query
 - **WHEN** I submit a search
@@ -513,9 +515,17 @@ The system SHALL provide a multi-select Type filter on the search results page, 
 - **WHEN** the loaded search results contain no music videos
 - **THEN** the type filter does not offer Music as an option
 
-#### Scenario: Clearing the type filter
-- **WHEN** no type is selected in the search page's type filter
+#### Scenario: All applies no type restriction
+- **WHEN** the search page's type filter is on All
 - **THEN** anime cards of every loaded type are shown
+
+#### Scenario: None empties the grid and says so
+- **WHEN** I press **None** in the search page's type filter on a query that matched anime
+- **THEN** no anime cards are shown and the page says no anime match the current filters, rather than saying no anime were found
+
+#### Scenario: Series survive None
+- **WHEN** the type filter is on **None** and the query matched a stored series
+- **THEN** that series card is still listed
 
 ### Requirement: Searching schedules a series build for an unknown franchise
 When a search's top-ranked anime match belongs to no stored series, the system SHALL schedule that anime's series to be built in the background, so the franchise becomes searchable on a later search without the user having to open its series page.
@@ -547,6 +557,10 @@ The system SHALL schedule at most one build per search — the top-ranked anime 
 ### Requirement: Search submission keeps the query text
 The system SHALL let the user submit the current search either by pressing Enter in the search box or by clicking a magnifier button beside it, navigating to the search results page for that query. The submitted text SHALL remain in the search box (and SHALL be restored from the URL when the search page is loaded directly or reloaded) rather than being cleared.
 
+Submitting SHALL dismiss the type-ahead dropdown and leave the search field unfocused, so the results page is shown with nothing over it and no cursor left in the field. The dismissal SHALL hold against a search request that was already in flight when the search was submitted: a response arriving afterwards for the submitted query SHALL NOT reopen the dropdown over the results.
+
+Dismissing the dropdown SHALL be scoped to the query that was dismissed, not sticky: typing anything after a submission SHALL show suggestions again as it does today, and returning focus to the field with results already in hand SHALL reopen them.
+
 #### Scenario: Submit via Enter
 - **WHEN** I press Enter with text in the search box
 - **THEN** I am taken to the search results page for that query and the text stays in the box
@@ -554,6 +568,22 @@ The system SHALL let the user submit the current search either by pressing Enter
 #### Scenario: Submit via the magnifier button
 - **WHEN** I click the magnifier button beside the search box
 - **THEN** I am taken to the search results page for the current query
+
+#### Scenario: The dropdown does not follow me to the results
+- **WHEN** I press Enter while the type-ahead dropdown is showing suggestions
+- **THEN** the results page is shown with no dropdown over it
+
+#### Scenario: The field gives up focus
+- **WHEN** I submit a search
+- **THEN** the search field is no longer focused and no cursor is left in it
+
+#### Scenario: A late response does not reopen the dropdown
+- **WHEN** I press Enter before the suggestions for that query have arrived, and the response arrives once the results page is showing
+- **THEN** no dropdown opens over the results
+
+#### Scenario: Typing again brings suggestions back
+- **WHEN** I submit a search and then type another character in the field
+- **THEN** the dropdown opens again with suggestions for the new query
 
 #### Scenario: Query restored on the search page
 - **WHEN** I load or reload the search page for a query (e.g. via a direct `/search?q=…` link)

@@ -525,17 +525,17 @@ function AnimeRefreshPicker() {
   const [refreshing, setRefreshing] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const { results: rawResults, open, setOpen } = useAnimeSearch(query)
+  const { results: rawResults, open, dismiss, reopen } = useAnimeSearch(query)
   // This picker refreshes a single anime's cached metadata — a series has no
   // such target, so its rows are filtered out rather than offered here.
   const results = rawResults.filter((result) => result.kind === 'anime')
 
-  useClickOutside(containerRef, () => setOpen(false))
+  useClickOutside(containerRef, dismiss)
 
   function pick(result: AnimeSearchResult) {
     setSelected(result)
     setQuery(pickDisplayTitle(result.title, result.englishTitle))
-    setOpen(false)
+    dismiss()
     setMessage(null)
   }
 
@@ -565,7 +565,7 @@ function AnimeRefreshPicker() {
             setQuery(event.target.value)
             setSelected(null)
           }}
-          onFocus={() => results.length > 0 && setOpen(true)}
+          onFocus={() => results.length > 0 && reopen()}
           aria-label="Search anime to refresh"
         />
         {open && results.length > 0 && (

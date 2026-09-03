@@ -120,7 +120,7 @@ export function EditHistoryOverlay({ onClose }: EditHistoryOverlayProps) {
           <p className="edit-history__empty">No history matches these filters.</p>
         ) : (
           <div className="edit-history__list-frame">
-            <ul className="edit-history__list scroll-y">
+            <ul className="edit-history__list scroll-hidden">
               {filteredHistory.map((item) => (
                 <li key={item.id} className="edit-history__row">
                   <Link to={`/anime/${item.animeId}`} className="edit-history__link" onClick={onClose}>

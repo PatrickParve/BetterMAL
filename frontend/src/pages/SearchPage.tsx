@@ -56,7 +56,10 @@ export function SearchPage() {
   const sortParam = searchParams.get('sort')
   const sort = isSortKey(sortParam) ? sortParam : 'relevance'
   const typeParam = searchParams.get('type')
-  const typeFilter = typeParam ? typeParam.split(',').filter(Boolean) : []
+  // URLSearchParams.get already distinguishes absent (null) from
+  // present-and-empty (''), which is what makes a third state — None — free:
+  // no parameter is All, `?type=` is None, `?type=tv,movie` is a selection.
+  const typeFilter = typeParam === null ? null : typeParam.split(',').filter(Boolean)
 
   // Keyed on the query alone: a different query is a different history
   // snapshot, so restoring one restores its results regardless of which sort
@@ -89,11 +92,11 @@ export function SearchPage() {
     })
   }
 
-  function setTypeFilter(next: string[]) {
+  function setTypeFilter(next: string[] | null) {
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev)
-      if (next.length > 0) params.set('type', next.join(','))
-      else params.delete('type')
+      if (next === null) params.delete('type')
+      else params.set('type', next.join(','))
       return params
     })
   }
@@ -129,8 +132,7 @@ export function SearchPage() {
   }, [items])
 
   const filteredItems = useMemo(
-    () =>
-      typeFilter.length === 0 ? items : items.filter((item) => typeFilter.includes(item.mediaType ?? 'unknown')),
+    () => (typeFilter === null ? items : items.filter((item) => typeFilter.includes(item.mediaType ?? 'unknown'))),
     [items, typeFilter],
   )
 
@@ -191,33 +193,42 @@ export function SearchPage() {
           <p className="search-page__empty">No anime found.</p>
         )
       ) : (
-        <div className="search-page__grid">
-          {series.map((s) => (
-            <AnimeCard
-              key={`series-${s.seriesId}`}
-              animeId={s.rootAnimeId}
-              title={s.title}
-              englishTitle={s.englishTitle}
-              pictureUrl={s.pictureUrl}
-              to={`/series/${s.rootAnimeId}`}
-              className="anime-card--fluid"
-            >
-              <SeriesBadge entryCount={s.entryCount} />
-            </AnimeCard>
-          ))}
-          {visibleItems.map((item) => (
-            <AnimeCard
-              key={item.animeId}
-              animeId={item.animeId}
-              title={item.title}
-              englishTitle={item.englishTitle}
-              pictureUrl={item.pictureUrl}
-              className="anime-card--fluid"
-            >
-              <AnimeCardMeta mediaType={item.mediaType} totalEpisodes={item.totalEpisodes} malScore={item.malScore} />
-            </AnimeCard>
-          ))}
-        </div>
+        <>
+          <div className="search-page__grid">
+            {series.map((s) => (
+              <AnimeCard
+                key={`series-${s.seriesId}`}
+                animeId={s.rootAnimeId}
+                title={s.title}
+                englishTitle={s.englishTitle}
+                pictureUrl={s.pictureUrl}
+                to={`/series/${s.rootAnimeId}`}
+                className="anime-card--fluid"
+              >
+                <SeriesBadge entryCount={s.entryCount} />
+              </AnimeCard>
+            ))}
+            {visibleItems.map((item) => (
+              <AnimeCard
+                key={item.animeId}
+                animeId={item.animeId}
+                title={item.title}
+                englishTitle={item.englishTitle}
+                pictureUrl={item.pictureUrl}
+                className="anime-card--fluid"
+              >
+                <AnimeCardMeta mediaType={item.mediaType} totalEpisodes={item.totalEpisodes} malScore={item.malScore} />
+              </AnimeCard>
+            ))}
+          </div>
+          {/* Distinct from "No anime found." above: the query matched anime,
+              the type filter just leaves none of them standing. Series cards
+              aren't subject to the type filter, so they keep rendering
+              alongside this rather than being hidden by it. */}
+          {items.length > 0 && filteredItems.length === 0 && (
+            <p className="search-page__empty">No anime match the current filters.</p>
+          )}
+        </>
       )}
 
       <div ref={sentinelRef} className="search-page__sentinel" />

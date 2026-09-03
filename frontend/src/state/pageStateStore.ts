@@ -2,7 +2,11 @@ export interface PageSnapshot {
   data: Map<string, unknown>
   view: Map<string, unknown>
   scrollY: number
-  strips: Map<string, number>
+  // Offsets for named in-page scroll containers (poster strips, the score
+  // board's slot list, ...), keyed by whatever restore key each caller
+  // gives its scroller — the axis a given scroller uses is its own concern,
+  // not this map's.
+  scrollers: Map<string, number>
 }
 
 // Bounds how many history entries' worth of state stay pinned in memory.
@@ -44,7 +48,7 @@ export function get(key: string): PageSnapshot | undefined {
 export function ensure(key: string): PageSnapshot {
   let snapshot = snapshots.get(key)
   if (!snapshot) {
-    snapshot = { data: new Map(), view: new Map(), scrollY: 0, strips: new Map() }
+    snapshot = { data: new Map(), view: new Map(), scrollY: 0, scrollers: new Map() }
     snapshots.set(key, snapshot)
     evictOldest()
   } else {
@@ -65,6 +69,6 @@ export function putScroll(key: string, scrollY: number): void {
   ensure(key).scrollY = scrollY
 }
 
-export function putStripScroll(key: string, stripKey: string, offset: number): void {
-  ensure(key).strips.set(stripKey, offset)
+export function putScrollerOffset(key: string, scrollerKey: string, offset: number): void {
+  ensure(key).scrollers.set(scrollerKey, offset)
 }

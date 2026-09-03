@@ -4,11 +4,17 @@ import './FilterMultiSelect.css'
 
 export type FilterMultiSelectOption = { value: string; label: string }
 
+// `selected`/`onChange`'s value is `string[] | null`: `null` is All (no
+// restriction, every option passes), an array is exactly those values, and
+// `[]` is None (nothing passes). The empty array can't keep doubling as
+// "unfiltered" — All and None have to render as, and be, two different
+// states, and an empty selection is the only shape left for the control to
+// say "the user chose to select nothing" (design D1).
 type FilterMultiSelectProps = {
   label: string
   options: FilterMultiSelectOption[]
-  selected: string[]
-  onChange: (next: string[]) => void
+  selected: string[] | null
+  onChange: (next: string[] | null) => void
 }
 
 // Checkbox popover for "any combination of a handful of values" filters (my
@@ -21,17 +27,49 @@ export function FilterMultiSelect({ label, options, selected, onChange }: Filter
 
   useClickOutside(containerRef, () => setOpen(false))
 
-  function toggle(value: string) {
-    onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value])
+  // Every emission goes through here so All has exactly one representation
+  // however it's reached — the shortcut, a fresh visit, or ticking the last
+  // unticked box by hand — rather than a `next.length === options.length`
+  // array that renders the same as `null` but isn't it (design D2).
+  function emit(next: string[]) {
+    onChange(options.every((option) => next.includes(option.value)) ? null : next)
   }
 
-  function summary(): string {
-    if (selected.length === 0) return `${label}: All`
-    if (selected.length === 1) {
-      const match = options.find((option) => option.value === selected[0])
-      return `${label}: ${match ? match.label : selected[0]}`
+  function toggle(value: string) {
+    if (selected === null) {
+      emit(options.map((option) => option.value).filter((v) => v !== value))
+      return
     }
-    return `${label}: ${selected.length} selected`
+    emit(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value])
+  }
+
+  // The bare state name, with no `${label}: ` prefix — shared by the live
+  // summary and (via summaryCandidates) every other state the button could
+  // be showing, so both are built from the same four branches.
+  function bareSummary(value: string[] | null): string {
+    if (value === null) return 'All'
+    if (value.length === 0) return 'None'
+    if (value.length === 1) {
+      const match = options.find((option) => option.value === value[0])
+      return match ? match.label : value[0]
+    }
+    return `${value.length} selected`
+  }
+
+  // The count branch above is now unreachable for a full selection — emit()
+  // normalises that to `null` before it ever reaches summary() — so "N
+  // selected" only ever describes a genuinely partial selection.
+  function summary(): string {
+    return `${label}: ${bareSummary(selected)}`
+  }
+
+  // Every bare state the control could ever show for its current options:
+  // All, None, each option's own label, and "N selected" for every count in
+  // between (2..options.length - 1; a full count is unreachable, see emit).
+  function summaryCandidates(): string[] {
+    const counts: string[] = []
+    for (let n = 2; n <= options.length - 1; n++) counts.push(`${n} selected`)
+    return ['All', 'None', ...options.map((option) => option.label), ...counts]
   }
 
   // Handled at the container so it fires regardless of which element inside
@@ -45,6 +83,8 @@ export function FilterMultiSelect({ label, options, selected, onChange }: Filter
     }
   }
 
+  const live = summary()
+
   return (
     <div className="filter-multi-select" ref={containerRef} onKeyDown={handleKeyDown}>
       <button
@@ -54,16 +94,23 @@ export function FilterMultiSelect({ label, options, selected, onChange }: Filter
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
       >
-        {summary()}
+        {summaryCandidates().map((candidate) => {
+          const text = `${label}: ${candidate}`
+          return (
+            <span key={candidate} className="filter-multi-select__button-text" aria-hidden={text === live ? undefined : true}>
+              {text}
+            </span>
+          )
+        })}
       </button>
       {open && (
         <div className="filter-multi-select__panel" role="group" aria-label={label}>
           <div className="filter-multi-select__shortcuts">
-            <button
-              type="button"
-              className="filter-multi-select__shortcut"
-              onClick={() => onChange(options.map((option) => option.value))}
-            >
+            {/* All deliberately does not write out every value: two states
+                that render identically (every box ticked vs. no restriction
+                at all) must not be separately expressible in a URL or a
+                page snapshot. */}
+            <button type="button" className="filter-multi-select__shortcut" onClick={() => onChange(null)}>
               All
             </button>
             <button type="button" className="filter-multi-select__shortcut" onClick={() => onChange([])}>
@@ -72,7 +119,11 @@ export function FilterMultiSelect({ label, options, selected, onChange }: Filter
           </div>
           {options.map((option) => (
             <label key={option.value} className="filter-multi-select__option">
-              <input type="checkbox" checked={selected.includes(option.value)} onChange={() => toggle(option.value)} />
+              <input
+                type="checkbox"
+                checked={selected === null || selected.includes(option.value)}
+                onChange={() => toggle(option.value)}
+              />
               {option.label}
             </label>
           ))}

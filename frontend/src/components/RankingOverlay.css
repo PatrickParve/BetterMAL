@@ -26,7 +26,6 @@
      where a row ends rather than mid-poster (list-recaps/profile-stats "the
      rankings See all overlay is sized by its rows"). */
   max-height: calc(8 * var(--ranking-row-outer-h) + 7 * var(--ranking-row-gap));
-  overflow-y: auto;
 }
 
 .ranking-overlay__link {

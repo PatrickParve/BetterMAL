@@ -99,7 +99,10 @@ export function SeasonPage() {
   const season = isSeasonName(seasonParam) ? seasonParam : fallback.season
   const sort = isSortKey(sortParam) ? sortParam : 'popularity'
   const inMyList = inMyListParam !== '0'
-  const typeFilter = typeParam ? typeParam.split(',').filter(Boolean) : []
+  // URLSearchParams.get already distinguishes absent (null) from
+  // present-and-empty (''), which is what makes a third state — None — free:
+  // no parameter is All, `?type=` is None, `?type=tv,movie` is a selection.
+  const typeFilter = typeParam === null ? null : typeParam.split(',').filter(Boolean)
   const { hideHentai } = useContentFilter()
 
   // Keyed on season/year/hideHentai: those are the only things a read
@@ -166,7 +169,7 @@ export function SeasonPage() {
   const displayed = useMemo(() => {
     const filtered = items.filter((item) => {
       if (!inMyList && item.inMyList) return false
-      if (typeFilter.length > 0 && !typeFilter.includes(item.mediaType ?? 'unknown')) return false
+      if (typeFilter !== null && !typeFilter.includes(item.mediaType ?? 'unknown')) return false
       return true
     })
     return [...filtered].sort((a, b) => (a.sortOrder?.[sort] ?? 0) - (b.sortOrder?.[sort] ?? 0))
@@ -264,11 +267,11 @@ export function SeasonPage() {
     })
   }
 
-  function setTypeFilter(next: string[]) {
+  function setTypeFilter(next: string[] | null) {
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev)
-      if (next.length > 0) params.set('type', next.join(','))
-      else params.delete('type')
+      if (next === null) params.delete('type')
+      else params.set('type', next.join(','))
       return params
     })
   }
