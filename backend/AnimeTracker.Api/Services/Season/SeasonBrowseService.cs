@@ -5,6 +5,7 @@ using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Library;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Season;
@@ -12,6 +13,7 @@ namespace AnimeTracker.Api.Services.Season;
 public class SeasonBrowseService(
     AnimeTrackerDbContext db,
     IMalClient malClient,
+    IAnimeMetadataChangeDetector changeDetector,
     ISeasonRepository seasonRepository,
     IBroadcastLocalTimeConverter broadcastConverter,
     RefreshGate refreshGate,
@@ -185,8 +187,18 @@ public class SeasonBrowseService(
         foreach (var edge in edges)
         {
             AnimeMetadata tracked;
+            AnimeMetadataSnapshot? before = null;
             if (existingAnime.TryGetValue(edge.Node.Id, out var existing))
             {
+                // A lean write to a row that already exists is a diff, not a
+                // first observation, so it detects the kinds its own fields
+                // can produce (spec "Every path that writes anime data detects
+                // the updates it can"). SnapshotListing, not Snapshot: nothing
+                // here Includes RelatedAnime, and a lean write never touches
+                // it. The created branch below stays undetected — a first
+                // observation is not a reveal — and a row that has never been
+                // fully fetched is filtered out by the detector itself.
+                before = changeDetector.SnapshotListing(existing);
                 edge.Node.ApplyLeanTo(existing, now);
                 tracked = existing;
             }
@@ -200,7 +212,14 @@ public class SeasonBrowseService(
             // ApplyLeanTo deliberately skips detail-page fields, but AiredFrom is
             // the same value regardless of source, so it's safe to set here —
             // required so a listing can be classified to its premiere season.
+            // Written before the record call below, so the premiere date is
+            // inside the diff: a browse that moves (or first supplies) a date
+            // now reports it instead of silently absorbing it, leaving the next
+            // full fetch nothing to find.
             tracked.AiredFrom = MalMappingExtensions.ParseMalDate(edge.Node.StartDate);
+
+            if (before is { } snapshot)
+                await changeDetector.RecordAsync(tracked, snapshot, now, ct);
         }
 
         var existingListingIds = (await db.SeasonAnimeListings

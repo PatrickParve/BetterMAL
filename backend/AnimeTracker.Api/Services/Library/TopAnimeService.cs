@@ -6,6 +6,7 @@ using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Library;
@@ -13,6 +14,7 @@ namespace AnimeTracker.Api.Services.Library;
 public class TopAnimeService(
     AnimeTrackerDbContext db,
     IMalClient malClient,
+    IAnimeMetadataChangeDetector changeDetector,
     ITopAnimeRepository topAnimeRepository,
     IEpisodeScheduleService scheduleService,
     IBroadcastLocalTimeConverter broadcastConverter,
@@ -97,10 +99,23 @@ public class TopAnimeService(
         {
             if (existingAnime.TryGetValue(edge.Node.Id, out var tracked))
             {
+                // A lean write to an existing row detects the kinds its own
+                // fields can produce (spec "Every path that writes anime data
+                // detects the updates it can") — here that is the episode
+                // count alone, the only detected field a ranking listing
+                // writes. SnapshotListing, not Snapshot: nothing here Includes
+                // RelatedAnime, and a lean write never touches it. A row that
+                // has never been fully fetched records nothing; the detector
+                // enforces that itself, from the snapshot.
+                var before = changeDetector.SnapshotListing(tracked);
                 edge.Node.ApplyLeanTo(tracked, now);
+                await changeDetector.RecordAsync(tracked, before, now, ct);
             }
             else
             {
+                // Created rows are a first observation, not a reveal, so they
+                // stay outside detection — the same skip every other insert
+                // branch makes.
                 var created = edge.Node.ToLeanAnimeMetadata(now);
                 db.AnimeMetadata.Add(created);
                 existingAnime[edge.Node.Id] = created;

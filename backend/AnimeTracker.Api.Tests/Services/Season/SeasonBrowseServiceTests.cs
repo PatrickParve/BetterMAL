@@ -5,6 +5,8 @@ using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using SeasonBrowseService = AnimeTracker.Api.Services.Season.SeasonBrowseService;
@@ -28,6 +30,7 @@ public class SeasonBrowseServiceTests
         new(
             db,
             malClient,
+            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db), new SeriesBuildTrigger()),
             new SeasonRepository(db),
             new FakeBroadcastLocalTimeConverter(),
             new RefreshGate(),
@@ -298,6 +301,80 @@ public class SeasonBrowseServiceTests
         // queries) or interleave the call order; observing all four in exact
         // calendar order is what a sequential, awaited loop guarantees.
         Assert.Equal(SeasonsInYearOrder, malClient.CalledSeasons);
+    }
+
+    // --- fix-false-updates-on-lean-rows: a lean listing write detects too ---
+
+    private static MalAnimeListEdge SeasonEdge(int id, int year, string season, int? numEpisodes = null, string? startDate = null) =>
+        new()
+        {
+            Node = new MalAnimeNode
+            {
+                Id = id,
+                Title = $"Anime {id}",
+                MediaType = "tv",
+                NumEpisodes = numEpisodes,
+                StartDate = startDate,
+                StartSeason = new MalStartSeason { Year = year, Season = season },
+            },
+        };
+
+    // Design D4: season browsing writes AiredFrom by hand, outside ApplyLeanTo
+    // — so before this change a genuine premiere move on a browsed anime was
+    // *absorbed*, stored without news, leaving the next full fetch nothing to
+    // find. The row is fully fetched and not yet aired, so the write is a real
+    // diff against a real prior observation and the airing gate lets it past.
+    [Fact]
+    public async Task RefreshAsync_LeanWriteOverAFullyFetchedAnimeRecordsThePremiereMoveItWrites()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata
+        {
+            Id = 1,
+            Title = "Anime 1",
+            AiringStatus = "not_yet_aired",
+            AiredFrom = new DateOnly(2027, 1, 5),
+            LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60),
+        };
+        anime.RelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel", Title = "Anime 2" });
+        db.AnimeMetadata.Add(anime);
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient([SeasonEdge(1, 2027, "winter", numEpisodes: 12, startDate: "2027-01-12")]);
+        await CreateService(db, malClient).RefreshAsync(2027, "winter");
+
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal(AnimeUpdateKinds.EpisodeCountReleased | AnimeUpdateKinds.StartDateChanged, update.Kinds);
+        Assert.Equal(new DateOnly(2027, 1, 5), update.PreviousStartDate);
+
+        // A lean write never touches relations and this path never Includes
+        // them, so the snapshot does not observe them (SnapshotListing leaves
+        // Relations null) and no edge is discovered off a browse.
+        Assert.Empty(await db.RelationDiscoveries.ToListAsync());
+    }
+
+    // The other half of D1: the same browse over a row that has never been
+    // fully fetched records nothing. Its null premiere date and null episode
+    // count were never observations of anything — the row is a listing stub,
+    // not a prior state to diff against.
+    [Fact]
+    public async Task RefreshAsync_LeanWriteOverANeverFullyFetchedRowRecordsNothing()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new MalAnimeNode { Id = 1, Title = "Anime 1", MediaType = "tv" }
+            .ToLeanAnimeMetadata(DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient([SeasonEdge(1, 2026, "summer", numEpisodes: 12, startDate: "2026-07-12")]);
+        await CreateService(db, malClient).RefreshAsync(2026, "summer");
+
+        Assert.Empty(await db.AnimeUpdates.ToListAsync());
+        Assert.Empty(await db.RelationDiscoveries.ToListAsync());
+
+        // The browse still caches what it fetched — it just doesn't call it news.
+        var stored = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
+        Assert.Equal(12, stored.TotalEpisodes);
+        Assert.Equal(new DateOnly(2026, 7, 12), stored.AiredFrom);
     }
 
     private sealed record MalSeasonResponse(List<MalAnimeListEdge>? Edges, bool Throws = false);

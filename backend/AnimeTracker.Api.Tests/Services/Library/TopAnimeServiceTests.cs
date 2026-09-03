@@ -7,6 +7,8 @@ using AnimeTracker.Api.Services.Library;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -27,6 +29,7 @@ public class TopAnimeServiceTests
         new(
             db,
             malClient,
+            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db), new SeriesBuildTrigger()),
             new TopAnimeRepository(db),
             new FakeEpisodeScheduleService(airedSoFar),
             new FakeBroadcastLocalTimeConverter(),

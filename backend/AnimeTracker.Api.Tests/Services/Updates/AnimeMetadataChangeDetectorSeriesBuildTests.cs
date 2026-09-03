@@ -78,6 +78,38 @@ public class AnimeMetadataChangeDetectorSeriesBuildTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => trigger.WaitAsync(cts.Token));
     }
 
+    // fix-false-updates-on-lean-rows design D4: the lean listing paths
+    // (season browsing, Top-Anime, reconciliation) snapshot through
+    // SnapshotListing, which leaves Relations null — "this write did not
+    // observe relations", as opposed to an empty set's "this anime has none".
+    // Neither of them Includes RelatedAnime, so diffing it would read an
+    // unloaded collection as empty and either manufacture removals or
+    // re-discover every edge; either way it would enqueue a series build off
+    // a write that never looked at a single relation.
+    [Fact]
+    public async Task AListingWriteEnqueuesNothingEvenOnARowThatCarriesEdges()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = now.AddDays(-60) };
+        anime.RelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel", Title = "Anime 2" });
+        db.AnimeMetadata.Add(anime);
+        await db.SaveChangesAsync();
+
+        var trigger = new SeriesBuildTrigger();
+        var detector = new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db), trigger);
+
+        var before = detector.SnapshotListing(anime);
+        new MalAnimeNode { Id = 1, Title = "Anime 1", MediaType = "tv", NumEpisodes = 12 }.ApplyLeanTo(anime, now);
+        await detector.RecordAsync(anime, before, now);
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await db.RelationDiscoveries.ToListAsync());
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => trigger.WaitAsync(cts.Token));
+    }
+
     private sealed class FakeMalClient(Dictionary<int, MalAnimeNode> responses) : IMalClient
     {
         public Task<MalAnimeNode> GetAnimeDetailsAsync(int animeId, IReadOnlyCollection<string>? fields = null, CancellationToken ct = default) =>

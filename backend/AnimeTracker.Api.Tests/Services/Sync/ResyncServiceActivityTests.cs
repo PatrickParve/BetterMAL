@@ -118,7 +118,18 @@ public class ResyncServiceActivityTests
     public async Task AResyncThatRevealsAnUnknownEpisodeCountRecordsAnUpdate()
     {
         using var db = CreateDb();
-        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", TotalEpisodes = null };
+        // Fully fetched once before, long enough ago that this resync's fetch
+        // is a diff rather than a first observation: detection reads
+        // LastSyncedAt to tell the two apart (anime-updates: "the first time
+        // SHALL mean the anime's first full-detail fetch"), and a row left at
+        // default is a never-fetched one, which records nothing by design.
+        var anime = new AnimeMetadata
+        {
+            Id = 1,
+            Title = "Anime 1",
+            TotalEpisodes = null,
+            LastSyncedAt = DateTimeOffset.UtcNow - TimeSpan.FromDays(60),
+        };
         db.AnimeMetadata.Add(anime);
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Anime = anime, Status = WatchStatus.Watching, EpisodesWatched = 3 });
         await db.SaveChangesAsync();

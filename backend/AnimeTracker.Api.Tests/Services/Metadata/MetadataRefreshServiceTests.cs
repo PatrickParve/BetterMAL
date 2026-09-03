@@ -23,8 +23,20 @@ public class MetadataRefreshServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    private static MetadataRefreshService CreateService(AnimeTrackerDbContext db, IMalClient malClient) =>
-        new(db, malClient, new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db), new SeriesBuildTrigger()), NullLogger<MetadataRefreshService>.Instance);
+    private static MetadataRefreshService CreateService(
+        AnimeTrackerDbContext db, IMalClient malClient, ISeriesBuildTrigger? seriesBuildTrigger = null) =>
+        new(db, malClient,
+            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db), seriesBuildTrigger ?? new SeriesBuildTrigger()),
+            NullLogger<MetadataRefreshService>.Instance);
+
+    // A row that stands for an anime already fully fetched once, long enough
+    // ago to still be due on every tier of RefreshTiers' ladder (the longest,
+    // StaleTtl, is 28 days). Detection reads LastSyncedAt to decide whether
+    // there was ever a prior observation to diff against (anime-updates: "the
+    // first time SHALL mean the anime's first full-detail fetch"), so a
+    // fixture left at default is a never-fetched row and records nothing —
+    // which is a different test from the one each of these is making.
+    private static readonly DateTimeOffset FullyFetchedLongAgo = DateTimeOffset.UtcNow - TimeSpan.FromDays(60);
 
     private static MalAnimeNode DetailNode(int id, params (int RelatedId, string RelationType)[] relations) => new()
     {
@@ -121,7 +133,9 @@ public class MetadataRefreshServiceTests
     public async Task RefreshStaleBatchAsync_NewlyAppearingEdgeWritesOneDiscoveryRow()
     {
         using var db = CreateDb();
-        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = default };
+        // Carries an edge, so it stands for an already-fully-fetched anime:
+        // only ApplyTo writes RelatedAnime, and it stamps LastSyncedAt with it.
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = FullyFetchedLongAgo };
         anime.RelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel", Title = "Anime 2" });
         db.AnimeMetadata.Add(anime);
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
@@ -143,7 +157,9 @@ public class MetadataRefreshServiceTests
     public async Task RefreshStaleBatchAsync_UnchangedRelationSetWritesNoDiscoveries()
     {
         using var db = CreateDb();
-        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = default };
+        // Carries an edge, so it stands for an already-fully-fetched anime:
+        // only ApplyTo writes RelatedAnime, and it stamps LastSyncedAt with it.
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = FullyFetchedLongAgo };
         anime.RelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel", Title = "Anime 2" });
         db.AnimeMetadata.Add(anime);
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
@@ -173,7 +189,9 @@ public class MetadataRefreshServiceTests
     public async Task RefreshStaleBatchAsync_RemovedEdgeWritesNoDiscoveryAndIsDropped()
     {
         using var db = CreateDb();
-        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = default };
+        // Carries an edge, so it stands for an already-fully-fetched anime:
+        // only ApplyTo writes RelatedAnime, and it stamps LastSyncedAt with it.
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = FullyFetchedLongAgo };
         anime.RelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel", Title = "Anime 2" });
         db.AnimeMetadata.Add(anime);
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
@@ -194,7 +212,8 @@ public class MetadataRefreshServiceTests
 
     private static MalAnimeNode FieldNode(
         int id, string status, int? numEpisodes = null, string? startDate = null,
-        string? broadcastDay = null, string? broadcastTime = null) => new()
+        string? broadcastDay = null, string? broadcastTime = null,
+        (int RelatedId, string RelationType)[]? relations = null) => new()
     {
         Id = id,
         Title = $"Anime {id}",
@@ -205,13 +224,29 @@ public class MetadataRefreshServiceTests
         Broadcast = broadcastDay is null && broadcastTime is null
             ? null
             : new MalBroadcast { DayOfTheWeek = broadcastDay, StartTime = broadcastTime },
+        RelatedAnime = relations?
+            .Select(r => new MalRelatedAnimeEdge
+            {
+                RelationType = r.RelationType,
+                Node = new MalAnimeNode { Id = r.RelatedId, Title = $"Anime {r.RelatedId}" },
+            })
+            .ToList(),
     };
+
+    // A row in exactly the state the three lean paths leave it in
+    // (ReconciliationService, TopAnimeService, SeasonBrowseService): title,
+    // score and rank written, LastScoreSyncedAt stamped, and every
+    // detail-only field — airing status, premiere date, broadcast slot — and
+    // LastSyncedAt untouched. Built through the real mapper rather than by
+    // hand, so it cannot drift from what ApplyLeanTo actually writes.
+    private static AnimeMetadata LeanCachedAnime(int id, DateTimeOffset now) =>
+        new MalAnimeNode { Id = id, Title = $"Anime {id}", MediaType = "tv" }.ToLeanAnimeMetadata(now);
 
     [Fact]
     public async Task RefreshOneAsync_UnknownToKnownEpisodeCountRecordsRelease()
     {
         using var db = CreateDb();
-        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = "currently_airing" });
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = "currently_airing", LastSyncedAt = FullyFetchedLongAgo });
         await db.SaveChangesAsync();
 
         var responses = new Dictionary<int, MalAnimeNode> { [1] = FieldNode(1, "currently_airing", numEpisodes: 12) };
@@ -227,7 +262,11 @@ public class MetadataRefreshServiceTests
     public async Task RefreshStaleBatchAsync_UnknownToKnownStartDateRecordsRelease()
     {
         using var db = CreateDb();
-        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = "not_yet_aired", LastSyncedAt = default });
+        // Unaired with no known premiere date is the 3-day tier, so a
+        // 60-day-old stamp keeps this row selected by the batch's due query
+        // while still standing for an anime that has been fully fetched
+        // before — which is what makes the reveal below a reveal.
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = "not_yet_aired", LastSyncedAt = FullyFetchedLongAgo });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
         await db.SaveChangesAsync();
 
@@ -253,6 +292,7 @@ public class MetadataRefreshServiceTests
             AiredFrom = new DateOnly(2024, 10, 5),
             BroadcastDayOfWeek = "mondays",
             BroadcastTime = new TimeOnly(23, 30),
+            LastSyncedAt = FullyFetchedLongAgo,
         });
         await db.SaveChangesAsync();
 
@@ -282,6 +322,7 @@ public class MetadataRefreshServiceTests
             AiringStatus = "not_yet_aired",
             TotalEpisodes = 12,
             AiredFrom = new DateOnly(2024, 10, 5),
+            LastSyncedAt = FullyFetchedLongAgo,
         });
         await db.SaveChangesAsync();
 
@@ -297,7 +338,7 @@ public class MetadataRefreshServiceTests
     public async Task RefreshOneAsync_ReleasedThenUnknownThenKnownAgainRecordsOnlyOnce()
     {
         using var db = CreateDb();
-        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = "currently_airing" });
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = "currently_airing", LastSyncedAt = FullyFetchedLongAgo });
         await db.SaveChangesAsync();
 
         var responses = new Dictionary<int, MalAnimeNode> { [1] = FieldNode(1, "currently_airing", numEpisodes: 12) };
@@ -325,6 +366,7 @@ public class MetadataRefreshServiceTests
             Title = "Anime 1",
             AiringStatus = "not_yet_aired",
             AiredFrom = new DateOnly(2024, 10, 5),
+            LastSyncedAt = FullyFetchedLongAgo,
         });
         await db.SaveChangesAsync();
 
@@ -344,7 +386,7 @@ public class MetadataRefreshServiceTests
     public async Task RefreshOneAsync_CountAndDateReleasedTogetherProduceOneRowWithBothKinds()
     {
         using var db = CreateDb();
-        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = "not_yet_aired" });
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = "not_yet_aired", LastSyncedAt = FullyFetchedLongAgo });
         await db.SaveChangesAsync();
 
         var responses = new Dictionary<int, MalAnimeNode>
@@ -369,6 +411,7 @@ public class MetadataRefreshServiceTests
             Title = "Anime 1",
             AiringStatus = "finished_airing",
             AiredFrom = new DateOnly(2011, 4, 1),
+            LastSyncedAt = FullyFetchedLongAgo,
         });
         await db.SaveChangesAsync();
 
@@ -393,6 +436,136 @@ public class MetadataRefreshServiceTests
         await service.RefreshOneAsync(1);
 
         Assert.Empty(await db.AnimeUpdates.ToListAsync());
+    }
+
+    // --- fix-false-updates-on-lean-rows: a lean row is not a prior observation ---
+
+    // The reported bug (Clannad: After Story - Another World, Kyou Chapter).
+    // Reconciliation, Top-Anime and season browsing all cache an anime
+    // leanly, so a row exists carrying no premiere date and no episode count
+    // — but that null was never an observation of anything, and diffing
+    // against it reports the cache catching up as though MAL had just
+    // revealed the date. anime-updates: "the first time SHALL mean the
+    // anime's first full-detail fetch, not the first time a row existed".
+    //
+    // Deliberately currently_airing rather than the reported anime's
+    // finished_airing, so nothing but the never-fully-fetched rule can
+    // explain the silence — the finished-airing gate is not doing the work.
+    [Fact]
+    public async Task RefreshOneAsync_FirstFullFetchOfALeanlyCachedAnimeRecordsNothing()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(LeanCachedAnime(1, DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
+
+        var responses = new Dictionary<int, MalAnimeNode>
+        {
+            [1] = FieldNode(1, "currently_airing", numEpisodes: 24, startDate: "2024-10-05"),
+        };
+        var service = CreateService(db, new FakeMalClient(responses));
+
+        await service.RefreshOneAsync(1);
+
+        Assert.Empty(await db.AnimeUpdates.ToListAsync());
+
+        // The fetch itself still lands — the row now holds the very values it
+        // recorded nothing about, which is what stops a later diff finding them.
+        var stored = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
+        Assert.Equal(24, stored.TotalEpisodes);
+        Assert.Equal(new DateOnly(2024, 10, 5), stored.AiredFrom);
+        Assert.NotEqual(default, stored.LastSyncedAt);
+    }
+
+    // Design D3: only the *field* diff falls silent on a first full fetch.
+    // A lean row holds no relations, so its edges are all newly discovered,
+    // each reaches announcement resolution as normal, and the series build is
+    // enqueued rather than waiting on a visit or the 30-day staleness window.
+    [Fact]
+    public async Task RefreshOneAsync_FirstFullFetchOfALeanlyCachedAnimeStillDiscoversItsRelations()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(LeanCachedAnime(1, DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
+
+        var trigger = new SeriesBuildTrigger();
+        var responses = new Dictionary<int, MalAnimeNode>
+        {
+            [1] = FieldNode(1, "currently_airing", numEpisodes: 24, startDate: "2024-10-05",
+                relations: [(2, "sequel"), (3, "side_story")]),
+        };
+        var service = CreateService(db, new FakeMalClient(responses), trigger);
+
+        await service.RefreshOneAsync(1);
+
+        var discoveries = await db.RelationDiscoveries.AsNoTracking().OrderBy(d => d.RelatedAnimeId).ToListAsync();
+        Assert.Equal([2, 3], discoveries.Select(d => d.RelatedAnimeId).ToList());
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, await trigger.WaitAsync(cts.Token));
+
+        Assert.Empty(await db.AnimeUpdates.ToListAsync());
+    }
+
+    // Design D2 / anime-updates "A premiere date released is news only while
+    // an anime has not finished airing": a premiere date arriving for a show
+    // that finished years ago is MAL's records reaching us, not a date anyone
+    // is waiting for. The gate reads the status this same fetch just wrote.
+    [Theory]
+    [InlineData("finished_airing", false)]
+    [InlineData("not_yet_aired", true)]
+    [InlineData("currently_airing", true)]
+    public async Task RefreshOneAsync_UnknownToKnownStartDateIsGatedOnAiringStatus(string status, bool expectRecorded)
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = status, LastSyncedAt = FullyFetchedLongAgo });
+        await db.SaveChangesAsync();
+
+        var responses = new Dictionary<int, MalAnimeNode> { [1] = FieldNode(1, status, startDate: "2008-06-15") };
+        var service = CreateService(db, new FakeMalClient(responses));
+
+        await service.RefreshOneAsync(1);
+
+        if (!expectRecorded)
+        {
+            Assert.Empty(await db.AnimeUpdates.ToListAsync());
+            return;
+        }
+
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal(AnimeUpdateKinds.StartDateReleased, update.Kinds);
+    }
+
+    // The deliberate asymmetry in the gate above (design D2), and the test
+    // that should stop a future reader "tidying" EpisodeCountReleased into
+    // the mask alongside it: a premiere date for a finished show reports an
+    // event already in the past that the anime's own record displays, but an
+    // episode count is a fact about what there is to watch — and
+    // anime-updates specifies the AniList-supplied total precisely for the
+    // finished anime MyAnimeList publishes no count for.
+    [Fact]
+    public async Task RefreshOneAsync_FinishedAiringAnimeStillRecordsAnEpisodeCountRelease()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1,
+            Title = "Anime 1",
+            AiringStatus = "finished_airing",
+            AiredFrom = new DateOnly(2008, 6, 15),
+            LastSyncedAt = FullyFetchedLongAgo,
+        });
+        await db.SaveChangesAsync();
+
+        var responses = new Dictionary<int, MalAnimeNode>
+        {
+            [1] = FieldNode(1, "finished_airing", numEpisodes: 1, startDate: "2008-06-15"),
+        };
+        var service = CreateService(db, new FakeMalClient(responses));
+
+        await service.RefreshOneAsync(1);
+
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal(AnimeUpdateKinds.EpisodeCountReleased, update.Kinds);
     }
 
     // --- 5.4/5.5: the adjacent set widens RefreshStaleBatchAsync's candidates ---

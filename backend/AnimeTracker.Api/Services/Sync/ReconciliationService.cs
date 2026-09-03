@@ -46,6 +46,16 @@ public class ReconciliationService(
             // a Season/Top-Anime browse row. Stamping the full ToAnimeMetadata
             // here would set LastSyncedAt on a rich-field-empty row and suppress
             // that upgrade.
+            //
+            // This is create-only, and deliberately stays that way: an anime
+            // already cached is left untouched here, because reconciliation is
+            // about the user's *entries* — refreshing an existing row's metadata
+            // is the metadata refresh's job, on its own cadence. So unlike the
+            // Season/Top-Anime browses, which do re-write existing rows leanly
+            // and therefore now detect (spec "Every path that writes anime data
+            // detects the updates it can"), there is nothing here to detect
+            // against: creating a row is a first observation, and the else-path
+            // writes no anime data at all. A detector call could never fire.
             if (existingAnimeIds.Add(animeId))
                 db.AnimeMetadata.Add(edge.Node.ToLeanAnimeMetadata(now));
 
