@@ -99,9 +99,14 @@ public sealed class SeriesSearchIndex
             || SearchTextMatch.StartsWithNormalized(member.SelectedTitle, term))
             return MatchQuality.Prefix;
 
-        if (SearchTextMatch.ContainsNormalized(member.Title, term)
-            || SearchTextMatch.ContainsNormalized(member.EnglishTitle, term)
-            || SearchTextMatch.ContainsNormalized(member.SelectedTitle, term))
+        // Whole-word, not raw substring: a series card stands for an entire
+        // franchise, so a mid-word fragment inside one obscure member's title
+        // (e.g. "miss" inside "...World Heroes' Mission") must not be enough
+        // to surface it — unlike the type-ahead's plain anime rows, where a
+        // loose substring match is naming that one exact title.
+        if (SearchTextMatch.ContainsWholeWord(member.Title, term)
+            || SearchTextMatch.ContainsWholeWord(member.EnglishTitle, term)
+            || SearchTextMatch.ContainsWholeWord(member.SelectedTitle, term))
             return MatchQuality.Contains;
 
         return null;

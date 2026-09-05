@@ -38,10 +38,12 @@ public class AnimeSearchServiceTests
     private static AnimeSearchService CreateService(
         AnimeTrackerDbContext db, List<AnimeTitleProjection>? localIndex = null,
         List<MalAnimeListEdge>? malResults = null, ISeriesBuildTrigger? trigger = null,
-        List<AnimeSearchFallbackProjection>? fallbackIndex = null, bool malFails = false) =>
+        List<AnimeSearchFallbackProjection>? fallbackIndex = null, bool malFails = false,
+        FakeMalClient? malClient = null, MalSearchCache? malSearchCache = null) =>
         new(
             new FakeAnimeMetadataRepository(localIndex ?? [], fallbackIndex ?? []),
-            new FakeMalClient(malResults ?? [], malFails),
+            malClient ?? new FakeMalClient(malResults ?? [], malFails),
+            malSearchCache ?? new MalSearchCache(),
             db,
             new SeriesSearchLookup(db),
             trigger ?? new FakeSeriesBuildTrigger(),
@@ -60,13 +62,26 @@ public class AnimeSearchServiceTests
     // malFails simulates the live MAL search unreachable/erroring — the case
     // AnimeSearchService.SearchMalAsync itself already catches and turns into
     // (Edges: [], Failed: true), so this mirrors that boundary rather than
-    // faking the Failed flag directly.
-    private sealed class FakeMalClient(List<MalAnimeListEdge> searchResults, bool fails = false) : IMalClient
+    // faking the Failed flag directly. throwIfCalled is stronger: it lets a
+    // test prove the cache-only stage never dispatches at all, via CallCount
+    // rather than relying on SearchMalAsync's catch-and-degrade swallowing
+    // the distinction.
+    private sealed class FakeMalClient(List<MalAnimeListEdge> searchResults, bool fails = false, bool throwIfCalled = false) : IMalClient
     {
-        public Task<MalPagedResponse<MalAnimeListEdge>> SearchAnimeAsync(string query, int limit = 5, CancellationToken ct = default) =>
-            fails
+        public int CallCount { get; private set; }
+        public int? LastLimit { get; private set; }
+
+        public Task<MalPagedResponse<MalAnimeListEdge>> SearchAnimeAsync(string query, int limit = 5, CancellationToken ct = default)
+        {
+            CallCount++;
+            LastLimit = limit;
+            if (throwIfCalled)
+                throw new InvalidOperationException("The cache-only stage must not call MAL.");
+
+            return fails
                 ? throw new HttpRequestException("Simulated MAL search failure")
                 : Task.FromResult(new MalPagedResponse<MalAnimeListEdge> { Data = searchResults });
+        }
 
         public Task<MalPagedResponse<MalAnimeListEdge>> GetSeasonAsync(int year, string season, int limit = 100, int offset = 0, string? sort = null, CancellationToken ct = default) =>
             throw new NotImplementedException();
@@ -115,7 +130,7 @@ public class AnimeSearchServiceTests
         };
         var service = CreateService(db, localIndex);
 
-        var results = await service.SearchAsync("gundam", limit: 5);
+        var results = await service.SearchAsync("gundam", limit: 5, includeLive: true);
 
         Assert.Equal(5, results.Count);
         Assert.Equal(["series", "series", "anime", "anime", "anime"], results.Select(r => r.Kind));
@@ -136,7 +151,7 @@ public class AnimeSearchServiceTests
         };
         var service = CreateService(db, localIndex);
 
-        var results = await service.SearchAsync("toradora", limit: 5);
+        var results = await service.SearchAsync("toradora", limit: 5, includeLive: true);
 
         Assert.Equal(2, results.Count);
         Assert.All(results, r => Assert.Equal("anime", r.Kind));
@@ -204,6 +219,24 @@ public class AnimeSearchServiceTests
         Assert.Empty(withoutSeries.Series);
         Assert.Equal(4, withSeries.TotalCount);
         Assert.Equal(withoutSeries.TotalCount, withSeries.TotalCount);
+    }
+
+    [Fact]
+    public async Task SearchPageAsync_ItemBudgetSharesTheOverallLimitWithSeries()
+    {
+        using var db = CreateDb();
+        AddSeries(db, seriesId: 1, rootAnimeId: 301, rootTitle: "Fate Series One", rootPopularityRank: 1);
+        AddSeries(db, seriesId: 2, rootAnimeId: 302, rootTitle: "Fate Series Two", rootPopularityRank: 2);
+        AddSeries(db, seriesId: 3, rootAnimeId: 303, rootTitle: "Fate Series Three", rootPopularityRank: 3);
+        await db.SaveChangesAsync();
+
+        var malResults = Enumerable.Range(0, 10).Select(i => MalEdge(1000 + i, $"Fate Anime {i}", i)).ToList();
+        var service = CreateService(db, malResults: malResults);
+
+        var page = await service.SearchPageAsync("fate", "relevance", offset: 0, limit: 5);
+
+        Assert.Equal(3, page.Series.Count);
+        Assert.Equal(2, page.Items.Count); // 5 - 3 series, so series+items never exceeds the limit
     }
 
     // --- Search results-page fallback (design.md D7/tasks.md 11.2) ---
@@ -349,7 +382,7 @@ public class AnimeSearchServiceTests
         var trigger = new FakeSeriesBuildTrigger();
         var service = CreateService(db, localIndex, trigger: trigger);
 
-        var results = await service.SearchAsync("gundam", limit: 5);
+        var results = await service.SearchAsync("gundam", limit: 5, includeLive: true);
 
         Assert.Equal([500], trigger.Enqueued);
         Assert.Single(results); // scheduling never alters the returned results
@@ -366,7 +399,7 @@ public class AnimeSearchServiceTests
         var trigger = new FakeSeriesBuildTrigger();
         var service = CreateService(db, localIndex, trigger: trigger);
 
-        await service.SearchAsync("gundam", limit: 5);
+        await service.SearchAsync("gundam", limit: 5, includeLive: true);
 
         Assert.Empty(trigger.Enqueued);
     }
@@ -381,7 +414,7 @@ public class AnimeSearchServiceTests
         var trigger = new FakeSeriesBuildTrigger();
         var service = CreateService(db, localIndex, trigger: trigger);
 
-        await service.SearchAsync("gu", limit: 5);
+        await service.SearchAsync("gu", limit: 5, includeLive: true);
 
         Assert.Empty(trigger.Enqueued);
     }
@@ -397,13 +430,147 @@ public class AnimeSearchServiceTests
         var service = CreateService(db, localIndex, trigger: trigger);
 
         for (var i = 0; i < 5; i++)
-            await service.SearchAsync("gundam", limit: 5); // repeated "keystrokes" of the same query
+            await service.SearchAsync("gundam", limit: 5, includeLive: true); // repeated "keystrokes" of the same query
 
         using var firstWait = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         Assert.Equal(500, await trigger.WaitAsync(firstWait.Token));
 
         using var secondWait = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => trigger.WaitAsync(secondWait.Token));
+    }
+
+    // --- Cache-only stage (design.md D1/D9, tasks.md 1.7) ---
+
+    [Fact]
+    public async Task SearchAsync_CacheOnlyStageOmitsMalMatchesButBandsLocalMatchesLikeTheMergedStage()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var localIndex = new List<AnimeTitleProjection>
+        {
+            new(1, "Attack on Titan", null, null, 1),
+            new(2, "Attack on Titan: Junior High", null, null, 50),
+        };
+        // MAL-only: would rank first by relevance index if it were merged in.
+        var malResults = new List<MalAnimeListEdge> { MalEdge(999, "Attack on Titania", 0) };
+        var service = CreateService(db, localIndex, malResults: malResults);
+
+        var results = await service.SearchAsync("attack", limit: 5, includeLive: false);
+
+        // Same exact/prefix/popularity banding as the merged stage, over the
+        // local index alone — the MAL-only match never appears.
+        Assert.Equal([1, 2], results.Select(r => r.Id));
+    }
+
+    [Fact]
+    public async Task SearchAsync_CacheOnlyStageStillLeadsWithStoredSeriesCappedAtTwo()
+    {
+        using var db = CreateDb();
+        AddSeries(db, seriesId: 1, rootAnimeId: 201, rootTitle: "Gundam Series One", rootPopularityRank: 1);
+        AddSeries(db, seriesId: 2, rootAnimeId: 202, rootTitle: "Gundam Series Two", rootPopularityRank: 50);
+        AddSeries(db, seriesId: 3, rootAnimeId: 203, rootTitle: "Gundam Series Three", rootPopularityRank: 100);
+        await db.SaveChangesAsync();
+
+        var localIndex = new List<AnimeTitleProjection>
+        {
+            new(1, "Gundam A", null, null, 10),
+            new(2, "Gundam B", null, null, 20),
+            new(3, "Gundam C", null, null, 30),
+            new(4, "Gundam D", null, null, 40),
+            new(5, "Gundam E", null, null, 60),
+        };
+        var service = CreateService(db, localIndex);
+
+        var results = await service.SearchAsync("gundam", limit: 5, includeLive: false);
+
+        Assert.Equal(5, results.Count);
+        Assert.Equal(["series", "series", "anime", "anime", "anime"], results.Select(r => r.Kind));
+        Assert.Equal([201, 202], results.Where(r => r.Kind == "series").Select(r => r.RootAnimeId));
+    }
+
+    [Fact]
+    public async Task SearchAsync_CacheOnlyStageSchedulesNoSeriesBuild()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var localIndex = new List<AnimeTitleProjection> { new(500, "Gundam Unicorn", null, null, 1) };
+        var trigger = new FakeSeriesBuildTrigger();
+        var service = CreateService(db, localIndex, trigger: trigger);
+
+        await service.SearchAsync("gundam", limit: 5, includeLive: false);
+
+        Assert.Empty(trigger.Enqueued);
+    }
+
+    [Fact]
+    public async Task SearchAsync_CacheOnlyStageMakesNoLiveRequest()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var localIndex = new List<AnimeTitleProjection> { new(1, "Naruto", null, null, 1) };
+        var malClient = new FakeMalClient(searchResults: [], throwIfCalled: true);
+        var service = CreateService(db, localIndex, malClient: malClient);
+
+        var results = await service.SearchAsync("naruto", limit: 5, includeLive: false);
+
+        Assert.Single(results);
+        Assert.Equal(0, malClient.CallCount);
+    }
+
+    [Fact]
+    public async Task SearchAsync_AndSearchPageAsync_AskMalForTheSameCandidateCount()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(searchResults: []);
+        var service = CreateService(db, malClient: malClient);
+
+        await service.SearchAsync("naruto", limit: 5, includeLive: true);
+        var dropdownLimit = malClient.LastLimit;
+
+        await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+        var pageLimit = malClient.LastLimit;
+
+        Assert.NotNull(dropdownLimit);
+        Assert.Equal(dropdownLimit, pageLimit);
+    }
+
+    // --- Live search cache (design.md D6-D8, tasks.md 2.5) ---
+
+    [Fact]
+    public async Task SearchAsync_AndSearchPageAsync_ShareOneCachedMalCallForTheSameQuery()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(searchResults: []);
+        var cache = new MalSearchCache();
+        var service = CreateService(db, malClient: malClient, malSearchCache: cache);
+
+        await service.SearchAsync("naruto", limit: 5, includeLive: true);
+        await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+
+        Assert.Equal(1, malClient.CallCount);
+    }
+
+    [Fact]
+    public async Task SearchPageAsync_AFailedLiveSearchIsRetriedRatherThanRemembered()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(searchResults: [], fails: true);
+        var cache = new MalSearchCache();
+        var service = CreateService(db, malClient: malClient, malSearchCache: cache);
+
+        await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+        await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+
+        Assert.Equal(2, malClient.CallCount);
     }
 
     // --- Normalized matching (design.md D1-D3, tasks.md 1.7) ---
@@ -417,7 +584,7 @@ public class AnimeSearchServiceTests
         var localIndex = new List<AnimeTitleProjection> { new(1, "Fullmetal Alchemist", null, null, 1) };
         var service = CreateService(db, localIndex);
 
-        var results = await service.SearchAsync("full metal", limit: 5);
+        var results = await service.SearchAsync("full metal", limit: 5, includeLive: true);
 
         Assert.Single(results);
         Assert.Equal(1, results[0].Id);
@@ -432,8 +599,8 @@ public class AnimeSearchServiceTests
         var localIndex = new List<AnimeTitleProjection> { new(1, "Re:ZERO -Starting Life in Another World-", null, null, 1) };
         var service = CreateService(db, localIndex);
 
-        var reZero = await service.SearchAsync("re zero", limit: 5);
-        var rezero = await service.SearchAsync("rezero", limit: 5);
+        var reZero = await service.SearchAsync("re zero", limit: 5, includeLive: true);
+        var rezero = await service.SearchAsync("rezero", limit: 5, includeLive: true);
 
         Assert.Single(reZero);
         Assert.Single(rezero);
@@ -448,13 +615,13 @@ public class AnimeSearchServiceTests
         var localIndex = new List<AnimeTitleProjection> { new(1, "Kimi ni Todoke: Yūki no Ippo", null, null, 1) };
         var service = CreateService(db, localIndex);
 
-        var unaccentedQuery = await service.SearchAsync("Yuki no Ippo", limit: 5);
+        var unaccentedQuery = await service.SearchAsync("Yuki no Ippo", limit: 5, includeLive: true);
 
         Assert.Single(unaccentedQuery);
 
         var accentedIndex = new List<AnimeTitleProjection> { new(1, "Yuki no Ippo", null, null, 1) };
         var accentedService = CreateService(db, accentedIndex);
-        var accentedQuery = await accentedService.SearchAsync("Yūki no Ippo", limit: 5);
+        var accentedQuery = await accentedService.SearchAsync("Yūki no Ippo", limit: 5, includeLive: true);
 
         Assert.Single(accentedQuery);
     }
@@ -472,7 +639,7 @@ public class AnimeSearchServiceTests
         };
         var service = CreateService(db, localIndex);
 
-        var results = await service.SearchAsync("\"fullmetal alchemist\"", limit: 5);
+        var results = await service.SearchAsync("\"fullmetal alchemist\"", limit: 5, includeLive: true);
 
         Assert.Single(results);
         Assert.Equal(1, results[0].Id);
@@ -487,7 +654,7 @@ public class AnimeSearchServiceTests
         var localIndex = new List<AnimeTitleProjection> { new(1, "Fullmetal Alchemist", null, null, 1) };
         var service = CreateService(db, localIndex);
 
-        var results = await service.SearchAsync("!!!", limit: 5);
+        var results = await service.SearchAsync("!!!", limit: 5, includeLive: true);
 
         Assert.Empty(results);
     }
@@ -505,7 +672,7 @@ public class AnimeSearchServiceTests
         };
         var service = CreateService(db, localIndex);
 
-        var results = await service.SearchAsync("kaguya sama", limit: 5);
+        var results = await service.SearchAsync("kaguya sama", limit: 5, includeLive: true);
 
         Assert.Equal([1, 2], results.Select(r => r.Id));
     }

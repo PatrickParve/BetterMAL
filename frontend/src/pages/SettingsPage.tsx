@@ -558,8 +558,9 @@ function AnimeRefreshPicker() {
           onChange={(event) => {
             setQuery(event.target.value)
             setSelected(null)
+            reopen()
           }}
-          onFocus={() => results.length > 0 && reopen()}
+          onFocus={reopen}
           aria-label="Search anime to refresh"
         />
         {open && results.length > 0 && (

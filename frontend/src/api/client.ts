@@ -136,8 +136,16 @@ export function getHealth(): Promise<HealthStatus> {
   return fetchJson<HealthStatus>('/api/health')
 }
 
-export function searchAnime(query: string, signal?: AbortSignal): Promise<AnimeSearchResult[]> {
-  return fetchJson<AnimeSearchResult[]>(`/api/anime/search?q=${encodeURIComponent(query)}`, { signal })
+// `stage: 'local'` requests the cache-only stage (`&stage=local`); `'full'`
+// omits the param so the URL — and the de-duplication in fetchRaw above —
+// matches today's merged call byte-for-byte.
+export function searchAnime(
+  query: string,
+  stage: 'local' | 'full',
+  signal?: AbortSignal,
+): Promise<AnimeSearchResult[]> {
+  const stageParam = stage === 'local' ? '&stage=local' : ''
+  return fetchJson<AnimeSearchResult[]>(`/api/anime/search?q=${encodeURIComponent(query)}${stageParam}`, { signal })
 }
 
 export function getSearchPage(

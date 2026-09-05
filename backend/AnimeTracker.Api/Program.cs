@@ -49,6 +49,7 @@ builder.Services.AddScoped<IEpisodeAiringRepository, EpisodeAiringRepository>();
 builder.Services.Configure<MalOptions>(builder.Configuration.GetSection(MalOptions.SectionName));
 
 builder.Services.AddSingleton<MalRequestPacer>();
+builder.Services.AddSingleton<MalSearchCache>();
 builder.Services.AddSingleton<MalOAuthStateStore>();
 builder.Services.AddSingleton<IMalTokenProvider, MalTokenProvider>();
 

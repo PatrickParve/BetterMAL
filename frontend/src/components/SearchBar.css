@@ -135,6 +135,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 22px;
+  min-width: 0;
+}
+
+/* Anime rows have no badge line beneath the title, so the row's 44px content
+   budget (see .search-bar__result above) is free to go entirely to the
+   title — two 22px lines instead of one, clamped rather than left to grow
+   the row. Series rows keep the single-line variant above: their title
+   shares that budget with the badge pill underneath it. */
+.search-bar__result-title--multiline {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
 }
 
 .search-bar__result .series-badge {

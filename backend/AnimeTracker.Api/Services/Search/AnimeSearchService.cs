@@ -11,6 +11,7 @@ namespace AnimeTracker.Api.Services.Search;
 public class AnimeSearchService(
     IAnimeMetadataRepository repository,
     IMalClient malClient,
+    MalSearchCache malSearchCache,
     AnimeTrackerDbContext db,
     SeriesSearchLookup seriesSearchLookup,
     ISeriesBuildTrigger seriesBuildTrigger,
@@ -25,12 +26,19 @@ public class AnimeSearchService(
     // prefix-match (design.md decision 6).
     private const int MinQueryLengthForSeriesBuildTrigger = 3;
 
+    // One figure for every live search, replacing four that used to disagree
+    // (design.md D6): the dropdown's merged stage, the results page's MAL
+    // fetch, and the page's own candidate ask now all mean this same number,
+    // which is what lets a live response be shared between the dropdown and
+    // the results page (see MalSearchCache).
+    private const int LiveSearchCandidates = 60;
+
     /// <summary>Type-ahead candidate: local cache and live MAL results are
     /// merged into this shape before ranking, so the two sources compete on
     /// equal footing (same fields, same popularity ordering).</summary>
     private sealed record SearchCandidate(int Id, string Title, string? EnglishTitle, string? PictureUrl, int? PopularityRank);
 
-    public async Task<List<AnimeSearchResultDto>> SearchAsync(string query, int limit, CancellationToken ct = default)
+    public async Task<List<AnimeSearchResultDto>> SearchAsync(string query, int limit, bool includeLive, CancellationToken ct = default)
     {
         var (term, exact) = ParseQuery(query);
         // A term that normalizes to nothing (e.g. "!!!") must match nothing,
@@ -43,19 +51,23 @@ public class AnimeSearchService(
         var index = await repository.GetSearchIndexAsync(ct);
         var localCandidates = index.Select(a => new SearchCandidate(a.Id, a.Title, a.EnglishTitle, a.PictureUrl, a.PopularityRank));
 
-        // A live-search hiccup (network blip, transient MAL error) shouldn't
-        // take down the search box — degrade to "local results only" instead.
-        // Failed is ignored here: the local index above is already merged in
-        // regardless, so a MAL failure silently degrades on its own.
-        var (malEdges, _) = await SearchMalAsync(term, 25, ct);
-        var malCandidates = malEdges.Select(edge => new SearchCandidate(
-            edge.Node.Id,
-            edge.Node.Title,
-            NullIfWhitespace(edge.Node.AlternativeTitles?.En),
-            edge.Node.MainPicture?.Medium ?? edge.Node.MainPicture?.Large,
-            edge.Node.Popularity));
+        var merged = localCandidates;
+        if (includeLive)
+        {
+            // A live-search hiccup (network blip, transient MAL error) shouldn't
+            // take down the search box — degrade to "local results only" instead.
+            // Failed is ignored here: the local index above is already merged in
+            // regardless, so a MAL failure silently degrades on its own.
+            var (malEdges, _) = await SearchMalAsync(term, LiveSearchCandidates, ct);
+            var malCandidates = malEdges.Select(edge => new SearchCandidate(
+                edge.Node.Id,
+                edge.Node.Title,
+                NullIfWhitespace(edge.Node.AlternativeTitles?.En),
+                edge.Node.MainPicture?.Medium ?? edge.Node.MainPicture?.Large,
+                edge.Node.Popularity));
 
-        var merged = MergeById(localCandidates, malCandidates);
+            merged = MergeById(localCandidates, malCandidates);
+        }
 
         // `term` is renormalized inside each SearchTextMatch call below
         // rather than once up front — the cost is a few thousand short
@@ -92,7 +104,13 @@ public class AnimeSearchService(
         var rankedAnime = ranked.ToList();
 
         var seriesIndex = await seriesSearchLookup.LoadAsync(ct);
-        ScheduleSeriesBuildForTopMatch(term, rankedAnime.FirstOrDefault()?.Id, seriesIndex);
+        // Only the merged stage schedules a build (design.md D9): the
+        // cache-only stage's top match is drawn from stored anime alone, so
+        // it isn't necessarily the query's top match, and the trigger exists
+        // for franchises the app doesn't have — precisely what the
+        // cache-only stage has the least to say about.
+        if (includeLive)
+            ScheduleSeriesBuildForTopMatch(term, rankedAnime.FirstOrDefault()?.Id, seriesIndex);
 
         var seriesRows = seriesIndex.Match(term, exact).Take(Math.Min(MaxSeriesRowsInDropdown, limit)).ToList();
         var animeRows = rankedAnime.Take(Math.Max(limit - seriesRows.Count, 0));
@@ -124,15 +142,14 @@ public class AnimeSearchService(
         if (SearchTextMatch.Normalize(term).Length == 0)
             return new SearchPageDto(query, [], offset, limit, 0, [], false);
 
-        const int MaxResults = 100;
-        var (edges, malFailed) = await SearchMalAsync(term, MaxResults, ct);
+        var (edges, malFailed) = await SearchMalAsync(term, LiveSearchCandidates, ct);
 
         List<SearchPageCandidate> filtered;
         if (malFailed)
         {
             // The live search never ran, so — unlike the MAL path below —
             // candidates must be filtered by term locally (design.md D7).
-            filtered = await BuildFallbackCandidatesAsync(term, exact, MaxResults, ct);
+            filtered = await BuildFallbackCandidatesAsync(term, exact, LiveSearchCandidates, ct);
         }
         else
         {
@@ -160,8 +177,8 @@ public class AnimeSearchService(
         // The frontend fetches this page once (offset 0) and reveals it client-side
         // in chunks, never re-fetching for more — so totalCount must reflect what
         // this single response can actually deliver, not MAL's full (up to
-        // MaxResults) candidate count, or the displayed total would exceed what
-        // scrolling could ever reveal.
+        // LiveSearchCandidates) candidate count, or the displayed total would
+        // exceed what scrolling could ever reveal.
         var totalCount = Math.Min(filtered.Count, limit);
 
         var seriesIndex = await seriesSearchLookup.LoadAsync(ct);
@@ -192,9 +209,14 @@ public class AnimeSearchService(
             _ => filtered.OrderBy(c => c.RelevanceIndex), // "relevance": MAL's own search order.
         };
 
+        // The on-screen candidate set is shared between series and anime rows
+        // (mirroring the dropdown's row budget in SearchAsync) — series rows
+        // eat into the same limit rather than riding along on top of it, so
+        // the page never renders more than `limit` cards total.
+        var itemBudget = Math.Max(limit - seriesResults.Count, 0);
         var items = sorted
             .Skip(offset)
-            .Take(limit)
+            .Take(itemBudget)
             .Select(c => new AnimeBrowseItemDto(
                 c.AnimeId, c.Title, c.EnglishTitle, c.PictureUrl, c.TotalEpisodes, c.MediaType, c.MalScore, c.PopularityRank,
                 myScores.GetValueOrDefault(c.AnimeId), myScores.ContainsKey(c.AnimeId)))
@@ -260,13 +282,32 @@ public class AnimeSearchService(
     /// matches (design.md D7) — the type-ahead (<see cref="SearchAsync"/>)
     /// ignores the flag since it already merges in the local index either
     /// way, but the results page (<see cref="SearchPageAsync"/>) uses it to
-    /// fall back to a local-only search.</summary>
+    /// fall back to a local-only search.
+    ///
+    /// Consults <see cref="MalSearchCache"/> before dispatching and populates
+    /// it on success only — a failure isn't held, so a MAL blip doesn't stick
+    /// for a minute (design.md D7). Both callers now ask for the same
+    /// <see cref="LiveSearchCandidates"/> figure (design.md D6), so the cache
+    /// key is the query alone.</summary>
     private async Task<(List<MalAnimeListEdge> Edges, bool Failed)> SearchMalAsync(string term, int limit, CancellationToken ct)
     {
+        if (malSearchCache.Get(term) is { } cached)
+            return (cached, false);
+
         try
         {
             var response = await malClient.SearchAnimeAsync(term, limit, ct);
+            malSearchCache.Set(term, response.Data);
             return (response.Data, false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // The client went away — there's no response to log a failure
+            // for, and no point doing further database work for it either
+            // (design.md D8). Rethrow so the caller's own cancellation
+            // propagates instead of degrading to a local-only result nobody
+            // will read.
+            throw;
         }
         catch (Exception ex)
         {

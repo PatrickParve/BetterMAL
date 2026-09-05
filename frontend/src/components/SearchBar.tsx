@@ -58,8 +58,11 @@ export function SearchBar() {
         className="search-bar__input"
         placeholder="Search anime…"
         value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        onFocus={() => results.length > 0 && reopen()}
+        onChange={(event) => {
+          setQuery(event.target.value)
+          reopen()
+        }}
+        onFocus={reopen}
         onKeyDown={(event) => {
           if (event.key === 'Enter') submitSearch()
           if (event.key === 'Escape') dismiss()
@@ -90,7 +93,9 @@ export function SearchBar() {
               <li key={`anime-${result.id}`}>
                 <button type="button" className="search-bar__result" onClick={() => goToAnime(result.id)}>
                   {result.pictureUrl && <RowPicture src={result.pictureUrl} className="search-bar__thumb" />}
-                  <span>{pickDisplayTitle(result.title, result.englishTitle)}</span>
+                  <span className="search-bar__result-title search-bar__result-title--multiline">
+                    {pickDisplayTitle(result.title, result.englishTitle)}
+                  </span>
                 </button>
               </li>
             ),

@@ -391,6 +391,15 @@ Starts-with, contains, and equality SHALL all be evaluated under the normalizati
 
 The dropdown's 5 rows are shared with matched series (see "Series appear in search results"): matched series occupy the first rows, up to a maximum of 2, and anime matches fill the rest. When no series matches, all 5 rows are anime, exactly as before.
 
+**The dropdown SHALL NOT wait on the live search to show anything.** Suggestions SHALL be delivered in two stages for every query:
+
+- A **cache-only stage**, answered from the app's own stored anime and stored series with no live request in its path, presented as soon as it arrives. It SHALL be ranked, capped, and shaped exactly as the merged result is — the same prefix-then-contains ordering by popularity, the same 5-row budget, the same maximum of 2 series pinned first — so it is indistinguishable from a merged result apart from which anime it could draw on.
+- The **merged stage** described above, which SHALL replace what the cache-only stage put on screen once it arrives.
+
+The cache-only stage SHALL be debounced more eagerly than the merged stage, since it costs a local read rather than a live request. When both stages have answered for the same query, what is shown SHALL be the merged result. A merged result SHALL NOT replace what is on screen once the cache-only stage has moved on to a newer query.
+
+The live search behind the merged stage SHALL request the same candidate set the full search results page requests for the same query, so that the two agree about which anime exist for a query and one live response can serve both (see `mal-api-integration`, "Live search responses are briefly cached and shared").
+
 #### Scenario: Prefix matches ranked by popularity
 - **WHEN** I type a query that is the start of several anime titles
 - **THEN** the dropdown shows up to 5 matches, listing titles that start with the query first, ordered by popularity (e.g. typing "attack" surfaces the popular "Attack on Titan" entries, not a single incidental cached title)
@@ -419,6 +428,26 @@ The dropdown's 5 rows are shared with matched series (see "Series appear in sear
 - **WHEN** my query matches more than two stored series
 - **THEN** only the two strongest-matching series are shown, leaving at least three rows for anime matches
 
+#### Scenario: Stored matches appear before the live search returns
+- **WHEN** I stop typing a query that several stored anime match
+- **THEN** those matches are on screen well before the live MAL search for that query has returned, rather than the dropdown staying empty until it does
+
+#### Scenario: Stored series appear in the first stage too
+- **WHEN** my query matches a stored series
+- **THEN** that series is pinned at the top of the first stage's rows, not added a second later when the live results arrive
+
+#### Scenario: The merged ranking replaces the stored-only rows
+- **WHEN** the live search for the query I have stopped typing returns
+- **THEN** the dropdown's rows become the merged local + live ranking, which is what it settles on
+
+#### Scenario: Nothing stored matches
+- **WHEN** I stop typing a query no stored anime or series matches
+- **THEN** the dropdown shows nothing until the merged stage arrives, and then shows the live matches
+
+#### Scenario: A superseded live response is discarded
+- **WHEN** a live response arrives for a query I have already typed past, and the first stage has already shown rows for the newer query
+- **THEN** the newer rows stay on screen and the superseded response is discarded
+
 ### Requirement: Search returns NSFW-rated titles
 The system SHALL include NSFW-rated anime (MAL ratings `r+` and `rx`) in every search result set — both the navbar type-ahead dropdown and the full search results page — by opting the live MAL search request into NSFW results, exactly as the season listing and user-animelist requests already do. A title that appears on the season page SHALL be findable by searching for it. No user setting SHALL suppress NSFW titles from search results.
 
@@ -435,7 +464,9 @@ The system SHALL include NSFW-rated anime (MAL ratings `r+` and `rx`) in every s
 - **THEN** it still appears in the search results, because the setting scopes to the season browser only
 
 ### Requirement: Full search results page
-The system SHALL provide a dedicated search results page that lists every anime matching a submitted query, presented the same way as the seasonal page (picture, title, media type, episode count, and MAL score per card, laid out exactly as a season card lays them out, using the same content-width-filling grid layout and the same fixed per-row card count at ordinary desktop widths). The MAL score SHALL follow the season card's rules in full, including showing nothing at all — no value, no placeholder, no reveal control — while the global hide-scores toggle is on. Results SHALL default to the order returned by the search API (closest match first) and SHALL additionally be sortable by Popularity, MAL score, Alphabetical, and My score; the Popularity sort SHALL place unranked anime (MAL popularity rank absent or zero) last. A double-quoted query SHALL constrain results to exact title matches. The query and sort SHALL be held in the URL so back-navigation restores the same view.
+The system SHALL provide a dedicated search results page that lists the anime matching a submitted query, presented the same way as the seasonal page (picture, title, media type, episode count, and MAL score per card, laid out exactly as a season card lays them out, using the same content-width-filling grid layout and the same fixed per-row card count at ordinary desktop widths). The MAL score SHALL follow the season card's rules in full, including showing nothing at all — no value, no placeholder, no reveal control — while the global hide-scores toggle is on. Results SHALL default to the order returned by the search API (closest match first) and SHALL additionally be sortable by Popularity, MAL score, Alphabetical, and My score; the Popularity sort SHALL place unranked anime (MAL popularity rank absent or zero) last. A double-quoted query SHALL constrain results to exact title matches. The query and sort SHALL be held in the URL so back-navigation restores the same view.
+
+The page SHALL work over a **bounded candidate set: the 60 highest-relevance anime the search finds for the query**. A query matching more than 60 anime SHALL show the 60 most relevant rather than all of them. The same 60 SHALL be what every other behaviour on the page is defined over — the sorts reorder those 60, the Type filter offers only the media types present among them and narrows within them, the count line counts them, and continuous scroll reveals them and then stops. The system SHALL NOT fetch more candidates than the page can display: the number requested from the live search, the number the endpoint will return, and the number the page asks for SHALL be one and the same figure.
 
 Under the default relevance order, matched series (see "Series appear in search results") SHALL be shown FIRST, ahead of the anime cards, to a maximum of 3. Under any other sort — Popularity, MAL score, Alphabetical, or My score — series SHALL be omitted, since those orderings are defined over per-anime figures a series does not have. The result count shown on the page SHALL continue to count anime only.
 
@@ -527,12 +558,26 @@ When the type filter leaves no anime card to show but the query itself matched a
 - **WHEN** the type filter is on **None** and the query matched a stored series
 - **THEN** that series card is still listed
 
+#### Scenario: A query with more matches than the page holds
+- **WHEN** I submit a query that matches more anime than the page's candidate set holds
+- **THEN** the 60 most relevant are listed, the count line reads 60, and scrolling past them loads nothing further
+
+#### Scenario: Nothing is fetched that cannot be shown
+- **WHEN** the page runs a search for a query
+- **THEN** the live search is asked for exactly the number of candidates the page can display, rather than a larger set that is ranked and then partly discarded
+
+#### Scenario: The type filter works within the candidate set
+- **WHEN** I filter by a media type on a query whose candidate set is full
+- **THEN** the types offered and the cards shown are drawn from those candidates, and the count line reflects the filtered count among them
+
 ### Requirement: Searching schedules a series build for an unknown franchise
 When a search's top-ranked anime match belongs to no stored series, the system SHALL schedule that anime's series to be built in the background, so the franchise becomes searchable on a later search without the user having to open its series page.
 
 Scheduling SHALL NOT affect the response: it SHALL NOT delay the search, SHALL NOT add a MAL request to the search request path, and a scheduling or build failure SHALL leave the search results unchanged.
 
 The system SHALL schedule at most one build per search — the top-ranked anime match only — SHALL skip scheduling for queries shorter than three characters, and SHALL NOT re-schedule an anime it has already scheduled since the app started, so a debounced type-ahead does not queue a build per keystroke.
+
+"Per search" counts a query, not a request. Where a query is answered in two stages (see "Type-ahead search, merged local + live ranked by prefix and popularity"), only the merged stage SHALL schedule: the cache-only stage SHALL schedule nothing, since its top-ranked match is drawn from stored anime alone and is not necessarily the query's top-ranked match.
 
 #### Scenario: An unknown franchise becomes searchable later
 - **WHEN** I search for a franchise whose series has never been built, and later search for it again
@@ -554,12 +599,20 @@ The system SHALL schedule at most one build per search — the top-ranked anime 
 - **WHEN** my query is one or two characters long
 - **THEN** no background build is scheduled
 
+#### Scenario: The cache-only stage schedules nothing
+- **WHEN** the type-ahead's cache-only stage answers a query
+- **THEN** it schedules no build, and the query still schedules at most one — from its merged stage
+
 ### Requirement: Search submission keeps the query text
 The system SHALL let the user submit the current search either by pressing Enter in the search box or by clicking a magnifier button beside it, navigating to the search results page for that query. The submitted text SHALL remain in the search box (and SHALL be restored from the URL when the search page is loaded directly or reloaded) rather than being cleared.
 
-Submitting SHALL dismiss the type-ahead dropdown and leave the search field unfocused, so the results page is shown with nothing over it and no cursor left in the field. The dismissal SHALL hold against a search request that was already in flight when the search was submitted: a response arriving afterwards for the submitted query SHALL NOT reopen the dropdown over the results.
+Submitting SHALL dismiss the type-ahead dropdown and leave the search field unfocused, so the results page is shown with nothing over it and no cursor left in the field.
 
-Dismissing the dropdown SHALL be scoped to the query that was dismissed, not sticky: typing anything after a submission SHALL show suggestions again as it does today, and returning focus to the field with results already in hand SHALL reopen them.
+**Only a user interaction with the search field SHALL open the dropdown** — typing in it, or focusing it. Nothing else SHALL: not a search response arriving, not a navigation, and not the search page restoring the submitted query into the field from the URL. This SHALL hold whatever was in flight and whatever the type-ahead's debounce was holding at the moment of submission, so pressing Enter before suggestions for the typed query have been requested at all is no different from pressing it after they have been shown.
+
+While the dropdown is dismissed, the type-ahead SHALL issue no search requests, and SHALL abandon any it has outstanding — so a submitted search does not compete with the results page's own search for the same query.
+
+Dismissal SHALL NOT be sticky: typing anything after a submission SHALL show suggestions again as it does today, and returning focus to the field SHALL show suggestions for whatever the field currently contains — searching for them if they are not already in hand, and never showing suggestions fetched for a different query than the one now in the field.
 
 #### Scenario: Submit via Enter
 - **WHEN** I press Enter with text in the search box
@@ -581,9 +634,25 @@ Dismissing the dropdown SHALL be scoped to the query that was dismissed, not sti
 - **WHEN** I press Enter before the suggestions for that query have arrived, and the response arrives once the results page is showing
 - **THEN** no dropdown opens over the results
 
+#### Scenario: Submitting before the debounce has even fired
+- **WHEN** I type a query and press Enter faster than the type-ahead's debounce, so suggestions for the typed query are requested only after I have left for the results page
+- **THEN** no dropdown opens over the results, and none appears when the search page writes the query back into the field
+
+#### Scenario: A dismissed dropdown stops searching
+- **WHEN** I submit a search while a type-ahead request for that query is in flight
+- **THEN** that request is abandoned rather than left to compete with the results page's own search
+
 #### Scenario: Typing again brings suggestions back
 - **WHEN** I submit a search and then type another character in the field
 - **THEN** the dropdown opens again with suggestions for the new query
+
+#### Scenario: Refocusing brings suggestions back
+- **WHEN** I submit a search and then click back into the search field without typing
+- **THEN** the dropdown opens with suggestions for the query in the field
+
+#### Scenario: Refocusing never shows another query's suggestions
+- **WHEN** the text in the field changed while the dropdown was dismissed and I then focus the field
+- **THEN** the dropdown shows suggestions for the text now in the field, never the ones fetched for what it held before
 
 #### Scenario: Query restored on the search page
 - **WHEN** I load or reload the search page for a query (e.g. via a direct `/search?q=…` link)

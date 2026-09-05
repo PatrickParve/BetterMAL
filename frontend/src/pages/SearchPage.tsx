@@ -32,16 +32,18 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 // array is rendered at once.
 const CHUNK_SIZE = 48
 
-// The whole candidate set for a query is fetched once (MAL's own cap), so
-// scrolling further just reveals more of what's already in memory instead of
-// re-running the live MAL search per chunk.
-const CANDIDATE_LIMIT = 90
+// The whole candidate set for a query is fetched once — the 60 highest-
+// relevance matches, the one figure the live search, the endpoint's clamp,
+// and this page all agree on (design.md D6) — so scrolling further just
+// reveals more of what's already in memory instead of re-running the live
+// MAL search per chunk.
+const CANDIDATE_LIMIT = 60
 
 function isSortKey(value: string | null): value is SortKey {
   return value !== null && SORT_OPTIONS.some((option) => option.value === value)
 }
 
-// Full search results page: fetches the whole (≤90) candidate set once per
+// Full search results page: fetches the whole (≤60) candidate set once per
 // (query, sort) — the search endpoint has no cache behind it, so paging would
 // re-run the live MAL search per chunk — and reveals it in chunks of
 // CHUNK_SIZE via an IntersectionObserver sentinel, the same continuous-scroll
@@ -158,7 +160,9 @@ export function SearchPage() {
       <div className="search-page__header">
         <h1>{q.length > 0 ? <>Results for “{q}”</> : 'Search'}</h1>
         <div className="search-page__controls">
-          {totalCount > 0 && <span className="search-page__count">{filteredItems.length} results</span>}
+          {totalCount > 0 && (
+            <span className="search-page__count">{filteredItems.length + series.length} results</span>
+          )}
           {typeOptions.length > 0 && (
             <FilterMultiSelect label="Type" options={typeOptions} selected={typeFilter} onChange={setTypeFilter} />
           )}

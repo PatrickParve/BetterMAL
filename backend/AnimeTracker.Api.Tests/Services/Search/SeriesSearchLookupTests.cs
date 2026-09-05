@@ -211,4 +211,34 @@ public class SeriesSearchLookupTests
 
         Assert.Equal([1, 2], results.Select(s => s.SeriesId));
     }
+
+    // --- Whole-word contains matching ---
+
+    [Fact]
+    public void ContainsMatchIgnoresAMidWordFragmentInAnotherMember()
+    {
+        var index = new SeriesSearchIndex(
+        [
+            Member(1, 100, "My Hero Academia", rootAnimeId: 100),
+            Member(1, 101, "My Hero Academia: World Heroes' Mission", rootAnimeId: 100),
+        ]);
+
+        // "miss" is a raw substring of "Mission" but not a whole word in it —
+        // the franchise must not surface for a query that names no real word
+        // in any of its titles.
+        Assert.Empty(index.Match("miss", exact: false));
+    }
+
+    [Fact]
+    public void ContainsMatchStillFindsAWholeWordInsideATitle()
+    {
+        var index = new SeriesSearchIndex(
+        [
+            Member(1, 100, "My Hero Academia", rootAnimeId: 100),
+        ]);
+
+        var results = index.Match("academia", exact: false);
+
+        Assert.Single(results);
+    }
 }

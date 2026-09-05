@@ -6,7 +6,13 @@ namespace AnimeTracker.Api.Services.Search;
 /// paginated, sortable view sourced from MAL's own relevance ordering.</summary>
 public interface IAnimeSearchService
 {
-    Task<List<AnimeSearchResultDto>> SearchAsync(string query, int limit, CancellationToken ct = default);
+    /// <summary>Type-ahead search, answered in one of two stages (design.md D1).
+    /// With <paramref name="includeLive"/> false, this is the cache-only stage:
+    /// the same ranking, the same 5-row budget, and the same 2-series cap as the
+    /// merged stage, drawn from stored anime and stored series only — no MAL call
+    /// in the path. With it true, MAL candidates are merged in as they are
+    /// today.</summary>
+    Task<List<AnimeSearchResultDto>> SearchAsync(string query, int limit, bool includeLive, CancellationToken ct = default);
 
     Task<SearchPageDto> SearchPageAsync(string query, string sortKey, int offset, int limit, CancellationToken ct = default);
 }
