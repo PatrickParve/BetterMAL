@@ -1,0 +1,116 @@
+using AnimeTracker.Api.Data;
+using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Relations;
+using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Services.Updates;
+using Microsoft.EntityFrameworkCore;
+
+namespace AnimeTracker.Api.Tests.Services.Updates;
+
+// IAnimeMetadataChangeDetector.RecordAsync's discovery gates (design.md D4;
+// scope-updates-to-my-list tasks 6.4): a RelationDiscovery is written only
+// for a non-Dropped list entry of the user's own that had already been fully
+// fetched before this write — never on a first full-detail fetch (the Yani
+// Neko case), and never for an anime the user does not track at all.
+public class AnimeMetadataChangeDetectorTests
+{
+    private static AnimeTrackerDbContext CreateDb() =>
+        new(new DbContextOptionsBuilder<AnimeTrackerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options);
+
+    private static AnimeMetadataChangeDetector CreateDetector(AnimeTrackerDbContext db, ISeriesBuildTrigger trigger) =>
+        new(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), trigger);
+
+    [Fact]
+    public async Task AFirstFullDetailFetchWritesZeroDiscoveriesButStillEnqueuesTheBuild()
+    {
+        using var db = CreateDb();
+        // Anime 1 is the user's own entry, so the discovery gate's list-entry
+        // half would pass on its own — isolating that HadFullDetail alone is
+        // what silences this, distinct from the not-my-entry case below.
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = default };
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        await db.SaveChangesAsync();
+
+        var trigger = new SeriesBuildTrigger();
+        var detector = CreateDetector(db, trigger);
+        var before = detector.Snapshot(anime); // HadFullDetail false; Relations captured as an empty set
+
+        anime.RelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel", Title = "Anime 2" });
+        anime.LastSyncedAt = DateTimeOffset.UtcNow; // the fetch itself stamps this, as ApplyTo would
+
+        await detector.RecordAsync(anime, before, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await db.RelationDiscoveries.ToListAsync());
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, await trigger.WaitAsync(cts.Token));
+    }
+
+    [Fact]
+    public async Task ARefreshOfMyOwnFullyFetchedEntryWritesTheDiscovery()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60) };
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        await db.SaveChangesAsync();
+
+        var detector = CreateDetector(db, new SeriesBuildTrigger());
+        var before = detector.Snapshot(anime); // HadFullDetail true; Relations captured as an empty set
+
+        anime.RelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel", Title = "Anime 2" });
+        anime.LastSyncedAt = DateTimeOffset.UtcNow;
+
+        await detector.RecordAsync(anime, before, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync();
+
+        var discovery = Assert.Single(await db.RelationDiscoveries.AsNoTracking().ToListAsync());
+        Assert.Equal(1, discovery.AnimeId);
+        Assert.Equal(2, discovery.RelatedAnimeId);
+    }
+
+    [Fact]
+    public async Task ARefreshOfAnAnimeThatIsNotMyEntryWritesNoDiscovery()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60) };
+        db.AnimeMetadata.Add(anime); // no UserAnimeEntries at all
+        await db.SaveChangesAsync();
+
+        var detector = CreateDetector(db, new SeriesBuildTrigger());
+        var before = detector.Snapshot(anime);
+
+        anime.RelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel", Title = "Anime 2" });
+        anime.LastSyncedAt = DateTimeOffset.UtcNow;
+
+        await detector.RecordAsync(anime, before, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await db.RelationDiscoveries.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ARefreshOfMyDroppedEntryWritesNoDiscovery()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60) };
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Dropped });
+        await db.SaveChangesAsync();
+
+        var detector = CreateDetector(db, new SeriesBuildTrigger());
+        var before = detector.Snapshot(anime);
+
+        anime.RelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel", Title = "Anime 2" });
+        anime.LastSyncedAt = DateTimeOffset.UtcNow;
+
+        await detector.RecordAsync(anime, before, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await db.RelationDiscoveries.ToListAsync());
+    }
+}

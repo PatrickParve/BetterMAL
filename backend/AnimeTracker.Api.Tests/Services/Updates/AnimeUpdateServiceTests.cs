@@ -20,7 +20,7 @@ public class AnimeUpdateServiceTests
             .Options);
 
     private static AnimeUpdateService CreateService(AnimeTrackerDbContext db) =>
-        new(db, new RelationResolver(db), new BroadcastLocalTimeConverter());
+        new(db, new AnimeUpdateRelevance(db, new RelationResolver(db)), new BroadcastLocalTimeConverter());
 
     [Fact]
     public async Task StandaloneNonDroppedEntryQualifiesWithNoRelationsAtAll()

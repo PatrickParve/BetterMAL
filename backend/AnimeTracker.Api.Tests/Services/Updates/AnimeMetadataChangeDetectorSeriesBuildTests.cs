@@ -3,6 +3,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
@@ -24,8 +25,11 @@ public class AnimeMetadataChangeDetectorSeriesBuildTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
+    private static IAnimeUpdateRecorder CreateRecorder(AnimeTrackerDbContext db) =>
+        new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db)));
+
     private static MetadataRefreshService CreateService(AnimeTrackerDbContext db, IMalClient malClient, ISeriesBuildTrigger trigger) =>
-        new(db, malClient, new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db), trigger), NullLogger<MetadataRefreshService>.Instance);
+        new(db, malClient, new AnimeMetadataChangeDetector(db, CreateRecorder(db), trigger), NullLogger<MetadataRefreshService>.Instance);
 
     private static MalAnimeNode DetailNode(int id, params (int RelatedId, string RelationType)[] relations) => new()
     {
@@ -97,7 +101,7 @@ public class AnimeMetadataChangeDetectorSeriesBuildTests
         await db.SaveChangesAsync();
 
         var trigger = new SeriesBuildTrigger();
-        var detector = new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db), trigger);
+        var detector = new AnimeMetadataChangeDetector(db, CreateRecorder(db), trigger);
 
         var before = detector.SnapshotListing(anime);
         new MalAnimeNode { Id = 1, Title = "Anime 1", MediaType = "tv", NumEpisodes = 12 }.ApplyLeanTo(anime, now);
@@ -108,6 +112,30 @@ public class AnimeMetadataChangeDetectorSeriesBuildTests
 
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => trigger.WaitAsync(cts.Token));
+    }
+
+    // scope-updates-to-my-list design.md D4, tasks 6.5: the test that stops a
+    // future reader "tidying" the series-build enqueue back inside the
+    // discovery gates above it — an anime with no list entry at all still
+    // needs its series rebuilt on a first full fetch, even though nothing is
+    // recorded as news for it.
+    [Fact]
+    public async Task AStrangersFirstFullFetchRecordsNoDiscoveryButStillEnqueuesTheBuild()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = default };
+        db.AnimeMetadata.Add(anime); // no UserAnimeEntries at all
+        await db.SaveChangesAsync();
+
+        var trigger = new SeriesBuildTrigger();
+        // MAL's first full-detail fetch reports a brand new relation edge.
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1, (2, "sequel")) });
+        await CreateService(db, malClient, trigger).RefreshOneAsync(1);
+
+        Assert.Empty(await db.RelationDiscoveries.ToListAsync());
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, await trigger.WaitAsync(cts.Token));
     }
 
     private sealed class FakeMalClient(Dictionary<int, MalAnimeNode> responses) : IMalClient

@@ -4,6 +4,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
+using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Updates;
@@ -30,7 +31,7 @@ public class SeasonBrowseServiceTests
         new(
             db,
             malClient,
-            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db), new SeriesBuildTrigger()),
+            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), new SeriesBuildTrigger()),
             new SeasonRepository(db),
             new FakeBroadcastLocalTimeConverter(),
             new RefreshGate(),
@@ -338,6 +339,11 @@ public class SeasonBrowseServiceTests
         };
         anime.RelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel", Title = "Anime 2" });
         db.AnimeMetadata.Add(anime);
+        // anime-updates "Nothing is recorded for an anime outside my list and
+        // its direct relations" (scope-updates-to-my-list tasks 6.1): without
+        // a non-Dropped entry of my own, the relevance gate would silence
+        // this reveal regardless of the diff below finding it.
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
         await db.SaveChangesAsync();
 
         var malClient = new FakeMalClient([SeasonEdge(1, 2027, "winter", numEpisodes: 12, startDate: "2027-01-12")]);
@@ -350,6 +356,33 @@ public class SeasonBrowseServiceTests
         // A lean write never touches relations and this path never Includes
         // them, so the snapshot does not observe them (SnapshotListing leaves
         // Relations null) and no edge is discovered off a browse.
+        Assert.Empty(await db.RelationDiscoveries.ToListAsync());
+    }
+
+    // anime-updates spec ("Nothing is recorded for an anime outside my list
+    // and its direct relations"; scope-updates-to-my-list tasks 6.7): the
+    // same premiere move as above, but for an anime with no list entry and no
+    // relation to one — the common case a season browse writes for hundreds
+    // of anime the user will never add.
+    [Fact]
+    public async Task RefreshAsync_LeanWriteOverAFullyFetchedStrangerRecordsNothing()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata
+        {
+            Id = 1,
+            Title = "Anime 1",
+            AiringStatus = "not_yet_aired",
+            AiredFrom = new DateOnly(2027, 1, 5),
+            LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60),
+        };
+        db.AnimeMetadata.Add(anime);
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient([SeasonEdge(1, 2027, "winter", numEpisodes: 12, startDate: "2027-01-12")]);
+        await CreateService(db, malClient).RefreshAsync(2027, "winter");
+
+        Assert.Empty(await db.AnimeUpdates.ToListAsync());
         Assert.Empty(await db.RelationDiscoveries.ToListAsync());
     }
 

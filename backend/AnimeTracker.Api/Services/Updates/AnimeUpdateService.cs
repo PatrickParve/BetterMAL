@@ -9,23 +9,9 @@ namespace AnimeTracker.Api.Services.Updates;
 
 public class AnimeUpdateService(
     AnimeTrackerDbContext db,
-    IRelationResolver relationResolver,
+    IAnimeUpdateRelevance relevance,
     IBroadcastLocalTimeConverter broadcastConverter) : IAnimeUpdateService
 {
-    // A fixed tie-break order (task 6.3) for when an anime qualifies through
-    // more than one affiliate: sequel/prequel is the most specific news an
-    // affiliation can carry. Eligibility itself is no longer restricted to
-    // SeriesRelations.TraversalSet (widened per user request: any relation
-    // MAL reports, not just "same story", counts here) — the precedence list
-    // below still favors the story-relation types first, since they're the
-    // most specific kind of news, with the looser universe/cast/media links
-    // appended after them.
-    private static readonly string[] RelationPrecedence =
-    [
-        "sequel", "prequel", "side_story", "parent_story", "summary", "full_story", "spin_off", "alternative_version",
-        "adaptation", "alternative_setting", "other", "character",
-    ];
-
     private static readonly Dictionary<WatchStatus, string> StatusLabels = new()
     {
         [WatchStatus.Watching] = "Watching",
@@ -109,46 +95,18 @@ public class AnimeUpdateService(
         return ownEligible ? OwnStatusReason(ownEntry!.Status) : null;
     }
 
+    // Thin wrapper (task 1.6) over IAnimeUpdateRelevance.FindAffiliateAsync,
+    // which owns the eligibility test and the tie-break that picks the
+    // winning edge when more than one qualifies. Humanizing that edge into a
+    // reason string is a display concern, not eligibility, so it stays here.
     private async Task<string?> TryDeriveAffiliateReasonAsync(AnimeMetadata anime, CancellationToken ct)
     {
-        // Every relation edge counts here, not just SeriesRelations.TraversalSet
-        // (widened per user request) — an anime related to my list any way MAL
-        // reports (alternative setting, shared character, a promo/other link)
-        // is still franchise-adjacent news, not just a same-story continuation.
-        // Confidence != Contradicted is the one guard kept: AniList actively
-        // disputing an edge is evidence it isn't real, not a matter of how
-        // narrowly "related" is defined.
-        var edges = await relationResolver.GetEdgesAsync(anime, ct);
-        var candidates = edges.Where(e => e.Confidence != RelationConfidence.Contradicted).ToList();
-        if (candidates.Count == 0)
+        var best = await relevance.FindAffiliateAsync(anime, ct);
+        if (best is null)
             return null;
-
-        var farEndIds = candidates.Select(e => e.AnimeId).Distinct().ToList();
-        var nonDroppedFarEndIds = await db.UserAnimeEntries.AsNoTracking()
-            .Where(ue => farEndIds.Contains(ue.AnimeId) && ue.Status != WatchStatus.Dropped)
-            .Select(ue => ue.AnimeId)
-            .ToListAsync(ct);
-        if (nonDroppedFarEndIds.Count == 0)
-            return null;
-
-        var nonDroppedFarEndSet = nonDroppedFarEndIds.ToHashSet();
-        var qualifying = candidates.Where(e => nonDroppedFarEndSet.Contains(e.AnimeId)).ToList();
-        if (qualifying.Count == 0)
-            return null;
-
-        var best = qualifying
-            .OrderBy(e => RelationPrecedenceOf(e.RelationType))
-            .ThenBy(e => e.Title, StringComparer.OrdinalIgnoreCase)
-            .First();
 
         var relationFromViewedSide = RelationInverse.Invert(best.RelationType) ?? best.RelationType;
         return $"{HumanizeRelation(relationFromViewedSide)} {best.Title}";
-    }
-
-    private static int RelationPrecedenceOf(string relationType)
-    {
-        var index = Array.IndexOf(RelationPrecedence, relationType);
-        return index >= 0 ? index : int.MaxValue;
     }
 
     private static string HumanizeRelation(string relationType) => relationType switch

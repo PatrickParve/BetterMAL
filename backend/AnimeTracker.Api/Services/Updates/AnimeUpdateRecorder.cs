@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Updates;
 
-public class AnimeUpdateRecorder(AnimeTrackerDbContext db) : IAnimeUpdateRecorder
+public class AnimeUpdateRecorder(AnimeTrackerDbContext db, IAnimeUpdateRelevance relevance) : IAnimeUpdateRecorder
 {
     private const AnimeUpdateKinds BecomingKnownKinds =
         AnimeUpdateKinds.Announced | AnimeUpdateKinds.EpisodeCountReleased | AnimeUpdateKinds.StartDateReleased;
@@ -17,6 +17,17 @@ public class AnimeUpdateRecorder(AnimeTrackerDbContext db) : IAnimeUpdateRecorde
         CancellationToken ct = default)
     {
         if (kinds == 0)
+            return;
+
+        // The relevance gate (design.md D1) lives here rather than at each
+        // call site because this is the only place an AnimeUpdate row is
+        // created: gating here covers AnimeMetadataChangeDetector,
+        // AnnouncementResolutionService and both EpisodeScheduleRefreshService
+        // call sites at once, and covers any writer added later — the same
+        // argument that put detection on the write functions themselves. It
+        // runs after the kinds == 0 early-out so a caller with nothing to
+        // report never pays for it.
+        if (!await relevance.IsRelevantAsync(anime.Id, ct))
             return;
 
         var becomingKnown = kinds & BecomingKnownKinds;

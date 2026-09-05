@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Series;
+using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Updates;
 
@@ -67,7 +68,18 @@ public interface IAnimeMetadataChangeDetector
     /// fetched its premiere date or broadcast slot. That case the detector now
     /// enforces itself from <c>HadFullDetail</c> rather than trusting the
     /// caller to spot it, because the caller cannot: it looks exactly like the
-    /// update branch.</para></summary>
+    /// update branch.</para>
+    ///
+    /// <para>The edge comparison that produces a newly-appeared relation
+    /// always runs and always enqueues a series rebuild when it finds one
+    /// (design.md D4) — narrowing what gets <em>recorded</em> must not narrow
+    /// what gets <em>compared</em>. A <see cref="RelationDiscovery"/> row is
+    /// written only when, in addition, <paramref name="anime"/> had already
+    /// been fully fetched before this write and is itself a non-Dropped list
+    /// entry of the user's: a first full-detail fetch's whole relation set
+    /// arriving at once is the system finally looking, not news, and an
+    /// announcement can only ever originate one step from the user's own
+    /// list, not one step from an anime merely linked to it.</para></summary>
     Task RecordAsync(AnimeMetadata anime, AnimeMetadataSnapshot before, DateTimeOffset now, CancellationToken ct = default);
 }
 
@@ -108,55 +120,87 @@ public class AnimeMetadataChangeDetector(
 
     public async Task RecordAsync(AnimeMetadata anime, AnimeMetadataSnapshot before, DateTimeOffset now, CancellationToken ct = default)
     {
-        var discoveredRelation = RecordDiscoveries(anime, before.Relations, now);
+        var newEdges = DiffNewRelationEdges(anime, before.Relations);
+
+        // design.md D4: before.HadFullDetail is the first-full-fetch baseline
+        // rule, reversing archived decision D3 ("a lean row's first full
+        // fetch still discovers its relations") — the direct cause of the
+        // Yani Neko announcement, where a half-cached spin-off's first full
+        // fetch stored its whole relation set at once and that arriving all
+        // together was recorded as fresh discovery instead of the system
+        // finally looking. IsOwnNonDroppedEntryAsync is the second, narrower
+        // gate: discoveries are the raw material for announcements, and news
+        // comes from one relation step off the user's own list, never from
+        // one step off an anime that only qualifies through IAnimeUpdateRelevance
+        // itself — see that method's own comment.
+        if (newEdges.Count > 0 && before.HadFullDetail && await IsOwnNonDroppedEntryAsync(anime.Id, ct))
+            RecordDiscoveries(anime.Id, newEdges, now);
+
         await RecordFieldUpdates(anime, before, now, ct);
 
-        // split-series-by-version tasks 9.1/9.2: a newly discovered relation
-        // enqueues this anime's series for a background rebuild, so a new
-        // entry (or a newly discovered alternative_version that splits a
-        // franchise) reaches the series page without waiting for a visit or
-        // the 30-day staleness window. Enqueue is synchronous and
+        // split-series-by-version tasks 9.1/9.2, design.md D4: the enqueue
+        // stays outside both gates above, unconditionally, per spec ("The
+        // comparison that finds newly-appeared edges SHALL still run for
+        // every anime"). A first full fetch is exactly when a series most
+        // needs rebuilding, and a stranger's relations still shape series the
+        // user can reach — narrowing what gets *recorded* above must not
+        // narrow what gets *compared* here. Enqueue is synchronous and
         // non-blocking, and ISeriesBuildTrigger already dedupes against an id
         // already queued, so one refresh pass discovering several edges on
         // the same anime still enqueues it once.
-        if (discoveredRelation)
+        if (newEdges.Count > 0)
             seriesBuildTrigger.Enqueue(anime.Id);
     }
 
-    /// <summary>Writes one <see cref="RelationDiscovery"/> per edge present in
-    /// <paramref name="anime"/>'s relation set after <c>ApplyTo</c> that wasn't
-    /// in <paramref name="before"/>. Removed and unchanged edges are
-    /// deliberately not events (design.md decision 10). Returns whether any
-    /// edge was newly discovered, so the caller knows whether to enqueue a
-    /// series build.</summary>
-    private bool RecordDiscoveries(
-        AnimeMetadata anime, HashSet<(int RelatedAnimeId, string RelationType)>? before, DateTimeOffset now)
+    /// <summary>The newly-appeared edges in <paramref name="anime"/>'s
+    /// relation set after <c>ApplyTo</c>, relative to <paramref name="before"/>.
+    /// Removed and unchanged edges are deliberately not events (design.md
+    /// decision 10). Pure — no write, no query — so the caller can enqueue a
+    /// series build off the comparison alone, whether or not a
+    /// <see cref="RelationDiscovery"/> ends up written for it (design.md D4).
+    /// A listing snapshot did not observe relations (and did not load them),
+    /// so <paramref name="before"/> being null diffs to nothing at all rather
+    /// than to "every edge is new".</summary>
+    private static List<(int RelatedAnimeId, string RelationType)> DiffNewRelationEdges(
+        AnimeMetadata anime, HashSet<(int RelatedAnimeId, string RelationType)>? before)
     {
-        // A listing snapshot did not observe relations (and did not load
-        // them), so there is nothing here to diff against: no discovery row,
-        // and no series build enqueued off a write that never saw an edge.
         if (before is null)
-            return false;
+            return [];
 
-        var discoveredAny = false;
+        return anime.RelatedAnime
+            .Select(r => (r.RelatedAnimeId, r.RelationType))
+            .Where(edge => !before.Contains(edge))
+            .ToList();
+    }
 
-        foreach (var edge in anime.RelatedAnime)
+    /// <summary>Writes one <see cref="RelationDiscovery"/> per edge in
+    /// <paramref name="newEdges"/>. The caller alone decides whether this runs
+    /// (design.md D4) — this method applies no gate of its own.</summary>
+    private void RecordDiscoveries(int animeId, List<(int RelatedAnimeId, string RelationType)> newEdges, DateTimeOffset now)
+    {
+        foreach (var edge in newEdges)
         {
-            if (before.Contains((edge.RelatedAnimeId, edge.RelationType)))
-                continue;
-
             db.RelationDiscoveries.Add(new RelationDiscovery
             {
-                AnimeId = anime.Id,
+                AnimeId = animeId,
                 RelatedAnimeId = edge.RelatedAnimeId,
                 RelationType = edge.RelationType,
                 DiscoveredAt = now,
             });
-            discoveredAny = true;
         }
-
-        return discoveredAny;
     }
+
+    /// <summary>design.md D4: deliberately narrower than
+    /// <see cref="IAnimeUpdateRelevance"/>. Discoveries are the raw material
+    /// for announcements, and an announcement is only ever wanted for
+    /// something appearing on the user's own show — one relation step from
+    /// the list is where news comes from, one step from <em>that</em> is not.
+    /// A plain non-Dropped entry lookup expresses exactly that; the fuller
+    /// relevance service would also admit an anime that merely has an
+    /// affiliate, which is one step too many for what a discovery is allowed
+    /// to feed.</summary>
+    private async Task<bool> IsOwnNonDroppedEntryAsync(int animeId, CancellationToken ct) =>
+        await db.UserAnimeEntries.AnyAsync(e => e.AnimeId == animeId && e.Status != WatchStatus.Dropped, ct);
 
     /// <summary>Records whichever of the becoming-known/schedule-change kinds
     /// the diff produced (spec "Every path that writes anime data detects the
@@ -173,8 +217,10 @@ public class AnimeMetadataChangeDetector(
         // null — but that null was never an observation of anything, so
         // diffing against it reports the cache catching up as though MAL had
         // just revealed the date. Same silence the insert branch keeps.
-        // Relation discovery above is deliberately outside this gate (design
-        // D3): a lean row's first full fetch still discovers all its edges.
+        // Relation discovery above is gated on this same HadFullDetail check
+        // (design.md D4, reversing archived decision D3): a lean row's first
+        // full fetch discovers none of its edges either, for the same reason
+        // this gate exists here.
         if (!before.HadFullDetail)
             return;
 

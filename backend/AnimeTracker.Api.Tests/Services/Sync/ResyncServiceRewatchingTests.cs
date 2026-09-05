@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
+using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Sync;
 using AnimeTracker.Api.Services.Updates;
@@ -22,7 +23,7 @@ public class ResyncServiceRewatchingTests
             .Options);
 
     private static ResyncService CreateService(AnimeTrackerDbContext db, IMalClient malClient) =>
-        new(malClient, db, new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db), new SeriesBuildTrigger()), new ResyncProgressTracker(), NullLogger<ResyncService>.Instance);
+        new(malClient, db, new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), new SeriesBuildTrigger()), new ResyncProgressTracker(), NullLogger<ResyncService>.Instance);
 
     private static MalUserAnimeListEdge Edge(int animeId, string status, int episodesWatched, int rewatchCount = 0) => new()
     {

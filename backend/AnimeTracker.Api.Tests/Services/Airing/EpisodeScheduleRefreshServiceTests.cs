@@ -40,12 +40,17 @@ public class EpisodeScheduleRefreshServiceTests
             aniList,
             new AniListRelationStore(db),
             LocalTime,
-            new AnimeUpdateRecorder(db),
+            new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))),
             NullLogger<EpisodeScheduleRefreshService>.Instance);
 
     private static async Task SeedAnimeAsync(AnimeTrackerDbContext db, int animeId, string airingStatus)
     {
         db.AnimeMetadata.Add(new AnimeMetadata { Id = animeId, Title = $"Anime {animeId}", AiringStatus = airingStatus });
+        // Every test below shares this seed, and most of them assert an
+        // update IS recorded (scope-updates-to-my-list tasks 6.1): the new
+        // relevance gate needs a non-Dropped list entry for that to still
+        // happen, whatever else the individual test is exercising.
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = animeId, Status = WatchStatus.Watching });
         // AniListId/LastFetchedAt already set: RefreshOneCoreAsync skips the
         // AniList lookup branch and goes straight to the schedule fetch.
         db.AnimeAiringSyncs.Add(new AnimeAiringSync

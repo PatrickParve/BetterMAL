@@ -92,6 +92,7 @@ builder.Services.AddScoped<IResyncService, ResyncService>();
 builder.Services.AddHostedService<ResyncBackgroundService>();
 
 // --- Metadata & score refresh ---
+builder.Services.AddScoped<IAnimeUpdateRelevance, AnimeUpdateRelevance>();
 builder.Services.AddScoped<IAnimeUpdateRecorder, AnimeUpdateRecorder>();
 builder.Services.AddScoped<IAnimeMetadataChangeDetector, AnimeMetadataChangeDetector>();
 builder.Services.AddScoped<IAnnouncementResolutionService, AnnouncementResolutionService>();

@@ -6,6 +6,7 @@ using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Library;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
+using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Updates;
@@ -29,15 +30,15 @@ public class TopAnimeServiceTests
         new(
             db,
             malClient,
-            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db), new SeriesBuildTrigger()),
+            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), new SeriesBuildTrigger()),
             new TopAnimeRepository(db),
             new FakeEpisodeScheduleService(airedSoFar),
             new FakeBroadcastLocalTimeConverter(),
             new RefreshGate(),
             NullLogger<TopAnimeService>.Instance);
 
-    private static MalAnimeListEdge Edge(int id, int rank) =>
-        new() { Node = new MalAnimeNode { Id = id, Title = $"Anime {id}" }, Ranking = new MalRankingInfo { Rank = rank } };
+    private static MalAnimeListEdge Edge(int id, int rank, int? numEpisodes = null) =>
+        new() { Node = new MalAnimeNode { Id = id, Title = $"Anime {id}", NumEpisodes = numEpisodes }, Ranking = new MalRankingInfo { Rank = rank } };
 
     [Fact]
     public async Task GetRankingAsync_FetchingOneListDoesNotMarkAnotherAsFetchedToday()
@@ -171,6 +172,49 @@ public class TopAnimeServiceTests
         var row = Assert.Single(result);
         Assert.Equal("currently_airing", row.AiringStatus);
         Assert.Equal(7, row.EpisodesAired);
+    }
+
+    // anime-updates spec ("Nothing is recorded for an anime outside my list
+    // and its direct relations"; scope-updates-to-my-list tasks 6.7): a
+    // ranking refresh's lean write still detects the episode count it
+    // reveals, but the gate records nothing for the anime that makes up the
+    // bulk of a ranking list — one with no list entry and no link to one.
+    [Fact]
+    public async Task GetRankingAsync_FullyFetchedStrangerRecordsNoUpdate()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60) });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<string, List<MalAnimeListEdge>>
+        {
+            ["all"] = [Edge(1, 1, numEpisodes: 12)],
+        });
+        var service = CreateService(db, malClient);
+
+        await service.GetRankingAsync(TopAnimeRankingType.All);
+
+        Assert.Empty(await db.AnimeUpdates.ToListAsync());
+    }
+
+    [Fact]
+    public async Task GetRankingAsync_FullyFetchedLinkedAnimeStillRecordsItsEpisodeCountReveal()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60) });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<string, List<MalAnimeListEdge>>
+        {
+            ["all"] = [Edge(1, 1, numEpisodes: 12)],
+        });
+        var service = CreateService(db, malClient);
+
+        await service.GetRankingAsync(TopAnimeRankingType.All);
+
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal(AnimeUpdateKinds.EpisodeCountReleased, update.Kinds);
     }
 
     private sealed class FakeEpisodeScheduleService(Dictionary<int, int>? airedSoFar = null) : IEpisodeScheduleService

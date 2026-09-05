@@ -3,6 +3,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +27,7 @@ public class MetadataRefreshServiceTests
     private static MetadataRefreshService CreateService(
         AnimeTrackerDbContext db, IMalClient malClient, ISeriesBuildTrigger? seriesBuildTrigger = null) =>
         new(db, malClient,
-            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db), seriesBuildTrigger ?? new SeriesBuildTrigger()),
+            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), seriesBuildTrigger ?? new SeriesBuildTrigger()),
             NullLogger<MetadataRefreshService>.Instance);
 
     // A row that stands for an anime already fully fetched once, long enough
@@ -247,6 +248,10 @@ public class MetadataRefreshServiceTests
     {
         using var db = CreateDb();
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = "currently_airing", LastSyncedAt = FullyFetchedLongAgo });
+        // anime-updates "Nothing is recorded for an anime outside my list and
+        // its direct relations" (scope-updates-to-my-list tasks 6.1): without
+        // a non-Dropped entry, the relevance gate would silence this release.
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
         await db.SaveChangesAsync();
 
         var responses = new Dictionary<int, MalAnimeNode> { [1] = FieldNode(1, "currently_airing", numEpisodes: 12) };
@@ -294,6 +299,7 @@ public class MetadataRefreshServiceTests
             BroadcastTime = new TimeOnly(23, 30),
             LastSyncedAt = FullyFetchedLongAgo,
         });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
         await db.SaveChangesAsync();
 
         var responses = new Dictionary<int, MalAnimeNode>
@@ -339,6 +345,7 @@ public class MetadataRefreshServiceTests
     {
         using var db = CreateDb();
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = "currently_airing", LastSyncedAt = FullyFetchedLongAgo });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
         await db.SaveChangesAsync();
 
         var responses = new Dictionary<int, MalAnimeNode> { [1] = FieldNode(1, "currently_airing", numEpisodes: 12) };
@@ -368,6 +375,7 @@ public class MetadataRefreshServiceTests
             AiredFrom = new DateOnly(2024, 10, 5),
             LastSyncedAt = FullyFetchedLongAgo,
         });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
         await db.SaveChangesAsync();
 
         var responses = new Dictionary<int, MalAnimeNode> { [1] = FieldNode(1, "not_yet_aired", startDate: "2024-10-12") };
@@ -387,6 +395,7 @@ public class MetadataRefreshServiceTests
     {
         using var db = CreateDb();
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = "not_yet_aired", LastSyncedAt = FullyFetchedLongAgo });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
         await db.SaveChangesAsync();
 
         var responses = new Dictionary<int, MalAnimeNode>
@@ -476,12 +485,14 @@ public class MetadataRefreshServiceTests
         Assert.NotEqual(default, stored.LastSyncedAt);
     }
 
-    // Design D3: only the *field* diff falls silent on a first full fetch.
-    // A lean row holds no relations, so its edges are all newly discovered,
-    // each reaches announcement resolution as normal, and the series build is
-    // enqueued rather than waiting on a visit or the 30-day staleness window.
+    // scope-updates-to-my-list design.md D4, reversing archived decision D3:
+    // a first full-detail fetch's whole relation set arriving at once is the
+    // system finally looking, not links newly appearing, so it now discovers
+    // nothing. The series-build enqueue is unaffected — narrowing what gets
+    // *recorded* must not narrow what gets *compared* (spec: "The comparison
+    // that finds newly-appeared edges SHALL still run for every anime").
     [Fact]
-    public async Task RefreshOneAsync_FirstFullFetchOfALeanlyCachedAnimeStillDiscoversItsRelations()
+    public async Task RefreshOneAsync_FirstFullFetchOfALeanlyCachedAnimeDiscoversNothingButStillEnqueuesTheBuild()
     {
         using var db = CreateDb();
         db.AnimeMetadata.Add(LeanCachedAnime(1, DateTimeOffset.UtcNow));
@@ -497,8 +508,7 @@ public class MetadataRefreshServiceTests
 
         await service.RefreshOneAsync(1);
 
-        var discoveries = await db.RelationDiscoveries.AsNoTracking().OrderBy(d => d.RelatedAnimeId).ToListAsync();
-        Assert.Equal([2, 3], discoveries.Select(d => d.RelatedAnimeId).ToList());
+        Assert.Empty(await db.RelationDiscoveries.ToListAsync());
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         Assert.Equal(1, await trigger.WaitAsync(cts.Token));
@@ -518,6 +528,7 @@ public class MetadataRefreshServiceTests
     {
         using var db = CreateDb();
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = status, LastSyncedAt = FullyFetchedLongAgo });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
         await db.SaveChangesAsync();
 
         var responses = new Dictionary<int, MalAnimeNode> { [1] = FieldNode(1, status, startDate: "2008-06-15") };
@@ -554,6 +565,7 @@ public class MetadataRefreshServiceTests
             AiredFrom = new DateOnly(2008, 6, 15),
             LastSyncedAt = FullyFetchedLongAgo,
         });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
         await db.SaveChangesAsync();
 
         var responses = new Dictionary<int, MalAnimeNode>

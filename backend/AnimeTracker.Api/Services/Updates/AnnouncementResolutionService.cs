@@ -38,31 +38,56 @@ public class AnnouncementResolutionService(
             var animeId = group.Key;
             var anime = await db.AnimeMetadata.AsNoTracking().FirstOrDefaultAsync(a => a.Id == animeId, ct);
 
+            // design.md D5: captured before any resolving fetch below, and in
+            // this order, because that fetch stamps LastSyncedAt — asked
+            // afterwards, "had we ever fully fetched this?" is unanswerable
+            // and every anime looks already-known, the same trap
+            // AnimeMetadataSnapshot.HadFullDetail already exists to avoid on
+            // the metadata-write path. hasEntry ignores status: a Dropped
+            // entry still proves the anime isn't a new show.
+            var hadFullDetail = anime is not null && anime.LastSyncedAt != default;
+            var hasEntry = await db.UserAnimeEntries.AsNoTracking().AnyAsync(e => e.AnimeId == animeId, ct);
+
+            if (hadFullDetail || hasEntry)
+            {
+                // Already fully fetched, or already a list entry in any
+                // status: not an announcement candidate. Mark it resolved
+                // and spend no MAL call.
+                foreach (var discovery in group)
+                    discovery.ProcessedAt = now;
+                continue;
+            }
+
+            // Announceable: the row is absent or lean, so it always needs a
+            // fetch for the airing gate below to have a status to read.
+            // Previously the fetch ran only when the row was entirely
+            // absent, so a lean row's null AiringStatus silently failed that
+            // gate forever.
+            try
+            {
+                await metadataRefresh.RefreshOneAsync(animeId, ct);
+                malCalls++;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to resolve newly-related anime {AnimeId}; will retry next pass.", animeId);
+                continue; // leave this group's discoveries unprocessed
+            }
+
+            anime = await db.AnimeMetadata.AsNoTracking().FirstOrDefaultAsync(a => a.Id == animeId, ct);
             if (anime is null)
             {
-                try
-                {
-                    await metadataRefresh.RefreshOneAsync(animeId, ct);
-                    malCalls++;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Failed to resolve newly-related anime {AnimeId}; will retry next pass.", animeId);
-                    continue; // leave this group's discoveries unprocessed
-                }
-
-                anime = await db.AnimeMetadata.AsNoTracking().FirstOrDefaultAsync(a => a.Id == animeId, ct);
-                if (anime is null)
-                {
-                    logger.LogWarning("Anime {AnimeId} still has no cached record after a successful resolution fetch; will retry next pass.", animeId);
-                    continue;
-                }
+                logger.LogWarning("Anime {AnimeId} still has no cached record after a successful resolution fetch; will retry next pass.", animeId);
+                continue;
             }
 
             // Gated at write time (design.md D6): only an anime that has not
             // finished airing is announced. MAL adds missing edges to
             // long-finished anime routinely, and those are a data correction
-            // reaching us, not news.
+            // reaching us, not news. Combined with the never-fully-fetched-
+            // and-no-entry check above, an announcement now means something
+            // the system had never seen before appeared in the relations of
+            // an anime on the user's list.
             if (anime.AiringStatus is "not_yet_aired" or "currently_airing")
                 await updateRecorder.RecordAsync(anime, AnimeUpdateKinds.Announced, default, now, ct);
 
