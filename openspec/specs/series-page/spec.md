@@ -123,8 +123,11 @@ Extras SHALL be grouped by their **relation to the main line** rather than by me
 An extra's group SHALL be resolved so that it belongs to exactly one:
 
 1. Where the extra carries a relation, in either direction, to any main-line member of this series, its group SHALL be the highest-precedence such relation in the display order above. Version relations rank first precisely so a version neighbour that also carries a sequel edge still reads as an alternative version.
-2. Where it does not — an extra reached only through another extra — it SHALL inherit the group of the extra that reaches it, resolved breadth-first outward from the main line, ties broken by the lower MAL id. A special of a side story therefore reads as Side story. A **version neighbour** SHALL NOT pass its group on by inheritance, and SHALL NOT be reached by it, so a story extra is never labelled an alternative version merely for sitting next to one.
-3. Failing both, its group SHALL be Other.
+2. Where it carries no relation to the main line at all, but does carry a version relation, in either direction, to any other member of this series, its group SHALL be that version relation's group — Alternative version ahead of Alternative setting where it carries both. An alternative version of a side story is an alternative version, and SHALL NOT fall to Other merely because the entry it retells is itself an extra.
+3. Where it carries neither — an extra reached only through another extra — it SHALL inherit the group of the extra that reaches it, resolved breadth-first outward from the main line, ties broken by the lower MAL id. A special of a side story therefore reads as Side story. The walk SHALL travel relations other than the version relations, and SHALL be seeded from extras grouped by rule 1 alone: a **version neighbour** SHALL NOT pass its group on by inheritance and SHALL NOT be reached by it, and neither SHALL an extra grouped by rule 2 — so a story extra is never labelled an alternative version merely for sitting next to one.
+4. Failing all three, its group SHALL be Other.
+
+A version relation SHALL count for grouping under rules 1 and 2 even though it is never traversed. Both ends of such a relation are frequently members of one series — a recap movie trilogy retelling the TV run it sits beside, a theatrical cut of a side story — and the relation is what names the entry, whether or not the series traversal follows it. Grouping SHALL NOT depend on whether the entry it names was reached as a story-component member or as a version neighbour.
 
 The relation SHALL be read **directionally, from the extra's side**: `M --summary--> X` makes X a Summary, while `X --summary--> M` makes X the Full story; `M --side_story--> X` makes X a Side story, while `X --side_story--> M` makes X the Parent story. The same holds for `sequel`/`prequel`.
 
@@ -159,6 +162,22 @@ The relation SHALL be read **directionally, from the extra's side**: `M --summar
 #### Scenario: A version neighbour does not pass its group on
 - **WHEN** an extra's only relation is to a version neighbour grouped under "Alternative setting"
 - **THEN** that extra is grouped under "Other" rather than under "Alternative setting"
+
+#### Scenario: A retelling inside its own series reads as an alternative version
+- **WHEN** a movie that is a member of the series declares an `alternative_version` relation to a main-line member, a `sequel` relation to another extra, and a `side_story` relation to a third
+- **THEN** it is grouped under "Alternative version", the version relation counting even though the traversal never followed it
+
+#### Scenario: An alternative version of an extra is still an alternative version
+- **WHEN** an entry's only relation to this series is an `alternative_version` to a member that is an extra rather than main line
+- **THEN** it is grouped under "Alternative version" rather than under "Other"
+
+#### Scenario: A relation to the main line outranks a version relation to an extra
+- **WHEN** an extra declares a `side_story` relation to a main-line member and an `alternative_version` relation to another extra
+- **THEN** it stays grouped under "Side story", and the extra it versions is grouped under "Alternative version"
+
+#### Scenario: An alternative version of an extra does not pass its group on either
+- **WHEN** a special's only relation is to an extra that was grouped under "Alternative version" by its version relation to another extra
+- **THEN** that special is grouped under "Other" rather than under "Alternative version"
 
 #### Scenario: Side stories and music videos are extras
 - **WHEN** a series contains a side story, an OVA run, and a music video

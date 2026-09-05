@@ -95,6 +95,77 @@ public class SeriesGraphBuilderTraverseAsyncTests
         Assert.Contains(edges, e => e.OwnerId == 3044 && e.RelatedAnimeId == 39360);
     }
 
+    // fix-alternative-version-grouping task 4.5, design.md D1: a version
+    // relation is recorded for grouping but never followed, so it draws the
+    // containment line at exactly the story component — no wider, no
+    // narrower. movieVersion is a genuine member (tied in by its own
+    // side_story edge) and its alternative_version edge to season2, another
+    // member, is now recorded; outsider's only relation to the component is
+    // alternative_version, so it admits nothing — the member set stops at
+    // the three story-connected anime.
+    [Fact]
+    public async Task AVersionEdgeBetweenTwoMembersIsRecordedWhileOneToANonMemberAdmitsNothing()
+    {
+        using var db = CreateDb();
+        var season1 = Anime(1, "tv");
+        var season2 = Anime(2, "tv");
+        var movieVersion = Anime(3, "movie"); // tied into the component by its own side_story edge to season1
+        var outsider = Anime(4, "movie"); // only relation to the component is a version relation — never admitted
+
+        Relate(season1, season2, "sequel");
+        Relate(season1, movieVersion, "side_story");
+        Relate(movieVersion, season2, "alternative_version"); // version relation between two members
+        Relate(season1, outsider, "alternative_version"); // version relation to a non-member
+
+        db.AnimeMetadata.AddRange(season1, season2, movieVersion, outsider);
+        await db.SaveChangesAsync();
+
+        var (members, edges, _, _, _) = await CreateBuilder(db)
+            .TraverseAsync(season1.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false, ct: default);
+
+        Assert.Equal(
+            new[] { season1.Id, season2.Id, movieVersion.Id }.OrderBy(x => x),
+            members.Select(m => m.Id).OrderBy(x => x));
+        Assert.DoesNotContain(members, m => m.Id == outsider.Id);
+
+        Assert.Contains(edges, e => e.OwnerId == movieVersion.Id && e.RelatedAnimeId == season2.Id && e.RelationType == "alternative_version");
+    }
+
+    // fix-alternative-version-grouping task 4.5: a version relation is
+    // filtered by the same AniList-contradiction check as a story relation
+    // (design.md D1) — mirrors
+    // ContradictedEdgeIsExcludedFromEdgesEvenWhenTheFarEndIsAMemberThroughAnotherPath
+    // above, with the direct edge's type swapped from sequel to
+    // alternative_version.
+    [Fact]
+    public async Task AnAniListContradictedVersionRelationIsNotRecorded()
+    {
+        using var db = CreateDb();
+        var fetched = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var root = Anime(17965, "movie");
+        var contradicted = Anime(39360, "movie");
+        var bridge = Anime(3044, "tv");
+        root.LastSyncedAt = fetched;
+        contradicted.LastSyncedAt = fetched;
+        bridge.LastSyncedAt = fetched;
+
+        Relate(root, contradicted, "alternative_version"); // one-sided; contradicted by AniList below
+        Relate(root, bridge, "sequel");
+        Relate(bridge, contradicted, "sequel"); // legitimate second path to the same anime
+
+        db.AnimeMetadata.AddRange(root, contradicted, bridge);
+        db.AnimeAiringSyncs.AddRange(
+            new AnimeAiringSync { AnimeId = 17965, AniListId = 1, RelationsFetchedAt = fetched },
+            new AnimeAiringSync { AnimeId = 39360, AniListId = 2, RelationsFetchedAt = fetched });
+        await db.SaveChangesAsync();
+
+        var (members, edges, _, _, _) = await CreateBuilder(db).TraverseAsync(root.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false, ct: default);
+
+        Assert.Contains(members, m => m.Id == contradicted.Id); // still a member, via the bridge
+        Assert.DoesNotContain(edges, e => e.OwnerId == root.Id && e.RelatedAnimeId == contradicted.Id);
+        Assert.Contains(edges, e => e.OwnerId == bridge.Id && e.RelatedAnimeId == contradicted.Id);
+    }
+
     // Fate/Zero's sequel edges put Fate/stay night and Unlimited Blade Works
     // on the same story component regardless of the alternative_version edge
     // between them; Prisma☆Illya hangs off by alternative_setting alone,
@@ -167,6 +238,40 @@ public class SeriesGraphBuilderTraverseAsyncTests
 
         var neighbour = Assert.Single(versionNeighbours);
         Assert.Equal(movie.Id, neighbour.AnimeId);
+        Assert.Equal(MembershipKind.FoldedVersion, neighbour.MembershipKind);
+    }
+
+    // Two standalone works with no story relation to anything, linked only to
+    // each other by alternative_version: phase 1 alone finds just the seed,
+    // and its only candidate's own component also sizes to 1 — a genuine tie,
+    // unlike Clannad Movie's neighbours which win outright on size. The
+    // seed's own inclusion in that comparison, plus the episode-count
+    // tie-break, is what settles on the fuller work regardless of which side
+    // was opened first, rather than always flipping onto whichever one
+    // happens to be "the other" (fix-false-memory-lone-version-pair).
+    [Theory]
+    [InlineData(1)] // seeded from the thin pilot
+    [InlineData(2)] // seeded from the fuller remake
+    public async Task TwoStandaloneWorksLinkedOnlyByVersionSettleOnTheFullerOneEitherWayRound(int seedId)
+    {
+        using var db = CreateDb();
+        var pilot = Anime(1, "ona");
+        pilot.TotalEpisodes = 1;
+        var remake = Anime(2, "ona");
+        remake.TotalEpisodes = 7;
+        Relate(pilot, remake, "alternative_version");
+        Relate(remake, pilot, "alternative_version");
+
+        db.AnimeMetadata.AddRange(pilot, remake);
+        await db.SaveChangesAsync();
+
+        var (members, _, _, _, versionNeighbours) = await CreateBuilder(db)
+            .TraverseAsync(seedId, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false, ct: default);
+
+        var soleMember = Assert.Single(members);
+        Assert.Equal(remake.Id, soleMember.Id);
+        var neighbour = Assert.Single(versionNeighbours);
+        Assert.Equal(pilot.Id, neighbour.AnimeId);
         Assert.Equal(MembershipKind.FoldedVersion, neighbour.MembershipKind);
     }
 

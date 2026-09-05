@@ -41,12 +41,14 @@ public class SeriesGraphBuilder(
     public const int VisitProbeBudget = 4;
     public const int RebuildProbeBudget = 10;
 
-    // Bump this to the ship date whenever ClassifyMainLineChain's rules
-    // change: SeriesService.NeedsBuild treats every series built before this
-    // timestamp as needing a rebuild, so a classification correction reaches
-    // already-stored series on their next read instead of requiring the user
-    // to find and rebuild each one by hand (design.md decision 3).
-    public static readonly DateTimeOffset ClassificationRevisedAt = new(2026, 8, 27, 0, 0, 0, TimeSpan.Zero);
+    // Bump this to the ship date whenever a build's classification of its
+    // members changes — main line (ClassifyMainLineChain) or extra relation
+    // group (ResolveExtraGroups) alike: SeriesService.NeedsBuild treats every
+    // series built before this timestamp as needing a rebuild, so a
+    // classification correction reaches already-stored series on their next
+    // read instead of requiring the user to find and rebuild each one by
+    // hand (design.md decision 3).
+    public static readonly DateTimeOffset ClassificationRevisedAt = new(2026, 9, 5, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>Builds and persists the series reachable from
     /// <paramref name="seedAnimeId"/>, spending at most <paramref name="fetchBudget"/>
@@ -68,7 +70,14 @@ public class SeriesGraphBuilder(
         var (members, edges, isPartial, isTruncated, versionNeighbours) =
             await TraverseAsync(seedAnimeId, fetchBudget, probeBudget, expandLeanMembers, ct);
 
-        if (members.Count <= 1)
+        // A single-node story component with no version neighbour at all
+        // isn't part of a series. One with a version neighbour is a series
+        // of exactly two, even though neither side has a story chain of its
+        // own — the "lone alternative version" case (Clannad Movie, and any
+        // pair of standalone works linked only by a version relation) — so
+        // it must still build and persist, or ResolveExtraGroups never gets
+        // a chance to run and the pairing stays unclassified forever.
+        if (members.Count == 0 || (members.Count == 1 && versionNeighbours.Count == 0))
             return null;
 
         // Story components are disjoint (design.md D1), so a build now
@@ -109,14 +118,21 @@ public class SeriesGraphBuilder(
     ///
     /// When phase 1 alone yields a single anime, that lone anime's own
     /// version neighbours are checked before giving up on it: if it has any,
-    /// the whole traversal is redone once more, seeded from whichever
-    /// neighbour has the largest story component of its own
-    /// (<see cref="PickLargestStoryComponentAsync"/>), so the original seed
-    /// is folded back into the result as that component's own version
-    /// neighbour. This is what makes opening a lone alternative version
-    /// (e.g. Clannad Movie) land on the franchise it belongs to, rather than
-    /// the "not part of a series" <see cref="BuildAsync"/> would otherwise
-    /// report for a lone member. With no version neighbour either, the lone
+    /// the seed and every neighbour are compared by the size of each one's
+    /// own story component (<see cref="PickLargestStoryComponentAsync"/>),
+    /// and — only when a neighbour's is strictly the largest, or wins that
+    /// comparison's episode/id tie-break — the whole traversal is redone
+    /// once more seeded from it, so the original seed is folded back into
+    /// the result as that component's own version neighbour. This is what
+    /// makes opening a lone alternative version (e.g. Clannad Movie) land on
+    /// the franchise it belongs to, rather than the "not part of a series"
+    /// <see cref="BuildAsync"/> would otherwise report for a lone member.
+    /// The seed's own inclusion in that comparison is what keeps a pair of
+    /// standalone works linked only by a version relation — neither with a
+    /// story chain of its own — resolving to the same one of the two
+    /// regardless of which side was opened first, rather than always
+    /// flipping onto whichever one happens to be "the other" one. With no
+    /// version neighbour either, the lone
     /// anime is returned exactly as phase 1 found it.</summary>
     internal async Task<(List<AnimeMetadata> Members, List<RelationEdge> Edges, bool IsPartial, bool IsTruncated, List<SeriesVersionNeighbours.Neighbour> VersionNeighbours)> TraverseAsync(
         int seedAnimeId, int fetchBudget, int probeBudget, bool expandLeanMembers, CancellationToken ct)
@@ -129,9 +145,25 @@ public class SeriesGraphBuilder(
             var (soleMemberCandidates, _) = await DiscoverVersionNeighboursAsync(members, ct);
             if (soleMemberCandidates.Count > 0)
             {
-                var reseedAnimeId = await PickLargestStoryComponentAsync(soleMemberCandidates, ct);
-                (members, edges, isPartial, isTruncated) =
-                    await TraverseStoryComponentAsync(reseedAnimeId, fetchBudget, probeBudget, expandLeanMembers, ct);
+                // The seed is a candidate too — its own component is this
+                // same lone node — so a pair of standalone works linked only
+                // by a version relation (neither with a story chain of its
+                // own) resolves the same way regardless of which side of the
+                // pair was opened first, rather than always flipping onto
+                // whichever one happens to be "the other" one.
+                var seedAsCandidate = new SeriesVersionNeighbours.Neighbour
+                {
+                    AnimeId = seedAnimeId,
+                    Anime = members[0],
+                    MembershipKind = MembershipKind.Core,
+                };
+                var reseedAnimeId = await PickLargestStoryComponentAsync(
+                    soleMemberCandidates.Prepend(seedAsCandidate).ToList(), ct);
+                if (reseedAnimeId != seedAnimeId)
+                {
+                    (members, edges, isPartial, isTruncated) =
+                        await TraverseStoryComponentAsync(reseedAnimeId, fetchBudget, probeBudget, expandLeanMembers, ct);
+                }
             }
         }
 
@@ -144,27 +176,37 @@ public class SeriesGraphBuilder(
         return (members, edges, isPartial, isTruncated, versionNeighbours);
     }
 
-    /// <summary>The classified version neighbour (design.md decision D2)
-    /// whose own story component is largest — see <see cref="TraverseAsync"/>'s
-    /// seed-resolution paragraph. Each candidate is sized by running phase 1
-    /// on it with a zero fetch/probe budget: still a real traversal over
-    /// every cached relation, just unable to grow the component past what's
-    /// already cached, so sizing costs nothing (design.md decision D3's "no
-    /// fetch" carried over from neighbour classification to the candidate
-    /// that wins it). Ties — Clannad and After Story are each the other's
-    /// whole component — break on the lower MAL id, so the result doesn't
-    /// depend on classification order.</summary>
+    /// <summary>Of <paramref name="candidates"/> — every version neighbour of
+    /// a lone seed, plus the seed itself (<see cref="TraverseAsync"/>'s
+    /// seed-resolution paragraph) — the one whose own story component is
+    /// largest. Each candidate is sized by running phase 1 on it with a zero
+    /// fetch/probe budget: still a real traversal over every cached
+    /// relation, just unable to grow the component past what's already
+    /// cached, so sizing costs nothing (design.md decision D3's "no fetch"
+    /// carried over from neighbour classification to the candidate that wins
+    /// it). Ties break on the higher total episode count — the fuller work
+    /// is the more useful default main line when two standalone works are
+    /// alternatives of each other and neither has a story chain — then on
+    /// the lower MAL id, so the result doesn't depend on classification
+    /// order: Clannad and After Story are each the other's whole component
+    /// and settle there, and a pair like a one-episode pilot and its
+    /// seven-episode remake settles on the remake regardless of which one
+    /// was opened first.</summary>
     private async Task<int> PickLargestStoryComponentAsync(List<SeriesVersionNeighbours.Neighbour> candidates, CancellationToken ct)
     {
-        var sized = new List<(int AnimeId, int ComponentSize)>();
+        var sized = new List<(int AnimeId, int ComponentSize, int TotalEpisodes)>();
         foreach (var candidate in candidates)
         {
             var (sizingMembers, _, _, _) = await TraverseStoryComponentAsync(
                 candidate.AnimeId, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false, ct);
-            sized.Add((candidate.AnimeId, sizingMembers.Count));
+            sized.Add((candidate.AnimeId, sizingMembers.Count, candidate.Anime.TotalEpisodes ?? 0));
         }
 
-        return sized.OrderByDescending(s => s.ComponentSize).ThenBy(s => s.AnimeId).First().AnimeId;
+        return sized
+            .OrderByDescending(s => s.ComponentSize)
+            .ThenByDescending(s => s.TotalEpisodes)
+            .ThenBy(s => s.AnimeId)
+            .First().AnimeId;
     }
 
     /// <summary>Finds and classifies <paramref name="componentMembers"/>'
@@ -342,6 +384,14 @@ public class SeriesGraphBuilder(
                 .ToList();
             var storyOutgoingIds = storyOutgoingEdges.Select(e => e.RelatedAnimeId);
 
+            // Recorded for grouping (fix-alternative-version-grouping
+            // design.md D1) but never traversed — see the comment below,
+            // where these are folded into edges without their far ends ever
+            // reaching outgoingIds.
+            var versionOutgoingEdges = metadata.RelatedAnime
+                .Where(r => SeriesRelations.VersionRelations.Contains(r.RelationType))
+                .Select(r => new RelationEdge(animeId, r.RelatedAnimeId, r.RelationType));
+
             // Companion-media `other` edges (design.md decision 1, widened to
             // `pv` by polish-rewatch-more-and-filters design.md D5a): one
             // batched lookup of the cached MediaType of this node's
@@ -442,8 +492,25 @@ public class SeriesGraphBuilder(
             // in the component is captured exactly once regardless of which
             // end declares it (mirrors SeriesRelations.FindRecapIds/
             // FindSideContentIds's own reliance on that symmetry).
+            //
+            // versionOutgoingEdges rides along in this same foreach — an
+            // AniList-contradicted version edge is filtered exactly as a
+            // story edge is — but is deliberately absent from outgoingIds
+            // above: it is recorded for ResolveExtraGroups to read, never
+            // followed, so a version relation neither grows nor splits the
+            // story component (fix-alternative-version-grouping design.md
+            // D1). The tail filter below
+            // (`edges.Where(e => memberIds.Contains(e.RelatedAnimeId))`) is
+            // what then partitions these against
+            // DiscoverVersionNeighboursAsync's member→neighbour version
+            // edges: a version edge recorded here whose far end never became
+            // a member is dropped there, while DiscoverVersionNeighboursAsync
+            // records that exact edge itself, under its own
+            // `!memberIds.Contains(...)` guard — so one version edge is
+            // either member→member (kept here) or member→neighbour (kept
+            // there), never both.
             var companionOutgoingEdges = companionOutgoingIds.Select(id => new RelationEdge(animeId, id, "other"));
-            foreach (var edge in storyOutgoingEdges.Concat(companionOutgoingEdges))
+            foreach (var edge in storyOutgoingEdges.Concat(companionOutgoingEdges).Concat(versionOutgoingEdges))
             {
                 if (!contradictedFarEndIds.Contains(edge.RelatedAnimeId))
                     edges.Add(edge);
@@ -596,24 +663,44 @@ public class SeriesGraphBuilder(
     }
 
     /// <summary>Resolves each of a telling's extras to the <see cref="RelationGroup"/>
-    /// it displays under (design.md decision 4, task 5.2): the highest-precedence
-    /// relation to any main-line member of this telling
-    /// (<see cref="SeriesRelations.HighestPrecedenceGroup"/>); failing that,
-    /// inherited breadth-first from the nearest already-resolved extra — a
-    /// multi-source BFS seeded with every directly-resolved extra, ties broken
-    /// by the lower MAL id (design.md Risks/Trade-offs); failing that, Other.
+    /// it displays under, as four tiers in order
+    /// (fix-alternative-version-grouping design.md D2, spec's "Main line and
+    /// extras" extras-grouping rule):
+    ///
+    /// 1. The highest-precedence relation, in either direction, to any
+    /// main-line member of this telling (<see cref="SeriesRelations.HighestPrecedenceGroup"/>)
+    /// — unchanged from before this tiering.
+    /// 2. Failing that, a version relation (<see cref="SeriesRelations.VersionRelations"/>),
+    /// in either direction, to *any* other member of this telling — main
+    /// line or extra alike — by <see cref="SeriesRelations.HighestPrecedenceVersionGroup"/>.
+    /// Confined to version relations rather than any relation to any member:
+    /// tier 3 already gives a better answer for the rest of them — an extra
+    /// whose only relation is a plain story relation to another extra should
+    /// read as whatever that extra reads as, not flatly as that relation's
+    /// own group. A version relation is the one kind where the relation
+    /// itself names the correct group regardless of what it points at, so it
+    /// gets its own tier ahead of inheritance.
+    /// 3. Failing both, inherited breadth-first from the nearest
+    /// tier-1-resolved extra — a multi-source BFS seeded with only the
+    /// extras tier 1 resolved, ties broken by the lower MAL id (design.md
+    /// Risks/Trade-offs), travelling story/companion edges only.
+    /// 4. Failing all three, Other.
+    ///
     /// Scoped to edges whose both ends belong to this telling, so a shared
     /// member's edge into a neighbouring telling never leaks a foreign
     /// group in here.
     ///
-    /// <paramref name="versionNeighbourIds"/> — this telling's version
-    /// neighbours (rebuild-series-by-story-component design.md D2, task 5.5)
-    /// — never take part in the inheritance walk: one already resolves its
-    /// own group directly, from its own version relation to a main-line
-    /// member, so it never needs to inherit; and it's excluded as a BFS
-    /// source so it never passes that group on to whatever else it happens
-    /// to sit next to, which would otherwise mislabel a story extra as an
-    /// alternative version merely for hanging off one.</summary>
+    /// Neither a version edge nor a tier-2-resolved extra takes part in the
+    /// tier-3 walk — as adjacency or as a seed. Excluding version edges from
+    /// adjacency is what keeps a story extra from inheriting "Alternative
+    /// version" merely for sitting next to one; excluding tier-2-resolved
+    /// extras as seeds is what keeps a version relation from being passed on
+    /// by a second hand, the same reason <paramref name="versionNeighbourIds"/>
+    /// (rebuild-series-by-story-component design.md D2, task 5.5) are
+    /// excluded too — one already resolves its own group directly, in tier 1
+    /// or tier 2, from its own version relation to some member, so it never
+    /// needs to inherit and must never pass that group on to whatever else
+    /// it happens to sit next to.</summary>
     // Internal rather than private: tested directly (task 5.6) against
     // synthetic version-neighbour ids, and driven by the real ones
     // ClassifyTelling now threads through from BuildAsync's traversal
@@ -627,6 +714,7 @@ public class SeriesGraphBuilder(
 
         var scopedEdges = edges.Where(e => tellingIds.Contains(e.OwnerId) && tellingIds.Contains(e.RelatedAnimeId)).ToList();
 
+        // Tier 1: a relation, in either direction, to any main-line member.
         var groupByExtraId = new Dictionary<int, RelationGroup>();
         foreach (var extraId in extraIds)
         {
@@ -640,13 +728,44 @@ public class SeriesGraphBuilder(
                 groupByExtraId[extraId] = SeriesRelations.HighestPrecedenceGroup(edgesToMainLine);
         }
 
-        var queue = new Queue<int>(groupByExtraId.Keys.Where(id => !versionNeighbourIds.Contains(id)).OrderBy(id => id));
+        // Captured before tier 2 adds any entries: the tier-3 walk below
+        // seeds from exactly what tier 1 resolved, minus version neighbours
+        // — never from what tier 2 resolves too.
+        var tier1ResolvedIds = groupByExtraId.Keys.ToHashSet();
+
+        // Tier 2 (design.md D2, spec rule 2): an extra tier 1 left
+        // unresolved, but that carries a version relation to any other
+        // member of the telling. This is the pass a version neighbour
+        // exists for — one whose version relation names a non-main-line
+        // member matches nothing in tier 1 and, correctly, never seeds or is
+        // reached by the tier-3 walk, so without this tier it would fall
+        // straight through to Other.
+        foreach (var extraId in extraIds)
+        {
+            if (groupByExtraId.ContainsKey(extraId))
+                continue;
+
+            var edgesToAnyMember = scopedEdges
+                .Where(e => e.OwnerId == extraId || e.RelatedAnimeId == extraId)
+                .Select(e => (e.RelationType, ExtraIsOwner: e.OwnerId == extraId))
+                .ToList();
+
+            if (SeriesRelations.HighestPrecedenceVersionGroup(edgesToAnyMember) is { } versionGroup)
+                groupByExtraId[extraId] = versionGroup;
+        }
+
+        // Tier 3: the walk travels story/companion edges only — a version
+        // edge is excluded from its adjacency (design.md D3) so it can never
+        // carry a group between two extras the way a story edge does.
+        var nonVersionScopedEdges = scopedEdges.Where(e => !SeriesRelations.VersionRelations.Contains(e.RelationType)).ToList();
+
+        var queue = new Queue<int>(tier1ResolvedIds.Where(id => !versionNeighbourIds.Contains(id)).OrderBy(id => id));
         while (queue.Count > 0)
         {
             var currentId = queue.Dequeue();
             var currentGroup = groupByExtraId[currentId];
 
-            var neighbourIds = scopedEdges
+            var neighbourIds = nonVersionScopedEdges
                 .Where(e => e.OwnerId == currentId || e.RelatedAnimeId == currentId)
                 .Select(e => e.OwnerId == currentId ? e.RelatedAnimeId : e.OwnerId)
                 .Where(id => extraIds.Contains(id) && !groupByExtraId.ContainsKey(id) && !versionNeighbourIds.Contains(id))
@@ -660,6 +779,7 @@ public class SeriesGraphBuilder(
             }
         }
 
+        // Tier 4: failing all three, Other.
         foreach (var extraId in extraIds)
             groupByExtraId.TryAdd(extraId, RelationGroup.Other);
 

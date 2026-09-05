@@ -151,6 +151,46 @@ public class SeriesGraphBuilderVersionPersistenceTests
         Assert.Equal(nameof(RelationGroup.AlternativeVersion), brotherhoodMember.RelationGroup);
     }
 
+    // Two standalone works with no story relation to anything — each other's
+    // whole "story component" is just itself — linked only by
+    // alternative_version (fix-false-memory-lone-version-pair). Before this
+    // fix BuildAsync discarded this pairing outright (its final story
+    // component was always size 1, seeded from either side), so it could
+    // never build, never persist a RelationGroup, and stayed stuck on
+    // whatever a much older build had stored. It must now build the fuller
+    // work as main line and the thinner one as a FoldedVersion
+    // AlternativeVersion extra, regardless of which one seeds the build.
+    [Theory]
+    [InlineData(1)] // seeded from the thin pilot
+    [InlineData(2)] // seeded from the fuller remake
+    public async Task TwoStandaloneWorksLinkedOnlyByVersionBuildWithTheFullerOneAsMainLine(int seedId)
+    {
+        using var db = CreateDb();
+        var pilot = Anime(1, "ona");
+        pilot.TotalEpisodes = 1;
+        var remake = Anime(2, "ona");
+        remake.TotalEpisodes = 7;
+        Relate(pilot, remake, "alternative_version");
+        Relate(remake, pilot, "alternative_version");
+        db.AnimeMetadata.AddRange(pilot, remake);
+        await db.SaveChangesAsync();
+
+        var result = await CreateBuilder(db).BuildAsync(seedId, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
+
+        Assert.NotNull(result);
+        var members = await db.SeriesMembers.Where(m => m.SeriesId == result!.Id).ToListAsync();
+        Assert.Equal(2, members.Count);
+
+        var remakeMember = members.Single(m => m.AnimeId == remake.Id);
+        Assert.True(remakeMember.IsMainLine);
+        Assert.Equal(nameof(MembershipKind.Core), remakeMember.MembershipKind);
+
+        var pilotMember = members.Single(m => m.AnimeId == pilot.Id);
+        Assert.False(pilotMember.IsMainLine);
+        Assert.Equal(nameof(MembershipKind.FoldedVersion), pilotMember.MembershipKind);
+        Assert.Equal(nameof(RelationGroup.AlternativeVersion), pilotMember.RelationGroup);
+    }
+
     // A FoldedVersion neighbour can legitimately belong to two series at once
     // (design.md D8, e.g. Fate/Prototype). Exactly one membership is primary
     // — the larger story component — and building the larger one second

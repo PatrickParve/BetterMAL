@@ -203,4 +203,28 @@ public static class SeriesRelations
             .Select(e => ResolveDirectional(e.RelationType, e.ExtraIsOwner))
             .OrderBy(SeriesRelationGroupOrder.GroupOf)
             .First();
+
+    /// <summary>The single <see cref="RelationGroup"/> for an id related to
+    /// one or more other members of its telling by a version relation —
+    /// <see cref="VersionRelations"/> — alone (fix-alternative-version-grouping
+    /// design.md decision D4, spec's extras-grouping rule 2): the
+    /// highest-precedence group among just <paramref name="edgesToMember"/>'s
+    /// version-relation edges, by the same <see cref="SeriesRelationGroupOrder"/>
+    /// <see cref="HighestPrecedenceGroup"/> uses — Alternative version (order
+    /// 0) precedes Alternative setting (order 1), so an id carrying both
+    /// resolves Alternative version. Returns null when none of
+    /// <paramref name="edgesToMember"/> is a version relation, so a caller
+    /// can fall through to its next tier rather than resolving Other by way
+    /// of this helper. <see cref="ResolveDirectional"/> needs no direction
+    /// here either — the two version relations already resolve the same
+    /// group regardless of which end declared the edge.</summary>
+    public static RelationGroup? HighestPrecedenceVersionGroup(IEnumerable<(string RelationType, bool ExtraIsOwner)> edgesToMember)
+    {
+        var versionGroups = edgesToMember
+            .Where(e => VersionRelations.Contains(e.RelationType))
+            .Select(e => ResolveDirectional(e.RelationType, e.ExtraIsOwner))
+            .ToList();
+
+        return versionGroups.Count > 0 ? versionGroups.OrderBy(SeriesRelationGroupOrder.GroupOf).First() : null;
+    }
 }
