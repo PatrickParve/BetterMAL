@@ -29,4 +29,10 @@ public interface IMalClient
     /// <summary>Removes an anime from my MAL list. A 404 (MAL already has no
     /// such list entry) counts as success — the desired end state already holds.</summary>
     Task DeleteMyListStatusAsync(int animeId, CancellationToken ct = default);
+
+    /// <summary>Reads MyAnimeList's current list status for one anime,
+    /// bearer-authenticated so `my_list_status` is actually populated
+    /// (GetAnimeDetailsAsync is client-id authenticated and never returns it).
+    /// Returns null when MyAnimeList has no list entry for the anime.</summary>
+    Task<MalListStatus?> GetMyListStatusAsync(int animeId, CancellationToken ct = default);
 }

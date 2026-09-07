@@ -15,10 +15,12 @@ public class UserAnimeEntryRepository(AnimeTrackerDbContext db) : IUserAnimeEntr
             .Include(e => e.Anime)
             .ToListAsync(ct);
 
-    public async Task<(int PendingCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default)
+    public async Task<(int PendingCount, int HeldCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default)
     {
-        var pendingCount = await db.UserAnimeEntries.AsNoTracking().CountAsync(e => e.PendingSync, ct);
+        var pendingCount = await db.UserAnimeEntries.AsNoTracking().CountAsync(e => e.PendingSync && e.HeldForReviewAt == null, ct);
+        var heldEntryCount = await db.UserAnimeEntries.AsNoTracking().CountAsync(e => e.PendingSync && e.HeldForReviewAt != null, ct);
+        var heldRemovalCount = await db.PendingEntryDeletions.AsNoTracking().CountAsync(d => d.HeldForReviewAt != null, ct);
         var lastSyncedAt = await db.UserAnimeEntries.AsNoTracking().MaxAsync(e => (DateTimeOffset?)e.LastSyncedAt, ct);
-        return (pendingCount, lastSyncedAt);
+        return (pendingCount, heldEntryCount + heldRemovalCount, lastSyncedAt);
     }
 }

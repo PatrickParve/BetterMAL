@@ -11,4 +11,8 @@ public class PendingEntryDeletion
     public int AnimeId { get; set; }
     public AnimeMetadata Anime { get; set; } = null!;
     public DateTimeOffset RequestedAt { get; set; }
+
+    /// <summary>Non-null means this removal was already waiting to be pushed
+    /// when the process started, and is awaiting my decision.</summary>
+    public DateTimeOffset? HeldForReviewAt { get; set; }
 }

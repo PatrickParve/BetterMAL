@@ -40,4 +40,8 @@ public class UserAnimeEntry
     public int RewatchCount { get; set; }
     public bool PendingSync { get; set; }
     public DateTimeOffset? LastSyncedAt { get; set; }
+
+    /// <summary>Non-null means this entry was already waiting to be pushed
+    /// when the process started, and is awaiting my decision.</summary>
+    public DateTimeOffset? HeldForReviewAt { get; set; }
 }

@@ -1,9 +1,4 @@
-# activity-recording Specification
-
-## Purpose
-The activity-recording capability governs how a change to a stored list entry becomes a record in the activity log, whichever of the app's paths applied that change — my own edits, the automatic reopening of a completed entry, the background import, an accepted reconciliation diff, or the corrective re-sync. It fixes the granularity a change is recorded at, the origin every record carries, and the special case of the import that establishes a list's baseline, so that every surface reading the log — the recaps, the profile page's activity feed and history, and any future reader — can rely on one consistent history regardless of which path produced it.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Every path that changes my list records what it changed
 
@@ -130,33 +125,3 @@ The origin SHALL describe where a change came from, and SHALL NOT be used to dec
 
 - **WHEN** a surface that groups the MyAnimeList-side origins together displays that record
 - **THEN** it reads as coming from MyAnimeList rather than as my own editing
-
-### Requirement: The import that establishes the baseline records nothing
-
-An import that runs while **no activity has been recorded at all** SHALL record nothing. Such a run is establishing what my list already is rather than reporting things that happened, and recording it would fill the history with one addition per anime, all sharing a single moment, before any activity worth reading exists.
-
-The judgement SHALL be made once per run, from the state at the run's start, so a change recorded while a long import is in flight does not make that same import start recording halfway through.
-
-Because the judgement is "nothing has been recorded yet" rather than "this is the first run", it SHALL hold across interruption: a baseline import interrupted partway and resumed still records nothing, for as long as nothing else has recorded anything in between.
-
-Every import that runs once history exists SHALL record normally, so an anime added on MyAnimeList's own site and picked up by a later import appears as an addition.
-
-#### Scenario: A first import writes no history
-
-- **WHEN** the list is imported for the first time, with no activity recorded before it
-- **THEN** the activity log holds no records for the anime it imported
-
-#### Scenario: An interrupted first import writes no history either
-
-- **WHEN** a first import is interrupted partway and resumes on the next restart, with nothing recorded in between
-- **THEN** the anime imported by the resumed run are not recorded either
-
-#### Scenario: An edit during the baseline import does not start it recording
-
-- **WHEN** I edit an entry while a baseline import is still running
-- **THEN** the rest of that import's anime are still not recorded
-
-#### Scenario: A later import is recorded
-
-- **WHEN** an anime is added on MyAnimeList's own site after my history has begun, and a later import creates its entry
-- **THEN** that anime is recorded as an addition

@@ -8,17 +8,19 @@ namespace AnimeTracker.Api.Controllers;
 public class SyncController(
     IEntryPushService pushService,
     IReconciliationService reconciliationService,
+    IHeldChangeService heldChangeService,
     IUserAnimeEntryRepository entryRepository,
     IResyncTrigger resyncTrigger,
     IResyncProgressTracker resyncProgress) : ControllerBase
 {
     /// <summary>Sync status for the settings page: how many entries are
-    /// currently pending/retrying, and when the most recent push succeeded.</summary>
+    /// currently pending/retrying, how many are held for review, and when the
+    /// most recent push succeeded.</summary>
     [HttpGet("api/sync/status")]
     public async Task<IActionResult> GetStatus(CancellationToken ct)
     {
-        var (pendingCount, lastSyncedAt) = await entryRepository.GetSyncStatusAsync(ct);
-        return Ok(new { pendingCount, lastSyncedAt });
+        var (pendingCount, heldCount, lastSyncedAt) = await entryRepository.GetSyncStatusAsync(ct);
+        return Ok(new { pendingCount, heldCount, lastSyncedAt });
     }
 
     /// <summary>Manual "sync now" — flushes only pending entries immediately,
@@ -66,6 +68,61 @@ public class SyncController(
         var cancelled = await reconciliationService.CancelPendingDiffAsync(ct);
         return cancelled ? NoContent() : NotFound();
     }
+
+    /// <summary>Every change held for review since a previous process
+    /// start — entries and queued removals together, each tagged with its
+    /// kind — or an empty list. Empty rather than 204, since the settings
+    /// page also uses the count. An item MyAnimeList already agrees with is
+    /// cleared as a side effect of this read and omitted (design.md D8a).</summary>
+    [HttpGet("api/sync/held")]
+    public async Task<IActionResult> GetHeld(CancellationToken ct)
+    {
+        var held = await heldChangeService.GetHeldAsync(ct);
+        return Ok(held);
+    }
+
+    /// <summary>Accepts one held change: releases its hold and pushes it to
+    /// MyAnimeList immediately. 404 if that anime has nothing held.</summary>
+    [HttpPost("api/sync/held/{animeId:int}/accept")]
+    public async Task<IActionResult> AcceptHeld(int animeId, CancellationToken ct)
+    {
+        var result = await heldChangeService.AcceptAsync(animeId, ct);
+        return HeldDecisionResponse(result);
+    }
+
+    /// <summary>Declines one held change: discards it and adopts MyAnimeList's
+    /// current value instead. 404 if that anime has nothing held.</summary>
+    [HttpPost("api/sync/held/{animeId:int}/decline")]
+    public async Task<IActionResult> DeclineHeld(int animeId, CancellationToken ct)
+    {
+        var result = await heldChangeService.DeclineAsync(animeId, ct);
+        return HeldDecisionResponse(result);
+    }
+
+    /// <summary>Accepts every currently held change, one at a time; a
+    /// per-item failure leaves that item held rather than aborting the rest.</summary>
+    [HttpPost("api/sync/held/accept")]
+    public async Task<IActionResult> AcceptAllHeld(CancellationToken ct)
+    {
+        var result = await heldChangeService.AcceptAllAsync(ct);
+        return Ok(result);
+    }
+
+    /// <summary>Declines every currently held change, one at a time; a
+    /// per-item failure leaves that item held rather than aborting the rest.</summary>
+    [HttpPost("api/sync/held/decline")]
+    public async Task<IActionResult> DeclineAllHeld(CancellationToken ct)
+    {
+        var result = await heldChangeService.DeclineAllAsync(ct);
+        return Ok(result);
+    }
+
+    private IActionResult HeldDecisionResponse(HeldChangeDecisionResult result) => result.Outcome switch
+    {
+        HeldChangeDecisionOutcome.NotHeld => NotFound(),
+        HeldChangeDecisionOutcome.Failed => Ok(new { applied = false, error = result.Error }),
+        _ => Ok(new { applied = true }),
+    };
 
     /// <summary>Kicks off the one-time corrective full re-sync (settings page):
     /// re-fetches full detail for every anime in the MAL list and upserts

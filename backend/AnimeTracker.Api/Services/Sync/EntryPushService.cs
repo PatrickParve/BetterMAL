@@ -14,7 +14,7 @@ public class EntryPushService(
     public async Task<bool> PushIfPendingAsync(int animeId, CancellationToken ct = default)
     {
         var entry = await db.UserAnimeEntries.FirstOrDefaultAsync(e => e.AnimeId == animeId, ct);
-        if (entry is null || !entry.PendingSync)
+        if (entry is null || !entry.PendingSync || entry.HeldForReviewAt is not null)
             return false;
 
         try
@@ -59,7 +59,7 @@ public class EntryPushService(
     public async Task<bool> PushPendingDeletionAsync(int animeId, CancellationToken ct = default)
     {
         var pending = await db.PendingEntryDeletions.FirstOrDefaultAsync(d => d.AnimeId == animeId, ct);
-        if (pending is null)
+        if (pending is null || pending.HeldForReviewAt is not null)
             return false;
 
         try
@@ -93,7 +93,7 @@ public class EntryPushService(
     public async Task<int> DrainPendingAsync(CancellationToken ct = default)
     {
         var pendingIds = await db.UserAnimeEntries.AsNoTracking()
-            .Where(e => e.PendingSync)
+            .Where(e => e.PendingSync && e.HeldForReviewAt == null)
             .Select(e => e.AnimeId)
             .ToListAsync(ct);
 
@@ -105,6 +105,7 @@ public class EntryPushService(
         }
 
         var pendingDeletionIds = await db.PendingEntryDeletions.AsNoTracking()
+            .Where(d => d.HeldForReviewAt == null)
             .Select(d => d.AnimeId)
             .ToListAsync(ct);
 

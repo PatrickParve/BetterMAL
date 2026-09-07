@@ -159,5 +159,7 @@ public class AnimeMetadataChangeDetectorSeriesBuildTests
             throw new NotImplementedException();
         public Task DeleteMyListStatusAsync(int animeId, CancellationToken ct = default) =>
             throw new NotImplementedException();
+        public Task<MalListStatus?> GetMyListStatusAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 }

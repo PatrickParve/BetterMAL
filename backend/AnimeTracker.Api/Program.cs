@@ -82,6 +82,8 @@ builder.Services.AddScoped<IAiringWatchStatusService, AiringWatchStatusService>(
 // --- Write-sync retry & reconciliation ---
 builder.Services.AddScoped<IEntryPushService, EntryPushService>();
 builder.Services.AddScoped<IReconciliationService, ReconciliationService>();
+builder.Services.AddScoped<IHeldChangeService, HeldChangeService>();
+builder.Services.AddScoped<IStartupPendingSyncHold, StartupPendingSyncHold>();
 builder.Services.AddHostedService<PendingSyncRetryBackgroundService>();
 builder.Services.AddHostedService<ReconciliationBackgroundService>();
 
@@ -205,6 +207,12 @@ using (var startupScope = app.Services.CreateScope())
 {
     var db = startupScope.ServiceProvider.GetRequiredService<AnimeTrackerDbContext>();
     db.Database.Migrate();
+
+    // Stamped here, immediately after the migration and before app.Run(), so
+    // it is committed before any hosted service, controller, or debounce
+    // timer can push a pending row (design.md D2).
+    var startupHold = startupScope.ServiceProvider.GetRequiredService<IStartupPendingSyncHold>();
+    await startupHold.ApplyAsync();
 }
 
 app.Run();

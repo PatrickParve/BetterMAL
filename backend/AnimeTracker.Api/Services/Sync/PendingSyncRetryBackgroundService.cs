@@ -3,7 +3,12 @@ namespace AnimeTracker.Api.Services.Sync;
 /// <summary>Safety net for the debounce timer: periodically drains any entries
 /// still marked pending_sync — e.g. a push that failed, or a debounce timer
 /// lost to a process restart — so a failure is retried rather than silently
-/// dropped (design.md's "Lost writes on crash/offline" risk).</summary>
+/// dropped (design.md's "Lost writes on crash/offline" risk). Its startup
+/// drain (the first pass, before the first Task.Delay) is safe even though it
+/// runs before anything has reviewed what was left pending by the previous
+/// process: the startup hold (design.md D1/D2) has already stamped every such
+/// row as held by the time this service starts, and DrainPendingAsync filters
+/// held rows out.</summary>
 public class PendingSyncRetryBackgroundService(
     IServiceScopeFactory scopeFactory,
     ILogger<PendingSyncRetryBackgroundService> logger) : BackgroundService

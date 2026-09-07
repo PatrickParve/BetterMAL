@@ -69,7 +69,7 @@ public class MalClient(HttpClient http) : IMalClient
     public async Task<List<MalAnimeListEdge>?> GetFullSeasonAsync(int year, string season, string? sort = null, CancellationToken ct = default)
     {
         var firstPage = await GetAsyncOrNotFound<MalPagedResponse<MalAnimeListEdge>>(
-            BuildSeasonUrl(year, season, FullListPageSize, 0, sort), ct);
+            BuildSeasonUrl(year, season, FullListPageSize, 0, sort), MalAuthMode.ClientId, ct);
         if (firstPage is null)
             return null; // MAL has no listing for this season (404) — an answer, not a fetch failure
 
@@ -136,6 +136,12 @@ public class MalClient(HttpClient http) : IMalClient
             ?? throw new InvalidOperationException("MAL returned an empty my_list_status response.");
     }
 
+    public async Task<MalListStatus?> GetMyListStatusAsync(int animeId, CancellationToken ct = default)
+    {
+        var node = await GetAsyncOrNotFound<MalAnimeNode>($"anime/{animeId}?fields=my_list_status", MalAuthMode.Bearer, ct);
+        return node?.MyListStatus;
+    }
+
     public async Task DeleteMyListStatusAsync(int animeId, CancellationToken ct = default)
     {
         var request = new HttpRequestMessage(HttpMethod.Delete, $"anime/{animeId}/my_list_status");
@@ -159,14 +165,13 @@ public class MalClient(HttpClient http) : IMalClient
             ?? throw new InvalidOperationException($"MAL returned an empty response for {url}.");
     }
 
-    /// <summary>Same as <see cref="GetAsync{T}"/> (always client-id auth) but a
-    /// 404 returns null instead of throwing — the same "already absent on
-    /// MAL" tolerance <see cref="DeleteMyListStatusAsync"/> gives a missing
-    /// list entry.</summary>
-    private async Task<T?> GetAsyncOrNotFound<T>(string url, CancellationToken ct) where T : class
+    /// <summary>Same as <see cref="GetAsync{T}"/> but a 404 returns null
+    /// instead of throwing — the same "already absent on MAL" tolerance
+    /// <see cref="DeleteMyListStatusAsync"/> gives a missing list entry.</summary>
+    private async Task<T?> GetAsyncOrNotFound<T>(string url, MalAuthMode authMode, CancellationToken ct) where T : class
     {
         var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Options.Set(MalRequestOptions.AuthModeKey, MalAuthMode.ClientId);
+        request.Options.Set(MalRequestOptions.AuthModeKey, authMode);
 
         using var response = await http.SendAsync(request, ct);
         if (response.StatusCode == HttpStatusCode.NotFound)

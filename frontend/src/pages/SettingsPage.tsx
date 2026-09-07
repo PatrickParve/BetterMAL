@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
+  acceptAllHeldChanges,
+  acceptHeldChange,
   acceptReconciliationDiff,
   cancelReconciliationDiff,
+  declineAllHeldChanges,
+  declineHeldChange,
   getAiringFullRefreshStatus,
+  getHeldChanges,
   getMalAuthStatus,
   getPendingReconciliationDiff,
   getResyncFromMalStatus,
@@ -18,6 +23,9 @@ import {
 import type {
   AiringFullRefreshStatusDto,
   AnimeSearchResult,
+  HeldChangeDto,
+  HeldChangeRecentChangeDto,
+  HeldChangeValuesDto,
   MalAuthStatus,
   PendingReconciliationDiffDto,
   ResyncStatusDto,
@@ -149,6 +157,43 @@ function JobProgress({ phase, done, total, noun }: { phase: JobPhase; done: numb
   )
 }
 
+// Mirrors the backend's ActivityFeedComposer.Summarize for the small,
+// uncollapsed slice of history a held row shows (design.md D4) — same
+// ChangeType/ChangeDetail parsing, minus the episode-run collapsing and
+// completion/score merging that only matter across a whole feed.
+function summarizeHeldChange(change: HeldChangeRecentChangeDto): string {
+  const detail = change.changeDetail
+  switch (change.changeType) {
+    case 'Added': {
+      const prefix = 'Added as '
+      const status = detail?.startsWith(prefix) ? (detail.slice(prefix.length) as keyof typeof STATUS_LABELS) : null
+      if (status && status in STATUS_LABELS) return `Added to list as ${STATUS_LABELS[status]}`
+      break
+    }
+    case 'Completed':
+      return 'Completed'
+    case 'StatusChanged': {
+      const separator = ' -> '
+      const separatorIndex = detail?.indexOf(separator) ?? -1
+      if (detail && separatorIndex >= 0) {
+        const from = detail.slice(0, separatorIndex) as keyof typeof STATUS_LABELS
+        const to = detail.slice(separatorIndex + separator.length) as keyof typeof STATUS_LABELS
+        if (from in STATUS_LABELS && to in STATUS_LABELS) return `${STATUS_LABELS[from]} → ${STATUS_LABELS[to]}`
+      }
+      break
+    }
+    case 'Removed':
+      return 'Removed from list'
+  }
+  return detail ?? change.changeType.replace(/([a-z])([A-Z])/g, '$1 $2')
+}
+
+// The six pushed fields, rendered the same way the reconciliation diff
+// renders them, so the two review surfaces read as one pattern.
+function formatHeldValues(values: HeldChangeValuesDto): string {
+  return `${STATUS_LABELS[values.status]}, ${values.episodesWatched} ep${values.myScore !== null ? `, score ${values.myScore}` : ''}`
+}
+
 // Operational/settings page: sync status + manual triggers, pending
 // reconciliation-diff review, MAL re-authorization, and on-demand
 // force-refresh of a single anime's cached metadata. Every action here is a
@@ -157,6 +202,7 @@ function JobProgress({ phase, done, total, noun }: { phase: JobPhase; done: numb
 export function SettingsPage() {
   const [status, setStatus] = useState<SyncStatusDto | null>(null)
   const [diff, setDiff] = useState<PendingReconciliationDiffDto | null>(null)
+  const [heldChanges, setHeldChanges] = useState<HeldChangeDto[] | null>(null)
   const [authStatus, setAuthStatus] = useState<MalAuthStatus | null>(null)
   const [resyncStatus, setResyncStatus] = useState<ResyncStatusDto | null>(null)
   const [airingRefreshStatus, setAiringRefreshStatus] = useState<AiringFullRefreshStatusDto | null>(null)
@@ -167,6 +213,8 @@ export function SettingsPage() {
   const [reconciling, setReconciling] = useState(false)
   const [reviewing, setReviewing] = useState(false)
   const [diffError, setDiffError] = useState<string | null>(null)
+  const [heldActingId, setHeldActingId] = useState<number | 'all' | null>(null)
+  const [heldError, setHeldError] = useState<string | null>(null)
   const [startingFullResync, setStartingFullResync] = useState(false)
   const [startingAiringRefresh, setStartingAiringRefresh] = useState(false)
   const [startingSeriesBulkBuild, setStartingSeriesBulkBuild] = useState(false)
@@ -182,6 +230,9 @@ export function SettingsPage() {
       getPendingReconciliationDiff()
         .then(setDiff)
         .catch(() => setDiff(null)),
+      getHeldChanges()
+        .then(setHeldChanges)
+        .catch(() => setHeldChanges(null)),
       getMalAuthStatus()
         .then(setAuthStatus)
         .catch(() => setAuthStatus(null)),
@@ -328,6 +379,70 @@ export function SettingsPage() {
     }
   }
 
+  async function handleAcceptHeld(animeId: number) {
+    if (heldActingId !== null) return
+    setHeldActingId(animeId)
+    setHeldError(null)
+    try {
+      const result = await acceptHeldChange(animeId)
+      if (!result.applied) setHeldError(result.error ?? 'Could not apply that change. Please try again.')
+      await load()
+    } catch {
+      setHeldError('Could not apply that change. Please try again.')
+    } finally {
+      setHeldActingId(null)
+    }
+  }
+
+  async function handleDeclineHeld(animeId: number) {
+    if (heldActingId !== null) return
+    setHeldActingId(animeId)
+    setHeldError(null)
+    try {
+      const result = await declineHeldChange(animeId)
+      if (!result.applied) setHeldError(result.error ?? 'Could not discard that change. Please try again.')
+      await load()
+    } catch {
+      setHeldError('Could not discard that change. Please try again.')
+    } finally {
+      setHeldActingId(null)
+    }
+  }
+
+  async function handleAcceptAllHeld() {
+    if (heldActingId !== null) return
+    setHeldActingId('all')
+    setHeldError(null)
+    try {
+      const result = await acceptAllHeldChanges()
+      if (result.stillHeld > 0) {
+        setHeldError(`${result.stillHeld} change${result.stillHeld === 1 ? '' : 's'} could not be applied and stayed held.`)
+      }
+      await load()
+    } catch {
+      setHeldError('Could not apply the held changes. Please try again.')
+    } finally {
+      setHeldActingId(null)
+    }
+  }
+
+  async function handleDeclineAllHeld() {
+    if (heldActingId !== null) return
+    setHeldActingId('all')
+    setHeldError(null)
+    try {
+      const result = await declineAllHeldChanges()
+      if (result.stillHeld > 0) {
+        setHeldError(`${result.stillHeld} change${result.stillHeld === 1 ? '' : 's'} could not be discarded and stayed held.`)
+      }
+      await load()
+    } catch {
+      setHeldError('Could not discard the held changes. Please try again.')
+    } finally {
+      setHeldActingId(null)
+    }
+  }
+
   if (loading) {
     return <p className="settings-page__loading">Loading…</p>
   }
@@ -362,6 +477,12 @@ export function SettingsPage() {
               <dd>{status.pendingCount}</dd>
             </div>
             <div className="settings-stats__row">
+              <dt>Held for review</dt>
+              {/* design.md D14: taken from the held-list payload, not
+                  status.heldCount, so it never disagrees with the rows below. */}
+              <dd>{heldChanges?.length ?? 0}</dd>
+            </div>
+            <div className="settings-stats__row">
               <dt>Last successful sync</dt>
               <dd>{formatTimestamp(status.lastSyncedAt)}</dd>
             </div>
@@ -372,7 +493,11 @@ export function SettingsPage() {
 
         <SettingsAction
           title="Sync now"
-          hint="Pushes your own unsent edits to MyAnimeList right away instead of waiting for the next scheduled sync. Sends nothing else, and changes nothing on your list locally."
+          hint={
+            heldChanges && heldChanges.length > 0
+              ? "Pushes your own unsent edits to MyAnimeList right away instead of waiting for the next scheduled sync. Sends nothing else, and changes nothing on your list locally. Changes held for review below are not among what it pushes — they're waiting on your decision."
+              : 'Pushes your own unsent edits to MyAnimeList right away instead of waiting for the next scheduled sync. Sends nothing else, and changes nothing on your list locally.'
+          }
           button={
             <button type="button" onClick={handleResyncNow} disabled={resyncing}>
               {resyncing ? 'Resyncing…' : 'Resync now'}
@@ -389,6 +514,82 @@ export function SettingsPage() {
             </button>
           }
         />
+
+        {heldChanges && heldChanges.length > 0 && (
+          <div className="settings-subsection">
+            <h3 className="settings-subsection__title">Changes held for review</h3>
+            <p className="settings-subsection__hint">
+              These are changes from a previous session that never reached MyAnimeList and are waiting on your
+              decision. Accepting sends the anime's stored values to MyAnimeList now, overwriting what MyAnimeList
+              holds for it. Declining discards the unsent change and takes MyAnimeList's current value for that
+              anime instead — unless MyAnimeList holds no entry for it, in which case declining removes the anime
+              from your list locally. Anything applied here appears in Latest updates and the full edit history,
+              marked as coming from MyAnimeList.
+            </p>
+            <ul className="settings-held-list">
+              {heldChanges.map((item) => {
+                const displayTitle = pickDisplayTitle(item.title, item.englishTitle)
+                const busy = heldActingId === item.animeId || heldActingId === 'all'
+                const destructiveDecline = item.kind === 'Entry' && item.remoteValues === null && !item.remoteUnavailable
+                return (
+                  <li key={item.animeId} className="settings-held-row">
+                    <RowPicture src={item.pictureUrl} className="settings-held-row__picture" />
+                    <div className="settings-held-row__body">
+                      <span className="settings-held-row__title" title={displayTitle}>
+                        {displayTitle}
+                      </span>
+                      <span className="settings-held-row__meta">
+                        {item.kind === 'Removal' ? 'Queued removal' : 'Unsent edit'} — held since{' '}
+                        {formatTimestamp(item.heldAt)}
+                      </span>
+                      <ul className="settings-held-row__changes">
+                        {item.recentChanges.map((change, index) => (
+                          <li key={index}>
+                            {summarizeHeldChange(change)} — {formatTimestamp(change.timestamp)}
+                          </li>
+                        ))}
+                        {item.additionalChangeCount > 0 && <li>and {item.additionalChangeCount} more…</li>}
+                      </ul>
+                      <span className="settings-held-row__meta">
+                        Would send: {item.localValues ? formatHeldValues(item.localValues) : 'remove from MyAnimeList'}
+                      </span>
+                      <span className="settings-held-row__meta">
+                        MyAnimeList currently holds:{' '}
+                        {item.remoteUnavailable
+                          ? "couldn't be read"
+                          : item.remoteValues
+                            ? formatHeldValues(item.remoteValues)
+                            : 'no entry for this anime'}
+                      </span>
+                      {destructiveDecline && (
+                        <span className="settings-box__error">
+                          MyAnimeList holds no entry for this anime — declining removes it from your list locally.
+                        </span>
+                      )}
+                    </div>
+                    <div className="settings-box__buttons settings-box__buttons--column">
+                      <button type="button" onClick={() => handleDeclineHeld(item.animeId)} disabled={busy}>
+                        {heldActingId === item.animeId ? 'Working…' : 'Decline'}
+                      </button>
+                      <button type="button" onClick={() => handleAcceptHeld(item.animeId)} disabled={busy}>
+                        {heldActingId === item.animeId ? 'Working…' : 'Accept'}
+                      </button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+            {heldError && <p className="settings-box__error">{heldError}</p>}
+            <div className="settings-box__buttons">
+              <button type="button" onClick={handleDeclineAllHeld} disabled={heldActingId !== null}>
+                Decline all
+              </button>
+              <button type="button" onClick={handleAcceptAllHeld} disabled={heldActingId !== null}>
+                Accept all
+              </button>
+            </div>
+          </div>
+        )}
 
         {diff && (
           <div className="settings-subsection">
@@ -513,20 +714,24 @@ export function SettingsPage() {
 // Search-and-pick input feeding the existing single-anime refresh endpoint —
 // same debounced search backing the navbar's SearchBar, just without
 // navigation on selection.
+type AnimeOnlySearchResult = Extract<AnimeSearchResult, { kind: 'anime' }>
+
 function AnimeRefreshPicker() {
   const [query, setQuery] = useState('')
-  const [selected, setSelected] = useState<AnimeSearchResult | null>(null)
+  const [selected, setSelected] = useState<AnimeOnlySearchResult | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const { results: rawResults, open, dismiss, reopen } = useAnimeSearch(query)
   // This picker refreshes a single anime's cached metadata — a series has no
   // such target, so its rows are filtered out rather than offered here.
-  const results = rawResults.filter((result) => result.kind === 'anime')
+  const results = rawResults.filter(
+    (result): result is AnimeOnlySearchResult => result.kind === 'anime',
+  )
 
   useClickOutside(containerRef, dismiss)
 
-  function pick(result: AnimeSearchResult) {
+  function pick(result: AnimeOnlySearchResult) {
     setSelected(result)
     setQuery(pickDisplayTitle(result.title, result.englishTitle))
     dismiss()

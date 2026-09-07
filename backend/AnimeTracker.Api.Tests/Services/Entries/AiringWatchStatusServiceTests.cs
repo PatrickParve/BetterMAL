@@ -220,6 +220,57 @@ public class AiringWatchStatusServiceTests
         Assert.Single(await db.ActivityLogs.Where(a => a.AnimeId == 1).ToListAsync());
     }
 
+    // --- Held entries (hold-startup-pending-sync-for-review design.md D15) ---
+
+    [Fact]
+    public async Task AnAutomaticReopenOnAHeldEntryLeavesTheHoldInPlace()
+    {
+        using var db = CreateDb();
+        var heldAt = DateTimeOffset.UtcNow.AddDays(-1);
+        var finishDate = new DateOnly(2024, 1, 1);
+        var anime = new AnimeMetadata { Id = 1, Title = "Show", AiringStatus = "currently_airing", TotalEpisodes = 24 };
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry
+        {
+            AnimeId = 1, Anime = anime, Status = WatchStatus.Completed, EpisodesWatched = 12, CompletedAt = finishDate,
+            PendingSync = true, HeldForReviewAt = heldAt,
+        });
+        await db.SaveChangesAsync();
+
+        var service = new AiringWatchStatusService(db, new RecordingEntrySyncScheduler(), NullLogger<AiringWatchStatusService>.Instance);
+
+        var entries = await ReadUntrackedAsync(db);
+        await service.SettleAsync(entries, new Dictionary<int, int> { [1] = 13 });
+
+        var stored = await db.UserAnimeEntries.AsNoTracking().SingleAsync(e => e.AnimeId == 1);
+        Assert.Equal(WatchStatus.Watching, stored.Status); // the automatic transition still applies
+        Assert.Equal(heldAt, stored.HeldForReviewAt); // but the hold survives it
+    }
+
+    [Fact]
+    public async Task AnAutomaticCompleteOnAHeldEntryLeavesTheHoldInPlace()
+    {
+        using var db = CreateDb();
+        var heldAt = DateTimeOffset.UtcNow.AddDays(-1);
+        var anime = new AnimeMetadata { Id = 1, Title = "Show", AiringStatus = "finished_airing", TotalEpisodes = 12 };
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry
+        {
+            AnimeId = 1, Anime = anime, Status = WatchStatus.Watching, EpisodesWatched = 12,
+            PendingSync = true, HeldForReviewAt = heldAt,
+        });
+        await db.SaveChangesAsync();
+
+        var service = new AiringWatchStatusService(db, new RecordingEntrySyncScheduler(), NullLogger<AiringWatchStatusService>.Instance);
+
+        var entries = await ReadUntrackedAsync(db);
+        await service.SettleAsync(entries, new Dictionary<int, int>());
+
+        var stored = await db.UserAnimeEntries.AsNoTracking().SingleAsync(e => e.AnimeId == 1);
+        Assert.Equal(WatchStatus.Completed, stored.Status); // the automatic transition still applies
+        Assert.Equal(heldAt, stored.HeldForReviewAt); // but the hold survives it
+    }
+
     private sealed class RecordingEntrySyncScheduler : IEntrySyncScheduler
     {
         public List<int> ScheduledAnimeIds { get; } = [];

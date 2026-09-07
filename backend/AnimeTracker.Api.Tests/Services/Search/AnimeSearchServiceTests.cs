@@ -97,6 +97,7 @@ public class AnimeSearchServiceTests
         public Task<MalListStatus> UpdateMyListStatusAsync(int animeId, MalListStatusUpdate update, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task DeleteMyListStatusAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<MalListStatus?> GetMyListStatusAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     private sealed class FakeSeriesBuildTrigger : ISeriesBuildTrigger

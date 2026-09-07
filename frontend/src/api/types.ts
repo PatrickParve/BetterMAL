@@ -355,7 +355,7 @@ export type ActivityChangeType =
 // Where a change came from — BetterMal is my own editing in the app; the
 // other three are the sync paths. A row with no `source` at all (an older
 // payload) renders unmarked (record-mal-origin-activity design D7).
-export type ActivityChangeSource = 'BetterMal' | 'MalStartupImport' | 'MalReconciliation' | 'MalResync'
+export type ActivityChangeSource = 'BetterMal' | 'MalStartupImport' | 'MalReconciliation' | 'MalResync' | 'MalHeldDecline'
 
 export type ActivityFeedItemDto = {
   id: number
@@ -544,7 +544,54 @@ export type RewatchedSeriesSectionDto = {
 
 export type SyncStatusDto = {
   pendingCount: number
+  heldCount: number
   lastSyncedAt: string | null
+}
+
+// A change held for review since a previous process start — an unsent edit
+// or a queued removal (design.md D1-D8a). Kind distinguishes the two;
+// localValues is null for a removal, which has no field values to show.
+export type HeldChangeKind = 'Entry' | 'Removal'
+
+export type HeldChangeValuesDto = {
+  status: WatchStatus
+  episodesWatched: number
+  myScore: number | null
+  startedAt: string | null
+  completedAt: string | null
+  rewatchCount: number
+}
+
+export type HeldChangeRecentChangeDto = {
+  changeType: ActivityChangeType
+  changeDetail: string | null
+  timestamp: string
+}
+
+export type HeldChangeDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  kind: HeldChangeKind
+  heldAt: string
+  localValues: HeldChangeValuesDto | null
+  recentChanges: HeldChangeRecentChangeDto[]
+  additionalChangeCount: number
+  remoteValues: HeldChangeValuesDto | null
+  remoteUnavailable: boolean
+}
+
+// Response of a per-item accept/decline. A 404 (nothing held for that anime)
+// is surfaced by the client call throwing rather than via this shape.
+export type HeldChangeDecisionDto = {
+  applied: boolean
+  error?: string
+}
+
+export type HeldChangeBulkResultDto = {
+  succeeded: number
+  stillHeld: number
 }
 
 export type ResyncPhase = 'NotStarted' | 'Running' | 'Complete'

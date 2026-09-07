@@ -23,6 +23,12 @@ public enum ActivityChangeSource
     MalStartupImport,
     MalReconciliation,
     MalResync,
+
+    /// <summary>A held change declined (design.md D6/D10) — MyAnimeList's
+    /// current value applied in place of an unsent local change. Kept
+    /// distinct from MalReconciliation: both write MyAnimeList's values onto
+    /// an entry, but the log must stay able to say which surface did it.</summary>
+    MalHeldDecline,
 }
 
 /// <summary>Timestamped change record. The only way to reconstruct a chronological

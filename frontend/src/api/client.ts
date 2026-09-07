@@ -7,6 +7,9 @@ import type {
   AnimeSearchResult,
   AnimeUpdateDto,
   HealthStatus,
+  HeldChangeBulkResultDto,
+  HeldChangeDecisionDto,
+  HeldChangeDto,
   MainDashboardDto,
   MalAuthStatus,
   MyListItemDto,
@@ -438,6 +441,41 @@ export async function cancelReconciliationDiff(): Promise<boolean> {
   if (res.status === 404) return false
   if (!res.ok) throw new Error(`/api/sync/reconcile/cancel responded with ${res.status}`)
   return true
+}
+
+// Every change held for review since a previous process start (design.md
+// D1-D8a). An item MyAnimeList already agrees with clears itself as a side
+// effect of this read and is omitted from the list.
+export function getHeldChanges(): Promise<HeldChangeDto[]> {
+  return fetchJson<HeldChangeDto[]>('/api/sync/held')
+}
+
+// 404 (nothing held for that anime, e.g. it self-cleared under us) resolves
+// to a reported failure rather than throwing, so the section can say so.
+async function heldDecisionResponse(res: Response, path: string): Promise<HeldChangeDecisionDto> {
+  if (res.status === 404) return { applied: false, error: 'That change is no longer held.' }
+  if (!res.ok) throw new Error(`${path} responded with ${res.status}`)
+  return res.json() as Promise<HeldChangeDecisionDto>
+}
+
+export async function acceptHeldChange(animeId: number): Promise<HeldChangeDecisionDto> {
+  const path = `/api/sync/held/${animeId}/accept`
+  const res = await fetchRaw(path, { method: 'POST' })
+  return heldDecisionResponse(res, path)
+}
+
+export async function declineHeldChange(animeId: number): Promise<HeldChangeDecisionDto> {
+  const path = `/api/sync/held/${animeId}/decline`
+  const res = await fetchRaw(path, { method: 'POST' })
+  return heldDecisionResponse(res, path)
+}
+
+export function acceptAllHeldChanges(): Promise<HeldChangeBulkResultDto> {
+  return fetchJson<HeldChangeBulkResultDto>('/api/sync/held/accept', { method: 'POST' })
+}
+
+export function declineAllHeldChanges(): Promise<HeldChangeBulkResultDto> {
+  return fetchJson<HeldChangeBulkResultDto>('/api/sync/held/decline', { method: 'POST' })
 }
 
 // One-time corrective re-sync: kicks off a background run (~1 req/s per

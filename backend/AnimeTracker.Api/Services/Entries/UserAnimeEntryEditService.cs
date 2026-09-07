@@ -88,7 +88,15 @@ public class UserAnimeEntryEditService(
 
         var triggersSync = isNew || changes.Count > 0;
         if (triggersSync)
+        {
             entry.PendingSync = true;
+
+            // A deliberate edit is current by definition and supersedes
+            // whatever stale value was held (design.md D15) — unlike
+            // AiringWatchStatusService's automatic transitions, which leave a
+            // hold in place since they are inferences, not statements of intent.
+            entry.HeldForReviewAt = null;
+        }
 
         await db.SaveChangesAsync(ct);
 
