@@ -192,8 +192,8 @@ public class RecapServiceTests
 
         public Task<List<UserAnimeEntry>> GetAllAsync(CancellationToken ct = default) => Task.FromResult(entries);
 
-        public Task<(int PendingCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
-            Task.FromResult((0, (DateTimeOffset?)null));
+        public Task<(int PendingCount, int HeldCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
+            Task.FromResult((0, 0, (DateTimeOffset?)null));
     }
 
     private sealed class FakeTopAnimeSelectionRepository : ITopAnimeSelectionRepository

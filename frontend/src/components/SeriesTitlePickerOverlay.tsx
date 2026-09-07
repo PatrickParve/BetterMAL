@@ -53,7 +53,17 @@ export function SeriesTitlePickerOverlay({ offeredTitles, current, onPick, onClo
 
         <label className="series-title-picker-overlay__field">
           Custom (must be a contiguous piece of one of the titles above)
-          <input type="text" value={value} onChange={(e) => setValue(e.target.value)} />
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                handleConfirm()
+              }
+            }}
+          />
         </label>
 
         {!acceptable && trimmed.length > 0 && (

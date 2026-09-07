@@ -32,7 +32,13 @@
 }
 
 .series-title-picker-overlay__option:hover {
+  background: var(--accent-bg);
   border-color: var(--accent-border);
+}
+
+.series-title-picker-overlay__option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .series-title-picker-overlay__option--selected {
@@ -77,6 +83,16 @@
   background: var(--bg);
   color: var(--text-h);
   cursor: pointer;
+}
+
+.series-title-picker-overlay__buttons button:not(:disabled):hover {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.series-title-picker-overlay__buttons button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .series-title-picker-overlay__confirm:disabled {

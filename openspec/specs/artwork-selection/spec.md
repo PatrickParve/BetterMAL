@@ -5,18 +5,56 @@ TBD - created by archiving change add-artwork-and-title-selection. Update Purpos
 
 ## Requirements
 
-### Requirement: An anime's picture set is stored, not just its main picture
-The system SHALL store, per anime, the full set of picture URLs MyAnimeList publishes for it, alongside MAL's own main picture and the picture the app displays.
+### Requirement: Every presentation choice carries the time it was made
+The system SHALL store, beside each of the three presentation choices — an anime's chosen picture, a series' chosen title, and a series' chosen picture — the time that choice last changed.
 
-Three distinct values SHALL be kept per anime:
+The time SHALL be recorded when a choice is set and when it is cleared alike. A clearing is a change, and it SHALL be possible to recognise it as the later of two conflicting versions of the same choice.
+
+The time SHALL be the moment the change was made, taken from the act that makes it. Nothing that later reads, copies, exports, or rebuilds a choice SHALL restamp it: a choice made three weeks ago SHALL still report a three-week-old time. No MyAnimeList sync of any kind SHALL write one of these times.
+
+A recorded time SHALL NOT be the marker of whether a choice exists. A time stored beside no chosen value SHALL mean a choice that was cleared at that time; no time at all SHALL mean that no choice has ever been made or cleared for that anime or series.
+
+Setting a choice to the value it already holds SHALL record the time of that write, since it is a write.
+
+These times exist so that the same choice made on two devices can be ordered against each other. No surface of the app SHALL be required to display them.
+
+#### Scenario: Setting records the time
+- **WHEN** I choose a picture for an anime
+- **THEN** the anime's chosen picture and the time I chose it are both stored
+
+#### Scenario: Clearing records the time
+- **WHEN** I clear a series' chosen picture
+- **THEN** no chosen picture is stored for it and the time I cleared it is recorded
+
+#### Scenario: A choice keeps its own age
+- **WHEN** a picture chosen three weeks ago is read, rendered, or carried through a series rebuild today
+- **THEN** its recorded time is still the three-week-old one
+
+#### Scenario: A MAL sync does not stamp anything
+- **WHEN** an anime with a chosen picture is refreshed from MAL
+- **THEN** its chosen picture's recorded time is unchanged
+
+#### Scenario: Never chosen has no time
+- **WHEN** an anime has never had a picture chosen or cleared
+- **THEN** no time is recorded for its picture choice
+
+#### Scenario: Choosing the same picture again
+- **WHEN** I choose the picture an anime already has chosen
+- **THEN** the recorded time becomes the time of that write
+
+### Requirement: An anime's picture set is stored, not just its main picture
+The system SHALL store, per anime, the full set of picture URLs MyAnimeList publishes for it, alongside MAL's own main picture, the picture chosen for it, and the picture the app displays.
+
+Four distinct values SHALL be kept per anime:
 
 - **MAL's main picture** — whatever MAL reports as `main_picture`, always overwritten by any MAL sync.
-- **The displayed picture** — the picture every surface in the app renders for that anime. It equals MAL's main picture until a picture is chosen, and equals the chosen picture thereafter.
+- **The chosen picture** — the picture I have chosen for that anime. Its default SHALL be nothing at all, which SHALL mean "no choice; follow MAL".
+- **The displayed picture** — the picture every surface in the app renders for that anime. It SHALL be derived from the two values above: the chosen picture where there is one, MAL's main picture otherwise. Every write of either value it derives from SHALL re-derive it in the same write, so the three can never disagree.
 - **The picture set** — every URL MAL returns under `pictures` for that anime, in MAL's order.
 
 The system SHALL also record **when the picture set was last fetched**, as a value distinct from "when full detail was last fetched". An anime whose picture set has never been fetched SHALL be distinguishable from one that has been fetched and has exactly one picture, so the latter is never re-fetched on every visit.
 
-An anime SHALL be treated as having a chosen picture exactly when its displayed picture differs from MAL's main picture. There SHALL NOT be a separate stored flag that can disagree with those two values.
+An anime SHALL be treated as having a chosen picture exactly when a chosen picture is stored for it. Chosen-ness SHALL NOT be inferred by comparing the displayed picture with MAL's main picture: those two hold the same URL both when MAL's own picture was chosen deliberately and when nothing was chosen at all, and those are different states. Nor is such a comparison meaningful beyond the one database that made both writes, since another device may have cached MAL's picture at another time.
 
 #### Scenario: Storing a picture set
 - **WHEN** the system fetches an anime whose MAL record lists six pictures
@@ -28,7 +66,11 @@ An anime SHALL be treated as having a chosen picture exactly when its displayed 
 
 #### Scenario: Nothing is chosen by default
 - **WHEN** an anime's picture set has been fetched and no picture has been chosen
-- **THEN** its displayed picture equals MAL's main picture
+- **THEN** no chosen picture is stored for it and its displayed picture equals MAL's main picture
+
+#### Scenario: A chosen picture that is MAL's own
+- **WHEN** I choose the picture MAL calls an anime's main picture
+- **THEN** that URL is stored as the chosen picture and the anime is recorded as having one, even though its displayed picture equals MAL's
 
 ### Requirement: Picture sets are fetched only for anime on my list
 The system SHALL fetch an anime's picture set only when that anime is in my list. An anime reached by browsing — a season listing, the Year or Top pages, a search result, a related-anime link, or a series member not in my list — SHALL NOT have its picture set fetched, and SHALL keep MAL's main picture as its displayed picture.
@@ -116,18 +158,34 @@ An anime with **no** chosen picture SHALL continue to follow MAL: when MAL chang
 - **WHEN** MAL changes the main picture of an anime for which nothing has been chosen
 - **THEN** that anime's displayed picture becomes the new MAL picture
 
-### Requirement: Choosing MAL's own picture clears the choice
-The picker SHALL present MAL's main picture among the options. Choosing it SHALL clear the override rather than storing a redundant one, so "reset to default" and "pick the default" are the same act and produce the same state.
+### Requirement: Picking MAL's own picture pins it, and clearing is an act of its own
+The picker SHALL present MAL's main picture among the options. Choosing it SHALL store it as the chosen picture exactly as choosing any other option does, so that anime stops following MAL's main picture from then on: a later MAL change of main picture SHALL NOT move that anime's displayed picture.
 
-The system SHALL additionally accept an explicit reset that clears the choice without naming a picture.
+Clearing SHALL be a separate act from choosing, and the only way to remove a choice. It SHALL remove the chosen picture so that the anime follows MAL's main picture again, and SHALL record the time.
 
-#### Scenario: Picking the default clears the override
-- **WHEN** an anime has a chosen picture and I pick the picture MAL calls its main picture
-- **THEN** the anime is no longer recorded as having a chosen picture, and it follows MAL again from then on
+A choice SHALL NOT be re-validated away by this rule any more than by any other: a chosen picture that happens to be MAL's own current main picture SHALL remain stored as a choice until it is cleared.
 
-#### Scenario: Explicit reset
-- **WHEN** I reset an anime's picture
-- **THEN** its displayed picture becomes MAL's main picture
+The same SHALL hold for a series' chosen picture, whose default is its root member's MAL picture: choosing the picture the series already shows by default SHALL store it as a choice, and only clearing SHALL return the series to following its root's MAL picture — including when the root anime itself carries its own chosen picture, which the series default SHALL NOT follow.
+
+#### Scenario: Picking the default stores it
+- **WHEN** I pick the picture MAL calls an anime's main picture
+- **THEN** that URL is stored as the anime's chosen picture, and the anime is recorded as having a chosen picture
+
+#### Scenario: A pinned picture survives a MAL picture change
+- **WHEN** MAL changes the main picture of an anime whose chosen picture is the main picture MAL published before
+- **THEN** the anime still displays the picture I chose, and MAL's new main picture is recorded behind it
+
+#### Scenario: Clearing returns the anime to MAL
+- **WHEN** I clear an anime's chosen picture
+- **THEN** no chosen picture is stored for it, its displayed picture becomes MAL's main picture, and it follows MAL from then on
+
+#### Scenario: A series choice that matches its root
+- **WHEN** a series shows its root member's MAL picture by default and I pick that same picture in the series picker
+- **THEN** it is stored as the series' own chosen picture, and choosing a different picture for the root anime no longer changes the series' picture
+
+#### Scenario: A series default ignores the root anime's own choice
+- **WHEN** a series has no chosen picture of its own, and its root anime has a chosen picture that differs from MAL's main picture for that anime
+- **THEN** the series displays the root anime's MAL picture, not the root anime's chosen picture
 
 ### Requirement: Only pictures MAL publishes may be chosen
 The system SHALL accept as a choice only a URL that is in the anime's own option set — its stored picture set together with MAL's main picture. Any other value SHALL be rejected.
@@ -168,6 +226,8 @@ The overlay SHALL behave as the app's other overlays do — dismissable with Esc
 
 The control that opens the picker SHALL be rendered **only when there is more than one option**, so a picker never opens onto a single image and an anime with several pictures never lacks the control.
 
+The picker SHALL offer a control that **clears the choice**, rendered only when a choice is stored, so that the presence of the control is itself the sign that one is. Its wording SHALL name the default that clearing returns to, which differs by surface: MAL's own main picture for an anime, and the root member's MAL picture for a series. Using it SHALL clear the choice and close the overlay, as choosing an option sets and closes.
+
 These presentation rules SHALL hold for the anime picker and the series picker alike.
 
 #### Scenario: Opening and choosing
@@ -185,6 +245,18 @@ These presentation rules SHALL hold for the anime picker and the series picker a
 #### Scenario: Dismissing without choosing
 - **WHEN** I press Escape or click outside the overlay
 - **THEN** it closes and the anime's picture is unchanged
+
+#### Scenario: Clearing from the picker
+- **WHEN** I open the picker for an anime with a chosen picture and use the control that clears it
+- **THEN** the choice is removed, the overlay closes, and the anime displays MAL's main picture again
+
+#### Scenario: No choice, no clear control
+- **WHEN** I open the picker for an anime that has no chosen picture
+- **THEN** no clear control is rendered
+
+#### Scenario: The series picker names its own default
+- **WHEN** I open the picker for a series with a chosen picture
+- **THEN** its clear control names the root anime's MAL picture as what clearing returns to, and using it makes the series follow its root member's MAL picture again
 
 #### Scenario: A landscape option is shown landscape
 - **WHEN** I open the picker on an option set containing a picture wider than it is tall
@@ -218,7 +290,7 @@ A series SHALL have its own chosen picture, independent of any member's. Its opt
 
 Options SHALL be ordered by main-line watch order, and within a member by MAL's own order. Extras SHALL NOT contribute options.
 
-When a series has no chosen picture, it SHALL show its root member's **displayed** picture — so choosing a picture for the root anime also changes the series' picture, until the series is given one of its own, which then wins.
+When a series has no chosen picture, it SHALL show its root member's **MAL main picture** — not the root's displayed picture — so a picture chosen for the root anime SHALL NOT change the series' default. Choosing that same MAL picture explicitly as the series' own picture SHALL be stored as a choice of the series', distinct from merely following the default.
 
 Setting, clearing, validating, and surviving MAL syncs SHALL work for a series picture exactly as the requirements above define for an anime picture.
 
@@ -230,9 +302,9 @@ Setting, clearing, validating, and surviving MAL syncs SHALL work for a series p
 - **WHEN** a series' extras carry pictures of their own
 - **THEN** none of them appear in the series picker
 
-#### Scenario: A series with no choice follows its root
-- **WHEN** a series has no chosen picture and I choose a new picture for its root anime
-- **THEN** the series shows that picture too
+#### Scenario: A series with no choice follows its root's MAL picture
+- **WHEN** a series has no chosen picture
+- **THEN** it shows its root member's MAL main picture, unaffected by any chosen picture stored on the root anime
 
 #### Scenario: A series choice outranks the root's
 - **WHEN** a series has a chosen picture and its root anime also has one
