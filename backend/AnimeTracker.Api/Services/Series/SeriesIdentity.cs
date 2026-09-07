@@ -10,10 +10,14 @@ public static class SeriesIdentity
     /// picture. A chosen title suppresses the English title: the client's
     /// title-preference rule picks between the two, so leaving the root's
     /// English title in place beside a chosen title would let some surfaces
-    /// render the very title that was rejected.</summary>
+    /// render the very title that was rejected. The picture's default is the
+    /// root member's **MAL** picture, not its displayed one — deliberately
+    /// bypassing any pin the root anime itself carries (artwork-selection
+    /// design.md D7 revision), so one anime's own choice never doubles as an
+    /// unintended series-wide default.</summary>
     public static (string Title, string? EnglishTitle, string? PictureUrl) Resolve(
-        string? selectedTitle, string? selectedPictureUrl, string rootTitle, string? rootEnglishTitle, string? rootPictureUrl) =>
+        string? selectedTitle, string? selectedPictureUrl, string rootTitle, string? rootEnglishTitle, string? rootMalPictureUrl) =>
         selectedTitle is not null
-            ? (selectedTitle, null, selectedPictureUrl ?? rootPictureUrl)
-            : (rootTitle, rootEnglishTitle, selectedPictureUrl ?? rootPictureUrl);
+            ? (selectedTitle, null, selectedPictureUrl ?? rootMalPictureUrl)
+            : (rootTitle, rootEnglishTitle, selectedPictureUrl ?? rootMalPictureUrl);
 }

@@ -113,6 +113,45 @@ public class SeriesGraphBuilderReRootTests
             members.Select(m => m.AnimeId).OrderBy(x => x));
     }
 
+    // --- 7.7: a re-root carries both choices and both timestamps unchanged (design.md D5) ---
+
+    [Fact]
+    public async Task ReRootCarriesBothChoicesAndBothTimestampsUnchanged()
+    {
+        using var db = CreateDb();
+        var b = Anime(5, "tv", new DateOnly(2015, 1, 1));
+        var c = Anime(6, "tv", new DateOnly(2016, 1, 1));
+        Relate(b, c, "sequel");
+        db.AnimeMetadata.AddRange(b, c);
+        await db.SaveChangesAsync();
+
+        var firstBuild = await CreateBuilder(db).BuildAsync(b.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
+        Assert.Equal(b.Id, firstBuild!.Id);
+
+        var threeWeeksAgo = DateTimeOffset.UtcNow.AddDays(-21);
+        var stored = await db.Series.FirstAsync(s => s.Id == firstBuild.Id);
+        stored.SelectedTitle = "Chosen Title";
+        stored.SelectedTitleModifiedAt = threeWeeksAgo;
+        stored.SelectedPictureUrl = "chosen.jpg";
+        stored.SelectedPictureModifiedAt = threeWeeksAgo;
+        await db.SaveChangesAsync();
+
+        var a = Anime(3, "tv", new DateOnly(2010, 1, 1));
+        db.AnimeMetadata.Add(a);
+        Relate(a, b, "sequel");
+        await db.SaveChangesAsync();
+
+        var rebuilt = await CreateBuilder(db).BuildAsync(b.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
+
+        Assert.Equal(a.Id, rebuilt!.Id); // the series moved to the new root's id
+
+        var survivor = await db.Series.AsNoTracking().SingleAsync();
+        Assert.Equal("Chosen Title", survivor.SelectedTitle);
+        Assert.Equal(threeWeeksAgo, survivor.SelectedTitleModifiedAt); // re-rooting is not choosing — the time is untouched
+        Assert.Equal("chosen.jpg", survivor.SelectedPictureUrl);
+        Assert.Equal(threeWeeksAgo, survivor.SelectedPictureModifiedAt);
+    }
+
     // --- 6.4: design.md D5 — the id a re-root needs is always free by the time it's taken,
     // even when a stale (absorbed) series, not the matched survivor, is the one holding it ---
 

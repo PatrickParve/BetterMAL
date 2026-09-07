@@ -1,5 +1,7 @@
 using AnimeTracker.Api.Controllers;
 using AnimeTracker.Api.Data;
+using AnimeTracker.Api.Data.Repositories;
+using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Ranking;
@@ -24,7 +26,8 @@ public class SeriesControllerBulkBuildTests
             new DbContextOptionsBuilder<AnimeTrackerDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
         var listService = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService(), new UnusedAnimeRankingService());
         var controller = new SeriesController(
-            new UnusedSeriesService(), listService, trigger, tracker, new UnusedArtworkSelectionService(), new UnusedPictureRefreshService());
+            new UnusedSeriesService(), listService, trigger, tracker, new UnusedArtworkSelectionService(),
+            new UnusedPictureRefreshService(), new UnusedAnimeMetadataRepository());
 
         Assert.Equal(SeriesBulkBuildPhase.NotStarted, tracker.Snapshot.Phase);
 
@@ -66,6 +69,18 @@ public class SeriesControllerBulkBuildTests
         public Task<bool> RefreshOneAsync(int animeId, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<int> RefreshSeriesMainLineAsync(int seriesId, int budget, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+    }
+
+    private sealed class UnusedAnimeMetadataRepository : IAnimeMetadataRepository
+    {
+        public Task<AnimeMetadata?> GetByIdAsync(int id, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<List<AnimeMetadata>> GetAllAsync(CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<List<AnimeTitleProjection>> GetSearchIndexAsync(CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<List<AnimeSearchFallbackProjection>> GetSearchFallbackIndexAsync(CancellationToken ct = default) =>
             throw new NotImplementedException();
     }
 

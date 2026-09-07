@@ -12,7 +12,7 @@ public class SeriesIdentityTests
     {
         var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
             selectedTitle: null, selectedPictureUrl: null,
-            rootTitle: "Attack on Titan", rootEnglishTitle: "Shingeki no Kyojin", rootPictureUrl: "root.jpg");
+            rootTitle: "Attack on Titan", rootEnglishTitle: "Shingeki no Kyojin", rootMalPictureUrl: "root.jpg");
 
         Assert.Equal("Attack on Titan", title);
         Assert.Equal("Shingeki no Kyojin", englishTitle);
@@ -24,11 +24,11 @@ public class SeriesIdentityTests
     {
         var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
             selectedTitle: "Beyblade", selectedPictureUrl: null,
-            rootTitle: "Beyblade: Metal Fusion", rootEnglishTitle: "Beyblade: Metal Fusion", rootPictureUrl: "root.jpg");
+            rootTitle: "Beyblade: Metal Fusion", rootEnglishTitle: "Beyblade: Metal Fusion", rootMalPictureUrl: "root.jpg");
 
         Assert.Equal("Beyblade", title);
         Assert.Null(englishTitle);
-        Assert.Equal("root.jpg", pictureUrl); // no chosen picture -> falls back to root's
+        Assert.Equal("root.jpg", pictureUrl); // no chosen picture -> falls back to root's MAL picture
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public class SeriesIdentityTests
     {
         var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
             selectedTitle: null, selectedPictureUrl: "chosen.jpg",
-            rootTitle: "Attack on Titan", rootEnglishTitle: "Shingeki no Kyojin", rootPictureUrl: "root.jpg");
+            rootTitle: "Attack on Titan", rootEnglishTitle: "Shingeki no Kyojin", rootMalPictureUrl: "root.jpg");
 
         Assert.Equal("Attack on Titan", title);
         Assert.Equal("Shingeki no Kyojin", englishTitle);
@@ -48,7 +48,7 @@ public class SeriesIdentityTests
     {
         var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
             selectedTitle: "Beyblade", selectedPictureUrl: "chosen.jpg",
-            rootTitle: "Beyblade: Metal Fusion", rootEnglishTitle: "Beyblade: Metal Fusion", rootPictureUrl: "root.jpg");
+            rootTitle: "Beyblade: Metal Fusion", rootEnglishTitle: "Beyblade: Metal Fusion", rootMalPictureUrl: "root.jpg");
 
         Assert.Equal("Beyblade", title);
         Assert.Null(englishTitle);

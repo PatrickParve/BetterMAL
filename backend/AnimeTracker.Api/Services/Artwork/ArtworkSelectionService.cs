@@ -6,6 +6,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Artwork;
 
+// These six methods are the only writers of SelectedPictureModifiedAt
+// (anime and series) and SelectedTitleModifiedAt: every set or clear stamps
+// UtcNow at the point of the write, which is what makes "stamped when the
+// change is made, never when it is later read, exported or rebuilt" true by
+// construction (spec `artwork-selection`).
 public class ArtworkSelectionService(AnimeTrackerDbContext db) : IArtworkSelectionService
 {
     public async Task<string?> SetAnimePictureAsync(int animeId, string pictureUrl, CancellationToken ct = default)
@@ -19,10 +24,9 @@ public class ArtworkSelectionService(AnimeTrackerDbContext db) : IArtworkSelecti
         if (!AnimePicture.Options(anime).Contains(pictureUrl))
             throw new ArtworkSelectionRejectedException($"'{pictureUrl}' is not one of anime {animeId}'s pictures.");
 
-        // Setting MAL's own main picture *is* the clear — it makes PictureUrl
-        // equal MalPictureUrl again, which is exactly what "overridden" means
-        // the absence of (design.md D2).
-        anime.PictureUrl = pictureUrl;
+        anime.SelectedPictureUrl = pictureUrl;
+        anime.SelectedPictureModifiedAt = DateTimeOffset.UtcNow;
+        anime.ResolvePictureUrl();
         await db.SaveChangesAsync(ct);
         return anime.PictureUrl;
     }
@@ -32,7 +36,12 @@ public class ArtworkSelectionService(AnimeTrackerDbContext db) : IArtworkSelecti
         var anime = await db.AnimeMetadata.FirstOrDefaultAsync(a => a.Id == animeId, ct)
             ?? throw new AnimeMetadataNotFoundException(animeId);
 
-        anime.PictureUrl = anime.MalPictureUrl;
+        // Clearing is now the only way to remove a choice. It stamps because
+        // a clear must be able to outrank an earlier set made on another
+        // device.
+        anime.SelectedPictureUrl = null;
+        anime.SelectedPictureModifiedAt = DateTimeOffset.UtcNow;
+        anime.ResolvePictureUrl();
         await db.SaveChangesAsync(ct);
         return anime.PictureUrl;
     }
@@ -47,6 +56,7 @@ public class ArtworkSelectionService(AnimeTrackerDbContext db) : IArtworkSelecti
             throw new ArtworkSelectionRejectedException($"'{title}' is not an acceptable title for series {seriesId}.");
 
         series.SelectedTitle = SeriesTitleRule.Normalize(title);
+        series.SelectedTitleModifiedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         return series.SelectedTitle;
     }
@@ -57,6 +67,7 @@ public class ArtworkSelectionService(AnimeTrackerDbContext db) : IArtworkSelecti
             ?? throw new SeriesIdNotFoundException(seriesId);
 
         series.SelectedTitle = null;
+        series.SelectedTitleModifiedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         return series.SelectedTitle;
     }
@@ -75,6 +86,7 @@ public class ArtworkSelectionService(AnimeTrackerDbContext db) : IArtworkSelecti
             throw new ArtworkSelectionRejectedException($"'{pictureUrl}' is not one of series {seriesId}'s pictures.");
 
         series.SelectedPictureUrl = pictureUrl;
+        series.SelectedPictureModifiedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         return series.SelectedPictureUrl;
     }
@@ -85,6 +97,7 @@ public class ArtworkSelectionService(AnimeTrackerDbContext db) : IArtworkSelecti
             ?? throw new SeriesIdNotFoundException(seriesId);
 
         series.SelectedPictureUrl = null;
+        series.SelectedPictureModifiedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         return series.SelectedPictureUrl;
     }

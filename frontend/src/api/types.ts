@@ -882,6 +882,9 @@ export type AnimeDetailDto = {
   // MAL's own main picture (artwork-selection) — feeds the picker and is
   // what "Reset" restores; pictureUrl is the picture actually displayed.
   malPictureUrl: string | null
+  // The stored choice, null when there is none — the client's only signal
+  // that a clear control should render.
+  selectedPictureUrl: string | null
   // Every picture MAL publishes for this anime, my-list only; null/empty
   // when never fetched or MAL reports none.
   pictureUrls: string[] | null

@@ -1,3 +1,4 @@
+using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +12,8 @@ public class SeriesController(
     ISeriesBulkBuildTrigger bulkBuildTrigger,
     ISeriesBulkBuildProgressTracker bulkBuildProgress,
     IArtworkSelectionService artworkSelectionService,
-    IPictureRefreshService pictureRefreshService) : ControllerBase
+    IPictureRefreshService pictureRefreshService,
+    IAnimeMetadataRepository metadataRepository) : ControllerBase
 {
     /// <summary>The Series page's whole-list read (add-series-browser
     /// design.md D1). Builds nothing, refreshes nothing, and makes no MAL
@@ -90,7 +92,7 @@ public class SeriesController(
         try
         {
             var pictureUrl = await artworkSelectionService.SetSeriesPictureAsync(seriesId, request.PictureUrl, ct);
-            return Ok(new { pictureUrl });
+            return Ok(new { pictureUrl, selectedPictureUrl = pictureUrl });
         }
         catch (SeriesIdNotFoundException)
         {
@@ -107,8 +109,16 @@ public class SeriesController(
     {
         try
         {
-            var pictureUrl = await artworkSelectionService.ResetSeriesPictureAsync(seriesId, ct);
-            return Ok(new { pictureUrl });
+            var selectedPictureUrl = await artworkSelectionService.ResetSeriesPictureAsync(seriesId, ct);
+
+            // The series' displayed picture, cleared, falls back to its root
+            // member's MAL picture, not the root's own displayed picture
+            // (SeriesIdentity.Resolve) — the series row itself carries no
+            // picture column, so the root anime (its id is the series id,
+            // key-series-by-root-anime-id) is the fallback source, and its own
+            // pin (if any) is deliberately bypassed (design.md D7 revision).
+            var root = await metadataRepository.GetByIdAsync(seriesId, ct);
+            return Ok(new { pictureUrl = root?.MalPictureUrl, selectedPictureUrl });
         }
         catch (SeriesIdNotFoundException)
         {

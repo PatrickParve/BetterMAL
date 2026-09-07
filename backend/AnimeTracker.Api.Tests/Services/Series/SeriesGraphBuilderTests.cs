@@ -661,6 +661,38 @@ public class SeriesGraphBuilderTests
     }
 
     [Fact]
+    public async Task AbsorptionAdoptsTheSourceSeriesOwnTimestampRatherThanTheRebuildsTime()
+    {
+        using var db = CreateDb();
+        var (a, bAnime, cAnime, dAnime, eAnime, fAnime) = SixMemberChain();
+        db.AnimeMetadata.AddRange(a, bAnime, cAnime, dAnime, eAnime, fAnime);
+
+        var threeWeeksAgo = DateTimeOffset.UtcNow.AddDays(-21);
+        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = a.Id, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new AnimeTracker.Api.Models.Series
+        {
+            Id = cAnime.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "FromTwo", SelectedTitleModifiedAt = threeWeeksAgo,
+        });
+        db.SeriesMembers.AddRange(
+            new SeriesMember { AnimeId = a.Id, SeriesId = a.Id, IsMainLine = true, Order = 0 },
+            new SeriesMember { AnimeId = bAnime.Id, SeriesId = a.Id, IsMainLine = true, Order = 1 },
+            new SeriesMember { AnimeId = fAnime.Id, SeriesId = a.Id, IsMainLine = true, Order = 2 },
+            new SeriesMember { AnimeId = cAnime.Id, SeriesId = cAnime.Id, IsMainLine = true, Order = 0 },
+            new SeriesMember { AnimeId = dAnime.Id, SeriesId = cAnime.Id, IsMainLine = true, Order = 1 });
+        await db.SaveChangesAsync();
+
+        await CreateBuilder(db).BuildAsync(a.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
+
+        var survivor = await db.Series.AsNoTracking().FirstAsync(s => s.Id == a.Id);
+        Assert.Equal("FromTwo", survivor.SelectedTitle);
+        // Adopting an existing choice is not making one, so the absorbed
+        // series' own three-week-old time rides along rather than UtcNow
+        // (design.md D5, spec `series-identity` "A rebuild does not restamp
+        // a choice").
+        Assert.Equal(threeWeeksAgo, survivor.SelectedTitleModifiedAt);
+    }
+
+    [Fact]
     public async Task AbsorptionDoesNotOverwriteTheSurvivorsOwnChoice()
     {
         using var db = CreateDb();

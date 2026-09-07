@@ -9,10 +9,11 @@ namespace AnimeTracker.Api.Tests.Services.Artwork;
 // `pictures`).
 public class AnimePictureTests
 {
-    private static AnimeMetadata Anime(string? pictureUrl, string? malPictureUrl, List<string>? pictureUrls) => new()
+    private static AnimeMetadata Anime(string? pictureUrl, string? malPictureUrl, List<string>? pictureUrls, string? selectedPictureUrl = null) => new()
     {
         Id = 1,
         Title = "T",
+        SelectedPictureUrl = selectedPictureUrl,
         PictureUrl = pictureUrl,
         MalPictureUrl = malPictureUrl,
         PictureUrls = pictureUrls,
@@ -71,5 +72,22 @@ public class AnimePictureTests
         var options = AnimePicture.Options(anime);
 
         Assert.Equal(2, options.Count);
+    }
+
+    [Fact]
+    public void Options_AChoiceMalNoLongerListsStaysInTheOptions()
+    {
+        // MAL has since dropped the chosen picture from `pictures` entirely
+        // — it is never re-validated away (design.md D9 / spec "A stored
+        // choice is never re-validated away").
+        var anime = Anime(
+            pictureUrl: "https://cdn.myanimelist.net/images/anime/9/9-chosen.jpg",
+            malPictureUrl: "https://cdn.myanimelist.net/images/anime/9/9-main.jpg",
+            pictureUrls: ["https://cdn.myanimelist.net/images/anime/9/9-main.jpg"],
+            selectedPictureUrl: "https://cdn.myanimelist.net/images/anime/9/9-chosen.jpg");
+
+        var options = AnimePicture.Options(anime);
+
+        Assert.Contains(anime.SelectedPictureUrl, options);
     }
 }

@@ -18,6 +18,10 @@ public record AnimeDetailDto(
     // Feeds the picture picker (artwork-selection): MAL's own main picture,
     // alongside the displayed PictureUrl above, plus the full picture set.
     string? MalPictureUrl,
+    // The stored choice itself (null means none), so the client knows
+    // whether there is anything to clear without comparing PictureUrl and
+    // MalPictureUrl. No timestamp is exposed here — nothing in the UI reads one.
+    string? SelectedPictureUrl,
     List<string>? PictureUrls,
     // Handshake flag: true when this anime is in my list and its picture set
     // has never been fetched, so the client should call the one-anime
@@ -89,6 +93,7 @@ public record AnimeDetailDto(
             anime.EnglishTitle,
             anime.PictureUrl,
             anime.MalPictureUrl,
+            anime.SelectedPictureUrl,
             anime.PictureUrls,
             picturesFetchPending,
             anime.MalScore,

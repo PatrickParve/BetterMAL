@@ -16,9 +16,13 @@ public class Series
     public bool IsTruncated { get; set; } // build hit the 60-member cap
 
     // Survive a rebuild: the rebuild keeps this row and simply never writes
-    // these fields.
+    // these fields. A choice and its timestamp move together — carried
+    // across a re-root or adopted from an absorbed series — and a rebuild
+    // never restamps either; only a new choice does.
     public string? SelectedTitle { get; set; }
+    public DateTimeOffset? SelectedTitleModifiedAt { get; set; }
     public string? SelectedPictureUrl { get; set; }
+    public DateTimeOffset? SelectedPictureModifiedAt { get; set; }
 
     public List<SeriesMember> Members { get; set; } = [];
 }

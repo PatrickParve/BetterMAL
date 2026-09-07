@@ -8,7 +8,7 @@ namespace AnimeTracker.Api.Tests.Services.Artwork;
 // .webp-vs-.jpg duplication AnimePictureTests covers for a single anime).
 public class SeriesPicturePoolTests
 {
-    private static SeriesMember Member(int animeId, string? pictureUrl, string? malPictureUrl, List<string>? pictureUrls) => new()
+    private static SeriesMember Member(int animeId, string? pictureUrl, string? malPictureUrl, List<string>? pictureUrls, string? selectedPictureUrl = null) => new()
     {
         AnimeId = animeId,
         SeriesId = 1,
@@ -18,6 +18,7 @@ public class SeriesPicturePoolTests
         {
             Id = animeId,
             Title = $"Anime {animeId}",
+            SelectedPictureUrl = selectedPictureUrl,
             PictureUrl = pictureUrl,
             MalPictureUrl = malPictureUrl,
             PictureUrls = pictureUrls,
@@ -50,5 +51,23 @@ public class SeriesPicturePoolTests
         var pool = SeriesPicturePool.Build([a, b]);
 
         Assert.Equal(2, pool.Count);
+    }
+
+    [Fact]
+    public void Build_AMembersChosenPictureMalNoLongerListsStaysInThePool()
+    {
+        // The member's own displayed picture (its chosen picture) is
+        // upserted before its PictureUrls, so it stays in the pool even
+        // after MAL drops it from that member's picture set (design.md D9).
+        var member = Member(
+            animeId: 5,
+            pictureUrl: "https://cdn.myanimelist.net/images/anime/5/5-chosen.jpg",
+            malPictureUrl: "https://cdn.myanimelist.net/images/anime/5/5-main.jpg",
+            pictureUrls: ["https://cdn.myanimelist.net/images/anime/5/5-main.jpg"],
+            selectedPictureUrl: "https://cdn.myanimelist.net/images/anime/5/5-chosen.jpg");
+
+        var pool = SeriesPicturePool.Build([member]);
+
+        Assert.Contains("https://cdn.myanimelist.net/images/anime/5/5-chosen.jpg", pool);
     }
 }

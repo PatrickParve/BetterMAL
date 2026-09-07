@@ -1113,13 +1113,34 @@ public class SeriesGraphBuilder(
         // single-target absorption this generalises). Done before the
         // re-root check below, since a re-root carries these two fields
         // across onto the fresh row it inserts (design.md D4, task 3.3).
+        // Adopting a choice is not making one, so its timestamp comes along
+        // from the same source series, never from UtcNow (design.md D5,
+        // spec `series-identity` "A rebuild does not restamp a choice") — a
+        // single FirstOrDefault per choice keeps a title (or picture) and
+        // its own time from ever being taken off two different series.
         if (staleSeries.Count > 0 && (target.SelectedTitle is null || target.SelectedPictureUrl is null))
         {
             var byOverlapDesc = staleSeries
                 .OrderByDescending(s => telling.CoreMemberIds.Count(coreIdsByStoredSeriesId[s.Id].Contains))
                 .ToList();
-            target.SelectedTitle ??= byOverlapDesc.FirstOrDefault(s => s.SelectedTitle is not null)?.SelectedTitle;
-            target.SelectedPictureUrl ??= byOverlapDesc.FirstOrDefault(s => s.SelectedPictureUrl is not null)?.SelectedPictureUrl;
+            if (target.SelectedTitle is null)
+            {
+                var source = byOverlapDesc.FirstOrDefault(s => s.SelectedTitle is not null);
+                if (source is not null)
+                {
+                    target.SelectedTitle = source.SelectedTitle;
+                    target.SelectedTitleModifiedAt = source.SelectedTitleModifiedAt;
+                }
+            }
+            if (target.SelectedPictureUrl is null)
+            {
+                var source = byOverlapDesc.FirstOrDefault(s => s.SelectedPictureUrl is not null);
+                if (source is not null)
+                {
+                    target.SelectedPictureUrl = source.SelectedPictureUrl;
+                    target.SelectedPictureModifiedAt = source.SelectedPictureModifiedAt;
+                }
+            }
         }
 
         // A matched series whose root moved can't be renumbered in place —
@@ -1208,16 +1229,19 @@ public class SeriesGraphBuilder(
     /// main-line and so Core in its own series). Both saves are wrapped in
     /// an explicit transaction — the only place this class opens one — so a
     /// crash between them can't lose <paramref name="matchedSeries"/>'s
-    /// chosen title and picture, the one thing on the row that can't be
-    /// re-derived, even though the franchise briefly has no stored series
-    /// between the two saves (self-healing: the next read rebuilds it).</summary>
+    /// chosen title and picture, and the times they were chosen, the one
+    /// thing on the row that can't be re-derived, even though the franchise
+    /// briefly has no stored series between the two saves (self-healing: the
+    /// next read rebuilds it).</summary>
     private async Task<SeriesEntity> PersistReRootedAsync(
         TellingBuild telling, SeriesEntity matchedSeries, List<SeriesEntity> staleSeries, int matchedSeriesId,
         HashSet<int> staleSeriesIds, Dictionary<int, List<SeriesMember>> priorRowsByAnimeId, List<int> fullIds,
         bool isPartial, bool isTruncated, CancellationToken ct)
     {
         var selectedTitle = matchedSeries.SelectedTitle;
+        var selectedTitleModifiedAt = matchedSeries.SelectedTitleModifiedAt;
         var selectedPictureUrl = matchedSeries.SelectedPictureUrl;
+        var selectedPictureModifiedAt = matchedSeries.SelectedPictureModifiedAt;
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
@@ -1232,7 +1256,9 @@ public class SeriesGraphBuilder(
         {
             Id = telling.RootAnimeId,
             SelectedTitle = selectedTitle,
+            SelectedTitleModifiedAt = selectedTitleModifiedAt,
             SelectedPictureUrl = selectedPictureUrl,
+            SelectedPictureModifiedAt = selectedPictureModifiedAt,
             BuiltAt = DateTimeOffset.UtcNow,
             IsPartial = isPartial,
             IsTruncated = isTruncated,

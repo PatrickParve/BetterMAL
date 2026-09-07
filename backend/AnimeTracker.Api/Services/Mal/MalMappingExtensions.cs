@@ -94,12 +94,11 @@ public static class MalMappingExtensions
         target.Title = node.Title;
         target.EnglishTitle = string.IsNullOrWhiteSpace(node.AlternativeTitles?.En) ? null : node.AlternativeTitles.En;
 
-        // The single guard for the whole app (design.md D2): read whether the
-        // row is overridden *before* writing either picture column. A second
-        // writer of PictureUrl outside this guard would defeat it.
-        var wasOverridden = target.PictureUrl != target.MalPictureUrl;
+        // No ordering hazard, no guard — SelectedPictureUrl is untouched
+        // here, so re-deriving is always safe, the same obligation
+        // MalTotalEpisodes/ResolveTotalEpisodes already carries below.
         target.MalPictureUrl = node.MainPicture?.Large ?? node.MainPicture?.Medium;
-        if (!wasOverridden) target.PictureUrl = target.MalPictureUrl;
+        target.ResolvePictureUrl();
 
         node.ApplyPictureSetTo(target, now);
 
@@ -180,12 +179,11 @@ public static class MalMappingExtensions
         target.Title = node.Title;
         target.EnglishTitle = string.IsNullOrWhiteSpace(node.AlternativeTitles?.En) ? null : node.AlternativeTitles.En;
 
-        // Same override guard as ApplyTo (design.md D2) — a Season/Year/Top/Search
-        // listing refresh must not revert a chosen picture either. Lean nodes
-        // never carry `pictures`, so PictureUrls/PicturesSyncedAt are untouched here.
-        var wasOverridden = target.PictureUrl != target.MalPictureUrl;
+        // Same re-derive as ApplyTo, no guard needed — SelectedPictureUrl is
+        // untouched here. Lean nodes never carry `pictures`, so
+        // PictureUrls/PicturesSyncedAt are untouched here too.
         target.MalPictureUrl = node.MainPicture?.Large ?? node.MainPicture?.Medium;
-        if (!wasOverridden) target.PictureUrl = target.MalPictureUrl;
+        target.ResolvePictureUrl();
 
         target.MalScore = node.Mean;
         target.MediaType = node.MediaType;

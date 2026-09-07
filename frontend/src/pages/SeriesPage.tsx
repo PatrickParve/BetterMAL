@@ -5,6 +5,7 @@ import {
   moveFavouriteAdjacent,
   rebuildSeries,
   refreshSeriesPictures,
+  resetSeriesPicture,
   setSeriesPicture,
   setSeriesTitle,
 } from '../api/client.ts'
@@ -617,6 +618,21 @@ export function SeriesPage() {
     })
   }
 
+  // Not optimistic like the pick above — the root member's MAL picture that
+  // clearing reverts to isn't known client-side (design D7), so both fields
+  // patch from the response instead.
+  function handleClearSeriesPicture() {
+    if (!data?.found) return
+    const seriesId = data.series.seriesId
+    resetSeriesPicture(seriesId)
+      .then(({ pictureUrl, selectedPictureUrl }) => {
+        patchSeries((series) => ({ ...series, pictureUrl, selectedPictureUrl }))
+      })
+      .catch(() => {
+        // A later refresh/reload re-syncs if the save failed server-side.
+      })
+  }
+
   function handlePickSeriesTitle(title: string) {
     if (!data?.found) return
     const seriesId = data.series.seriesId
@@ -937,6 +953,7 @@ export function SeriesPage() {
           current={series.pictureUrl}
           onPick={handlePickSeriesPicture}
           onClose={() => setShowPicturePicker(false)}
+          onClear={series.selectedPictureUrl != null ? handleClearSeriesPicture : undefined}
           note={
             series.picturesPendingCount > 0
               ? `${series.picturesPendingCount} member${series.picturesPendingCount === 1 ? '' : 's'} not yet fetched — more pictures may appear on a later visit.`

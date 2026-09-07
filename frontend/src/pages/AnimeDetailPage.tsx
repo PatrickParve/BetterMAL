@@ -5,6 +5,7 @@ import {
   getAnimeDetail,
   refreshAnime,
   refreshAnimePictures,
+  resetAnimePicture,
   setAnimePicture,
   updateEntry,
 } from "../api/client.ts";
@@ -137,7 +138,7 @@ function formatTotalTime(seconds: number | null, totalEpisodes: number | null): 
 // preserved — so the choice MAL has dropped stays visible and replaceable
 // (design D9) even before pictureUrls itself has ever loaded.
 function animePictureOptions(detail: AnimeDetailDto): string[] {
-  return dedupePictureOptions(detail.pictureUrls ?? [], [detail.malPictureUrl, detail.pictureUrl]);
+  return dedupePictureOptions(detail.pictureUrls ?? [], [detail.malPictureUrl, detail.selectedPictureUrl]);
 }
 
 // Single anime detail page: large picture + progress/edit on the left, a
@@ -179,9 +180,11 @@ export function AnimeDetailPage() {
     if (pictureRefreshRequestedForRef.current === detail.animeId) return;
     pictureRefreshRequestedForRef.current = detail.animeId;
     refreshAnimePictures(detail.animeId)
-      .then(({ pictureUrl, pictureUrls }) => {
+      .then(({ pictureUrl, selectedPictureUrl, pictureUrls }) => {
         setDetail((prev) =>
-          prev && prev.animeId === detail.animeId ? { ...prev, pictureUrl, pictureUrls } : prev,
+          prev && prev.animeId === detail.animeId
+            ? { ...prev, pictureUrl, selectedPictureUrl, pictureUrls }
+            : prev,
         );
       })
       .catch(() => {
@@ -261,11 +264,36 @@ export function AnimeDetailPage() {
   // src argument) just changed.
   function handlePickAnimePicture(url: string) {
     if (!detail) return;
-    setDetail((prev) => (prev ? { ...prev, pictureUrl: url } : prev));
-    setAnimePicture(detail.animeId, url).catch(() => {
-      // The picker already closed; a later refresh/reload re-syncs if the
-      // save failed server-side.
-    });
+    setDetail((prev) => (prev ? { ...prev, pictureUrl: url, selectedPictureUrl: url } : prev));
+    setAnimePicture(detail.animeId, url)
+      .then(({ pictureUrl, selectedPictureUrl }) => {
+        setDetail((prev) =>
+          prev && prev.animeId === detail.animeId ? { ...prev, pictureUrl, selectedPictureUrl } : prev,
+        );
+      })
+      .catch(() => {
+        // The picker already closed; a later refresh/reload re-syncs if the
+        // save failed server-side.
+      });
+  }
+
+  // Clearing follows the same optimistic-then-reconcile shape as picking:
+  // apply MAL's picture locally right away, then patch both fields from the
+  // response.
+  function handleClearAnimePicture() {
+    if (!detail) return;
+    setDetail((prev) =>
+      prev ? { ...prev, pictureUrl: prev.malPictureUrl, selectedPictureUrl: null } : prev,
+    );
+    resetAnimePicture(detail.animeId)
+      .then(({ pictureUrl, selectedPictureUrl }) => {
+        setDetail((prev) =>
+          prev && prev.animeId === detail.animeId ? { ...prev, pictureUrl, selectedPictureUrl } : prev,
+        );
+      })
+      .catch(() => {
+        // A later refresh/reload re-syncs if the save failed server-side.
+      });
   }
 
   function buildIncrementTarget(): IncrementTarget {
@@ -472,6 +500,7 @@ export function AnimeDetailPage() {
           current={detail.pictureUrl}
           onPick={handlePickAnimePicture}
           onClose={() => setShowPicturePicker(false)}
+          onClear={detail.selectedPictureUrl != null ? handleClearAnimePicture : undefined}
         />
       )}
 

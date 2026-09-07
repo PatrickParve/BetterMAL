@@ -31,6 +31,7 @@ public class MalMappingExtensionsTests
     {
         Id = 1,
         Title = "Original Title",
+        SelectedPictureUrl = "https://mal/chosen.jpg",
         PictureUrl = "https://mal/chosen.jpg",
         MalPictureUrl = "https://mal/old-main.jpg",
     };
@@ -50,6 +51,8 @@ public class MalMappingExtensionsTests
 
         Assert.Equal("https://mal/chosen.jpg", anime.PictureUrl);
         Assert.Equal("https://mal/new-main.jpg", anime.MalPictureUrl);
+        Assert.Equal("https://mal/chosen.jpg", anime.SelectedPictureUrl); // the choice is untouched by a MAL sync
+        Assert.Null(anime.SelectedPictureModifiedAt); // no MAL sync writes this timestamp (design.md D4)
     }
 
     [Fact]
@@ -60,6 +63,8 @@ public class MalMappingExtensionsTests
 
         Assert.Equal("https://mal/chosen.jpg", anime.PictureUrl);
         Assert.Equal("https://mal/new-main.jpg", anime.MalPictureUrl);
+        Assert.Equal("https://mal/chosen.jpg", anime.SelectedPictureUrl);
+        Assert.Null(anime.SelectedPictureModifiedAt);
     }
 
     [Fact]
@@ -70,6 +75,7 @@ public class MalMappingExtensionsTests
 
         Assert.Equal("https://mal/new.jpg", anime.PictureUrl);
         Assert.Equal("https://mal/new.jpg", anime.MalPictureUrl);
+        Assert.Null(anime.SelectedPictureUrl);
     }
 
     [Fact]
@@ -80,6 +86,31 @@ public class MalMappingExtensionsTests
 
         Assert.Equal("https://mal/new.jpg", anime.PictureUrl);
         Assert.Equal("https://mal/new.jpg", anime.MalPictureUrl);
+        Assert.Null(anime.SelectedPictureUrl);
+    }
+
+    // 7.6: the invariant PictureUrl == SelectedPictureUrl ?? MalPictureUrl
+    // holds after a full and a lean upsert, with and without a stored choice.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("https://mal/chosen.jpg")]
+    public void ApplyToAlwaysLeavesPictureUrlEqualToSelectedPictureUrlOrMalPictureUrl(string? selectedPictureUrl)
+    {
+        var anime = new AnimeMetadata { Id = 1, Title = "T", SelectedPictureUrl = selectedPictureUrl };
+        NodeWithMainPicture("https://mal/main.jpg").ApplyTo(anime, DateTimeOffset.UtcNow);
+
+        Assert.Equal(anime.SelectedPictureUrl ?? anime.MalPictureUrl, anime.PictureUrl);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("https://mal/chosen.jpg")]
+    public void ApplyLeanToAlwaysLeavesPictureUrlEqualToSelectedPictureUrlOrMalPictureUrl(string? selectedPictureUrl)
+    {
+        var anime = new AnimeMetadata { Id = 1, Title = "T", SelectedPictureUrl = selectedPictureUrl };
+        NodeWithMainPicture("https://mal/main.jpg").ApplyLeanTo(anime, DateTimeOffset.UtcNow);
+
+        Assert.Equal(anime.SelectedPictureUrl ?? anime.MalPictureUrl, anime.PictureUrl);
     }
 
     [Fact]

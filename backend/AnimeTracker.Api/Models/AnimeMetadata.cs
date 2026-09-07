@@ -4,8 +4,8 @@ namespace AnimeTracker.Api.Models;
 /// AiringStatus, BroadcastDayOfWeek) are kept as strings rather than enums so an
 /// unrecognized upstream value doesn't break ingestion. Not strictly a MAL mirror
 /// throughout: PictureUrl and TotalEpisodes are each an effective value beside the
-/// source value(s) they derive from — MAL's picture until one is chosen for the
-/// former, MAL's total when MAL has one, else AniList's, for the latter.</summary>
+/// source value(s) they derive from — the chosen picture and MAL's for the former,
+/// MAL's total when MAL has one, else AniList's, for the latter.</summary>
 public class AnimeMetadata
 {
     public int Id { get; set; } // MAL anime id
@@ -13,9 +13,18 @@ public class AnimeMetadata
     public required string Title { get; set; }
     public string? EnglishTitle { get; set; }
 
-    // The picture to display: MAL's main picture until one is chosen, the
-    // chosen one after. MalPictureUrl is what MAL says; the two differ
-    // exactly when a picture has been chosen (Services/Artwork/AnimePicture).
+    // The chosen picture, null meaning "no choice; follow MAL". Written only
+    // by ArtworkSelectionService, which also stamps SelectedPictureModifiedAt
+    // in the same write.
+    public string? SelectedPictureUrl { get; set; }
+    // When SelectedPictureUrl was last set or cleared; null means neither has
+    // ever happened for this anime.
+    public DateTimeOffset? SelectedPictureModifiedAt { get; set; }
+
+    // The picture to display, derived from the pair above: the chosen
+    // picture where there is one, MAL's main picture otherwise.
+    // ResolvePictureUrl() is the only writer — same shape as the
+    // TotalEpisodes trio below.
     public string? PictureUrl { get; set; }
     public string? MalPictureUrl { get; set; }
     public List<string>? PictureUrls { get; set; } // every picture MAL publishes, MAL's order, my-list anime only
@@ -72,4 +81,10 @@ public class AnimeMetadata
     /// just touched a source column (MAL's own upsert, or the AniList
     /// refresh); MAL wins when it has a figure.</summary>
     public void ResolveTotalEpisodes() => TotalEpisodes = MalTotalEpisodes ?? AniListTotalEpisodes;
+
+    /// <summary>Re-derives <see cref="PictureUrl"/> from the two source
+    /// columns — the only writer of that field. Called by whichever writer
+    /// just touched <see cref="SelectedPictureUrl"/> or <see cref="MalPictureUrl"/>;
+    /// the choice wins when there is one.</summary>
+    public void ResolvePictureUrl() => PictureUrl = SelectedPictureUrl ?? MalPictureUrl;
 }

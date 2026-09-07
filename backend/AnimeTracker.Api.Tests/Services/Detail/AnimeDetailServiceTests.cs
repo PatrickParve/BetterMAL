@@ -309,6 +309,34 @@ public class AnimeDetailServiceTests
         Assert.Equal(["https://mal/p1.jpg", "https://mal/p2.jpg"], detail.PictureUrls);
     }
 
+    [Fact]
+    public async Task GetDetailAsync_DtoCarriesNullSelectedPictureUrlForAnAnimeWithNoChoice()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(Anime(1, DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
+        var refresh = new FakeMetadataRefreshService(db);
+
+        var detail = await CreateService(db, refresh).GetDetailAsync(1);
+
+        Assert.Null(detail.SelectedPictureUrl);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_DtoCarriesTheChosenPictureUrlForAnAnimeWithAChoice()
+    {
+        using var db = CreateDb();
+        var anime = Anime(1, DateTimeOffset.UtcNow);
+        anime.SelectedPictureUrl = "https://mal/chosen.jpg";
+        db.AnimeMetadata.Add(anime);
+        await db.SaveChangesAsync();
+        var refresh = new FakeMetadataRefreshService(db);
+
+        var detail = await CreateService(db, refresh).GetDetailAsync(1);
+
+        Assert.Equal("https://mal/chosen.jpg", detail.SelectedPictureUrl);
+    }
+
     private sealed class FakeMetadataRefreshService(AnimeTrackerDbContext db, bool throwOnRefresh = false, bool setsPicturesSyncedAt = false) : IMetadataRefreshService
     {
         public List<int> Calls { get; } = [];

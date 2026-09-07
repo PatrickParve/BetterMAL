@@ -35,7 +35,7 @@ public class AnimeDetailController(
         try
         {
             var pictureUrl = await artworkSelectionService.SetAnimePictureAsync(animeId, request.PictureUrl, ct);
-            return Ok(new { pictureUrl });
+            return Ok(new { pictureUrl, selectedPictureUrl = pictureUrl });
         }
         catch (AnimeMetadataNotFoundException)
         {
@@ -53,7 +53,7 @@ public class AnimeDetailController(
         try
         {
             var pictureUrl = await artworkSelectionService.ResetAnimePictureAsync(animeId, ct);
-            return Ok(new { pictureUrl });
+            return Ok(new { pictureUrl, selectedPictureUrl = (string?)null });
         }
         catch (AnimeMetadataNotFoundException)
         {
@@ -74,7 +74,7 @@ public class AnimeDetailController(
         if (anime is null)
             return NotFound();
 
-        return Ok(new { pictureUrl = anime.PictureUrl, pictureUrls = AnimePicture.Options(anime) });
+        return Ok(new { pictureUrl = anime.PictureUrl, selectedPictureUrl = anime.SelectedPictureUrl, pictureUrls = AnimePicture.Options(anime) });
     }
 }
 
