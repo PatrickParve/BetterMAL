@@ -647,7 +647,7 @@ export function ProfilePage() {
             {displayedTopSeries.map((item) => (
               <Link
                 key={item.seriesId}
-                to={`/series/${item.rootAnimeId}`}
+                to={`/series/${item.seriesId}`}
                 className="top-series-strip__item"
                 draggable={false}
                 title={topSeriesCountsTitle(item)}
@@ -719,7 +719,7 @@ export function ProfilePage() {
               {displayedRewatchedSeries.items.map((item) => (
                 <Link
                   key={item.seriesId}
-                  to={`/series/${item.rootAnimeId}`}
+                  to={`/series/${item.seriesId}`}
                   className="rewatched-strip__item"
                   draggable={false}
                   onClick={rewatchedStripScroll.onItemClick}

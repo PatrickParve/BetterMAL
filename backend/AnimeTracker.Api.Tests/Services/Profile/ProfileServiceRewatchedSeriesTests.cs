@@ -31,8 +31,8 @@ public class ProfileServiceRewatchedSeriesTests
             new FakeEpisodeScheduleService(),
             new UnusedAnimeRankingService());
 
-    private static void AddSeriesShell(AnimeTrackerDbContext db, int seriesId, int rootAnimeId) =>
-        db.Series.Add(new SeriesModel { Id = seriesId, RootAnimeId = rootAnimeId, BuiltAt = DateTimeOffset.UtcNow });
+    private static void AddSeriesShell(AnimeTrackerDbContext db, int rootAnimeId) =>
+        db.Series.Add(new SeriesModel { Id = rootAnimeId, BuiltAt = DateTimeOffset.UtcNow });
 
     private static void AddMember(
         AnimeTrackerDbContext db, int seriesId, int animeId, bool isMainLine, int order, string title,
@@ -64,12 +64,12 @@ public class ProfileServiceRewatchedSeriesTests
     public async Task SumsAcrossMainLineAndExtras()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
+        AddSeriesShell(db, 100);
         // Main line: 12 published episodes, 25min each, rewatched once -> 12 * 1500s = 18000s.
-        AddMember(db, 1, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
             averageEpisodeDurationSeconds: 1500, rewatchCount: 1, episodesWatched: 12);
         // Extra: 1 episode, 120min, rewatched 3 times -> 3 * 1 * 7200s = 21600s.
-        AddMember(db, 1, 101, isMainLine: false, order: 1, title: "Extra", totalEpisodes: 1,
+        AddMember(db, 100, 101, isMainLine: false, order: 1, title: "Extra", totalEpisodes: 1,
             averageEpisodeDurationSeconds: 7200, rewatchCount: 3, episodesWatched: 1);
         await db.SaveChangesAsync();
 
@@ -84,8 +84,8 @@ public class ProfileServiceRewatchedSeriesTests
     public async Task FirstWatchesDoNotCount()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
-        AddMember(db, 1, 100, isMainLine: true, order: 0, title: "Never Rewatched", totalEpisodes: 12,
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Never Rewatched", totalEpisodes: 12,
             averageEpisodeDurationSeconds: 1500, rewatchCount: 0, episodesWatched: 12);
         await db.SaveChangesAsync();
 
@@ -99,8 +99,8 @@ public class ProfileServiceRewatchedSeriesTests
     public async Task NoPublishedTotalFallsBackToEpisodesWatched()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
-        AddMember(db, 1, 100, isMainLine: true, order: 0, title: "Still Airing", totalEpisodes: null,
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Still Airing", totalEpisodes: null,
             averageEpisodeDurationSeconds: 1500, rewatchCount: 1, episodesWatched: 8);
         await db.SaveChangesAsync();
 
@@ -115,8 +115,8 @@ public class ProfileServiceRewatchedSeriesTests
     public async Task NoPublishedDurationFallsBackToTheAssumedDuration()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
-        AddMember(db, 1, 100, isMainLine: true, order: 0, title: "No Duration", totalEpisodes: 12,
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "No Duration", totalEpisodes: 12,
             averageEpisodeDurationSeconds: null, rewatchCount: 1, episodesWatched: 12);
         await db.SaveChangesAsync();
 
@@ -135,18 +135,18 @@ public class ProfileServiceRewatchedSeriesTests
     public async Task FranchiseWithOneOfThreeAiredMainLineEntriesRewatchedIsListed()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
-        AddMember(db, 1, 100, isMainLine: true, order: 0, title: "Season 1", totalEpisodes: 12,
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Season 1", totalEpisodes: 12,
             averageEpisodeDurationSeconds: 1500, rewatchCount: 1, episodesWatched: 12);
-        AddMember(db, 1, 101, isMainLine: true, order: 1, title: "Season 2"); // not in my list
-        AddMember(db, 1, 102, isMainLine: true, order: 2, title: "Season 3"); // not in my list
+        AddMember(db, 100, 101, isMainLine: true, order: 1, title: "Season 2"); // not in my list
+        AddMember(db, 100, 102, isMainLine: true, order: 2, title: "Season 3"); // not in my list
         await db.SaveChangesAsync();
 
         var entries = await db.UserAnimeEntries.AsNoTracking().ToListAsync();
         var section = await CreateService(db, entries).GetRewatchedSeriesSectionAsync();
 
         var item = Assert.Single(section.Items);
-        Assert.Equal(100, item.RootAnimeId);
+        Assert.Equal(100, item.SeriesId);
     }
 
     // --- An in-progress rewatch (design.md D1, tasks.md 2.4) ---
@@ -155,10 +155,10 @@ public class ProfileServiceRewatchedSeriesTests
     public async Task AnInProgressRewatchAddsToASeriesTotal()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
+        AddSeriesShell(db, 100);
         // 12-episode season, rewatch count 2 (24 episodes' worth completed)
         // plus 3 episodes watched of the run in progress -> 27 * 1500s.
-        AddMember(db, 1, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
             averageEpisodeDurationSeconds: 1500, rewatchCount: 2, episodesWatched: 3,
             status: WatchStatus.Rewatching);
         await db.SaveChangesAsync();
@@ -174,9 +174,9 @@ public class ProfileServiceRewatchedSeriesTests
     public async Task AFirstRewatchInProgressMakesASeriesEligible()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
+        AddSeriesShell(db, 100);
         // Rewatch count still 0 - previously contributed nothing at all.
-        AddMember(db, 1, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
             averageEpisodeDurationSeconds: 1500, rewatchCount: 0, episodesWatched: 5,
             status: WatchStatus.Rewatching);
         await db.SaveChangesAsync();
@@ -192,8 +192,8 @@ public class ProfileServiceRewatchedSeriesTests
     public async Task ACompletedMemberWithZeroRewatchesStillContributesNothing()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
-        AddMember(db, 1, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
             averageEpisodeDurationSeconds: 1500, rewatchCount: 0, episodesWatched: 12,
             status: WatchStatus.Completed);
         await db.SaveChangesAsync();
@@ -208,8 +208,8 @@ public class ProfileServiceRewatchedSeriesTests
     public async Task TheAllScopesBadgeIsUnchangedByAnInProgressRewatch()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
-        AddMember(db, 1, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
             averageEpisodeDurationSeconds: 1500, rewatchCount: 1, episodesWatched: 4,
             status: WatchStatus.Rewatching);
         await db.SaveChangesAsync();
@@ -228,14 +228,14 @@ public class ProfileServiceRewatchedSeriesTests
     public async Task OrderedByTotalDescendingThenTitle()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
-        AddMember(db, 1, 100, isMainLine: true, order: 0, title: "Charlie", totalEpisodes: 1,
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Charlie", totalEpisodes: 1,
             averageEpisodeDurationSeconds: 3600, rewatchCount: 1, episodesWatched: 1); // 3600s
-        AddSeriesShell(db, 2, 200);
-        AddMember(db, 2, 200, isMainLine: true, order: 0, title: "Bravo", totalEpisodes: 1,
+        AddSeriesShell(db, 200);
+        AddMember(db, 200, 200, isMainLine: true, order: 0, title: "Bravo", totalEpisodes: 1,
             averageEpisodeDurationSeconds: 7200, rewatchCount: 1, episodesWatched: 1); // 7200s
-        AddSeriesShell(db, 3, 300);
-        AddMember(db, 3, 300, isMainLine: true, order: 0, title: "Alpha", totalEpisodes: 1,
+        AddSeriesShell(db, 300);
+        AddMember(db, 300, 300, isMainLine: true, order: 0, title: "Alpha", totalEpisodes: 1,
             averageEpisodeDurationSeconds: 7200, rewatchCount: 1, episodesWatched: 1); // 7200s, ties with Bravo
         await db.SaveChangesAsync();
 
@@ -243,7 +243,7 @@ public class ProfileServiceRewatchedSeriesTests
         var section = await CreateService(db, entries).GetRewatchedSeriesSectionAsync();
 
         // Alpha and Bravo tie at 7200s -> broken alphabetically; Charlie trails at 3600s.
-        Assert.Equal([300, 200, 100], section.Items.Select(i => i.RootAnimeId));
+        Assert.Equal([300, 200, 100], section.Items.Select(i => i.SeriesId));
     }
 
     private sealed class FakeUserAnimeEntryRepository(List<UserAnimeEntry> entries) : IUserAnimeEntryRepository
@@ -251,7 +251,7 @@ public class ProfileServiceRewatchedSeriesTests
         public Task<UserAnimeEntry?> GetByAnimeIdAsync(int animeId, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<List<UserAnimeEntry>> GetAllAsync(CancellationToken ct = default) => Task.FromResult(entries);
-        public Task<(int PendingCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
+        public Task<(int PendingCount, int HeldCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
             throw new NotImplementedException();
     }
 

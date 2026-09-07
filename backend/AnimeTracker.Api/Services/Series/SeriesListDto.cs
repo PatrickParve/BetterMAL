@@ -36,9 +36,10 @@ public enum SeriesProgressBadge
 /// filters on — and `MainLineAverageRank` is the mean overall ranking
 /// position of the main-line members my rankings cover, `null` when they
 /// cover none.</summary>
+// SeriesId is the root entry's MAL id (key-series-by-root-anime-id
+// design.md D1/D7), so the card's link target reads this same field.
 public record SeriesListItemDto(
     int SeriesId,
-    int RootAnimeId,
     string Title,
     string? EnglishTitle,
     string? PictureUrl,

@@ -5,28 +5,31 @@ namespace AnimeTracker.Api.Tests.Services.Search;
 // SeriesSearchLookup itself is a thin SeriesMembers ⋈ AnimeMetadata query; the
 // matching/collapsing/ordering logic it feeds lives in SeriesSearchIndex, so
 // these tests build the index directly from projections (as LoadAsync would)
-// rather than going through a database.
+// rather than going through a database. seriesId is the root entry's anime
+// id (key-series-by-root-anime-id design.md D1) — every series here must
+// include a member row whose AnimeId equals its own seriesId, since
+// SeriesSearchIndex.ToResultDto resolves display fields from that row.
 public class SeriesSearchLookupTests
 {
     private static SeriesMemberProjection Member(
-        int seriesId, int animeId, string title, int rootAnimeId,
-        string? englishTitle = null, string? pictureUrl = null, bool isMainLine = true, int? popularityRank = null,
+        int seriesId, int animeId, string title,
+        string? englishTitle = null, string? malPictureUrl = null, bool isMainLine = true, int? popularityRank = null,
         string? selectedTitle = null, string? selectedPictureUrl = null) =>
-        new(seriesId, animeId, title, englishTitle, pictureUrl, isMainLine, popularityRank, rootAnimeId, selectedTitle, selectedPictureUrl);
+        new(seriesId, animeId, title, englishTitle, malPictureUrl, isMainLine, popularityRank, selectedTitle, selectedPictureUrl);
 
     [Fact]
     public void MatchesOnNonRootMembersTitle()
     {
         var index = new SeriesSearchIndex(
         [
-            Member(1, 100, "Attack on Titan", rootAnimeId: 100, pictureUrl: "root.jpg"),
-            Member(1, 101, "Attack on Titan Final Season", rootAnimeId: 100),
+            Member(100, 100, "Attack on Titan", malPictureUrl: "root.jpg"),
+            Member(100, 101, "Attack on Titan Final Season"),
         ]);
 
         var results = index.Match("final season", exact: false);
 
         var series = Assert.Single(results);
-        Assert.Equal(1, series.SeriesId);
+        Assert.Equal(100, series.SeriesId);
     }
 
     [Fact]
@@ -34,14 +37,14 @@ public class SeriesSearchLookupTests
     {
         var index = new SeriesSearchIndex(
         [
-            Member(1, 100, "Attack on Titan", rootAnimeId: 100, englishTitle: "Attack on Titan", pictureUrl: "root.jpg"),
-            Member(1, 101, "Shingeki no Kyojin: Final Season", rootAnimeId: 100, englishTitle: null, pictureUrl: "final-season.jpg"),
+            Member(100, 100, "Attack on Titan", englishTitle: "Attack on Titan", malPictureUrl: "root.jpg"),
+            Member(100, 101, "Shingeki no Kyojin: Final Season", englishTitle: null, malPictureUrl: "final-season.jpg"),
         ]);
 
         var results = index.Match("shingeki", exact: false);
 
         var series = Assert.Single(results);
-        Assert.Equal(100, series.RootAnimeId);
+        Assert.Equal(100, series.SeriesId);
         Assert.Equal("Attack on Titan", series.Title);
         Assert.Equal("Attack on Titan", series.EnglishTitle);
         Assert.Equal("root.jpg", series.PictureUrl);
@@ -52,19 +55,19 @@ public class SeriesSearchLookupTests
     {
         var index = new SeriesSearchIndex(
         [
-            // Series 1: one member only contains-matches, its sibling prefix-matches —
+            // Series 100: one member only contains-matches, its sibling prefix-matches —
             // the collapsed row should carry the stronger (prefix) quality.
-            Member(1, 100, "The Great Attack Chronicles", rootAnimeId: 100),
-            Member(1, 101, "Attack on Titan", rootAnimeId: 100),
-            // Series 2: every member is contains-only, never prefix — should rank behind series 1.
-            Member(2, 200, "Some Other Attack Story", rootAnimeId: 200),
+            Member(100, 100, "The Great Attack Chronicles"),
+            Member(100, 101, "Attack on Titan"),
+            // Series 200: every member is contains-only, never prefix — should rank behind series 100.
+            Member(200, 200, "Some Other Attack Story"),
         ]);
 
         var results = index.Match("attack", exact: false);
 
         Assert.Equal(2, results.Count); // collapsed to one row per series, not per member
-        Assert.Equal(1, results[0].SeriesId); // prefix-quality series ranks ahead of contains-only
-        Assert.Equal(2, results[1].SeriesId);
+        Assert.Equal(100, results[0].SeriesId); // prefix-quality series ranks ahead of contains-only
+        Assert.Equal(200, results[1].SeriesId);
     }
 
     [Fact]
@@ -72,8 +75,8 @@ public class SeriesSearchLookupTests
     {
         var index = new SeriesSearchIndex(
         [
-            Member(1, 100, "Attack on Titan", rootAnimeId: 100),
-            Member(1, 101, "Attack on Titan Final Season", rootAnimeId: 100),
+            Member(100, 100, "Attack on Titan"),
+            Member(100, 101, "Attack on Titan Final Season"),
         ]);
 
         var exactMatch = index.Match("Attack on Titan", exact: true);
@@ -88,13 +91,13 @@ public class SeriesSearchLookupTests
     {
         var index = new SeriesSearchIndex(
         [
-            Member(1, 100, "Attack on Titan", rootAnimeId: 100, isMainLine: true),
-            Member(1, 101, "Attack on Titan Season 2", rootAnimeId: 100, isMainLine: true),
-            Member(1, 102, "Attack on Titan Season 3", rootAnimeId: 100, isMainLine: true),
-            Member(1, 103, "Attack on Titan Final Season", rootAnimeId: 100, isMainLine: true),
-            Member(1, 104, "Attack on Titan: No Regrets (OVA)", rootAnimeId: 100, isMainLine: false),
-            Member(1, 105, "Attack on Titan: Lost Girls (OVA)", rootAnimeId: 100, isMainLine: false),
-            Member(1, 106, "Attack on Titan: Chronicle (Recap)", rootAnimeId: 100, isMainLine: false),
+            Member(100, 100, "Attack on Titan", isMainLine: true),
+            Member(100, 101, "Attack on Titan Season 2", isMainLine: true),
+            Member(100, 102, "Attack on Titan Season 3", isMainLine: true),
+            Member(100, 103, "Attack on Titan Final Season", isMainLine: true),
+            Member(100, 104, "Attack on Titan: No Regrets (OVA)", isMainLine: false),
+            Member(100, 105, "Attack on Titan: Lost Girls (OVA)", isMainLine: false),
+            Member(100, 106, "Attack on Titan: Chronicle (Recap)", isMainLine: false),
         ]);
 
         var results = index.Match("attack on titan", exact: false);
@@ -108,7 +111,7 @@ public class SeriesSearchLookupTests
     {
         var index = new SeriesSearchIndex(
         [
-            Member(1, 100, "Attack on Titan", rootAnimeId: 100),
+            Member(100, 100, "Attack on Titan"),
         ]);
 
         Assert.Empty(index.Match("one piece", exact: false));
@@ -128,7 +131,7 @@ public class SeriesSearchLookupTests
     {
         var index = new SeriesSearchIndex(
         [
-            Member(1, 100, "Beyblade: Metal Fusion", rootAnimeId: 100, selectedTitle: "Beyblade"),
+            Member(100, 100, "Beyblade: Metal Fusion", selectedTitle: "Beyblade"),
         ]);
 
         var results = index.Match("Metal Fusion", exact: false);
@@ -142,7 +145,7 @@ public class SeriesSearchLookupTests
     {
         var index = new SeriesSearchIndex(
         [
-            Member(1, 100, "Beyblade: Metal Fusion", rootAnimeId: 100, selectedTitle: "Beyblade"),
+            Member(100, 100, "Beyblade: Metal Fusion", selectedTitle: "Beyblade"),
         ]);
 
         var results = index.Match("Beyblade", exact: false);
@@ -155,7 +158,7 @@ public class SeriesSearchLookupTests
     {
         var index = new SeriesSearchIndex(
         [
-            Member(1, 100, "Beyblade: Metal Fusion", rootAnimeId: 100, englishTitle: "Beyblade: Metal Fusion", selectedTitle: "Beyblade"),
+            Member(100, 100, "Beyblade: Metal Fusion", englishTitle: "Beyblade: Metal Fusion", selectedTitle: "Beyblade"),
         ]);
 
         var results = index.Match("Metal Fusion", exact: false);
@@ -172,13 +175,13 @@ public class SeriesSearchLookupTests
     {
         var index = new SeriesSearchIndex(
         [
-            Member(1, 100, "Re:ZERO -Starting Life in Another World-", rootAnimeId: 100),
+            Member(100, 100, "Re:ZERO -Starting Life in Another World-"),
         ]);
 
         var results = index.Match("re zero starting life", exact: false);
 
         var series = Assert.Single(results);
-        Assert.Equal(1, series.SeriesId);
+        Assert.Equal(100, series.SeriesId);
     }
 
     [Fact]
@@ -188,7 +191,7 @@ public class SeriesSearchLookupTests
         [
             // The member's own title doesn't match at all — only the chosen
             // (renamed) title does, once its punctuation is stripped.
-            Member(1, 100, "Hagane no Renkinjutsushi", rootAnimeId: 100, selectedTitle: "Full-Metal: Alchemist!"),
+            Member(100, 100, "Hagane no Renkinjutsushi", selectedTitle: "Full-Metal: Alchemist!"),
         ]);
 
         var results = index.Match("full metal alchemist", exact: false);
@@ -202,14 +205,14 @@ public class SeriesSearchLookupTests
         var index = new SeriesSearchIndex(
         [
             // Prefix once de-punctuated (query is the leading words, minus punctuation).
-            Member(1, 100, "Kaguya-sama: Love is War", rootAnimeId: 100),
+            Member(100, 100, "Kaguya-sama: Love is War"),
             // Contains only: the query sits in the middle of the de-punctuated title.
-            Member(2, 200, "Some Preamble Kaguya-sama Love Story", rootAnimeId: 200),
+            Member(200, 200, "Some Preamble Kaguya-sama Love Story"),
         ]);
 
         var results = index.Match("kaguya sama love", exact: false);
 
-        Assert.Equal([1, 2], results.Select(s => s.SeriesId));
+        Assert.Equal([100, 200], results.Select(s => s.SeriesId));
     }
 
     // --- Whole-word contains matching ---
@@ -219,8 +222,8 @@ public class SeriesSearchLookupTests
     {
         var index = new SeriesSearchIndex(
         [
-            Member(1, 100, "My Hero Academia", rootAnimeId: 100),
-            Member(1, 101, "My Hero Academia: World Heroes' Mission", rootAnimeId: 100),
+            Member(100, 100, "My Hero Academia"),
+            Member(100, 101, "My Hero Academia: World Heroes' Mission"),
         ]);
 
         // "miss" is a raw substring of "Mission" but not a whole word in it —
@@ -234,7 +237,7 @@ public class SeriesSearchLookupTests
     {
         var index = new SeriesSearchIndex(
         [
-            Member(1, 100, "My Hero Academia", rootAnimeId: 100),
+            Member(100, 100, "My Hero Academia"),
         ]);
 
         var results = index.Match("academia", exact: false);

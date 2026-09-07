@@ -39,20 +39,22 @@ public class ProfileServiceTopSeriesTests
             new FakeEpisodeScheduleService(),
             new AnimeRankingService(new FakeUserAnimeEntryRepository(entries), new FakeTopAnimeSelectionRepository()));
 
+    // seriesId is the root entry's own anime id (key-series-by-root-anime-id
+    // design.md D1) — rootAnimeId is both the series' Id and its sole member.
     private static void AddSeries(
-        AnimeTrackerDbContext db, int seriesId, int rootAnimeId, string title, int myScore, string airingStatus = "finished_airing")
+        AnimeTrackerDbContext db, int rootAnimeId, string title, int myScore, string airingStatus = "finished_airing")
     {
-        db.Series.Add(new SeriesModel { Id = seriesId, RootAnimeId = rootAnimeId, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = rootAnimeId, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = rootAnimeId, Title = title, MalScore = 7.0, AiringStatus = airingStatus });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = rootAnimeId, SeriesId = seriesId, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = rootAnimeId, SeriesId = rootAnimeId, IsMainLine = true, Order = 0 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = rootAnimeId, Status = WatchStatus.Completed, MyScore = myScore });
     }
 
     // Multi-member variant for the watched-coverage tests below: one Series
     // row plus per-member airing status and (optional) list membership, so a
     // franchise's main line can be built up entry by entry.
-    private static void AddSeriesShell(AnimeTrackerDbContext db, int seriesId, int rootAnimeId) =>
-        db.Series.Add(new SeriesModel { Id = seriesId, RootAnimeId = rootAnimeId, BuiltAt = DateTimeOffset.UtcNow });
+    private static void AddSeriesShell(AnimeTrackerDbContext db, int rootAnimeId) =>
+        db.Series.Add(new SeriesModel { Id = rootAnimeId, BuiltAt = DateTimeOffset.UtcNow });
 
     private static void AddMember(
         AnimeTrackerDbContext db, int seriesId, int animeId, bool isMainLine, int order,
@@ -68,15 +70,15 @@ public class ProfileServiceTopSeriesTests
     public async Task BaseOrdering_MyAverageDescendingThenTitle()
     {
         using var db = CreateDb();
-        AddSeries(db, 1, 100, "Bravo", myScore: 8);
-        AddSeries(db, 2, 200, "Alpha", myScore: 9);
-        AddSeries(db, 3, 300, "Charlie", myScore: 7);
+        AddSeries(db, 100, "Bravo", myScore: 8);
+        AddSeries(db, 200, "Alpha", myScore: 9);
+        AddSeries(db, 300, "Charlie", myScore: 7);
         await db.SaveChangesAsync();
 
         var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
         var section = await CreateService(db, entries).GetTopSeriesSectionAsync();
 
-        Assert.Equal([200, 100, 300], section.Items.Select(i => i.RootAnimeId));
+        Assert.Equal([200, 100, 300], section.Items.Select(i => i.SeriesId));
     }
 
     // The four tie-break steps of the full my-score chain
@@ -92,9 +94,9 @@ public class ProfileServiceTopSeriesTests
     {
         using var db = CreateDb();
         // Series A: one main-line member scored 8.
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 100, Title = "Series A", AiringStatus = "finished_airing" });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 100, SeriesId = 1, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 100, SeriesId = 100, IsMainLine = true, Order = 0 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 100, Status = WatchStatus.Completed, MyScore = 8 });
 
         // Series B: two main-line members scored 9 and 7 -> same average (8),
@@ -102,11 +104,11 @@ public class ProfileServiceTopSeriesTests
         // (a filler entry, not part of any series, takes rank 3 ahead of the
         // score-7 member on title), for an average position of 2.5 against
         // series A's own rank of 2.
-        db.Series.Add(new SeriesModel { Id = 2, RootAnimeId = 200, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 200, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 200, Title = "Series B One", AiringStatus = "finished_airing" });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 201, Title = "Series B Two", AiringStatus = "finished_airing" });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 200, SeriesId = 2, IsMainLine = true, Order = 0 });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 201, SeriesId = 2, IsMainLine = true, Order = 1 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 200, SeriesId = 200, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 201, SeriesId = 200, IsMainLine = true, Order = 1 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 200, Status = WatchStatus.Completed, MyScore = 9 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 201, Status = WatchStatus.Completed, MyScore = 7 });
 
@@ -119,7 +121,7 @@ public class ProfileServiceTopSeriesTests
         var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
         var section = await CreateService(db, entries).GetTopSeriesSectionAsync();
 
-        Assert.Equal([100, 200], section.Items.Select(i => i.RootAnimeId));
+        Assert.Equal([100, 200], section.Items.Select(i => i.SeriesId));
     }
 
     [Fact]
@@ -127,25 +129,25 @@ public class ProfileServiceTopSeriesTests
     {
         using var db = CreateDb();
         // Series C: scored 8, Completed -> hand-ordered, so it holds a rank.
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 300, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 300, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 300, Title = "Series C", AiringStatus = "finished_airing" });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 300, SeriesId = 1, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 300, SeriesId = 300, IsMainLine = true, Order = 0 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 300, Status = WatchStatus.Completed, MyScore = 8 });
 
         // Series D: same average (8) but PlanToWatch -> Unranked band, so it
         // holds no position at all despite carrying a my-score.
-        db.Series.Add(new SeriesModel { Id = 2, RootAnimeId = 400, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 400, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 400, Title = "Series D", AiringStatus = "finished_airing" });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 400, SeriesId = 2, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 400, SeriesId = 400, IsMainLine = true, Order = 0 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 400, Status = WatchStatus.PlanToWatch, MyScore = 8 });
         await db.SaveChangesAsync();
 
         var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
         var section = await CreateService(db, entries).GetTopSeriesSectionAsync();
 
-        Assert.Equal([300, 400], section.Items.Select(i => i.RootAnimeId));
-        Assert.NotNull(section.Items.Single(i => i.RootAnimeId == 300).MainLineAverageRank);
-        Assert.Null(section.Items.Single(i => i.RootAnimeId == 400).MainLineAverageRank);
+        Assert.Equal([300, 400], section.Items.Select(i => i.SeriesId));
+        Assert.NotNull(section.Items.Single(i => i.SeriesId == 300).MainLineAverageRank);
+        Assert.Null(section.Items.Single(i => i.SeriesId == 400).MainLineAverageRank);
     }
 
     [Fact]
@@ -155,21 +157,21 @@ public class ProfileServiceTopSeriesTests
         // Both series tie on average (8) and on average rank (both
         // PlanToWatch -> Unranked -> null), so the tie falls to main-line
         // episodes aired: series E's 24 beats series F's 12.
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 500, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 500, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 500, Title = "Series E", AiringStatus = "finished_airing", TotalEpisodes = 24 });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 500, SeriesId = 1, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 500, SeriesId = 500, IsMainLine = true, Order = 0 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 500, Status = WatchStatus.PlanToWatch, MyScore = 8 });
 
-        db.Series.Add(new SeriesModel { Id = 2, RootAnimeId = 600, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 600, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 600, Title = "Series F", AiringStatus = "finished_airing", TotalEpisodes = 12 });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 600, SeriesId = 2, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 600, SeriesId = 600, IsMainLine = true, Order = 0 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 600, Status = WatchStatus.PlanToWatch, MyScore = 8 });
         await db.SaveChangesAsync();
 
         var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
         var section = await CreateService(db, entries).GetTopSeriesSectionAsync();
 
-        Assert.Equal([500, 600], section.Items.Select(i => i.RootAnimeId));
+        Assert.Equal([500, 600], section.Items.Select(i => i.SeriesId));
     }
 
     [Fact]
@@ -178,21 +180,21 @@ public class ProfileServiceTopSeriesTests
         using var db = CreateDb();
         // Tied on average (8), on average rank (both null), and on
         // main-line episodes aired (both 12) -> falls to display title.
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 700, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 700, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 700, Title = "Zulu", AiringStatus = "finished_airing", TotalEpisodes = 12 });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 700, SeriesId = 1, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 700, SeriesId = 700, IsMainLine = true, Order = 0 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 700, Status = WatchStatus.PlanToWatch, MyScore = 8 });
 
-        db.Series.Add(new SeriesModel { Id = 2, RootAnimeId = 800, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 800, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 800, Title = "Alpha", AiringStatus = "finished_airing", TotalEpisodes = 12 });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 800, SeriesId = 2, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 800, SeriesId = 800, IsMainLine = true, Order = 0 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 800, Status = WatchStatus.PlanToWatch, MyScore = 8 });
         await db.SaveChangesAsync();
 
         var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
         var section = await CreateService(db, entries).GetTopSeriesSectionAsync();
 
-        Assert.Equal([800, 700], section.Items.Select(i => i.RootAnimeId));
+        Assert.Equal([800, 700], section.Items.Select(i => i.SeriesId));
     }
 
     // The MAL basis's own tie-break — scored main-line count — is unchanged
@@ -204,18 +206,18 @@ public class ProfileServiceTopSeriesTests
     {
         using var db = CreateDb();
         // Series K: one MAL-scored main-line member, higher my-score.
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 100, Title = "Series K", MalScore = 7.0, AiringStatus = "finished_airing" });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 100, SeriesId = 1, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 100, SeriesId = 100, IsMainLine = true, Order = 0 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 100, Status = WatchStatus.Completed, MyScore = 9 });
 
         // Series L: two MAL-scored main-line members, same MAL average (7)
         // but a larger scored count, and a lower my-score than series K.
-        db.Series.Add(new SeriesModel { Id = 2, RootAnimeId = 200, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 200, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 200, Title = "Series L One", MalScore = 7.0, AiringStatus = "finished_airing" });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 201, Title = "Series L Two", MalScore = 7.0, AiringStatus = "finished_airing" });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 200, SeriesId = 2, IsMainLine = true, Order = 0 });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 201, SeriesId = 2, IsMainLine = true, Order = 1 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 200, SeriesId = 200, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 201, SeriesId = 200, IsMainLine = true, Order = 1 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 200, Status = WatchStatus.Completed, MyScore = 6 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 201, Status = WatchStatus.Completed, MyScore = 6 });
         await db.SaveChangesAsync();
@@ -224,10 +226,10 @@ public class ProfileServiceTopSeriesTests
         var section = await CreateService(db, entries).GetTopSeriesSectionAsync();
 
         // The response is in my-score order (9 > 6) — not by MAL scored count.
-        Assert.Equal([100, 200], section.Items.Select(i => i.RootAnimeId));
+        Assert.Equal([100, 200], section.Items.Select(i => i.SeriesId));
 
-        var seriesK = section.Items.Single(i => i.RootAnimeId == 100);
-        var seriesL = section.Items.Single(i => i.RootAnimeId == 200);
+        var seriesK = section.Items.Single(i => i.SeriesId == 100);
+        var seriesL = section.Items.Single(i => i.SeriesId == 200);
         Assert.Equal(7.0, seriesK.MalMain.Value);
         Assert.Equal(1, seriesK.MalMain.ScoredCount);
         Assert.Equal(7.0, seriesL.MalMain.Value);
@@ -238,9 +240,9 @@ public class ProfileServiceTopSeriesTests
     public async Task SeriesWithNoListMemberIsExcluded()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 100, Title = "Not In My List" });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 100, SeriesId = 1, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 100, SeriesId = 100, IsMainLine = true, Order = 0 });
         await db.SaveChangesAsync();
 
         var section = await CreateService(db, []).GetTopSeriesSectionAsync();
@@ -252,7 +254,7 @@ public class ProfileServiceTopSeriesTests
     public async Task BothAveragesArePresentOnEveryItem()
     {
         using var db = CreateDb();
-        AddSeries(db, 1, 100, "Only Series", myScore: 8);
+        AddSeries(db, 100, "Only Series", myScore: 8);
         await db.SaveChangesAsync();
 
         var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
@@ -272,10 +274,10 @@ public class ProfileServiceTopSeriesTests
     public async Task WatchedCoverage_ThreeAiredMainLineOneInList_Excluded()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
-        AddMember(db, 1, 100, isMainLine: true, order: 0, status: WatchStatus.Completed, myScore: 8);
-        AddMember(db, 1, 101, isMainLine: true, order: 1);
-        AddMember(db, 1, 102, isMainLine: true, order: 2);
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, status: WatchStatus.Completed, myScore: 8);
+        AddMember(db, 100, 101, isMainLine: true, order: 1);
+        AddMember(db, 100, 102, isMainLine: true, order: 2);
         await db.SaveChangesAsync();
 
         var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
@@ -288,10 +290,10 @@ public class ProfileServiceTopSeriesTests
     public async Task WatchedCoverage_ThreeAiredMainLineTwoInList_Included()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
-        AddMember(db, 1, 100, isMainLine: true, order: 0, status: WatchStatus.Completed, myScore: 8);
-        AddMember(db, 1, 101, isMainLine: true, order: 1, status: WatchStatus.Completed, myScore: 7);
-        AddMember(db, 1, 102, isMainLine: true, order: 2);
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, status: WatchStatus.Completed, myScore: 8);
+        AddMember(db, 100, 101, isMainLine: true, order: 1, status: WatchStatus.Completed, myScore: 7);
+        AddMember(db, 100, 102, isMainLine: true, order: 2);
         await db.SaveChangesAsync();
 
         var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
@@ -304,9 +306,9 @@ public class ProfileServiceTopSeriesTests
     public async Task WatchedCoverage_OneAiredPlusUnairedSequelBothCounted_Included()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
-        AddMember(db, 1, 100, isMainLine: true, order: 0, status: WatchStatus.Completed, myScore: 8);
-        AddMember(db, 1, 101, isMainLine: true, order: 1, airingStatus: "not_yet_aired");
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, status: WatchStatus.Completed, myScore: 8);
+        AddMember(db, 100, 101, isMainLine: true, order: 1, airingStatus: "not_yet_aired");
         await db.SaveChangesAsync();
 
         var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
@@ -319,9 +321,9 @@ public class ProfileServiceTopSeriesTests
     public async Task WatchedCoverage_TwoAiredOneCompletedOnePlanToWatch_Included()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
-        AddMember(db, 1, 100, isMainLine: true, order: 0, status: WatchStatus.Completed, myScore: 8);
-        AddMember(db, 1, 101, isMainLine: true, order: 1, status: WatchStatus.PlanToWatch, myScore: null);
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, status: WatchStatus.Completed, myScore: 8);
+        AddMember(db, 100, 101, isMainLine: true, order: 1, status: WatchStatus.PlanToWatch, myScore: null);
         await db.SaveChangesAsync();
 
         var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
@@ -334,10 +336,10 @@ public class ProfileServiceTopSeriesTests
     public async Task WatchedCoverage_TwoAiredMainLineOnlyAnExtraInList_Excluded()
     {
         using var db = CreateDb();
-        AddSeriesShell(db, 1, 100);
-        AddMember(db, 1, 100, isMainLine: true, order: 0);
-        AddMember(db, 1, 101, isMainLine: true, order: 1);
-        AddMember(db, 1, 102, isMainLine: false, order: 2, status: WatchStatus.Completed, myScore: 6);
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0);
+        AddMember(db, 100, 101, isMainLine: true, order: 1);
+        AddMember(db, 100, 102, isMainLine: false, order: 2, status: WatchStatus.Completed, myScore: 6);
         await db.SaveChangesAsync();
 
         var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
@@ -351,7 +353,7 @@ public class ProfileServiceTopSeriesTests
         public Task<UserAnimeEntry?> GetByAnimeIdAsync(int animeId, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<List<UserAnimeEntry>> GetAllAsync(CancellationToken ct = default) => Task.FromResult(entries);
-        public Task<(int PendingCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
+        public Task<(int PendingCount, int HeldCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
             throw new NotImplementedException();
     }
 

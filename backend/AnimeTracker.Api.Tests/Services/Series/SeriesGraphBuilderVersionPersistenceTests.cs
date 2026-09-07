@@ -73,30 +73,30 @@ public class SeriesGraphBuilderVersionPersistenceTests
         Relate(movie, clannad, "alternative_version");
         db.AnimeMetadata.AddRange(clannad, afterStory, movie);
 
-        db.Series.Add(new SeriesEntity { Id = 10, RootAnimeId = clannad.Id, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesEntity { Id = clannad.Id, BuiltAt = DateTimeOffset.UtcNow });
         db.SeriesMembers.AddRange(
-            Member(10, clannad.Id, isMainLine: true, order: 0),
-            Member(10, afterStory.Id, isMainLine: true, order: 1));
+            Member(clannad.Id, clannad.Id, isMainLine: true, order: 0),
+            Member(clannad.Id, afterStory.Id, isMainLine: true, order: 1));
 
-        db.Series.Add(new SeriesEntity { Id = 20, RootAnimeId = afterStory.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "After Story's Own Title" });
+        db.Series.Add(new SeriesEntity { Id = afterStory.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "After Story's Own Title" });
         db.SeriesMembers.AddRange(
-            Member(20, afterStory.Id, isMainLine: true, order: 0),
-            Member(20, clannad.Id, isMainLine: false, order: 0));
+            Member(afterStory.Id, afterStory.Id, isMainLine: true, order: 0),
+            Member(afterStory.Id, clannad.Id, isMainLine: false, order: 0));
 
-        db.Series.Add(new SeriesEntity { Id = 30, RootAnimeId = movie.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "Movie's Own Title" });
+        db.Series.Add(new SeriesEntity { Id = movie.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "Movie's Own Title" });
         db.SeriesMembers.AddRange(
-            Member(30, movie.Id, isMainLine: true, order: 0),
-            Member(30, clannad.Id, isMainLine: false, order: 0));
+            Member(movie.Id, movie.Id, isMainLine: true, order: 0),
+            Member(movie.Id, clannad.Id, isMainLine: false, order: 0));
         await db.SaveChangesAsync();
 
         var result = await CreateBuilder(db).BuildAsync(clannad.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
 
         var allSeries = await db.Series.AsNoTracking().ToListAsync();
-        Assert.Equal(10, result!.Id); // ties at overlap 2 (clannad+afterStory); lowest stored id wins
+        Assert.Equal(clannad.Id, result!.Id); // ties at overlap 2 (clannad+afterStory); lowest root id wins
         Assert.Single(allSeries);
         var survivor = allSeries[0];
-        Assert.Equal(clannad.Id, survivor.RootAnimeId);
-        // Series 20 (overlap 2) outranks series 30 (overlap 1) for adoption.
+        Assert.Equal(clannad.Id, survivor.Id);
+        // Series afterStory (overlap 2) outranks series movie (overlap 1) for adoption.
         Assert.Equal("After Story's Own Title", survivor.SelectedTitle);
 
         var members = await db.SeriesMembers.Where(m => m.SeriesId == survivor.Id).ToListAsync();
@@ -126,20 +126,20 @@ public class SeriesGraphBuilderVersionPersistenceTests
         Relate(brotherhood, brotherhoodFilm, "side_story");
         db.AnimeMetadata.AddRange(fma2003, fmaFilm, brotherhood, brotherhoodFilm);
 
-        db.Series.Add(new SeriesEntity { Id = 100, RootAnimeId = brotherhood.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "Brotherhood" });
+        db.Series.Add(new SeriesEntity { Id = brotherhood.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "Brotherhood" });
         db.SeriesMembers.AddRange(
-            Member(100, brotherhood.Id, isMainLine: true, order: 0),
-            Member(100, brotherhoodFilm.Id, isMainLine: true, order: 1));
+            Member(brotherhood.Id, brotherhood.Id, isMainLine: true, order: 0),
+            Member(brotherhood.Id, brotherhoodFilm.Id, isMainLine: true, order: 1));
         await db.SaveChangesAsync();
 
         var result = await CreateBuilder(db).BuildAsync(fma2003.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
 
-        var brotherhoodSeries = await db.Series.AsNoTracking().SingleAsync(s => s.Id == 100);
+        var brotherhoodSeries = await db.Series.AsNoTracking().SingleAsync(s => s.Id == brotherhood.Id);
         Assert.Equal("Brotherhood", brotherhoodSeries.SelectedTitle);
-        var brotherhoodMembers = await db.SeriesMembers.Where(m => m.SeriesId == 100).ToListAsync();
+        var brotherhoodMembers = await db.SeriesMembers.Where(m => m.SeriesId == brotherhood.Id).ToListAsync();
         Assert.Equal(2, brotherhoodMembers.Count); // untouched — brotherhoodFilm never left it
 
-        Assert.NotEqual(100, result!.Id); // a brand-new series for 2003's own component
+        Assert.NotEqual(brotherhood.Id, result!.Id); // a brand-new series for 2003's own component
         var newSeriesMembers = await db.SeriesMembers.Where(m => m.SeriesId == result.Id).ToListAsync();
         Assert.Equal(3, newSeriesMembers.Count); // 2003, its film, and brotherhood as a neighbour — never brotherhoodFilm
         Assert.DoesNotContain(newSeriesMembers, m => m.AnimeId == brotherhoodFilm.Id);
@@ -147,7 +147,7 @@ public class SeriesGraphBuilderVersionPersistenceTests
         var brotherhoodMember = newSeriesMembers.Single(m => m.AnimeId == brotherhood.Id);
         Assert.Equal(nameof(MembershipKind.NeighbourTelling), brotherhoodMember.MembershipKind);
         Assert.False(brotherhoodMember.IsMainLine);
-        Assert.False(brotherhoodMember.IsPrimary); // that anime's own series (100) is its home
+        Assert.False(brotherhoodMember.IsPrimary); // that anime's own series (brotherhood's root) is its home
         Assert.Equal(nameof(RelationGroup.AlternativeVersion), brotherhoodMember.RelationGroup);
     }
 

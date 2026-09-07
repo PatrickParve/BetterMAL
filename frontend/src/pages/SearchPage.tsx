@@ -202,11 +202,11 @@ export function SearchPage() {
             {series.map((s) => (
               <AnimeCard
                 key={`series-${s.seriesId}`}
-                animeId={s.rootAnimeId}
+                animeId={s.seriesId}
                 title={s.title}
                 englishTitle={s.englishTitle}
                 pictureUrl={s.pictureUrl}
-                to={`/series/${s.rootAnimeId}`}
+                to={`/series/${s.seriesId}`}
                 className="anime-card--fluid"
               >
                 <SeriesBadge entryCount={s.entryCount} />

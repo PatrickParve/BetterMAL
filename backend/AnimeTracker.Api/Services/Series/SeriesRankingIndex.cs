@@ -61,9 +61,10 @@ public sealed class SeriesRankingIndex
             if (!members.Any(m => m.EntryStatus is not null))
                 continue; // no member of this series is in my list (task 2.5)
 
-            // The root is always a member of its own series (SeriesGraphBuilder
-            // invariant), so display fields come from that row.
-            var root = members.First(m => m.AnimeId == m.RootAnimeId);
+            // The series id is the root's anime id, and every series holds a
+            // membership for its own root (key-series-by-root-anime-id
+            // design.md D6), so display fields come from that row.
+            var root = members.First(m => m.AnimeId == m.SeriesId);
             var mainLine = members.Where(m => m.IsMainLine).ToList();
 
             // An announced main-line entry that hasn't started airing yet has
@@ -93,7 +94,7 @@ public sealed class SeriesRankingIndex
                 mainLine.Select(m => (m.AiringStatus, m.EntryStatus)));
             var malRevealed = mainLineSettledByMe && !mainLineAiring;
             var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
-                root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.PictureUrl);
+                root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.MalPictureUrl);
 
             // mainLineAverageRank accompanies mineAverage above and so covers
             // the same (whole, unfiltered) main line it does. mainLineAired-
@@ -107,7 +108,7 @@ public sealed class SeriesRankingIndex
             var mainLineAiredEpisodes = ListedSeriesMainLineAiredEpisodes(scopedMainLine, airedEpisodesByAnimeId);
 
             results.Add(new SeriesRankingResult(
-                group.Key, root.RootAnimeId, title, englishTitle, pictureUrl,
+                group.Key, title, englishTitle, pictureUrl,
                 members.Count, mainLineAiredCount, malAverage, mineAverage, malRevealed,
                 mainLineAiredEpisodes, mainLineAverageRank));
         }
@@ -147,7 +148,7 @@ public sealed class SeriesRankingIndex
             if (!members.Any(m => m.EntryStatus is not null && m.MembershipKind == nameof(MembershipKind.Core)))
                 continue;
 
-            var root = members.First(m => m.AnimeId == m.RootAnimeId);
+            var root = members.First(m => m.AnimeId == m.SeriesId);
             var mainLine = members.Where(m => m.IsMainLine).ToList();
 
             var status = SeriesStatusRules.Compute(
@@ -181,7 +182,7 @@ public sealed class SeriesRankingIndex
             var mainLineWatchedEpisodes = scopedMainLine.Sum(m => MemberEffectiveWatchedEpisodes(m, airedEpisodesByAnimeId));
             var mainLineAiredEpisodes = ListedSeriesMainLineAiredEpisodes(scopedMainLine, airedEpisodesByAnimeId);
             var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
-                root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.PictureUrl);
+                root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.MalPictureUrl);
 
             // Both figures below describe the whole main line, not
             // scopedMainLine — unlike the episode figures two lines above,
@@ -191,7 +192,7 @@ public sealed class SeriesRankingIndex
             var mainLineAverageRank = MainLineAverageRankOf(mainLine, ranking);
 
             results.Add(new SeriesListItemDto(
-                group.Key, root.RootAnimeId, title, englishTitle, pictureUrl,
+                group.Key, title, englishTitle, pictureUrl,
                 status, badge, behindEpisodes, malAverage, mineAverage, malRevealed,
                 firstYear, lastYear, episodeTotal, hasUnknown, members.Count,
                 mainLineWatchedEpisodes, mainLineAiredEpisodes,
@@ -429,11 +430,11 @@ public sealed class SeriesRankingIndex
             if (totalSeconds <= 0)
                 continue;
 
-            var root = members.First(m => m.AnimeId == m.RootAnimeId);
+            var root = members.First(m => m.AnimeId == m.SeriesId);
             var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
-                root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.PictureUrl);
+                root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.MalPictureUrl);
             results.Add(new SeriesRewatchResult(
-                group.Key, root.RootAnimeId, title, englishTitle, pictureUrl, totalSeconds));
+                group.Key, title, englishTitle, pictureUrl, totalSeconds));
         }
 
         return results
@@ -495,7 +496,6 @@ public sealed class SeriesRankingIndex
 /// sets; see <see cref="SeriesRankingIndex.EligibleSeries"/>.</summary>
 public sealed record SeriesRankingResult(
     int SeriesId,
-    int RootAnimeId,
     string Title,
     string? EnglishTitle,
     string? PictureUrl,
@@ -512,7 +512,6 @@ public sealed record SeriesRankingResult(
 /// (design.md D9).</summary>
 public sealed record SeriesRewatchResult(
     int SeriesId,
-    int RootAnimeId,
     string Title,
     string? EnglishTitle,
     string? PictureUrl,

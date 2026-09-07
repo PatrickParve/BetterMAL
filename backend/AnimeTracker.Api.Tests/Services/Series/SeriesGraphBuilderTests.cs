@@ -74,7 +74,7 @@ public class SeriesGraphBuilderTests
         var series = await CreateBuilder(db).BuildAsync(show.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
         var members = await db.SeriesMembers.Where(m => m.SeriesId == series!.Id).ToListAsync();
 
-        Assert.Equal(show.Id, series!.RootAnimeId);
+        Assert.Equal(show.Id, series!.Id);
         Assert.True(members.Single(m => m.AnimeId == show.Id).IsMainLine);
         Assert.False(members.Single(m => m.AnimeId == concept.Id).IsMainLine);
         Assert.False(members.Single(m => m.AnimeId == characterStory.Id).IsMainLine);
@@ -640,24 +640,24 @@ public class SeriesGraphBuilderTests
         // Pre-existing stored series overlapping the new build's component
         // differently: the eventual survivor (largest overlap), and two
         // absorbed candidates with differing overlap counts.
-        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, RootAnimeId = a.Id, BuiltAt = DateTimeOffset.UtcNow });
-        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 2, RootAnimeId = cAnime.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "FromTwo" });
-        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 3, RootAnimeId = eAnime.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "FromThree" });
+        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = a.Id, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = cAnime.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "FromTwo" });
+        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = eAnime.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "FromThree" });
         db.SeriesMembers.AddRange(
-            new SeriesMember { AnimeId = a.Id, SeriesId = 1, IsMainLine = true, Order = 0 },
-            new SeriesMember { AnimeId = bAnime.Id, SeriesId = 1, IsMainLine = true, Order = 1 },
-            new SeriesMember { AnimeId = fAnime.Id, SeriesId = 1, IsMainLine = true, Order = 2 }, // overlap 3 -> survivor
-            new SeriesMember { AnimeId = cAnime.Id, SeriesId = 2, IsMainLine = true, Order = 0 },
-            new SeriesMember { AnimeId = dAnime.Id, SeriesId = 2, IsMainLine = true, Order = 1 }, // overlap 2
-            new SeriesMember { AnimeId = eAnime.Id, SeriesId = 3, IsMainLine = true, Order = 0 }); // overlap 1
+            new SeriesMember { AnimeId = a.Id, SeriesId = a.Id, IsMainLine = true, Order = 0 },
+            new SeriesMember { AnimeId = bAnime.Id, SeriesId = a.Id, IsMainLine = true, Order = 1 },
+            new SeriesMember { AnimeId = fAnime.Id, SeriesId = a.Id, IsMainLine = true, Order = 2 }, // overlap 3 -> survivor
+            new SeriesMember { AnimeId = cAnime.Id, SeriesId = cAnime.Id, IsMainLine = true, Order = 0 },
+            new SeriesMember { AnimeId = dAnime.Id, SeriesId = cAnime.Id, IsMainLine = true, Order = 1 }, // overlap 2
+            new SeriesMember { AnimeId = eAnime.Id, SeriesId = eAnime.Id, IsMainLine = true, Order = 0 }); // overlap 1
         await db.SaveChangesAsync();
 
         var result = await CreateBuilder(db).BuildAsync(a.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
 
-        Assert.Equal(1, result!.Id); // largest-overlap series (3 members) survives
-        var survivor = await db.Series.AsNoTracking().FirstAsync(s => s.Id == 1);
-        Assert.Equal("FromTwo", survivor.SelectedTitle); // adopted from series 2 (overlap 2), not series 3 (overlap 1)
-        Assert.False(await db.Series.AsNoTracking().AnyAsync(s => s.Id == 2 || s.Id == 3)); // absorbed rows deleted
+        Assert.Equal(a.Id, result!.Id); // largest-overlap series (3 members) survives
+        var survivor = await db.Series.AsNoTracking().FirstAsync(s => s.Id == a.Id);
+        Assert.Equal("FromTwo", survivor.SelectedTitle); // adopted from series c (overlap 2), not series e (overlap 1)
+        Assert.False(await db.Series.AsNoTracking().AnyAsync(s => s.Id == cAnime.Id || s.Id == eAnime.Id)); // absorbed rows deleted
     }
 
     [Fact]
@@ -669,20 +669,20 @@ public class SeriesGraphBuilderTests
 
         db.Series.Add(new AnimeTracker.Api.Models.Series
         {
-            Id = 1, RootAnimeId = a.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "Survivor's Own",
+            Id = a.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "Survivor's Own",
         });
-        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 2, RootAnimeId = cAnime.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "FromTwo" });
+        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = cAnime.Id, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "FromTwo" });
         db.SeriesMembers.AddRange(
-            new SeriesMember { AnimeId = a.Id, SeriesId = 1, IsMainLine = true, Order = 0 },
-            new SeriesMember { AnimeId = bAnime.Id, SeriesId = 1, IsMainLine = true, Order = 1 },
-            new SeriesMember { AnimeId = fAnime.Id, SeriesId = 1, IsMainLine = true, Order = 2 },
-            new SeriesMember { AnimeId = cAnime.Id, SeriesId = 2, IsMainLine = true, Order = 0 },
-            new SeriesMember { AnimeId = dAnime.Id, SeriesId = 2, IsMainLine = true, Order = 1 });
+            new SeriesMember { AnimeId = a.Id, SeriesId = a.Id, IsMainLine = true, Order = 0 },
+            new SeriesMember { AnimeId = bAnime.Id, SeriesId = a.Id, IsMainLine = true, Order = 1 },
+            new SeriesMember { AnimeId = fAnime.Id, SeriesId = a.Id, IsMainLine = true, Order = 2 },
+            new SeriesMember { AnimeId = cAnime.Id, SeriesId = cAnime.Id, IsMainLine = true, Order = 0 },
+            new SeriesMember { AnimeId = dAnime.Id, SeriesId = cAnime.Id, IsMainLine = true, Order = 1 });
         await db.SaveChangesAsync();
 
         await CreateBuilder(db).BuildAsync(a.Id, fetchBudget: 0, probeBudget: 0, expandLeanMembers: false);
 
-        var survivor = await db.Series.AsNoTracking().FirstAsync(s => s.Id == 1);
+        var survivor = await db.Series.AsNoTracking().FirstAsync(s => s.Id == a.Id);
         Assert.Equal("Survivor's Own", survivor.SelectedTitle);
     }
 

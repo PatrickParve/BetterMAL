@@ -89,9 +89,10 @@ public record RewatchedSectionDto(List<RewatchedEntryDto> Items, string MediaTyp
 /// mean ranking position over main-line entries that hold a rank, null when
 /// none does — over the whole, unfiltered main line, matching
 /// <c>MineMain</c>'s own scope.</summary>
+// SeriesId is the root entry's MAL id (key-series-by-root-anime-id
+// design.md D1/D7), so a link built from it reaches the root anime.
 public record TopSeriesItemDto(
     int SeriesId,
-    int RootAnimeId,
     string Title,
     string? EnglishTitle,
     string? PictureUrl,
@@ -118,9 +119,10 @@ public record TopSeriesSectionDto(List<TopSeriesItemDto> Items);
 /// across every member — main line and extras alike (design.md D9) — the
 /// same arithmetic <c>WatchMath</c> uses for the profile's own rewatch
 /// stats, so the two can never disagree about what a rewatch is worth.</summary>
+// SeriesId is the root entry's MAL id (key-series-by-root-anime-id
+// design.md D1/D7), so a link built from it reaches the root anime.
 public record RewatchedSeriesItemDto(
     int SeriesId,
-    int RootAnimeId,
     string Title,
     string? EnglishTitle,
     string? PictureUrl,

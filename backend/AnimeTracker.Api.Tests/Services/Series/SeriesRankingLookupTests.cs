@@ -74,11 +74,11 @@ public class SeriesRankingLookupTests
     public async Task Averages_OnlyReflectMainLineMembers()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, malScore: 8.0);
         AddAnime(db, 101, malScore: 6.0); // extra — must not affect the main-line average
-        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
-        AddMember(db, seriesId: 1, animeId: 101, isMainLine: false, order: 1);
+        AddMember(db, seriesId: 100, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 100, animeId: 101, isMainLine: false, order: 1);
         AddEntry(db, 100, WatchStatus.Completed, myScore: 9);
         AddEntry(db, 101, WatchStatus.Completed, myScore: 1);
         await db.SaveChangesAsync();
@@ -95,11 +95,11 @@ public class SeriesRankingLookupTests
     public async Task EligibleThroughAnExtraOnlyListEntry()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, malScore: 8.0);
         AddAnime(db, 101, malScore: 6.0);
-        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
-        AddMember(db, seriesId: 1, animeId: 101, isMainLine: false, order: 1);
+        AddMember(db, seriesId: 100, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 100, animeId: 101, isMainLine: false, order: 1);
         // Only the extra is in my list — no main-line entry at all.
         AddEntry(db, 101, WatchStatus.Completed, myScore: 7);
         await db.SaveChangesAsync();
@@ -107,7 +107,7 @@ public class SeriesRankingLookupTests
         var index = await new SeriesRankingLookup(db).LoadAsync();
         var series = Assert.Single(index.EligibleSeries([], AnimeRankingSnapshot.Empty));
 
-        Assert.Equal(1, series.SeriesId);
+        Assert.Equal(100, series.SeriesId);
         Assert.Null(series.MineMain.Value); // averages are still main-line only
         Assert.Equal(0, series.MineMain.ScoredCount);
     }
@@ -116,9 +116,9 @@ public class SeriesRankingLookupTests
     public async Task IneligibleWhenNoMemberIsInMyList()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, malScore: 8.0);
-        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 100, animeId: 100, isMainLine: true, order: 0);
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
@@ -130,9 +130,9 @@ public class SeriesRankingLookupTests
     public async Task MalRevealed_TrueWhenMainLineCompletedAndNothingAiring()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, malScore: 8.0, airingStatus: "finished_airing");
-        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 100, animeId: 100, isMainLine: true, order: 0);
         AddEntry(db, 100, WatchStatus.Completed, myScore: 9);
         await db.SaveChangesAsync();
 
@@ -146,11 +146,11 @@ public class SeriesRankingLookupTests
     public async Task MalRevealed_FalseWhenAMainLineMemberIsCurrentlyAiring()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, malScore: 8.0, airingStatus: "finished_airing");
         AddAnime(db, 101, malScore: 7.5, airingStatus: "currently_airing");
-        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
-        AddMember(db, seriesId: 1, animeId: 101, isMainLine: true, order: 1);
+        AddMember(db, seriesId: 100, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 100, animeId: 101, isMainLine: true, order: 1);
         AddEntry(db, 100, WatchStatus.Completed, myScore: 9);
         AddEntry(db, 101, WatchStatus.Watching, myScore: null);
         await db.SaveChangesAsync();
@@ -165,11 +165,11 @@ public class SeriesRankingLookupTests
     public async Task MainLineAiredCount_ExcludesNotYetAiredMainLineMembers()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, malScore: 8.0, airingStatus: "finished_airing");
         AddAnime(db, 101, airingStatus: "not_yet_aired"); // announced season 2, zero episodes out
-        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
-        AddMember(db, seriesId: 1, animeId: 101, isMainLine: true, order: 1);
+        AddMember(db, seriesId: 100, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 100, animeId: 101, isMainLine: true, order: 1);
         AddEntry(db, 100, WatchStatus.Completed, myScore: 9);
         AddEntry(db, 101, WatchStatus.PlanToWatch, myScore: null);
         await db.SaveChangesAsync();
@@ -191,9 +191,9 @@ public class SeriesRankingLookupTests
     public async Task RewatchProjection_PopulatesTheFourNewColumns()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, totalEpisodes: 12, averageEpisodeDurationSeconds: 1500);
-        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 100, animeId: 100, isMainLine: true, order: 0);
         AddEntry(db, 100, WatchStatus.Completed, myScore: 9, rewatchCount: 1, episodesWatched: 12);
         await db.SaveChangesAsync();
 
@@ -210,11 +210,11 @@ public class SeriesRankingLookupTests
     public async Task RewatchProjection_MemberWithNoUserEntryContributesNothing()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, totalEpisodes: 12, averageEpisodeDurationSeconds: 1500);
         AddAnime(db, 101, totalEpisodes: 12, averageEpisodeDurationSeconds: 1500); // never in my list at all
-        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
-        AddMember(db, seriesId: 1, animeId: 101, isMainLine: true, order: 1);
+        AddMember(db, seriesId: 100, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 100, animeId: 101, isMainLine: true, order: 1);
         AddEntry(db, 100, WatchStatus.Completed, myScore: 9, rewatchCount: 1, episodesWatched: 12);
         await db.SaveChangesAsync();
 
@@ -228,9 +228,9 @@ public class SeriesRankingLookupTests
     public async Task HasSeries_ReflectsStoredMembership()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, malScore: 8.0);
-        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 100, animeId: 100, isMainLine: true, order: 0);
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
@@ -247,11 +247,11 @@ public class SeriesRankingLookupTests
     public async Task AverageRank_MeanOverRankedMainLineMembersOnly()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, malScore: 9.0);
         AddAnime(db, 101, malScore: 7.0);
-        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
-        AddMember(db, seriesId: 1, animeId: 101, isMainLine: true, order: 1);
+        AddMember(db, seriesId: 100, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 100, animeId: 101, isMainLine: true, order: 1);
         AddEntry(db, 100, WatchStatus.Completed, myScore: 9);
         AddEntry(db, 101, WatchStatus.Completed, myScore: 7);
         await db.SaveChangesAsync();
@@ -269,9 +269,9 @@ public class SeriesRankingLookupTests
     public async Task AverageRank_NoRankedMainLineMemberReportsNull()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, malScore: 8.0);
-        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 100, animeId: 100, isMainLine: true, order: 0);
         AddEntry(db, 100, WatchStatus.Watching, myScore: null); // in my list, unscored — no rank
         await db.SaveChangesAsync();
 
@@ -287,15 +287,15 @@ public class SeriesRankingLookupTests
     public async Task AverageRank_UnrankedMembersExcludedFromTheDivisorNotCountedAsZero()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 200, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 200, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 200); // ranked 4th
         AddAnime(db, 201); // ranked 6th
         AddAnime(db, 202); // never scored — no rank
         AddAnime(db, 203); // never scored — no rank
-        AddMember(db, seriesId: 1, animeId: 200, isMainLine: true, order: 0);
-        AddMember(db, seriesId: 1, animeId: 201, isMainLine: true, order: 1);
-        AddMember(db, seriesId: 1, animeId: 202, isMainLine: true, order: 2);
-        AddMember(db, seriesId: 1, animeId: 203, isMainLine: true, order: 3);
+        AddMember(db, seriesId: 200, animeId: 200, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 200, animeId: 201, isMainLine: true, order: 1);
+        AddMember(db, seriesId: 200, animeId: 202, isMainLine: true, order: 2);
+        AddMember(db, seriesId: 200, animeId: 203, isMainLine: true, order: 3);
         AddEntry(db, 200, WatchStatus.Completed, myScore: 7);
         AddEntry(db, 201, WatchStatus.Completed, myScore: 5);
         await db.SaveChangesAsync();
@@ -320,11 +320,11 @@ public class SeriesRankingLookupTests
     public async Task AverageRank_ExtraNeverEntersTheMean()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, malScore: 9.0); // main line — ranked 2nd
         AddAnime(db, 101, malScore: 9.5); // extra — ranked 1st, must not lower the average
-        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
-        AddMember(db, seriesId: 1, animeId: 101, isMainLine: false, order: 1);
+        AddMember(db, seriesId: 100, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 100, animeId: 101, isMainLine: false, order: 1);
         AddEntry(db, 100, WatchStatus.Completed, myScore: 9);
         AddEntry(db, 101, WatchStatus.Completed, myScore: 10);
         await db.SaveChangesAsync();
@@ -342,11 +342,11 @@ public class SeriesRankingLookupTests
     public async Task MainLineAiredEpisodes_MatchesListedSeriesForTheSameMembers()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, airingStatus: "finished_airing", totalEpisodes: 12);
         AddAnime(db, 101, airingStatus: "currently_airing", totalEpisodes: 24);
-        AddMember(db, seriesId: 1, animeId: 100, isMainLine: true, order: 0);
-        AddMember(db, seriesId: 1, animeId: 101, isMainLine: true, order: 1);
+        AddMember(db, seriesId: 100, animeId: 100, isMainLine: true, order: 0);
+        AddMember(db, seriesId: 100, animeId: 101, isMainLine: true, order: 1);
         AddEntry(db, 100, WatchStatus.Completed, myScore: null, episodesWatched: 12);
         AddEntry(db, 101, WatchStatus.Watching, myScore: null, episodesWatched: 8);
         await db.SaveChangesAsync();

@@ -396,7 +396,7 @@ The page SHALL open on **My average**, and SHALL keep the chosen sort in the URL
 - **THEN** it is sorted by my average
 
 ### Requirement: Series list read endpoint
-The system SHALL expose a read endpoint returning every series eligible for the Series page, each carrying the figures a card shows and the figures the page sorts and filters by: root anime id, series id, title and English title, picture, status, progress badge, both main-line averages, whether the MAL average may be revealed, first and last year, main-line episode total with its lower-bound marker, entry count, main-line episodes watched and aired, the count of main-line entries that have started airing, and the average position the series' main-line entries hold in my rankings.
+The system SHALL expose a read endpoint returning every series eligible for the Series page, each carrying the figures a card shows and the figures the page sorts and filters by: series id — which is the series' root anime id, carried once rather than as two fields — title and English title, picture, status, progress badge, both main-line averages, whether the MAL average may be revealed, first and last year, main-line episode total with its lower-bound marker, entry count, main-line episodes watched and aired, the count of main-line entries that have started airing, and the average position the series' main-line entries hold in my rankings.
 
 The **main-line aired entry count** SHALL count main-line members that have started airing — currently airing or finished airing — and SHALL exclude any that has not aired at all, matching the figure the profile's Top series section already uses for its own multi-entry filter.
 
@@ -411,6 +411,10 @@ Score averages SHALL NOT be read from storage but computed from members' current
 #### Scenario: The endpoint returns eligible series only
 - **WHEN** the endpoint is called on a store holding series both with and without members in my list
 - **THEN** only the series with a member in my list are returned
+
+#### Scenario: One id per series
+- **WHEN** the endpoint returns a series whose root entry is the anime with MAL id 1735
+- **THEN** it carries the single id 1735, which the card uses both to identify the series and to open its page
 
 #### Scenario: The endpoint makes no MAL calls
 - **WHEN** the endpoint is called while some stored series are partial

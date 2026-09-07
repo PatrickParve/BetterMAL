@@ -36,15 +36,18 @@ export type UserAnimeEntryEditRequest = {
   countsAsRewatch?: boolean
 }
 
-// The dropdown's "series" row (design.md decision 5) — id is the series id,
-// rootAnimeId is the navigation target, entryCount covers every member.
+// The dropdown's "series" row (design.md decision 5) — id is the root
+// entry's MAL id and so is itself the navigation target (key-series-by-root-
+// anime-id design.md D1/D7), entryCount covers every member. Backend
+// AnimeSearchResultDto carries one shared `id` field for both kinds (see
+// its own doc comment), so this is `id`, not `seriesId`, unlike the separate
+// SeriesSearchResultDto below.
 export type SeriesSearchResult = {
   kind: 'series'
   id: number
   title: string
   englishTitle: string | null
   pictureUrl: string | null
-  rootAnimeId: number
   entryCount: number
 }
 
@@ -276,7 +279,6 @@ export type YearRefreshResultDto = {
 // discriminated `items` union (design.md decision 5).
 export type SeriesSearchResultDto = {
   seriesId: number
-  rootAnimeId: number
   title: string
   englishTitle: string | null
   pictureUrl: string | null
@@ -501,7 +503,6 @@ export type ProfileDto = {
 // none). Both are what the my-score basis's tie-break chain sorts on.
 export type TopSeriesItemDto = {
   seriesId: number
-  rootAnimeId: number
   title: string
   englishTitle: string | null
   pictureUrl: string | null
@@ -529,7 +530,6 @@ export type TopSeriesSectionDto = {
 // every member — main line and extras alike (design.md D9).
 export type RewatchedSeriesItemDto = {
   seriesId: number
-  rootAnimeId: number
   title: string
   englishTitle: string | null
   pictureUrl: string | null
@@ -790,7 +790,6 @@ export type SeriesStatsByPickDto = {
 
 export type SeriesDto = {
   seriesId: number
-  rootAnimeId: number
   rootAniListId: number | null
   title: string
   englishTitle: string | null
@@ -847,7 +846,6 @@ export type SeriesProgressBadge = 'None' | 'Completed' | 'CaughtUp' | 'Behind' |
 // my rankings cover, null when they cover none.
 export type SeriesListItemDto = {
   seriesId: number
-  rootAnimeId: number
   title: string
   englishTitle: string | null
   pictureUrl: string | null

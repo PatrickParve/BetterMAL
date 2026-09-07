@@ -4,7 +4,9 @@ namespace AnimeTracker.Api.Models;
 /// anime) rather than per anime, since split-series-by-version lets an anime
 /// belong to more than one series: its own telling, plus any other telling
 /// it's a shared or boundary member of (split-series-by-version design.md
-/// decisions 1-2). Keyed on <c>(SeriesId, AnimeId)</c>.</summary>
+/// decisions 1-2). Keyed on <c>(SeriesId, AnimeId)</c>. <c>SeriesId</c> holds
+/// the series' root entry's MAL id, so a membership row names the franchise
+/// it belongs to without a join.</summary>
 public class SeriesMember
 {
     public int SeriesId { get; set; } // PK (part 1)

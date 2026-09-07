@@ -57,8 +57,8 @@ public class SeriesBulkBuildBackgroundServiceTests
     public async Task TargetsAreResolvedFromMyListExcludingAlreadyCoveredAnime()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 2, BuiltAt = DateTimeOffset.UtcNow });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 0, IsPrimary = true });
+        db.Series.Add(new SeriesModel { Id = 2, BuiltAt = DateTimeOffset.UtcNow });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 2, IsMainLine = true, Order = 0, IsPrimary = true });
         await db.SaveChangesAsync();
 
         var seriesService = new FakeSeriesService();
@@ -83,7 +83,7 @@ public class SeriesBulkBuildBackgroundServiceTests
         var seriesService = new FakeSeriesService();
         seriesService.OnCall(1, () =>
         {
-            db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 1, BuiltAt = DateTimeOffset.UtcNow });
+            db.Series.Add(new SeriesModel { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
             db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0, IsPrimary = true });
             db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 1, IsPrimary = true });
             db.SaveChanges();
@@ -144,8 +144,8 @@ public class SeriesBulkBuildBackgroundServiceTests
     {
         using var db = CreateDb();
         var staleBuiltAt = SeriesGraphBuilder.ClassificationRevisedAt - TimeSpan.FromDays(1);
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 2, BuiltAt = staleBuiltAt });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 0, IsPrimary = true });
+        db.Series.Add(new SeriesModel { Id = 2, BuiltAt = staleBuiltAt });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 2, IsMainLine = true, Order = 0, IsPrimary = true });
         await db.SaveChangesAsync();
 
         var seriesService = new FakeSeriesService();
@@ -173,12 +173,12 @@ public class SeriesBulkBuildBackgroundServiceTests
     public async Task ANeighbourTellingOnlyMembershipDoesNotCountAsCovered()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 2, BuiltAt = DateTimeOffset.UtcNow });
-        // Anime 1 is a NeighbourTelling of series 1 (another telling's own
+        db.Series.Add(new SeriesModel { Id = 2, BuiltAt = DateTimeOffset.UtcNow });
+        // Anime 1 is a NeighbourTelling of series 2 (another telling's own
         // story component) — up to date, but never primary, so it isn't its
         // series.
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = false, Order = 0, IsPrimary = false, MembershipKind = nameof(MembershipKind.NeighbourTelling) });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 0, IsPrimary = true });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 2, IsMainLine = false, Order = 0, IsPrimary = false, MembershipKind = nameof(MembershipKind.NeighbourTelling) });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 2, IsMainLine = true, Order = 0, IsPrimary = true });
         await db.SaveChangesAsync();
 
         var seriesService = new FakeSeriesService();
@@ -195,7 +195,7 @@ public class SeriesBulkBuildBackgroundServiceTests
     {
         using var db = CreateDb();
         var staleBuiltAt = SeriesGraphBuilder.ClassificationRevisedAt - TimeSpan.FromDays(1);
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 1, BuiltAt = staleBuiltAt });
+        db.Series.Add(new SeriesModel { Id = 1, BuiltAt = staleBuiltAt });
         db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0, IsPrimary = true });
         db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 1, IsPrimary = true });
         await db.SaveChangesAsync();
@@ -305,7 +305,7 @@ public class SeriesBulkBuildBackgroundServiceTests
             throw new NotImplementedException();
 
         private static SeriesDto EmptySeriesDto(int animeId) => new(
-            animeId, animeId, null, "Series", null, null, "Finished", null, null,
+            animeId, null, "Series", null, null, "Finished", null, null,
             DateTimeOffset.UtcNow, false, false,
             new SeriesScoresDto(
                 new SeriesAverageDto(null, 0, 0), new SeriesAverageDto(null, 0, 0),
@@ -321,7 +321,7 @@ public class SeriesBulkBuildBackgroundServiceTests
         public Task<UserAnimeEntry?> GetByAnimeIdAsync(int animeId, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<List<UserAnimeEntry>> GetAllAsync(CancellationToken ct = default) => Task.FromResult(entries);
-        public Task<(int PendingCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
+        public Task<(int PendingCount, int HeldCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
             throw new NotImplementedException();
     }
 
@@ -331,7 +331,7 @@ public class SeriesBulkBuildBackgroundServiceTests
             throw new NotImplementedException();
         public Task<List<UserAnimeEntry>> GetAllAsync(CancellationToken ct = default) =>
             throw new InvalidOperationException("Target resolution failed.");
-        public Task<(int PendingCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
+        public Task<(int PendingCount, int HeldCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
             throw new NotImplementedException();
     }
 

@@ -193,7 +193,10 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
 
         modelBuilder.Entity<Series>(entity =>
         {
-            entity.HasIndex(e => e.RootAnimeId).IsUnique();
+            // Id is the root entry's MAL id, supplied by the builder — the
+            // uniqueness the RootAnimeId index used to guarantee is now the
+            // primary key's job.
+            entity.Property(e => e.Id).ValueGeneratedNever();
         });
 
         modelBuilder.Entity<SeriesMember>(entity =>

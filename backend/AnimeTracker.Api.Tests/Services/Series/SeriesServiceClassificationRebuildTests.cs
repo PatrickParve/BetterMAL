@@ -50,7 +50,7 @@ public class SeriesServiceClassificationRebuildTests
         db.AnimeMetadata.AddRange(seasonOne, seasonTwo);
 
         var staleBuiltAt = SeriesGraphBuilder.ClassificationRevisedAt - TimeSpan.FromDays(1);
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 1, BuiltAt = staleBuiltAt });
+        db.Series.Add(new SeriesModel { Id = 1, BuiltAt = staleBuiltAt });
         db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0 });
         db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = true, Order = 1 });
         await db.SaveChangesAsync();
@@ -75,7 +75,7 @@ public class SeriesServiceClassificationRebuildTests
         db.AnimeMetadata.AddRange(show, pv);
 
         var staleBuiltAt = SeriesGraphBuilder.ClassificationRevisedAt - TimeSpan.FromDays(1);
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 1, BuiltAt = staleBuiltAt });
+        db.Series.Add(new SeriesModel { Id = 1, BuiltAt = staleBuiltAt });
         // Stored main-line under the pre-revision rules, which had no `pv`
         // exclusion at all.
         db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0 });
@@ -97,7 +97,7 @@ public class SeriesServiceClassificationRebuildTests
         db.AnimeMetadata.AddRange(seasonOne, seasonTwo);
 
         var freshBuiltAt = SeriesGraphBuilder.ClassificationRevisedAt + TimeSpan.FromDays(1);
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 1, BuiltAt = freshBuiltAt });
+        db.Series.Add(new SeriesModel { Id = 1, BuiltAt = freshBuiltAt });
         db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0, IsPrimary = true });
         db.SeriesMembers.Add(new SeriesMember { AnimeId = 2, SeriesId = 1, IsMainLine = false, Order = 0, IsPrimary = true });
         await db.SaveChangesAsync();

@@ -72,7 +72,7 @@ public class ProfileServiceTopSeriesBackfillTests
     public async Task OnlyIdsWithNoSeriesMembershipAreEnqueued()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 1, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Already Built" });
         db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0 });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 2, Title = "Also Already Built" });
@@ -115,7 +115,7 @@ public class ProfileServiceTopSeriesBackfillTests
 
         // Simulate anime 1's franchise getting built between reads — it drops
         // out of the "missing" set naturally; 2 and 3 are still missing.
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 1, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Now Built" });
         db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0 });
         await db.SaveChangesAsync();
@@ -152,7 +152,7 @@ public class ProfileServiceTopSeriesBackfillTests
         public Task<UserAnimeEntry?> GetByAnimeIdAsync(int animeId, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<List<UserAnimeEntry>> GetAllAsync(CancellationToken ct = default) => Task.FromResult(entries);
-        public Task<(int PendingCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
+        public Task<(int PendingCount, int HeldCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
             throw new NotImplementedException();
     }
 

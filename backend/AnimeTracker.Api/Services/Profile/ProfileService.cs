@@ -139,7 +139,7 @@ public class ProfileService(
     }
 
     private static TopSeriesItemDto ToTopSeriesItem(SeriesRankingResult s) =>
-        new(s.SeriesId, s.RootAnimeId, s.Title, s.EnglishTitle, s.PictureUrl, s.EntryCount, s.MainLineAiredCount,
+        new(s.SeriesId, s.Title, s.EnglishTitle, s.PictureUrl, s.EntryCount, s.MainLineAiredCount,
             s.MalMain, s.MineMain, s.MalRevealed, s.MainLineAiredEpisodes, s.MainLineAverageRank);
 
     // No ScheduleMissingSeriesBuildsAsync call here (design.md D10): the same
@@ -154,7 +154,7 @@ public class ProfileService(
     }
 
     private static RewatchedSeriesItemDto ToRewatchedSeriesItem(SeriesRewatchResult s) =>
-        new(s.SeriesId, s.RootAnimeId, s.Title, s.EnglishTitle, s.PictureUrl, s.RewatchSeconds);
+        new(s.SeriesId, s.Title, s.EnglishTitle, s.PictureUrl, s.RewatchSeconds);
 
     // Fire-and-forget: enqueues a bounded batch of my-list anime with no
     // stored series onto the existing background build queue, reusing the

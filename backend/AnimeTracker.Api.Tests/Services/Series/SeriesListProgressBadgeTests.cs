@@ -31,9 +31,9 @@ public class SeriesListProgressBadgeTests
     public async Task EveryMemberFinishedAndCompleted_ReadsCompleted()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
-        AddMember(db, 1, 100, order: 0);
+        AddMember(db, 100, 100, order: 0);
         AddEntry(db, 100, WatchStatus.Completed, episodesWatched: 12);
         await db.SaveChangesAsync();
 
@@ -48,11 +48,11 @@ public class SeriesListProgressBadgeTests
     public async Task CaughtUpOnAnAiringSeason_ReadsCaughtUp()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
         AddAnime(db, 101, "currently_airing");
-        AddMember(db, 1, 100, order: 0);
-        AddMember(db, 1, 101, order: 1);
+        AddMember(db, 100, 100, order: 0);
+        AddMember(db, 100, 101, order: 1);
         AddEntry(db, 100, WatchStatus.Completed, episodesWatched: 12);
         AddEntry(db, 101, WatchStatus.Watching, episodesWatched: 5);
         await db.SaveChangesAsync();
@@ -68,11 +68,11 @@ public class SeriesListProgressBadgeTests
     public async Task BehindOnAnAiringSeason_ReadsBehindWithTheUnwatchedCount()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
         AddAnime(db, 101, "currently_airing");
-        AddMember(db, 1, 100, order: 0);
-        AddMember(db, 1, 101, order: 1);
+        AddMember(db, 100, 100, order: 0);
+        AddMember(db, 100, 101, order: 1);
         AddEntry(db, 100, WatchStatus.Completed, episodesWatched: 12);
         AddEntry(db, 101, WatchStatus.Watching, episodesWatched: 5);
         await db.SaveChangesAsync();
@@ -88,11 +88,11 @@ public class SeriesListProgressBadgeTests
     public async Task AiringSeasonNotInMyListAtAll_CountsAsZeroWatched()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
         AddAnime(db, 101, "currently_airing"); // not in my list at all
-        AddMember(db, 1, 100, order: 0);
-        AddMember(db, 1, 101, order: 1);
+        AddMember(db, 100, 100, order: 0);
+        AddMember(db, 100, 101, order: 1);
         AddEntry(db, 100, WatchStatus.Completed, episodesWatched: 12);
         await db.SaveChangesAsync();
 
@@ -107,11 +107,11 @@ public class SeriesListProgressBadgeTests
     public async Task CaughtUpWhileNextEntryUnaired_ReadsCaughtUp()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
         AddAnime(db, 101, "not_yet_aired");
-        AddMember(db, 1, 100, order: 0);
-        AddMember(db, 1, 101, order: 1);
+        AddMember(db, 100, 100, order: 0);
+        AddMember(db, 100, 101, order: 1);
         AddEntry(db, 100, WatchStatus.Completed, episodesWatched: 12);
         await db.SaveChangesAsync();
 
@@ -128,9 +128,9 @@ public class SeriesListProgressBadgeTests
     public async Task PartiallyWatchedFinishedEntry_ReadsBehindNotNoBadge()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
-        AddMember(db, 1, 100, order: 0);
+        AddMember(db, 100, 100, order: 0);
         AddEntry(db, 100, WatchStatus.Watching, episodesWatched: 5); // never marked Completed
         await db.SaveChangesAsync();
 
@@ -147,11 +147,11 @@ public class SeriesListProgressBadgeTests
     public async Task DroppedWithNothingWatchedAfter_ReadsDropped()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
         AddAnime(db, 101, "finished_airing", totalEpisodes: 12);
-        AddMember(db, 1, 100, order: 0);
-        AddMember(db, 1, 101, order: 1);
+        AddMember(db, 100, 100, order: 0);
+        AddMember(db, 100, 101, order: 1);
         AddEntry(db, 100, WatchStatus.Dropped, episodesWatched: 3);
         AddEntry(db, 101, WatchStatus.PlanToWatch); // aired after the drop, never watched
         await db.SaveChangesAsync();
@@ -169,9 +169,9 @@ public class SeriesListProgressBadgeTests
     public async Task DroppedAsTheOnlyAiredEntry_ReadsDropped()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
-        AddMember(db, 1, 100, order: 0);
+        AddMember(db, 100, 100, order: 0);
         AddEntry(db, 100, WatchStatus.Dropped, episodesWatched: 0);
         await db.SaveChangesAsync();
 
@@ -187,11 +187,11 @@ public class SeriesListProgressBadgeTests
     public async Task DroppedEntryLaterResumed_DoesNotReadDropped()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
         AddAnime(db, 101, "finished_airing", totalEpisodes: 12);
-        AddMember(db, 1, 100, order: 0);
-        AddMember(db, 1, 101, order: 1);
+        AddMember(db, 100, 100, order: 0);
+        AddMember(db, 100, 101, order: 1);
         AddEntry(db, 100, WatchStatus.Dropped, episodesWatched: 3);
         AddEntry(db, 101, WatchStatus.Watching, episodesWatched: 6); // resumed on the next entry
         await db.SaveChangesAsync();
@@ -210,9 +210,9 @@ public class SeriesListProgressBadgeTests
     public async Task NothingWatchedAtAllWithNoDrop_ReadsUnwatched()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
-        AddMember(db, 1, 100, order: 0);
+        AddMember(db, 100, 100, order: 0);
         AddEntry(db, 100, WatchStatus.PlanToWatch); // finished airing, not completed, nothing watched
         await db.SaveChangesAsync();
 
@@ -228,9 +228,9 @@ public class SeriesListProgressBadgeTests
     public async Task DroppedWithZeroWatched_ReadsDroppedNotUnwatched()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
-        AddMember(db, 1, 100, order: 0);
+        AddMember(db, 100, 100, order: 0);
         AddEntry(db, 100, WatchStatus.Dropped, episodesWatched: 0);
         await db.SaveChangesAsync();
 
@@ -244,9 +244,9 @@ public class SeriesListProgressBadgeTests
     public async Task NothingAiredAtAll_ReadsNoBadge()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "not_yet_aired");
-        AddMember(db, 1, 100, order: 0);
+        AddMember(db, 100, 100, order: 0);
         AddEntry(db, 100, WatchStatus.PlanToWatch);
         await db.SaveChangesAsync();
 
@@ -263,9 +263,9 @@ public class SeriesListProgressBadgeTests
     public async Task CurrentlyAiringEntryWithNoStoredAiredCount_ReadsNoBadge()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "currently_airing");
-        AddMember(db, 1, 100, order: 0);
+        AddMember(db, 100, 100, order: 0);
         AddEntry(db, 100, WatchStatus.Watching, episodesWatched: 3);
         await db.SaveChangesAsync();
 
@@ -282,11 +282,11 @@ public class SeriesListProgressBadgeTests
     public async Task UnknownBroadcastCount_StillReadsDroppedWhenApplicable()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
         AddAnime(db, 101, "currently_airing"); // unknown broadcast count
-        AddMember(db, 1, 100, order: 0);
-        AddMember(db, 1, 101, order: 1);
+        AddMember(db, 100, 100, order: 0);
+        AddMember(db, 100, 101, order: 1);
         AddEntry(db, 100, WatchStatus.Dropped, episodesWatched: 0);
         await db.SaveChangesAsync();
 
@@ -305,7 +305,7 @@ public class SeriesListProgressBadgeTests
     public async Task RewatchInProgress_DoesNotReadAsBehind()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
         AddAnime(db, 101, "finished_airing", totalEpisodes: 12);
         AddAnime(db, 102, "finished_airing", totalEpisodes: 12);
@@ -313,10 +313,10 @@ public class SeriesListProgressBadgeTests
         // "Finished", so this exercises the Caught-up/Behind computation
         // rather than shortcutting through rule (1)'s Completed clause.
         AddAnime(db, 103, "not_yet_aired");
-        AddMember(db, 1, 100, order: 0);
-        AddMember(db, 1, 101, order: 1);
-        AddMember(db, 1, 102, order: 2);
-        AddMember(db, 1, 103, order: 3);
+        AddMember(db, 100, 100, order: 0);
+        AddMember(db, 100, 101, order: 1);
+        AddMember(db, 100, 102, order: 2);
+        AddMember(db, 100, 103, order: 3);
         AddEntry(db, 100, WatchStatus.Rewatching, episodesWatched: 2); // resets to 2, but full run has aired
         AddEntry(db, 101, WatchStatus.Completed, episodesWatched: 12);
         AddEntry(db, 102, WatchStatus.Completed, episodesWatched: 12);
@@ -333,14 +333,14 @@ public class SeriesListProgressBadgeTests
     public async Task RewatchInProgress_DoesNotReadAsUnwatched()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
         // A 2nd, not-yet-aired member keeps the series' overall status off
         // "Finished", so this exercises the Unwatched check itself rather
         // than shortcutting through rule (1)'s Completed clause.
         AddAnime(db, 101, "not_yet_aired");
-        AddMember(db, 1, 100, order: 0);
-        AddMember(db, 1, 101, order: 1);
+        AddMember(db, 100, 100, order: 0);
+        AddMember(db, 100, 101, order: 1);
         AddEntry(db, 100, WatchStatus.Rewatching, episodesWatched: 0); // just started the rewatch
         await db.SaveChangesAsync();
 
@@ -355,11 +355,11 @@ public class SeriesListProgressBadgeTests
     public async Task RewatchAfterADrop_CountsAsWatchingPastIt()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
         AddAnime(db, 101, "finished_airing", totalEpisodes: 12);
-        AddMember(db, 1, 100, order: 0);
-        AddMember(db, 1, 101, order: 1);
+        AddMember(db, 100, 100, order: 0);
+        AddMember(db, 100, 101, order: 1);
         AddEntry(db, 100, WatchStatus.Dropped, episodesWatched: 3);
         AddEntry(db, 101, WatchStatus.Rewatching, episodesWatched: 0); // reset, but has aired in full
         await db.SaveChangesAsync();
@@ -376,9 +376,9 @@ public class SeriesListProgressBadgeTests
     public async Task FinishedFranchiseBeingRewatched_KeepsCompleted()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing", totalEpisodes: 12);
-        AddMember(db, 1, 100, order: 0);
+        AddMember(db, 100, 100, order: 0);
         AddEntry(db, 100, WatchStatus.Rewatching, episodesWatched: 2);
         await db.SaveChangesAsync();
 

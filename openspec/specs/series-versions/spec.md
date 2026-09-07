@@ -190,7 +190,9 @@ A build whose first phase yields a single anime that has version neighbours SHAL
 
 A neighbouring series SHALL be stored when it is itself visited, bulk-built, or enqueued by a relation discovery. A tile that opens a neighbouring series SHALL therefore always resolve: the series read endpoint builds a series for an anime that has none.
 
-Series identity across a rebuild SHALL be resolved by matching the derived component to the stored series it overlaps most; that series SHALL keep its identifier, its chosen title and its chosen picture. Every other stored series overlapping the component SHALL be deleted, and SHALL surrender its chosen title and picture to the survivor where the survivor has none, exactly as an absorbed series does today.
+Series identity across a rebuild SHALL be resolved by matching the derived component to the stored series it overlaps most; that series SHALL keep its members, its chosen title and its chosen picture, and SHALL be stored under the identifier the derived root gives it — unchanged where the root did not move. Every other stored series overlapping the component SHALL be deleted, and SHALL surrender its chosen title and picture to the survivor where the survivor has none, exactly as an absorbed series does today.
+
+Where the surviving series' identifier changes, the change SHALL take effect together with the deletion of the stored series holding that identifier, so no build leaves a franchise unstored or two series claiming one identifier.
 
 Overlap and deletion SHALL be computed over **story-component members only**, never over version neighbours, so a series that holds a neighbouring series' root as an extra can never delete that neighbour's stored series.
 
@@ -208,7 +210,7 @@ Overlap and deletion SHALL be computed over **story-component members only**, ne
 
 #### Scenario: Fragments left by the previous rules are absorbed
 - **WHEN** Clannad, Clannad: After Story and Clannad Movie are stored as three separate series and any of them is next read
-- **THEN** one series remains, keeping the identifier of whichever of the three overlapped the component most, and the other two are deleted
+- **THEN** one series remains, keeping the members and choices of whichever of the three overlapped the component most, stored under the merged component's root, and the other two are deleted
 
 #### Scenario: A neighbour's series is not deleted
 - **WHEN** the Fullmetal Alchemist (2003) series is rebuilt while holding Brotherhood as a version-neighbour extra
@@ -216,7 +218,11 @@ Overlap and deletion SHALL be computed over **story-component members only**, ne
 
 #### Scenario: A rebuild does not shuffle identity
 - **WHEN** a series is rebuilt with no membership change
-- **THEN** it keeps the identifier it had
+- **THEN** it keeps the identifier it had, since its root is unchanged
+
+#### Scenario: A survivor takes an absorbed series' identifier
+- **WHEN** a rebuild's component is rooted at an entry belonging to a series it absorbs rather than to the survivor
+- **THEN** the survivor is stored under that root's identifier, keeping its own chosen title and picture, and the absorbed series is gone
 
 #### Scenario: Favourite ranks survive a re-derivation
 - **WHEN** a series holding ordered favourites is re-derived under these rules

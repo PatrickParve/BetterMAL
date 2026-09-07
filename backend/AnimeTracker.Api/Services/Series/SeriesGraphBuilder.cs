@@ -1050,17 +1050,21 @@ public class SeriesGraphBuilder(
     // series per build by rebuild-series-by-story-component design.md D3,
     // D8, D9, tasks 6.1-6.3) ---
 
-    /// <summary>Persists the one series a build derives, in the transaction
-    /// <see cref="AnimeTrackerDbContext.SaveChangesAsync"/> opens implicitly
-    /// (design.md D3, task 6.1). Series identity across the rebuild is
-    /// resolved by <see cref="MatchToStoredSeries"/> (design.md D9, task 6.2):
-    /// the stored series overlapping this build's core members the most
-    /// keeps its identifier, chosen title and chosen picture; every other
-    /// stored series that overlaps on core members is stale and is deleted,
-    /// surrendering any chosen title/picture a still-unset survivor lacks. A
-    /// stored series that only shares a version neighbour with this build is
-    /// never matched or deleted — it simply isn't a candidate in
-    /// <see cref="MatchToStoredSeries"/>'s eyes.</summary>
+    /// <summary>Persists the one series a build derives. Series identity
+    /// across the rebuild is resolved by <see cref="MatchToStoredSeries"/>
+    /// (design.md D9, task 6.2): the stored series overlapping this build's
+    /// core members the most keeps its members and its chosen title and
+    /// picture; every other stored series that overlaps on core members is
+    /// stale and is deleted, surrendering any chosen title/picture a
+    /// still-unset survivor lacks. A stored series that only shares a
+    /// version neighbour with this build is never matched or deleted — it
+    /// simply isn't a candidate in <see cref="MatchToStoredSeries"/>'s eyes.
+    /// The identifier the survivor ends up under is whatever its root
+    /// implies (design.md D1, D3) — the same value it already had unless
+    /// this rebuild moved the root, in which case
+    /// <see cref="PersistReRootedAsync"/> takes over and the whole
+    /// persist happens across two transacted saves instead of the single
+    /// implicit one below.</summary>
     private async Task<SeriesEntity> PersistAsync(TellingBuild telling, bool isPartial, bool isTruncated, CancellationToken ct)
     {
         var fullIds = telling.FullMemberIds.ToList();
@@ -1099,14 +1103,16 @@ public class SeriesGraphBuilder(
         }
         else
         {
-            target = new SeriesEntity();
+            target = new SeriesEntity { Id = telling.RootAnimeId };
             db.Series.Add(target);
         }
 
         // Fill in a missing chosen title/picture from whichever stale
         // (to-be-deleted, absorbed) stored series has the largest overlap —
         // the survivor's own choice always wins (design.md D9, mirroring the
-        // single-target absorption this generalises).
+        // single-target absorption this generalises). Done before the
+        // re-root check below, since a re-root carries these two fields
+        // across onto the fresh row it inserts (design.md D4, task 3.3).
         if (staleSeries.Count > 0 && (target.SelectedTitle is null || target.SelectedPictureUrl is null))
         {
             var byOverlapDesc = staleSeries
@@ -1116,7 +1122,17 @@ public class SeriesGraphBuilder(
             target.SelectedPictureUrl ??= byOverlapDesc.FirstOrDefault(s => s.SelectedPictureUrl is not null)?.SelectedPictureUrl;
         }
 
-        target.RootAnimeId = telling.RootAnimeId;
+        // A matched series whose root moved can't be renumbered in place —
+        // SeriesId is the primary key now, and EF refuses to modify a key
+        // column on a tracked entity (design.md D3 case 3; see
+        // PersistReRootedAsync for why and how).
+        if (matchedSeriesId is { } matchedSeriesIdValue && target.Id != telling.RootAnimeId)
+        {
+            return await PersistReRootedAsync(
+                telling, target, staleSeries, matchedSeriesIdValue, staleSeriesIdSet, priorRowsByAnimeId, fullIds,
+                isPartial, isTruncated, ct);
+        }
+
         target.BuiltAt = DateTimeOffset.UtcNow;
         target.IsPartial = isPartial;
         target.IsTruncated = isTruncated;
@@ -1147,25 +1163,6 @@ public class SeriesGraphBuilder(
 
         foreach (var animeId in fullIds)
         {
-            var kind = telling.KindOf(animeId);
-            var isMainLine = telling.MainLineIds.Contains(animeId);
-            var order = telling.OrderByAnimeId[animeId];
-            var relationGroup = telling.RelationGroupByAnimeId.TryGetValue(animeId, out var group) ? group.ToString() : null;
-            var versionSlotKey = telling.VersionSlotKeyByAnimeId.TryGetValue(animeId, out var slotKey) ? slotKey : (int?)null;
-            var branchHeadAnimeId = telling.BranchHeadAnimeIdByAnimeId.TryGetValue(animeId, out var branchHead) ? branchHead : (int?)null;
-
-            // Core is always primary; a NeighbourTelling never is — that
-            // anime's own series is its home; a FoldedVersion is primary only
-            // when nothing else already claims Core, resolved between two
-            // folds by the larger component then the lower root (design.md
-            // D8, task 6.3).
-            var isPrimary = kind switch
-            {
-                MembershipKind.Core => true,
-                MembershipKind.NeighbourTelling => false,
-                _ => await ResolveFoldedPrimaryAsync(animeId, telling, matchedSeriesId, staleSeriesIdSet, priorRowsByAnimeId, ct),
-            };
-
             // A row already at (target.Id, animeId) is updated in place. A
             // row that exists only under a *different* series can't be
             // reassigned by an in-place SeriesId update now that SeriesId is
@@ -1173,32 +1170,122 @@ public class SeriesGraphBuilder(
             // on a tracked entity — so that case is a fresh insert instead.
             if (existingByAnimeId.TryGetValue(animeId, out var existing))
             {
-                existing.IsMainLine = isMainLine;
-                existing.Order = order;
-                existing.RelationGroup = relationGroup;
-                existing.IsPrimary = isPrimary;
-                existing.MembershipKind = kind.ToString();
-                existing.VersionSlotKey = versionSlotKey;
-                existing.BranchHeadAnimeId = branchHeadAnimeId;
+                var updated = await BuildMemberAsync(animeId, telling, matchedSeriesId, staleSeriesIdSet, priorRowsByAnimeId, ct);
+                existing.IsMainLine = updated.IsMainLine;
+                existing.Order = updated.Order;
+                existing.RelationGroup = updated.RelationGroup;
+                existing.IsPrimary = updated.IsPrimary;
+                existing.MembershipKind = updated.MembershipKind;
+                existing.VersionSlotKey = updated.VersionSlotKey;
+                existing.BranchHeadAnimeId = updated.BranchHeadAnimeId;
             }
             else
             {
-                target.Members.Add(new SeriesMember
-                {
-                    AnimeId = animeId,
-                    IsMainLine = isMainLine,
-                    Order = order,
-                    RelationGroup = relationGroup,
-                    IsPrimary = isPrimary,
-                    MembershipKind = kind.ToString(),
-                    VersionSlotKey = versionSlotKey,
-                    BranchHeadAnimeId = branchHeadAnimeId,
-                });
+                target.Members.Add(await BuildMemberAsync(animeId, telling, matchedSeriesId, staleSeriesIdSet, priorRowsByAnimeId, ct));
             }
         }
 
         await db.SaveChangesAsync(ct);
         return target;
+    }
+
+    /// <summary>The re-root path (design.md D3 case 3, D4): a matched
+    /// series' identifier is derived from its root, and a root can move
+    /// between rebuilds — including as a side effect of absorbing another
+    /// series, since case 3 is the merge case as much as the
+    /// "MAL revealed an older prequel" case. EF refuses to modify a key on a
+    /// tracked entity (the comment above the member-persistence loop already
+    /// says so for <see cref="SeriesMember"/>; <c>Series.Id</c> is now in the
+    /// same position), so the matched row can't simply be renumbered: it —
+    /// and anything stale it absorbs — is deleted and that deletion is saved
+    /// first, and only then is a fresh row inserted at the new root id.
+    /// That ordering isn't cosmetic: the id the new row takes is frequently
+    /// held by the very row(s) just deleted (design.md D5 — the new root is
+    /// always in <c>fullIds</c>, so any stored series holding it as a Core
+    /// member is either <paramref name="matchedSeries"/> or one of
+    /// <paramref name="staleSeries"/>; a series holding it only as a version
+    /// neighbour was never a candidate to begin with, since a root is always
+    /// main-line and so Core in its own series). Both saves are wrapped in
+    /// an explicit transaction — the only place this class opens one — so a
+    /// crash between them can't lose <paramref name="matchedSeries"/>'s
+    /// chosen title and picture, the one thing on the row that can't be
+    /// re-derived, even though the franchise briefly has no stored series
+    /// between the two saves (self-healing: the next read rebuilds it).</summary>
+    private async Task<SeriesEntity> PersistReRootedAsync(
+        TellingBuild telling, SeriesEntity matchedSeries, List<SeriesEntity> staleSeries, int matchedSeriesId,
+        HashSet<int> staleSeriesIds, Dictionary<int, List<SeriesMember>> priorRowsByAnimeId, List<int> fullIds,
+        bool isPartial, bool isTruncated, CancellationToken ct)
+    {
+        var selectedTitle = matchedSeries.SelectedTitle;
+        var selectedPictureUrl = matchedSeries.SelectedPictureUrl;
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+        db.Series.Remove(matchedSeries); // cascade-deletes its SeriesMember rows too
+        if (staleSeries.Count > 0)
+            db.Series.RemoveRange(staleSeries); // cascade-deletes their SeriesMember rows too
+        await db.SaveChangesAsync(ct);
+
+        // The id taken here is free by construction (design.md D5, above):
+        // whichever stored series held it as a Core member was just deleted.
+        var target = new SeriesEntity
+        {
+            Id = telling.RootAnimeId,
+            SelectedTitle = selectedTitle,
+            SelectedPictureUrl = selectedPictureUrl,
+            BuiltAt = DateTimeOffset.UtcNow,
+            IsPartial = isPartial,
+            IsTruncated = isTruncated,
+        };
+        db.Series.Add(target);
+
+        foreach (var animeId in fullIds)
+        {
+            // The old matched series id, unchanged from the non-re-root
+            // path: priorRowsByAnimeId is a pre-read AsNoTracking snapshot
+            // taken before either save above, and this is what still
+            // excludes its rows from ResolveFoldedPrimaryAsync's
+            // rowsElsewhere (design.md D6, task 3.7).
+            target.Members.Add(await BuildMemberAsync(animeId, telling, matchedSeriesId, staleSeriesIds, priorRowsByAnimeId, ct));
+        }
+
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+
+        return target;
+    }
+
+    /// <summary>Builds one <see cref="SeriesMember"/> row for
+    /// <paramref name="animeId"/> from <paramref name="telling"/>, shared by
+    /// the in-place and re-root persist paths so the two can't drift apart
+    /// on what a membership row looks like. Core is always primary; a
+    /// NeighbourTelling never is — that anime's own series is its home; a
+    /// FoldedVersion is primary only when nothing else already claims Core,
+    /// resolved between two folds by the larger component then the lower
+    /// root (design.md D8, task 6.3).</summary>
+    private async Task<SeriesMember> BuildMemberAsync(
+        int animeId, TellingBuild telling, int? currentSeriesId, HashSet<int> staleSeriesIds,
+        Dictionary<int, List<SeriesMember>> priorRowsByAnimeId, CancellationToken ct)
+    {
+        var kind = telling.KindOf(animeId);
+        var isPrimary = kind switch
+        {
+            MembershipKind.Core => true,
+            MembershipKind.NeighbourTelling => false,
+            _ => await ResolveFoldedPrimaryAsync(animeId, telling, currentSeriesId, staleSeriesIds, priorRowsByAnimeId, ct),
+        };
+
+        return new SeriesMember
+        {
+            AnimeId = animeId,
+            IsMainLine = telling.MainLineIds.Contains(animeId),
+            Order = telling.OrderByAnimeId[animeId],
+            RelationGroup = telling.RelationGroupByAnimeId.TryGetValue(animeId, out var group) ? group.ToString() : null,
+            IsPrimary = isPrimary,
+            MembershipKind = kind.ToString(),
+            VersionSlotKey = telling.VersionSlotKeyByAnimeId.TryGetValue(animeId, out var slotKey) ? slotKey : (int?)null,
+            BranchHeadAnimeId = telling.BranchHeadAnimeIdByAnimeId.TryGetValue(animeId, out var branchHead) ? branchHead : (int?)null,
+        };
     }
 
     /// <summary>The single-component match (design.md D9, task 6.2): the
@@ -1268,11 +1355,14 @@ public class SeriesGraphBuilder(
         }
         else
         {
-            var competingRootAnimeId = await db.Series
-                .Where(s => s.Id == competingFold.SeriesId)
-                .Select(s => s.RootAnimeId)
-                .FirstAsync(ct);
-            thisWins = telling.RootAnimeId < competingRootAnimeId;
+            // The tie-break still reads "the lower root MAL id wins" — the
+            // competing series' id *is* its root now, so no lookup is
+            // needed (design.md D6, task 3.8). This query is unaffected by
+            // the re-root path's early delete: competingFold.SeriesId is
+            // always a series rowsElsewhere has already excluded from both
+            // the current series and the stale set, so it names a row
+            // nothing in this build has just deleted.
+            thisWins = telling.RootAnimeId < competingFold.SeriesId;
         }
 
         if (thisWins)

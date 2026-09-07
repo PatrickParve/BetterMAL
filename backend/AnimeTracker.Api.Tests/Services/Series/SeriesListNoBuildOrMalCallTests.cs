@@ -53,9 +53,9 @@ public class SeriesListNoBuildOrMalCallTests
     public async Task PartialSeries_ResolvesWithoutBuildingOrCallingMalAndBatchesTheScheduleRead()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow, IsPartial = true });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow, IsPartial = true });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 100, Title = "Partial", AiringStatus = "currently_airing" });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 100, SeriesId = 1, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 100, SeriesId = 100, IsMainLine = true, Order = 0 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 100, Status = WatchStatus.Watching, EpisodesWatched = 3 });
         await db.SaveChangesAsync();
 
@@ -65,7 +65,7 @@ public class SeriesListNoBuildOrMalCallTests
         var result = await service.GetSeriesListAsync();
 
         var listed = Assert.Single(result.Items);
-        Assert.Equal(1, listed.SeriesId);
+        Assert.Equal(100, listed.SeriesId);
         Assert.Equal(1, scheduleService.CallCount); // one batched call, not one per member
     }
 
@@ -73,9 +73,9 @@ public class SeriesListNoBuildOrMalCallTests
     public async Task NoCurrentlyAiringMembers_NeverCallsTheScheduleReaderAtAll()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 100, Title = "Finished", AiringStatus = "finished_airing", TotalEpisodes = 12 });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = 100, SeriesId = 1, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = 100, SeriesId = 100, IsMainLine = true, Order = 0 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 100, Status = WatchStatus.Completed, EpisodesWatched = 12 });
         await db.SaveChangesAsync();
 

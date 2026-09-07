@@ -21,17 +21,17 @@ public class AnimeSearchServiceTests
     private static void AddAnime(AnimeTrackerDbContext db, int id, string title, int? popularityRank = null) =>
         db.AnimeMetadata.Add(new AnimeMetadata { Id = id, Title = title, PopularityRank = popularityRank });
 
-    private static void AddSeries(AnimeTrackerDbContext db, int seriesId, int rootAnimeId, string rootTitle, int? rootPopularityRank, int extraMembers = 0)
+    private static void AddSeries(AnimeTrackerDbContext db, int rootAnimeId, string rootTitle, int? rootPopularityRank, int extraMembers = 0)
     {
         AddAnime(db, rootAnimeId, rootTitle, rootPopularityRank);
-        db.Series.Add(new SeriesModel { Id = seriesId, RootAnimeId = rootAnimeId, BuiltAt = DateTimeOffset.UtcNow });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = rootAnimeId, SeriesId = seriesId, IsMainLine = true, Order = 0 });
+        db.Series.Add(new SeriesModel { Id = rootAnimeId, BuiltAt = DateTimeOffset.UtcNow });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = rootAnimeId, SeriesId = rootAnimeId, IsMainLine = true, Order = 0 });
 
         for (var i = 0; i < extraMembers; i++)
         {
             var extraId = rootAnimeId * 1000 + i + 1;
             AddAnime(db, extraId, $"{rootTitle} Extra {i}");
-            db.SeriesMembers.Add(new SeriesMember { AnimeId = extraId, SeriesId = seriesId, IsMainLine = false, Order = i + 1 });
+            db.SeriesMembers.Add(new SeriesMember { AnimeId = extraId, SeriesId = rootAnimeId, IsMainLine = false, Order = i + 1 });
         }
     }
 
@@ -116,9 +116,9 @@ public class AnimeSearchServiceTests
     public async Task SearchAsync_SeriesLeadTheDropdownCappedAtTwoOutOfFiveTotalRows()
     {
         using var db = CreateDb();
-        AddSeries(db, seriesId: 1, rootAnimeId: 201, rootTitle: "Gundam Series One", rootPopularityRank: 1);
-        AddSeries(db, seriesId: 2, rootAnimeId: 202, rootTitle: "Gundam Series Two", rootPopularityRank: 50);
-        AddSeries(db, seriesId: 3, rootAnimeId: 203, rootTitle: "Gundam Series Three", rootPopularityRank: 100);
+        AddSeries(db, rootAnimeId: 201, rootTitle: "Gundam Series One", rootPopularityRank: 1);
+        AddSeries(db, rootAnimeId: 202, rootTitle: "Gundam Series Two", rootPopularityRank: 50);
+        AddSeries(db, rootAnimeId: 203, rootTitle: "Gundam Series Three", rootPopularityRank: 100);
         await db.SaveChangesAsync();
 
         var localIndex = new List<AnimeTitleProjection>
@@ -136,7 +136,7 @@ public class AnimeSearchServiceTests
         Assert.Equal(5, results.Count);
         Assert.Equal(["series", "series", "anime", "anime", "anime"], results.Select(r => r.Kind));
         // The two strongest (most popular) matching series lead, not the third.
-        Assert.Equal([201, 202], results.Where(r => r.Kind == "series").Select(r => r.RootAnimeId));
+        Assert.Equal([201, 202], results.Where(r => r.Kind == "series").Select(r => r.Id));
     }
 
     [Fact]
@@ -165,10 +165,10 @@ public class AnimeSearchServiceTests
     public async Task SearchPageAsync_SeriesLeadUnderRelevanceCappedAtThree()
     {
         using var db = CreateDb();
-        AddSeries(db, seriesId: 1, rootAnimeId: 301, rootTitle: "Fate Series One", rootPopularityRank: 1);
-        AddSeries(db, seriesId: 2, rootAnimeId: 302, rootTitle: "Fate Series Two", rootPopularityRank: 2);
-        AddSeries(db, seriesId: 3, rootAnimeId: 303, rootTitle: "Fate Series Three", rootPopularityRank: 3, extraMembers: 2);
-        AddSeries(db, seriesId: 4, rootAnimeId: 304, rootTitle: "Fate Series Four", rootPopularityRank: 4);
+        AddSeries(db, rootAnimeId: 301, rootTitle: "Fate Series One", rootPopularityRank: 1);
+        AddSeries(db, rootAnimeId: 302, rootTitle: "Fate Series Two", rootPopularityRank: 2);
+        AddSeries(db, rootAnimeId: 303, rootTitle: "Fate Series Three", rootPopularityRank: 3, extraMembers: 2);
+        AddSeries(db, rootAnimeId: 304, rootTitle: "Fate Series Four", rootPopularityRank: 4);
         await db.SaveChangesAsync();
 
         var malResults = Enumerable.Range(0, 4).Select(i => MalEdge(1000 + i, $"Fate Anime {i}", i)).ToList();
@@ -178,7 +178,7 @@ public class AnimeSearchServiceTests
 
         Assert.Equal(3, page.Series.Count); // capped, so series 4 is excluded
         Assert.Equal(4, page.Items.Count); // anime candidates unaffected by series
-        var withExtras = page.Series.Single(s => s.RootAnimeId == 303);
+        var withExtras = page.Series.Single(s => s.SeriesId == 303);
         Assert.Equal(3, withExtras.EntryCount); // root + 2 extras
     }
 
@@ -190,7 +190,7 @@ public class AnimeSearchServiceTests
     public async Task SearchPageAsync_SeriesOmittedUnderNonRelevanceSorts(string sortKey)
     {
         using var db = CreateDb();
-        AddSeries(db, seriesId: 1, rootAnimeId: 301, rootTitle: "Fate Series One", rootPopularityRank: 1);
+        AddSeries(db, rootAnimeId: 301, rootTitle: "Fate Series One", rootPopularityRank: 1);
         await db.SaveChangesAsync();
 
         var malResults = Enumerable.Range(0, 4).Select(i => MalEdge(1000 + i, $"Fate Anime {i}", i)).ToList();
@@ -208,7 +208,7 @@ public class AnimeSearchServiceTests
         var malResults = Enumerable.Range(0, 4).Select(i => MalEdge(1000 + i, $"Fate Anime {i}", i)).ToList();
 
         using var withSeriesDb = CreateDb();
-        AddSeries(withSeriesDb, seriesId: 1, rootAnimeId: 301, rootTitle: "Fate Series One", rootPopularityRank: 1);
+        AddSeries(withSeriesDb, rootAnimeId: 301, rootTitle: "Fate Series One", rootPopularityRank: 1);
         await withSeriesDb.SaveChangesAsync();
         var withSeries = await CreateService(withSeriesDb, malResults: malResults).SearchPageAsync("fate", "relevance", 0, 50);
 
@@ -226,9 +226,9 @@ public class AnimeSearchServiceTests
     public async Task SearchPageAsync_ItemBudgetSharesTheOverallLimitWithSeries()
     {
         using var db = CreateDb();
-        AddSeries(db, seriesId: 1, rootAnimeId: 301, rootTitle: "Fate Series One", rootPopularityRank: 1);
-        AddSeries(db, seriesId: 2, rootAnimeId: 302, rootTitle: "Fate Series Two", rootPopularityRank: 2);
-        AddSeries(db, seriesId: 3, rootAnimeId: 303, rootTitle: "Fate Series Three", rootPopularityRank: 3);
+        AddSeries(db, rootAnimeId: 301, rootTitle: "Fate Series One", rootPopularityRank: 1);
+        AddSeries(db, rootAnimeId: 302, rootTitle: "Fate Series Two", rootPopularityRank: 2);
+        AddSeries(db, rootAnimeId: 303, rootTitle: "Fate Series Three", rootPopularityRank: 3);
         await db.SaveChangesAsync();
 
         var malResults = Enumerable.Range(0, 10).Select(i => MalEdge(1000 + i, $"Fate Anime {i}", i)).ToList();
@@ -358,7 +358,7 @@ public class AnimeSearchServiceTests
     public async Task SearchPageAsync_SeriesStillRideAlongUnderRelevanceInFallback()
     {
         using var db = CreateDb();
-        AddSeries(db, seriesId: 1, rootAnimeId: 301, rootTitle: "Fate Series One", rootPopularityRank: 1);
+        AddSeries(db, rootAnimeId: 301, rootTitle: "Fate Series One", rootPopularityRank: 1);
         await db.SaveChangesAsync();
 
         var fallback = new List<AnimeSearchFallbackProjection> { new(500, "Fate Anime", null, null, 1, "tv", 24, 7.5) };
@@ -368,7 +368,7 @@ public class AnimeSearchServiceTests
 
         Assert.True(page.MalSearchFailed);
         Assert.Single(page.Series);
-        Assert.Equal(301, page.Series[0].RootAnimeId);
+        Assert.Equal(301, page.Series[0].SeriesId);
     }
 
     // --- 8.4 Background series build trigger ---
@@ -393,7 +393,7 @@ public class AnimeSearchServiceTests
     public async Task SearchAsync_SkipsEnqueueWhenTopMatchAlreadyHasStoredSeries()
     {
         using var db = CreateDb();
-        AddSeries(db, seriesId: 1, rootAnimeId: 500, rootTitle: "Gundam Unicorn", rootPopularityRank: 1);
+        AddSeries(db, rootAnimeId: 500, rootTitle: "Gundam Unicorn", rootPopularityRank: 1);
         await db.SaveChangesAsync();
 
         var localIndex = new List<AnimeTitleProjection> { new(500, "Gundam Unicorn", null, null, 1) };
@@ -468,9 +468,9 @@ public class AnimeSearchServiceTests
     public async Task SearchAsync_CacheOnlyStageStillLeadsWithStoredSeriesCappedAtTwo()
     {
         using var db = CreateDb();
-        AddSeries(db, seriesId: 1, rootAnimeId: 201, rootTitle: "Gundam Series One", rootPopularityRank: 1);
-        AddSeries(db, seriesId: 2, rootAnimeId: 202, rootTitle: "Gundam Series Two", rootPopularityRank: 50);
-        AddSeries(db, seriesId: 3, rootAnimeId: 203, rootTitle: "Gundam Series Three", rootPopularityRank: 100);
+        AddSeries(db, rootAnimeId: 201, rootTitle: "Gundam Series One", rootPopularityRank: 1);
+        AddSeries(db, rootAnimeId: 202, rootTitle: "Gundam Series Two", rootPopularityRank: 50);
+        AddSeries(db, rootAnimeId: 203, rootTitle: "Gundam Series Three", rootPopularityRank: 100);
         await db.SaveChangesAsync();
 
         var localIndex = new List<AnimeTitleProjection>
@@ -487,7 +487,7 @@ public class AnimeSearchServiceTests
 
         Assert.Equal(5, results.Count);
         Assert.Equal(["series", "series", "anime", "anime", "anime"], results.Select(r => r.Kind));
-        Assert.Equal([201, 202], results.Where(r => r.Kind == "series").Select(r => r.RootAnimeId));
+        Assert.Equal([201, 202], results.Where(r => r.Kind == "series").Select(r => r.Id));
     }
 
     [Fact]

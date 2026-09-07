@@ -42,33 +42,33 @@ public class SeriesListEligibilityTests
     public async Task OneMemberInMyList_SeriesIsListed()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100);
         AddAnime(db, 101);
         AddAnime(db, 102);
         AddAnime(db, 103);
         AddAnime(db, 104);
-        AddMember(db, 1, 100, isMainLine: true, order: 0);
-        AddMember(db, 1, 101, isMainLine: true, order: 1);
-        AddMember(db, 1, 102, isMainLine: true, order: 2);
-        AddMember(db, 1, 103, isMainLine: true, order: 3);
-        AddMember(db, 1, 104, isMainLine: true, order: 4);
+        AddMember(db, 100, 100, isMainLine: true, order: 0);
+        AddMember(db, 100, 101, isMainLine: true, order: 1);
+        AddMember(db, 100, 102, isMainLine: true, order: 2);
+        AddMember(db, 100, 103, isMainLine: true, order: 3);
+        AddMember(db, 100, 104, isMainLine: true, order: 4);
         AddEntry(db, 102, WatchStatus.Watching); // exactly one of five in my list
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
         var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
-        Assert.Equal(1, listed.SeriesId);
+        Assert.Equal(100, listed.SeriesId);
     }
 
     [Fact]
     public async Task NoMemberInMyList_SeriesIsNotListed()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100);
-        AddMember(db, 1, 100, isMainLine: true, order: 0);
+        AddMember(db, 100, 100, isMainLine: true, order: 0);
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
@@ -80,18 +80,18 @@ public class SeriesListEligibilityTests
     public async Task ExtraOnlyMembership_SeriesIsStillListed()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100);
         AddAnime(db, 101);
-        AddMember(db, 1, 100, isMainLine: true, order: 0);
-        AddMember(db, 1, 101, isMainLine: false, order: 0); // extra
+        AddMember(db, 100, 100, isMainLine: true, order: 0);
+        AddMember(db, 100, 101, isMainLine: false, order: 0); // extra
         AddEntry(db, 101, WatchStatus.Completed); // only the extra is in my list
         await db.SaveChangesAsync();
 
         var index = await new SeriesRankingLookup(db).LoadAsync();
         var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
-        Assert.Equal(1, listed.SeriesId);
+        Assert.Equal(100, listed.SeriesId);
     }
 
     // EligibleSeries() (Top series) requires at least two of a three-or-more
@@ -101,13 +101,13 @@ public class SeriesListEligibilityTests
     public async Task FranchiseWithOnlyOneOfThreeAiredMainLineEntriesInMyList_IsListedHereButNotInTopSeries()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100);
         AddAnime(db, 101);
         AddAnime(db, 102);
-        AddMember(db, 1, 100, isMainLine: true, order: 0);
-        AddMember(db, 1, 101, isMainLine: true, order: 1);
-        AddMember(db, 1, 102, isMainLine: true, order: 2);
+        AddMember(db, 100, 100, isMainLine: true, order: 0);
+        AddMember(db, 100, 101, isMainLine: true, order: 1);
+        AddMember(db, 100, 102, isMainLine: true, order: 2);
         AddEntry(db, 100, WatchStatus.Completed); // only one of three aired main-line entries
         await db.SaveChangesAsync();
 

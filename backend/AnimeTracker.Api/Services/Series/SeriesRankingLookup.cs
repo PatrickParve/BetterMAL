@@ -28,13 +28,12 @@ public class SeriesRankingLookup(AnimeTrackerDbContext db)
                 series => series.Id,
                 (member, series) => new SeriesRankingMemberProjection(
                     member.SeriesId,
-                    series.RootAnimeId,
                     member.AnimeId,
                     member.IsMainLine,
                     member.Order,
                     member.Anime.Title,
                     member.Anime.EnglishTitle,
-                    member.Anime.PictureUrl,
+                    member.Anime.MalPictureUrl,
                     member.Anime.MalScore,
                     member.Anime.UserEntry != null ? member.Anime.UserEntry.MyScore : null,
                     member.Anime.UserEntry != null ? member.Anime.UserEntry.Status : (WatchStatus?)null,
@@ -67,15 +66,17 @@ public class SeriesRankingLookup(AnimeTrackerDbContext db)
 /// membership; Order is the member's position within its main line or extras
 /// media-type group. SelectedTitle/SelectedPictureUrl are the series' own
 /// overrides (identical across every row of the same series), fed to
-/// SeriesIdentity.Resolve for display (design.md D7). MembershipKind,
-/// PopularityRank, VersionSlotKey and BranchHeadAnimeId
+/// SeriesIdentity.Resolve for display alongside the root's MalPictureUrl —
+/// its default, deliberately not its own (resolved) displayed picture, so a
+/// root anime's own pin never doubles as the series' default (design.md D7).
+/// MembershipKind, PopularityRank, VersionSlotKey and BranchHeadAnimeId
 /// (rebuild-series-by-story-component design.md D2/D4) let this index apply
 /// the same version-neighbour eligibility rule and default-combination
 /// scoping SeriesService applies on the series page itself (tasks
 /// 7.5-7.6).</summary>
 internal sealed record SeriesRankingMemberProjection(
-    int SeriesId, int RootAnimeId, int AnimeId, bool IsMainLine, int Order,
-    string Title, string? EnglishTitle, string? PictureUrl,
+    int SeriesId, int AnimeId, bool IsMainLine, int Order,
+    string Title, string? EnglishTitle, string? MalPictureUrl,
     double? MalScore, int? MyScore, WatchStatus? EntryStatus, string? AiringStatus,
     int? RewatchCount, int? EpisodesWatched, int? TotalEpisodes, int? AverageEpisodeDurationSeconds,
     DateOnly? AiredFrom, DateOnly? AiredTo,

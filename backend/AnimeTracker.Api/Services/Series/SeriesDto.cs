@@ -171,8 +171,11 @@ public record SeriesStatsByPickDto(List<int> BranchHeadAnimeIds, SeriesStatsDto 
 /// main line holds no slot at all, so a series untouched by this capability
 /// projects exactly as it always has.</summary>
 public record SeriesDto(
+    // The series' own MAL id, which is the root entry's MAL id
+    // (key-series-by-root-anime-id design.md D1/D7) — a surface that wants
+    // the root anime (a MyAnimeList link, the series page route) reads this
+    // same field.
     int SeriesId,
-    int RootAnimeId,
     int? RootAniListId,
     string Title,
     string? EnglishTitle,

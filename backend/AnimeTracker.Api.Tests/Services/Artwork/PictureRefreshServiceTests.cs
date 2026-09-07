@@ -78,7 +78,7 @@ public class PictureRefreshServiceTests
     public async Task RefreshSeriesMainLineAsync_StopsAtBudgetAndReportsRemainder()
     {
         using var db = CreateDb();
-        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, RootAnimeId = 1, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
         for (var i = 1; i <= 5; i++)
         {
             db.AnimeMetadata.Add(new AnimeMetadata { Id = i, Title = $"Anime {i}" });
@@ -100,7 +100,7 @@ public class PictureRefreshServiceTests
     public async Task RefreshSeriesMainLineAsync_NothingEligibleMakesNoCall()
     {
         using var db = CreateDb();
-        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, RootAnimeId = 1, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", PicturesSyncedAt = DateTimeOffset.UtcNow });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
         db.SeriesMembers.Add(new SeriesMember { AnimeId = 1, SeriesId = 1, IsMainLine = true, Order = 0 });

@@ -137,12 +137,12 @@ public class SeriesService(
             .ToList();
         var allAnime = series.Members.Select(m => m.Anime).ToList();
 
-        var root = allAnime.First(a => a.Id == series.RootAnimeId);
+        var root = allAnime.First(a => a.Id == series.Id);
         var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
-            series.SelectedTitle, series.SelectedPictureUrl, root.Title, root.EnglishTitle, root.PictureUrl);
+            series.SelectedTitle, series.SelectedPictureUrl, root.Title, root.EnglishTitle, root.MalPictureUrl);
         var (firstYear, lastYear) = YearSpan(allAnime);
         var rootAniListId = await db.AnimeAiringSyncs.AsNoTracking()
-            .Where(s => s.AnimeId == series.RootAnimeId)
+            .Where(s => s.AnimeId == series.Id)
             .Select(s => (int?)s.AniListId)
             .FirstOrDefaultAsync(ct);
         var airedEpisodesByAnimeId = await AiredEpisodesByAnimeIdAsync(allAnime, ct);
@@ -179,7 +179,6 @@ public class SeriesService(
 
         return new SeriesDto(
             series.Id,
-            series.RootAnimeId,
             rootAniListId,
             title,
             englishTitle,

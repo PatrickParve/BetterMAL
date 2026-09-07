@@ -31,9 +31,9 @@ public class SeriesListScoreRevealTests
     public async Task SettledAndNothingAiring_MalRevealedIsTrue()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing");
-        AddMember(db, 1, 100, order: 0);
+        AddMember(db, 100, 100, order: 0);
         AddEntry(db, 100, WatchStatus.Completed);
         await db.SaveChangesAsync();
 
@@ -48,9 +48,9 @@ public class SeriesListScoreRevealTests
     public async Task DroppedCountsTheSameAsCompleted()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing");
-        AddMember(db, 1, 100, order: 0);
+        AddMember(db, 100, 100, order: 0);
         AddEntry(db, 100, WatchStatus.Dropped);
         await db.SaveChangesAsync();
 
@@ -64,11 +64,11 @@ public class SeriesListScoreRevealTests
     public async Task FinishedAiringEntryAbsentFromMyList_MalRevealedIsFalse()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing");
         AddAnime(db, 101, "finished_airing");
-        AddMember(db, 1, 100, order: 0);
-        AddMember(db, 1, 101, order: 1); // not in my list at all
+        AddMember(db, 100, 100, order: 0);
+        AddMember(db, 100, 101, order: 1); // not in my list at all
         AddEntry(db, 100, WatchStatus.Completed);
         await db.SaveChangesAsync();
 
@@ -82,11 +82,11 @@ public class SeriesListScoreRevealTests
     public async Task AMainLineEntryAiring_MalRevealedIsFalse()
     {
         using var db = CreateDb();
-        db.Series.Add(new SeriesModel { Id = 1, RootAnimeId = 100, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
         AddAnime(db, 100, "finished_airing");
         AddAnime(db, 101, "currently_airing");
-        AddMember(db, 1, 100, order: 0);
-        AddMember(db, 1, 101, order: 1);
+        AddMember(db, 100, 100, order: 0);
+        AddMember(db, 100, 101, order: 1);
         AddEntry(db, 100, WatchStatus.Completed);
         AddEntry(db, 101, WatchStatus.Watching);
         await db.SaveChangesAsync();

@@ -27,10 +27,9 @@ public class SeriesSearchLookup(AnimeTrackerDbContext db)
                     member.AnimeId,
                     member.Anime.Title,
                     member.Anime.EnglishTitle,
-                    member.Anime.PictureUrl,
+                    member.Anime.MalPictureUrl,
                     member.IsMainLine,
                     member.Anime.PopularityRank,
-                    series.RootAnimeId,
                     series.SelectedTitle,
                     series.SelectedPictureUrl))
             .ToListAsync(ct);
@@ -39,12 +38,16 @@ public class SeriesSearchLookup(AnimeTrackerDbContext db)
     }
 }
 
-/// <summary>One series member row joined with its anime's title/picture and
-/// its series' root anime id — the unit SeriesSearchIndex matches over.
-/// SelectedTitle/SelectedPictureUrl are the series' own overrides (identical
-/// across every row of the same series), fed to SeriesIdentity.Resolve for
-/// display (design.md D7).</summary>
+/// <summary>One series member row joined with its anime's title/picture —
+/// the unit SeriesSearchIndex matches over. The series id is the same for
+/// every member of a series, and is the root's anime id
+/// (key-series-by-root-anime-id design.md D1). SelectedTitle/SelectedPictureUrl
+/// are the series' own overrides (identical across every row of the same
+/// series), fed to SeriesIdentity.Resolve for display alongside the root's
+/// MalPictureUrl — its default, deliberately not its own (resolved)
+/// displayed picture, so a root anime's own pin never doubles as the
+/// series' default (design.md D7).</summary>
 internal sealed record SeriesMemberProjection(
-    int SeriesId, int AnimeId, string Title, string? EnglishTitle, string? PictureUrl,
-    bool IsMainLine, int? PopularityRank, int RootAnimeId,
+    int SeriesId, int AnimeId, string Title, string? EnglishTitle, string? MalPictureUrl,
+    bool IsMainLine, int? PopularityRank,
     string? SelectedTitle, string? SelectedPictureUrl);

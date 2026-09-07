@@ -64,18 +64,19 @@ public sealed class SeriesSearchIndex
             .ToList();
     }
 
-    // The root is always a member of its own series (SeriesGraphBuilder
-    // invariant), so display fields come from that row (via SeriesIdentity,
-    // design.md D7) regardless of which member actually matched the query.
+    // The series id is the root's anime id, and the root is always a member
+    // of its own series (SeriesGraphBuilder invariant, key-series-by-root-
+    // anime-id design.md D6), so display fields come from that row (via
+    // SeriesIdentity, design.md D7) regardless of which member actually
+    // matched the query.
     private SeriesSearchResultDto ToResultDto(int seriesId)
     {
         var members = _membersBySeriesId[seriesId].ToList();
-        var rootAnimeId = members[0].RootAnimeId; // same for every member of a series
-        var root = members.First(m => m.AnimeId == rootAnimeId);
+        var root = members.First(m => m.AnimeId == seriesId);
         var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
-            root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.PictureUrl);
+            root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.MalPictureUrl);
 
-        return new SeriesSearchResultDto(seriesId, rootAnimeId, title, englishTitle, pictureUrl, members.Count);
+        return new SeriesSearchResultDto(seriesId, title, englishTitle, pictureUrl, members.Count);
     }
 
     // A chosen title is added to the match set alongside every member's own

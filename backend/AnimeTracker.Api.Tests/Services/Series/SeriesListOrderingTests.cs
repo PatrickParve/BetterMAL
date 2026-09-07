@@ -18,11 +18,11 @@ public class SeriesListOrderingTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    private static void AddSeries(AnimeTrackerDbContext db, int seriesId, int animeId, string title, int? myScore)
+    private static void AddSeries(AnimeTrackerDbContext db, int animeId, string title, int? myScore)
     {
-        db.Series.Add(new SeriesModel { Id = seriesId, RootAnimeId = animeId, BuiltAt = DateTimeOffset.UtcNow });
+        db.Series.Add(new SeriesModel { Id = animeId, BuiltAt = DateTimeOffset.UtcNow });
         db.AnimeMetadata.Add(new AnimeMetadata { Id = animeId, Title = title, AiringStatus = "finished_airing" });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = animeId, SeriesId = seriesId, IsMainLine = true, Order = 0 });
+        db.SeriesMembers.Add(new SeriesMember { AnimeId = animeId, SeriesId = animeId, IsMainLine = true, Order = 0 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = animeId, Status = WatchStatus.Completed, MyScore = myScore });
     }
 
@@ -62,9 +62,9 @@ public class SeriesListOrderingTests
     public async Task DefaultOrder_MyAverageDescendingWithNullsLastThenTitle()
     {
         using var db = CreateDb();
-        AddSeries(db, 1, 100, "Zeta", myScore: 7);
-        AddSeries(db, 2, 200, "Alpha", myScore: null); // unscored — nulls last
-        AddSeries(db, 3, 300, "Beta", myScore: 9);
+        AddSeries(db, 100, "Zeta", myScore: 7);
+        AddSeries(db, 200, "Alpha", myScore: null); // unscored — nulls last
+        AddSeries(db, 300, "Beta", myScore: 9);
         await db.SaveChangesAsync();
 
         var service = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService(), new UnusedAnimeRankingService());
@@ -77,8 +77,8 @@ public class SeriesListOrderingTests
     public async Task TiedAverages_BreakOnRawTitleCaseInsensitively()
     {
         using var db = CreateDb();
-        AddSeries(db, 1, 100, "banana", myScore: 8);
-        AddSeries(db, 2, 200, "Apple", myScore: 8);
+        AddSeries(db, 100, "banana", myScore: 8);
+        AddSeries(db, 200, "Apple", myScore: 8);
         await db.SaveChangesAsync();
 
         var service = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService(), new UnusedAnimeRankingService());
@@ -91,9 +91,9 @@ public class SeriesListOrderingTests
     public async Task StableAcrossTwoCallsOnUnchangedData()
     {
         using var db = CreateDb();
-        AddSeries(db, 1, 100, "Zeta", myScore: 7);
-        AddSeries(db, 2, 200, "Alpha", myScore: null);
-        AddSeries(db, 3, 300, "Beta", myScore: 9);
+        AddSeries(db, 100, "Zeta", myScore: 7);
+        AddSeries(db, 200, "Alpha", myScore: null);
+        AddSeries(db, 300, "Beta", myScore: 9);
         await db.SaveChangesAsync();
 
         var service = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService(), new UnusedAnimeRankingService());

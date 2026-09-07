@@ -36,10 +36,10 @@ export function SearchBar() {
     navigate(`/anime/${id}`)
   }
 
-  function goToSeries(rootAnimeId: number) {
+  function goToSeries(seriesId: number) {
     dismiss()
     setQuery('')
-    navigate(`/series/${rootAnimeId}`)
+    navigate(`/series/${seriesId}`)
   }
 
   function submitSearch() {
@@ -80,7 +80,7 @@ export function SearchBar() {
                 <button
                   type="button"
                   className="search-bar__result search-bar__result--series"
-                  onClick={() => goToSeries(result.rootAnimeId)}
+                  onClick={() => goToSeries(result.id)}
                 >
                   {result.pictureUrl && <RowPicture src={result.pictureUrl} className="search-bar__thumb" />}
                   <span className="search-bar__result-text">

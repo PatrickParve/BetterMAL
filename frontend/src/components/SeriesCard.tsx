@@ -23,11 +23,11 @@ function formatMineAverage(value: number | null): string {
 export function SeriesCard({ item }: { item: SeriesListItemDto }) {
   return (
     <AnimeCard
-      animeId={item.rootAnimeId}
+      animeId={item.seriesId}
       title={item.title}
       englishTitle={item.englishTitle}
       pictureUrl={item.pictureUrl}
-      to={`/series/${item.rootAnimeId}`}
+      to={`/series/${item.seriesId}`}
       className="anime-card--fluid"
     >
       <div className="series-card__meta">

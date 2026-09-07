@@ -676,7 +676,7 @@ export function SeriesPage() {
   }
 
   if (Number.isNaN(animeId)) {
-    return <p className="series-page__empty">Anime not found.</p>
+    return <p className="series-page__empty">Series not found.</p>
   }
 
   if (loading) {
@@ -975,7 +975,9 @@ export function SeriesPage() {
           </div>
           <div className="series-page__links">
             <a
-              href={`https://myanimelist.net/anime/${series.rootAnimeId}`}
+              // series.seriesId is the root entry's MAL id (key-series-by-root-
+              // anime-id design.md D1/D7), so it's also the anime link target.
+              href={`https://myanimelist.net/anime/${series.seriesId}`}
               target="_blank"
               rel="noreferrer"
               className="series-page__related-link"
