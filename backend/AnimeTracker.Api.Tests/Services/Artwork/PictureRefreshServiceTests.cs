@@ -74,6 +74,58 @@ public class PictureRefreshServiceTests
         Assert.Null(anime.PicturesSyncedAt);
     }
 
+    // --- evenIfFetched (device-transfer design.md D7, tasks.md 3.3) ---
+
+    [Fact]
+    public async Task RefreshOneAsync_EvenIfFetchedFetchesAnAlreadyFetchedSetAgain()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", PicturesSyncedAt = DateTimeOffset.UtcNow });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient();
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshOneAsync(1, evenIfFetched: true);
+
+        Assert.True(result);
+        Assert.Single(malClient.Calls);
+    }
+
+    [Fact]
+    public async Task RefreshOneAsync_EvenIfFetchedIsStillANoOpForAnAnimeNotInMyList()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", PicturesSyncedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync(); // no UserAnimeEntry
+
+        var malClient = new FakeMalClient();
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshOneAsync(1, evenIfFetched: true);
+
+        Assert.False(result);
+        Assert.Empty(malClient.Calls);
+    }
+
+    [Fact]
+    public async Task RefreshOneAsync_DefaultBehaviourIsUnchanged()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", PicturesSyncedAt = DateTimeOffset.UtcNow });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient();
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshOneAsync(1);
+
+        Assert.False(result);
+        Assert.Empty(malClient.Calls);
+    }
+
     [Fact]
     public async Task RefreshSeriesMainLineAsync_StopsAtBudgetAndReportsRemainder()
     {

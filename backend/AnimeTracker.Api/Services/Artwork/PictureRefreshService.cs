@@ -16,16 +16,16 @@ public class PictureRefreshService(
     // the series picker's pool (design.md D6).
     public const int SeriesPictureFetchBudget = 8;
 
-    public async Task<bool> RefreshOneAsync(int animeId, CancellationToken ct = default)
+    public async Task<bool> RefreshOneAsync(int animeId, bool evenIfFetched = false, CancellationToken ct = default)
     {
-        if (!await IsEligibleAsync(animeId, ct))
+        if (!await IsEligibleAsync(animeId, evenIfFetched, ct))
             return false;
 
         // Single-flighted on the same key the detail page's own full-detail
         // fetch uses, so a double-mount of the detail page can't double-fetch.
         using (await refreshGate.LockAsync($"anime:{animeId}", ct))
         {
-            if (!await IsEligibleAsync(animeId, ct))
+            if (!await IsEligibleAsync(animeId, evenIfFetched, ct))
                 return false;
 
             return await FetchAndApplyAsync(animeId, ct);
@@ -47,7 +47,7 @@ public class PictureRefreshService(
             ct.ThrowIfCancellationRequested();
             using (await refreshGate.LockAsync($"anime:{animeId}", ct))
             {
-                if (await IsEligibleAsync(animeId, ct))
+                if (await IsEligibleAsync(animeId, evenIfFetched: false, ct))
                     await FetchAndApplyAsync(animeId, ct);
             }
         }
@@ -55,8 +55,8 @@ public class PictureRefreshService(
         return eligibleAnimeIds.Count - toFetch.Count;
     }
 
-    private Task<bool> IsEligibleAsync(int animeId, CancellationToken ct) =>
-        db.AnimeMetadata.AnyAsync(a => a.Id == animeId && a.UserEntry != null && a.PicturesSyncedAt == null, ct);
+    private Task<bool> IsEligibleAsync(int animeId, bool evenIfFetched, CancellationToken ct) =>
+        db.AnimeMetadata.AnyAsync(a => a.Id == animeId && a.UserEntry != null && (evenIfFetched || a.PicturesSyncedAt == null), ct);
 
     private async Task<bool> FetchAndApplyAsync(int animeId, CancellationToken ct)
     {

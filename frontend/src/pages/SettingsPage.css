@@ -514,6 +514,54 @@
   cursor: default;
 }
 
+/* Hidden file input backing the import action's "Choose file…" button
+   (settings-page spec "Choosing a file starts an import") — triggered
+   programmatically, never shown itself. */
+.settings-import-input {
+  display: none;
+}
+
+/* Highlights the whole action while a dragged file is held over it
+   (settings-page spec "Dropping a file starts an import"). */
+.settings-action--drop-target {
+  border-radius: 8px;
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+}
+
+.settings-import-report {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-import-report__section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-import-report__label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.settings-import-report__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.85;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
 .settings-page__loading {
   padding: 48px 0;
   text-align: center;

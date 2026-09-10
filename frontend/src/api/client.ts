@@ -36,6 +36,7 @@ import type {
   TopAnimeRankingType,
   TopAnimeSectionDto,
   TopSeriesSectionDto,
+  TransferImportStatusDto,
   UserAnimeEntryDto,
   UserAnimeEntryEditRequest,
   YearPageDto,
@@ -537,4 +538,22 @@ export async function exportData(): Promise<{ blob: Blob; fileName: string }> {
   const disposition = res.headers.get('Content-Disposition')
   const fileName = disposition?.match(/filename="?([^";]+)"?/)?.[1] ?? 'bettermal-export.json'
   return { blob, fileName }
+}
+
+// device-transfer import (04, design.md D14): the backend reads the raw
+// request body itself, never model-bound (design.md D3), so this posts the
+// file's own text rather than re-serializing it. The response is already
+// `Running` (design.md D1), so a single call is enough to start polling.
+// A refusal (400/409) throws ApiError carrying the backend's reason.
+export async function importData(file: File): Promise<TransferImportStatusDto> {
+  const text = await file.text()
+  return fetchJson<TransferImportStatusDto>('/api/transfer/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: text,
+  })
+}
+
+export function getImportStatus(): Promise<TransferImportStatusDto> {
+  return fetchJson<TransferImportStatusDto>('/api/transfer/import/status')
 }

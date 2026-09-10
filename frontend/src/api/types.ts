@@ -1100,3 +1100,45 @@ export type RecapAvailabilityDto = {
   years: RecapYearAvailabilityDto[]
   seasons: RecapSeasonAvailabilityDto[]
 }
+
+// device-transfer import (04): mirrors backend TransferImportStatusSnapshot
+// and TransferImportReport (design.md D1/D13). deviceName/exportedAt name the
+// file the current or most recent run is for; report/error are that run's
+// outcome, whichever phase it ended in.
+export type TransferImportPhase = 'NotStarted' | 'Running' | 'Complete' | 'Failed'
+
+export type TransferReportAnimeDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+}
+
+export type TransferImportFailureSubject = 'Anime' | 'Series'
+
+// title is null when this device never learned it (design.md D13 "Neither
+// stored: no title").
+export type TransferImportFailureDto = {
+  subject: TransferImportFailureSubject
+  id: number
+  title: string | null
+  englishTitle: string | null
+  what: string
+  reason: string
+}
+
+export type TransferImportReportDto = {
+  rankingAdded: TransferReportAnimeDto[]
+  rankingRemoved: TransferReportAnimeDto[]
+  fetched: TransferReportAnimeDto[]
+  failures: TransferImportFailureDto[]
+}
+
+export type TransferImportStatusDto = {
+  phase: TransferImportPhase
+  done: number
+  total: number
+  deviceName: string | null
+  exportedAt: string | null
+  report: TransferImportReportDto | null
+  error: string | null
+}

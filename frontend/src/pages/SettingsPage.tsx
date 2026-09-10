@@ -1,19 +1,22 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from 'react'
 import {
   acceptAllHeldChanges,
   acceptHeldChange,
   acceptReconciliationDiff,
+  ApiError,
   cancelReconciliationDiff,
   declineAllHeldChanges,
   declineHeldChange,
   exportData,
   getAiringFullRefreshStatus,
   getHeldChanges,
+  getImportStatus,
   getMalAuthStatus,
   getPendingReconciliationDiff,
   getResyncFromMalStatus,
   getSeriesBulkBuildStatus,
   getSyncStatus,
+  importData,
   refreshAnime,
   runReconciliation,
   syncNow,
@@ -32,6 +35,8 @@ import type {
   ResyncStatusDto,
   SeriesBulkBuildStatusDto,
   SyncStatusDto,
+  TransferImportFailureDto,
+  TransferImportStatusDto,
 } from '../api/types.ts'
 import { RowPicture } from '../components/RowPicture.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
@@ -87,19 +92,35 @@ function SettingsToggleRow({
 // optional run state (a JobProgress for the three background jobs), and one
 // button — the titled-block shape SettingsToggleRow's one-line form is built
 // to contrast with.
+// className/onDrag*/onDrop are only ever passed by the import action, which
+// is also a drop target (settings-page spec "Dropping a file starts an
+// import") — every other caller leaves them undefined, so no handlers attach.
 function SettingsAction({
   title,
   hint,
   state,
   button,
+  className,
+  onDragOver,
+  onDragLeave,
+  onDrop,
 }: {
   title: string
   hint: string
   state?: ReactNode
   button: ReactNode
+  className?: string
+  onDragOver?: (event: DragEvent<HTMLDivElement>) => void
+  onDragLeave?: (event: DragEvent<HTMLDivElement>) => void
+  onDrop?: (event: DragEvent<HTMLDivElement>) => void
 }) {
   return (
-    <div className="settings-action">
+    <div
+      className={className ? `settings-action ${className}` : 'settings-action'}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <div className="settings-action__info">
         <h3 className="settings-action__title">{title}</h3>
         <p className="settings-action__hint">{hint}</p>
@@ -133,7 +154,22 @@ function jobPhase(phase: 'NotStarted' | 'Running' | 'Complete' | 'Failed'): JobP
 // it once. A job that has never run shows nothing rather than a zeroed
 // state, and a failed run is marked visually distinct rather than differing
 // only in wording.
-function JobProgress({ phase, done, total, noun }: { phase: JobPhase; done: number; total: number; noun: string }) {
+// failureReason replaces the generic "see backend logs" pointer for the
+// import job, which — unlike the other three — has a real reason to show
+// (settings-page spec "A failed import says nothing was applied").
+function JobProgress({
+  phase,
+  done,
+  total,
+  noun,
+  failureReason,
+}: {
+  phase: JobPhase
+  done: number
+  total: number
+  noun: string
+  failureReason?: string
+}) {
   if (phase === 'not-started') return null
   const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0
   return (
@@ -151,7 +187,7 @@ function JobProgress({ phase, done, total, noun }: { phase: JobPhase; done: numb
         {phase === 'running'
           ? `Running… ${done}/${total} ${noun}`
           : phase === 'failed'
-            ? `Failed after ${done}/${total} ${noun} — see backend logs.`
+            ? `Failed after ${done}/${total} ${noun} — ${failureReason ?? 'see backend logs.'}`
             : `Complete — ${done}/${total} ${noun}`}
       </span>
     </div>
@@ -222,6 +258,11 @@ export function SettingsPage() {
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [exportedFileName, setExportedFileName] = useState<string | null>(null)
+  const [importStatus, setImportStatus] = useState<TransferImportStatusDto | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importRefusal, setImportRefusal] = useState<string | null>(null)
+  const [importDragOver, setImportDragOver] = useState(false)
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   const { alwaysShowCompletedScores, toggleAlwaysShowCompletedScores } = useScoreVisibility()
   const { hideHentai, toggleHideHentai } = useContentFilter()
@@ -249,6 +290,9 @@ export function SettingsPage() {
       getSeriesBulkBuildStatus()
         .then(setSeriesBulkBuildStatus)
         .catch(() => setSeriesBulkBuildStatus(null)),
+      getImportStatus()
+        .then(setImportStatus)
+        .catch(() => setImportStatus(null)),
     ])
   }, [])
 
@@ -292,6 +336,18 @@ export function SettingsPage() {
     }, 2000)
     return () => clearInterval(id)
   }, [seriesBulkBuildStatus?.phase])
+
+  // Poll while an import is in flight — once a second (design.md D14), since
+  // an import's fetches are paced faster than the minutes-long jobs above.
+  useEffect(() => {
+    if (importStatus?.phase !== 'Running') return
+    const id = setInterval(() => {
+      getImportStatus()
+        .then(setImportStatus)
+        .catch(() => {})
+    }, 1000)
+    return () => clearInterval(id)
+  }, [importStatus?.phase])
 
   async function handleResyncNow() {
     if (resyncing) return
@@ -469,6 +525,59 @@ export function SettingsPage() {
     } finally {
       setExporting(false)
     }
+  }
+
+  const importRunning = importStatus?.phase === 'Running'
+
+  // Shared by the file picker and the drop target (settings-page spec
+  // "Choosing a file starts an import" / "Dropping a file starts an
+  // import") — a running import takes neither.
+  async function handleImportFile(file: File) {
+    if (importing || importRunning) return
+    setImporting(true)
+    setImportRefusal(null)
+    try {
+      setImportStatus(await importData(file))
+    } catch (err) {
+      setImportRefusal(err instanceof ApiError && err.reason ? err.reason : 'The import was refused. Please try again.')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  function handleChooseImportFile() {
+    importInputRef.current?.click()
+  }
+
+  function handleImportFileInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    // Reset so choosing the same file again still fires this handler.
+    event.target.value = ''
+    if (file) void handleImportFile(file)
+  }
+
+  function handleImportDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    if (importRunning) return
+    setImportDragOver(true)
+  }
+
+  function handleImportDragLeave() {
+    setImportDragOver(false)
+  }
+
+  function handleImportDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    setImportDragOver(false)
+    if (importRunning) return
+    const file = event.dataTransfer.files?.[0]
+    if (file) void handleImportFile(file)
+  }
+
+  // failure.title is null when this device never learned it (design.md D13).
+  function importFailureLabel(failure: TransferImportFailureDto): string {
+    if (failure.title) return pickDisplayTitle(failure.title, failure.englishTitle)
+    return failure.subject === 'Series' ? `Series ${failure.id}` : `Anime ${failure.id}`
   }
 
   if (loading) {
@@ -741,6 +850,102 @@ export function SettingsPage() {
           button={
             <button type="button" onClick={handleExport} disabled={exporting}>
               {exporting ? 'Exporting…' : 'Export'}
+            </button>
+          }
+        />
+
+        <SettingsAction
+          title="Import from a file"
+          hint="Merges a file exported on your other device into this one: the edit history is combined, each chosen picture and title goes to whichever device changed it last, and the ranking is replaced whole by whichever device arranged it last. It asks nothing before applying and cannot be undone — export this device first to keep a copy of what it holds. Runs in the background, and can take minutes when anime have to be fetched from MyAnimeList."
+          className={importDragOver ? 'settings-action--drop-target' : undefined}
+          onDragOver={handleImportDragOver}
+          onDragLeave={handleImportDragLeave}
+          onDrop={handleImportDrop}
+          state={
+            <>
+              <JobProgress
+                phase={importStatus ? jobPhase(importStatus.phase) : 'not-started'}
+                done={importStatus?.done ?? 0}
+                total={importStatus?.total ?? 0}
+                noun="fetches"
+                failureReason={
+                  importStatus?.phase === 'Failed'
+                    ? `${importStatus.error ?? 'Unknown error'}. Nothing from the file was applied.`
+                    : undefined
+                }
+              />
+              {importRefusal && <p className="settings-box__error">{importRefusal}</p>}
+              {importStatus?.phase === 'Complete' && importStatus.report && (
+                <div className="settings-import-report">
+                  <p className="settings-box__hint">
+                    From {importStatus.deviceName ?? 'the other device'} — exported{' '}
+                    {formatTimestamp(importStatus.exportedAt)}
+                  </p>
+                  {importStatus.report.rankingAdded.length === 0 &&
+                  importStatus.report.rankingRemoved.length === 0 &&
+                  importStatus.report.fetched.length === 0 &&
+                  importStatus.report.failures.length === 0 ? (
+                    <p className="settings-box__hint">Nothing to report.</p>
+                  ) : (
+                    <>
+                      {importStatus.report.rankingAdded.length > 0 && (
+                        <div className="settings-import-report__section">
+                          <h4 className="settings-import-report__label">Added to the ranking</h4>
+                          <ul className="settings-import-report__list">
+                            {importStatus.report.rankingAdded.map((anime) => (
+                              <li key={anime.animeId}>{pickDisplayTitle(anime.title, anime.englishTitle)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {importStatus.report.rankingRemoved.length > 0 && (
+                        <div className="settings-import-report__section">
+                          <h4 className="settings-import-report__label">Removed from the ranking</h4>
+                          <ul className="settings-import-report__list">
+                            {importStatus.report.rankingRemoved.map((anime) => (
+                              <li key={anime.animeId}>{pickDisplayTitle(anime.title, anime.englishTitle)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {importStatus.report.fetched.length > 0 && (
+                        <div className="settings-import-report__section">
+                          <h4 className="settings-import-report__label">Fetched for the first time</h4>
+                          <ul className="settings-import-report__list">
+                            {importStatus.report.fetched.map((anime) => (
+                              <li key={anime.animeId}>{pickDisplayTitle(anime.title, anime.englishTitle)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {importStatus.report.failures.length > 0 && (
+                        <div className="settings-import-report__section">
+                          <h4 className="settings-import-report__label">Could not be applied</h4>
+                          <ul className="settings-import-report__list">
+                            {importStatus.report.failures.map((failure, index) => (
+                              <li key={index}>
+                                {importFailureLabel(failure)} — {failure.what}: {failure.reason}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".json,application/json"
+                className="settings-import-input"
+                onChange={handleImportFileInputChange}
+              />
+            </>
+          }
+          button={
+            <button type="button" onClick={handleChooseImportFile} disabled={importing || importRunning}>
+              {importing || importRunning ? 'Importing…' : 'Choose file…'}
             </button>
           }
         />

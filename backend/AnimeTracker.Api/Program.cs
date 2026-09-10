@@ -195,6 +195,11 @@ builder.Services.AddScoped<ISeriesService, SeriesService>();
 // --- Device-to-device transfer ---
 builder.Services.AddScoped<IDeviceIdentityInitializer, DeviceIdentityInitializer>();
 builder.Services.AddScoped<IExportService, ExportService>();
+builder.Services.AddSingleton<ITransferImportProgressTracker, TransferImportProgressTracker>();
+builder.Services.AddSingleton<ITransferImportTrigger, TransferImportTrigger>();
+builder.Services.AddScoped<ITransferImportService, TransferImportService>();
+builder.Services.AddScoped<TransferImportRunner>();
+builder.Services.AddHostedService<TransferImportBackgroundService>();
 
 var app = builder.Build();
 

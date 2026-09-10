@@ -54,19 +54,29 @@ public class SeriesControllerBulkBuildTests
             throw new NotImplementedException();
         public Task<string?> ResetAnimePictureAsync(int animeId, CancellationToken ct = default) =>
             throw new NotImplementedException();
+        public Task<string?> AdoptAnimePictureAsync(int animeId, string? pictureUrl, DateTimeOffset modifiedAt, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task CheckAnimePictureAsync(int animeId, string pictureUrl, CancellationToken ct = default) =>
+            throw new NotImplementedException();
         public Task<string> SetSeriesTitleAsync(int seriesId, string title, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<string?> ResetSeriesTitleAsync(int seriesId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<string?> AdoptSeriesTitleAsync(int seriesId, string? title, DateTimeOffset modifiedAt, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<string?> SetSeriesPictureAsync(int seriesId, string pictureUrl, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<string?> ResetSeriesPictureAsync(int seriesId, CancellationToken ct = default) =>
             throw new NotImplementedException();
+        public Task<string?> AdoptSeriesPictureAsync(int seriesId, string? pictureUrl, DateTimeOffset modifiedAt, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task CheckSeriesPictureAsync(int seriesId, string pictureUrl, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 
     private sealed class UnusedPictureRefreshService : IPictureRefreshService
     {
-        public Task<bool> RefreshOneAsync(int animeId, CancellationToken ct = default) =>
+        public Task<bool> RefreshOneAsync(int animeId, bool evenIfFetched = false, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<int> RefreshSeriesMainLineAsync(int seriesId, int budget, CancellationToken ct = default) =>
             throw new NotImplementedException();

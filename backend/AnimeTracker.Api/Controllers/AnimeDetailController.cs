@@ -68,7 +68,7 @@ public class AnimeDetailController(
     [HttpPost("api/anime/{animeId:int}/pictures/refresh")]
     public async Task<IActionResult> RefreshPictures(int animeId, CancellationToken ct)
     {
-        await pictureRefreshService.RefreshOneAsync(animeId, ct);
+        await pictureRefreshService.RefreshOneAsync(animeId, ct: ct);
 
         var anime = await metadataRepository.GetByIdAsync(animeId, ct);
         if (anime is null)

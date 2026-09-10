@@ -13,7 +13,7 @@ The groups SHALL be, in this order:
 1. **Preferences** — the settings that change how the app displays things for me and take effect immediately: the completed/dropped score-reveal setting and the NSFW content filter.
 2. **Sync** — the state of the ongoing MyAnimeList sync (pending/retrying count, count held for review, last successful sync) together with the actions that drive it (resync now, run full reconciliation), the changes held for review when any exist, and the pending reconciliation diff when one exists.
 3. **Data tools** — the long-running corrective and backfill jobs: the corrective re-sync from MAL, the full airing-date refresh, the build-all-series run, and the single-anime metadata force-refresh.
-4. **Transfer** — moving what exists only in this app between my devices as a file: the export action. The group SHALL hold the transfer between devices and nothing else. It SHALL NOT hold a sync action, a corrective or backfill job, or a preference.
+4. **Transfer** — moving what exists only in this app between my devices as a file: the export action and the import action. The group SHALL hold the transfer between devices and nothing else. It SHALL NOT hold a sync action, a corrective or backfill job, or a preference.
 5. **Account** — the MyAnimeList connection state and the re-authorize action.
 
 Ordering SHALL run from the cheapest and most reversible to the most expensive:
@@ -31,7 +31,7 @@ Grouping SHALL be presentational only. Every control, label, status figure, and 
 
 #### Scenario: Transfer holds only the transfer
 - **WHEN** I look at the Transfer group
-- **THEN** it holds the export action and no sync action, corrective job, or preference
+- **THEN** it holds the export action and the import action, and no sync action, corrective job, or preference
 
 #### Scenario: Every control survives the regrouping
 - **WHEN** I compare the regrouped Settings page against what it offered before
@@ -73,6 +73,50 @@ When the export succeeds, the action SHALL name the file it handed over. When it
 #### Scenario: An export in progress cannot be started twice
 - **WHEN** an export is being produced
 - **THEN** the export button is disabled and says that the export is in progress
+
+### Requirement: The import action states what it does
+The Transfer group SHALL present the import as an action, beside the export, in the shape "A preference is visibly not a job" gives every action.
+
+Its explanation SHALL be readable before a file is given, without hovering, opening or expanding anything. It SHALL state:
+- that it merges a file exported on my other device into this one
+- how each section merges:
+  - the edit history is combined
+  - each chosen picture and title goes to whichever device changed it last
+  - the ranking is replaced whole by whichever device arranged it last
+- that it asks nothing before applying and cannot be undone, and that exporting this device first keeps a copy of what this device holds
+- that it runs in the background, and can take minutes when anime have to be fetched from MyAnimeList
+
+The action SHALL accept a file chosen with a file picker, and a file dropped onto it. While a file is held over the action, it SHALL show that it will take a dropped file.
+
+While an import runs, the action SHALL NOT accept another file, and its button SHALL say that an import is running.
+
+A refused file SHALL be reported in the action, in the words of the refusal. The action SHALL then accept a file again.
+
+When the import finishes, its report SHALL be shown in the action, together with the device name and export time of the file it is for.
+
+#### Scenario: The explanation is on the page
+- **WHEN** I open the Settings page and look at the Transfer group
+- **THEN** the import action's explanation already states what it merges and how, that it cannot be undone, that exporting first keeps a copy, and that it can take minutes, with nothing to hover over or expand
+
+#### Scenario: Choosing a file starts an import
+- **WHEN** I choose an export file with the import action's file picker
+- **THEN** the import starts, and the action shows its progress
+
+#### Scenario: Dropping a file starts an import
+- **WHEN** I drag an export file over the import action
+- **THEN** the action shows that it will take the file, and dropping it starts the import
+
+#### Scenario: A refused file says why
+- **WHEN** I give the import action a file that is refused
+- **THEN** the action shows the refusal's reason, nothing starts, and I can give it another file
+
+#### Scenario: A running import takes no second file
+- **WHEN** an import is running
+- **THEN** the import button is disabled and says an import is running, and a dropped file is not taken
+
+#### Scenario: The report is shown when the import finishes
+- **WHEN** an import finishes
+- **THEN** the action shows its report and names the device and export time of the file it came from
 
 ### Requirement: Changes held for review are surfaced on the Settings page
 
@@ -146,11 +190,21 @@ The two SHALL be distinguishable at a glance, without reading the explanations �
 - **THEN** the preference rows and the action entries are visibly different kinds of entry
 
 ### Requirement: Background jobs report progress the same way
-Every background job the page can start — the corrective re-sync from MAL, the full airing-date refresh, and the build-all-series run — SHALL report its state in **one shared presentation**, so a reader learns to read it once.
+Every background job the page can start SHALL report its state in **one shared presentation**, so that a reader learns to read it once. The jobs are:
+- the corrective re-sync from MAL
+- the full airing-date refresh
+- the build-all-series run
+- the import from a file
 
 While a job is running, the page SHALL show a proportional progress indicator alongside the processed-of-total counts the underlying operation reports, and SHALL keep both updating while the run is in flight. The job's button SHALL be disabled for the duration and SHALL say that the job is running rather than inviting a second press.
 
-When a job is not running, the page SHALL show its last known outcome where one exists — completed with its final counts, or failed with the counts reached and a pointer to where the failure is recorded — and SHALL leave the button enabled. A job that has never run SHALL show no state rather than a zeroed-out one.
+When a job is not running, the page SHALL show its last known outcome where one exists, and SHALL leave the button enabled. The outcome is either:
+- completed, with its final counts
+- failed, with the counts reached and a pointer to where the failure is recorded
+
+A job that has never run SHALL show no state rather than a zeroed-out one.
+
+The import's outcome SHALL also carry its report (see `device-transfer`, "The import reports what it did"). The report SHALL be shown beneath the shared presentation when the import completes. When the import fails, the page SHALL show the reason in place of the pointer, and state that nothing from the file was applied.
 
 A failed run SHALL be visibly distinct from a completed one rather than differing only in wording.
 
@@ -158,9 +212,9 @@ A failed run SHALL be visibly distinct from a completed one rather than differin
 - **WHEN** a background job is in flight
 - **THEN** the page shows a progress indicator filled in proportion to the processed-of-total counts, with those counts beside it, both refreshing while the run continues
 
-#### Scenario: All three jobs report alike
-- **WHEN** I compare the corrective re-sync, the airing refresh, and the series build while each is running
-- **THEN** all three present their progress in the same form, differing only in wording and figures
+#### Scenario: All four jobs report alike
+- **WHEN** I compare the corrective re-sync, the airing refresh, the series build, and an import while each is running
+- **THEN** all four present their progress in the same form, differing only in wording and figures
 
 #### Scenario: A running job cannot be started twice
 - **WHEN** a job is running
@@ -170,9 +224,17 @@ A failed run SHALL be visibly distinct from a completed one rather than differin
 - **WHEN** a job has finished
 - **THEN** its final counts remain visible until another run starts, and its button is enabled again
 
+#### Scenario: A finished import shows its report
+- **WHEN** an import has finished
+- **THEN** its report is shown beneath its progress presentation, and stays until another import starts or the app restarts
+
 #### Scenario: A failed run is marked as failed
 - **WHEN** a job's last run failed
 - **THEN** the page marks it as a failure rather than reporting it like a completed run, states how far it got, and points at where the failure is recorded
+
+#### Scenario: A failed import says nothing was applied
+- **WHEN** an import's last run failed
+- **THEN** the page marks it as a failure, gives the reason, and states that nothing from the file was applied
 
 #### Scenario: A job that never ran shows nothing
 - **WHEN** a job has never been started

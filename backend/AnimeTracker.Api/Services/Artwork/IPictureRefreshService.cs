@@ -7,10 +7,16 @@ namespace AnimeTracker.Api.Services.Artwork;
 public interface IPictureRefreshService
 {
     /// <summary>Backfills one anime's picture set. No-op (returns false) when
-    /// the anime isn't in my list or already has one. Never throws on a MAL
-    /// failure — logs and returns false so the caller's flag stays set for a
-    /// retry on the next visit.</summary>
-    Task<bool> RefreshOneAsync(int animeId, CancellationToken ct = default);
+    /// the anime isn't in my list, or (unless <paramref name="evenIfFetched"/>
+    /// is set) already has one. Never throws on a MAL failure — logs and
+    /// returns false so the caller's flag stays set for a retry on the next
+    /// visit. <paramref name="evenIfFetched"/> is device-transfer's retry
+    /// (design.md D7): a set fetched before MyAnimeList added the chosen
+    /// picture fails validation just as a never-fetched one does, so an
+    /// import re-fetches it even though <c>PicturesSyncedAt</c> is already
+    /// set. Still my-list-only, and still single-flighted on the same
+    /// key.</summary>
+    Task<bool> RefreshOneAsync(int animeId, bool evenIfFetched = false, CancellationToken ct = default);
 
     /// <summary>Backfills up to <paramref name="budget"/> never-fetched,
     /// my-list main-line members of a series, in main-line order. Returns how

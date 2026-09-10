@@ -4,7 +4,13 @@ using Microsoft.EntityFrameworkCore;
 namespace AnimeTracker.Api.Data.Repositories;
 
 public class UnknownAnimeIdsException(IReadOnlyCollection<int> animeIds)
-    : Exception($"Unknown anime id(s): {string.Join(", ", animeIds)}");
+    : Exception($"Unknown anime id(s): {string.Join(", ", animeIds)}")
+{
+    // Read by TransferImportRunner (device-transfer design.md D9) to name
+    // each anime that blocked a ranking replace, rather than re-parsing them
+    // out of Message.
+    public IReadOnlyCollection<int> AnimeIds { get; } = animeIds;
+}
 
 public class TopAnimeSelectionRepository(AnimeTrackerDbContext db) : ITopAnimeSelectionRepository
 {
