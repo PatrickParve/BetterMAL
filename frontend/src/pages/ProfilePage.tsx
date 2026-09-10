@@ -21,7 +21,6 @@ import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { AnimeRankOverlay } from '../components/AnimeRankOverlay.tsx'
 import { EditHistoryOverlay } from '../components/EditHistoryOverlay.tsx'
-import { MalOriginTag } from '../components/MalOriginTag.tsx'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
 import { RowPicture } from '../components/RowPicture.tsx'
@@ -504,10 +503,7 @@ export function ProfilePage() {
                         lines={1}
                         className="profile-list-row__title"
                       />
-                      <span className="profile-list-row__meta">
-                        <span className="profile-list-row__meta-text">{item.summary}</span>
-                        <MalOriginTag source={item.source} />
-                      </span>
+                      <span className="profile-list-row__meta">{item.summary}</span>
                     </span>
                   </Link>
                   <span className="profile-list-row__trailing">{formatTimestamp(item.timestamp)}</span>

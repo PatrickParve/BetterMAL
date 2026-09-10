@@ -8,9 +8,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AnimeTracker.Api.Tests.Services.Sync;
 
-// record-mal-origin-activity design D9 (tasks.md 8.3): AcceptPendingDiffAsync
-// records what it applied with MalReconciliation; declining and skipping
-// record nothing.
+// log-only-my-own-edits (design D1): AcceptPendingDiffAsync is a sync path
+// and records nothing, whatever it applies; declining a diff already applied
+// nothing and still records nothing.
 public class ReconciliationServiceActivityTests
 {
     private static AnimeTrackerDbContext CreateDb() =>
@@ -36,7 +36,7 @@ public class ReconciliationServiceActivityTests
     };
 
     [Fact]
-    public async Task AcceptingADiffRecordsOneRowPerGenuinelyChangedField()
+    public async Task AcceptingADiffWithChangedFieldsAppliesThemAndRecordsNothing()
     {
         using var db = CreateDb();
         var anime = new AnimeMetadata { Id = 1, Title = "Anime 1" };
@@ -55,37 +55,35 @@ public class ReconciliationServiceActivityTests
         var result = await CreateService(db).AcceptPendingDiffAsync();
 
         Assert.True(result);
-        var rows = await db.ActivityLogs.Where(a => a.AnimeId == 1).ToListAsync();
-        Assert.Equal(2, rows.Count); // episodes + score; status unchanged, no row
-        Assert.All(rows, r => Assert.Equal(ActivityChangeSource.MalReconciliation, r.Source));
-        Assert.Contains(rows, r => r.ChangeType == ActivityChangeType.EpisodeIncremented && r.ChangeDetail == "Episode 7");
-        Assert.Contains(rows, r => r.ChangeType == ActivityChangeType.ScoreChanged && r.ChangeDetail == "Score 8");
+        var stored = await db.UserAnimeEntries.AsNoTracking().SingleAsync(e => e.AnimeId == 1);
+        Assert.Equal(7, stored.EpisodesWatched);
+        Assert.Equal(8, stored.MyScore);
+        Assert.Empty(await db.ActivityLogs.ToListAsync());
     }
 
     [Fact]
-    public async Task ADiffEntryWhoseValuesAlreadyMatchRecordsNothing()
+    public async Task AcceptingADiffWithANewEntryAppliesItAndRecordsNothing()
     {
         using var db = CreateDb();
         var anime = new AnimeMetadata { Id = 1, Title = "Anime 1" };
         db.AnimeMetadata.Add(anime);
-        db.UserAnimeEntries.Add(new UserAnimeEntry
-        {
-            AnimeId = 1, Anime = anime, Status = WatchStatus.Watching, EpisodesWatched = 7, MyScore = 8,
-        });
         db.PendingReconciliationDiffs.Add(new PendingReconciliationDiff
         {
             ComputedAt = DateTimeOffset.UtcNow,
-            Entries = [DiffEntry(1, ReconciliationDiffChangeType.Updated, WatchStatus.Watching, 7, myScore: 8)],
+            Entries = [DiffEntry(1, ReconciliationDiffChangeType.Added, WatchStatus.Completed, 12)],
         });
         await db.SaveChangesAsync();
 
         await CreateService(db).AcceptPendingDiffAsync();
 
-        Assert.Empty(await db.ActivityLogs.Where(a => a.AnimeId == 1).ToListAsync());
+        var stored = await db.UserAnimeEntries.AsNoTracking().SingleAsync(e => e.AnimeId == 1);
+        Assert.Equal(WatchStatus.Completed, stored.Status);
+        Assert.Equal(12, stored.EpisodesWatched);
+        Assert.Empty(await db.ActivityLogs.ToListAsync());
     }
 
     [Fact]
-    public async Task APendingSyncEntryRecordsNothing()
+    public async Task AnEntryWithAPendingSyncEditIsSkippedAndRecordsNothing()
     {
         using var db = CreateDb();
         var anime = new AnimeMetadata { Id = 1, Title = "Anime 1" };
@@ -103,31 +101,10 @@ public class ReconciliationServiceActivityTests
 
         await CreateService(db).AcceptPendingDiffAsync();
 
-        Assert.Empty(await db.ActivityLogs.Where(a => a.AnimeId == 1).ToListAsync());
         var stored = await db.UserAnimeEntries.AsNoTracking().SingleAsync(e => e.AnimeId == 1);
         Assert.Equal(3, stored.EpisodesWatched); // untouched
         Assert.True(stored.PendingSync);
-    }
-
-    [Fact]
-    public async Task ANewEntryRecordsOneAddedRow()
-    {
-        using var db = CreateDb();
-        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1" };
-        db.AnimeMetadata.Add(anime);
-        db.PendingReconciliationDiffs.Add(new PendingReconciliationDiff
-        {
-            ComputedAt = DateTimeOffset.UtcNow,
-            Entries = [DiffEntry(1, ReconciliationDiffChangeType.Added, WatchStatus.Completed, 12)],
-        });
-        await db.SaveChangesAsync();
-
-        await CreateService(db).AcceptPendingDiffAsync();
-
-        var row = Assert.Single(await db.ActivityLogs.Where(a => a.AnimeId == 1).ToListAsync());
-        Assert.Equal(ActivityChangeType.Added, row.ChangeType);
-        Assert.Equal("Added as Completed", row.ChangeDetail);
-        Assert.Equal(ActivityChangeSource.MalReconciliation, row.Source);
+        Assert.Empty(await db.ActivityLogs.ToListAsync());
     }
 
     [Fact]

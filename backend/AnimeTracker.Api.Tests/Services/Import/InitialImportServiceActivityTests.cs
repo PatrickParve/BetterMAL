@@ -8,9 +8,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AnimeTracker.Api.Tests.Services.Import;
 
-// record-mal-origin-activity design D8/D9 (tasks.md 8.2): InitialImportService
-// records nothing while establishing the baseline, then records one Added row
-// per created entry with MalStartupImport once history exists.
+// log-only-my-own-edits (design D7): InitialImportService is a sync path and
+// records nothing, on any run, whatever it applies.
 public class InitialImportServiceActivityTests
 {
     private static AnimeTrackerDbContext CreateDb() =>
@@ -28,7 +27,7 @@ public class InitialImportServiceActivityTests
     };
 
     [Fact]
-    public async Task AnImportIntoAnEmptyActivityLogRecordsNothing()
+    public async Task AFirstImportRecordsNothing()
     {
         using var db = CreateDb();
         var malClient = new FakeMalClient([Edge(1)]);
@@ -40,64 +39,45 @@ public class InitialImportServiceActivityTests
     }
 
     [Fact]
-    public async Task AResumedImportWithEntriesAlreadyPresentButStillNoActivityRecordsNothing()
+    public async Task AnImportRunningOnceActivityExistsRecordsNothing()
     {
         using var db = CreateDb();
-        // Simulates an interrupted-and-resumed baseline import: entries already
-        // exist for anime 1, but nothing has been recorded yet (design D8).
-        var anime1 = new AnimeMetadata { Id = 1, Title = "Anime 1" };
-        db.AnimeMetadata.Add(anime1);
-        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Anime = anime1, Status = WatchStatus.Watching });
+        // Something has already been recorded, so history has begun.
+        var priorAnime = new AnimeMetadata { Id = 99, Title = "Prior" };
+        db.AnimeMetadata.Add(priorAnime);
+        db.ActivityLogs.Add(new ActivityLog { AnimeId = 99, Timestamp = DateTimeOffset.UtcNow, ChangeType = ActivityChangeType.Added });
         await db.SaveChangesAsync();
 
-        var malClient = new FakeMalClient([Edge(1), Edge(2)]);
+        var malClient = new FakeMalClient([Edge(1, "watching", 3)]);
 
         await CreateService(db, malClient).RunAsync(CancellationToken.None);
 
-        Assert.Equal(2, await db.UserAnimeEntries.CountAsync());
-        Assert.Empty(await db.ActivityLogs.ToListAsync());
+        Assert.Empty(await db.ActivityLogs.Where(a => a.AnimeId == 1).ToListAsync());
     }
 
     [Fact]
-    public async Task AnImportRunningOnceActivityExistsRecordsOneAddedRowPerCreatedEntry()
+    public async Task TheBackfilledEntryBranchRecordsNothing()
     {
         using var db = CreateDb();
-        // Something has already been recorded, so history has begun (design D8).
-        var priorAnime = new AnimeMetadata { Id = 99, Title = "Prior" };
-        db.AnimeMetadata.Add(priorAnime);
-        db.ActivityLogs.Add(new ActivityLog { AnimeId = 99, Timestamp = DateTimeOffset.UtcNow, ChangeType = ActivityChangeType.Added, Source = ActivityChangeSource.BetterMal });
-        await db.SaveChangesAsync();
-
-        // Anime 2's metadata is already cached (e.g. browsed before connecting
+        // Anime 1's metadata is already cached (e.g. browsed before connecting
         // MAL) but has no entry yet — the metadata-already-cached backfill branch.
-        var cachedAnime = new AnimeMetadata { Id = 2, Title = "Anime 2" };
+        var cachedAnime = new AnimeMetadata { Id = 1, Title = "Anime 1" };
         db.AnimeMetadata.Add(cachedAnime);
         await db.SaveChangesAsync();
 
-        var malClient = new FakeMalClient([Edge(1, "watching", 3), Edge(2, "completed", 12)]);
+        var malClient = new FakeMalClient([Edge(1, "completed", 12)]);
 
         await CreateService(db, malClient).RunAsync(CancellationToken.None);
 
-        var rows = await db.ActivityLogs.Where(a => a.AnimeId == 1 || a.AnimeId == 2).ToListAsync();
-        Assert.Equal(2, rows.Count);
-        Assert.All(rows, r =>
-        {
-            Assert.Equal(ActivityChangeType.Added, r.ChangeType);
-            Assert.Equal(ActivityChangeSource.MalStartupImport, r.Source);
-        });
-
-        var full = Assert.Single(rows, r => r.AnimeId == 1);
-        Assert.Equal("Added as Watching", full.ChangeDetail);
-
-        var backfilled = Assert.Single(rows, r => r.AnimeId == 2);
-        Assert.Equal("Added as Completed", backfilled.ChangeDetail);
+        Assert.Single(await db.UserAnimeEntries.ToListAsync());
+        Assert.Empty(await db.ActivityLogs.ToListAsync());
     }
 
     [Fact]
     public async Task AnAnimeAlreadyHavingAnEntryRecordsNothing()
     {
         using var db = CreateDb();
-        db.ActivityLogs.Add(new ActivityLog { AnimeId = 99, Timestamp = DateTimeOffset.UtcNow, ChangeType = ActivityChangeType.Added, Source = ActivityChangeSource.BetterMal });
+        db.ActivityLogs.Add(new ActivityLog { AnimeId = 99, Timestamp = DateTimeOffset.UtcNow, ChangeType = ActivityChangeType.Added });
         var anime = new AnimeMetadata { Id = 1, Title = "Anime 1" };
         db.AnimeMetadata.Add(anime);
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Anime = anime, Status = WatchStatus.Watching, EpisodesWatched = 3 });

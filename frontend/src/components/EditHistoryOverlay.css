@@ -186,13 +186,6 @@
 }
 
 .edit-history__detail {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.edit-history__detail-text {
   font-size: 13px;
   color: var(--text);
   opacity: 0.85;

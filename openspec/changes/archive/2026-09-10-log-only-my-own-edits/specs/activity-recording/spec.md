@@ -1,9 +1,12 @@
-# activity-recording Specification
+## RENAMED Requirements
 
-## Purpose
-The activity-recording capability governs how a change made in this app becomes a record in the activity log, and which paths are excluded from it entirely. Changes made in the app — my own edits and removals, the automatic completion of a caught-up entry, the automatic reopening of a completed entry, and the declining of a change held for review — are recorded. The sync paths that adopt a value set somewhere else — the background import, an accepted reconciliation diff, and the corrective re-sync — record nothing, on any run, whatever they apply. It fixes the granularity a change is recorded at, so that every surface reading the log — the recaps, the profile page's activity feed and history, and any future reader — can rely on one consistent history built entirely from what was done in the app.
+- FROM: `### Requirement: Every path that changes my list records what it changed`
+- TO: `### Requirement: Every change made in the app records what it changed`
 
-## Requirements
+- FROM: `### Requirement: The import that establishes the baseline records nothing`
+- TO: `### Requirement: The sync paths record nothing`
+
+## MODIFIED Requirements
 
 ### Requirement: Every change made in the app records what it changed
 
@@ -146,3 +149,11 @@ Declining a change held for review is not a sync path in this sense. It is a cha
 
 - **WHEN** I complete an anime on MyAnimeList's own site and a sync path applies that completion here
 - **THEN** the entry reads as Completed, and no record of the completion appears in the activity log, the Latest updates feed, or the full edit history
+
+## REMOVED Requirements
+
+### Requirement: A record names where the change came from
+
+**Reason**: The sync paths no longer record anything (see "The sync paths record nothing"), so every record in the log is a change made in this app. There is nothing left for an origin to tell apart, and a column holding one fixed value would only invite code to branch on it.
+
+**Migration**: The origin is removed from every record. In the same migration, the records previously written by the three sync paths are deleted: without an origin they would read as my own edits, and they would bring back the duplication this change exists to prevent. Records of declined held changes are kept and read like any other record. The deletion is irreversible, so a database dump is taken before the migration runs.

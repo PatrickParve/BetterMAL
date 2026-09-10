@@ -22,7 +22,7 @@ public class ActivityLogRepository(AnimeTrackerDbContext db) : IActivityLogRepos
 
     public Task<List<ActivityLog>> GetEpisodeProgressInRangeAsync(DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
         db.ActivityLogs.AsNoTracking()
-            .Where(l => l.ChangeType == ActivityChangeType.EpisodeIncremented && l.Source == ActivityChangeSource.BetterMal
+            .Where(l => l.ChangeType == ActivityChangeType.EpisodeIncremented
                 && l.Timestamp >= fromUtc && l.Timestamp < toUtc)
             .OrderBy(l => l.Timestamp)
             .ToListAsync(ct);

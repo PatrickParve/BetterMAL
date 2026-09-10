@@ -153,7 +153,7 @@ Specifically:
 - **Accepting a held change** SHALL say that it sends that anime's stored values to MyAnimeList now, overwriting what MyAnimeList holds for it. **Declining a held change** SHALL say that it discards the unsent change and takes MyAnimeList's current value for that anime instead; where MyAnimeList holds no entry for that anime, it SHALL say instead that declining removes the anime from my list locally.
 - **The corrective re-sync** SHALL say that it re-fetches my whole MyAnimeList list and full anime details, and **immediately overwrites** the local status, episodes watched, score, and dates for every anime, **with no review step**, creating entries for anime not tracked locally; and that entries with unsent local edits are left alone.
 
-Each explanation SHALL also say that the changes the control applies are recorded in Latest updates and the full edit history, marked as coming from MyAnimeList.
+Each explanation of a control that applies changes SHALL also say whether what it applies is recorded in my history. The explanations of accepting a reconciliation diff and of the corrective re-sync SHALL say that nothing they apply is recorded in Latest updates or the full edit history. The explanation of the held-change review SHALL say that what declining applies is recorded in the edit history, like any other change I make in the app. No explanation SHALL describe a change as marked as coming from MyAnimeList.
 
 An explanation SHALL describe what the control does today rather than what it is expected to do: a control that applies changes without review SHALL NOT be described in terms that suggest a review step exists.
 
@@ -184,30 +184,20 @@ These explanations SHALL be presentational. No control SHALL gain a confirmation
 - **WHEN** I open the Settings page and look at the Sync group
 - **THEN** each control's explanation is already on the page, with nothing to hover or expand to read it
 
-#### Scenario: Explanations name where the changes are recorded
+#### Scenario: The sync paths say they leave no history
 
-- **WHEN** I read the explanation of any control that applies changes from MyAnimeList
-- **THEN** it says those changes appear in Latest updates and the edit history, marked as coming from MyAnimeList
+- **WHEN** I read the explanation of accepting a reconciliation diff or of the corrective re-sync
+- **THEN** it says that nothing it applies is recorded in Latest updates or the full edit history
+
+#### Scenario: Declining a held change says it is recorded
+
+- **WHEN** I read the explanation of the changes held for review
+- **THEN** it says that what declining applies is recorded in the edit history, and no explanation on the page describes a change as marked as coming from MyAnimeList
 
 #### Scenario: Nothing about the controls themselves changes
 
 - **WHEN** I compare each sync control against what it did before the explanations were added
 - **THEN** each still calls the same operation, with no confirmation step added and no control moved or hidden
-
-#### Scenario: The held-change actions say which way the data flows
-
-- **WHEN** a change held for review is shown with its accept and decline actions
-- **THEN** the page states that accepting sends my stored values to MyAnimeList, and that declining discards them and takes MyAnimeList's current value instead
-
-#### Scenario: A destructive decline says so before it is pressed
-
-- **WHEN** a held change is shown for an anime MyAnimeList holds no entry for
-- **THEN** its decline action states that declining removes that anime from my list locally
-
-#### Scenario: Sync now says what it leaves behind
-
-- **WHEN** I read the sync-now explanation while changes are held for review
-- **THEN** it states that held changes are not pushed by it and are waiting on my decision
 
 ### Requirement: The force-refresh picker names anime in English
 

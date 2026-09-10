@@ -208,7 +208,6 @@ public class HeldChangeService(
                 Timestamp = now,
                 ChangeType = ActivityChangeType.Removed,
                 ChangeDetail = ActivityDetail.Removed,
-                Source = ActivityChangeSource.MalHeldDecline,
             });
             await db.SaveChangesAsync(ct);
             return new HeldChangeDecisionResult(HeldChangeDecisionOutcome.Applied);
@@ -219,7 +218,7 @@ public class HeldChangeService(
         entry.PendingSync = false;
         entry.HeldForReviewAt = null;
 
-        db.ActivityLogs.AddRange(EntryActivityRecorder.Diff(entry.AnimeId, before, entry, ActivityChangeSource.MalHeldDecline, now));
+        db.ActivityLogs.AddRange(EntryActivityRecorder.Diff(entry.AnimeId, before, entry, now));
 
         await db.SaveChangesAsync(ct);
         return new HeldChangeDecisionResult(HeldChangeDecisionOutcome.Applied);
@@ -249,7 +248,7 @@ public class HeldChangeService(
         {
             var restored = MalMappingExtensions.ToUserAnimeEntry(removal.AnimeId, remoteStatus, now);
             db.UserAnimeEntries.Add(restored);
-            db.ActivityLogs.Add(EntryActivityRecorder.Added(removal.AnimeId, restored.Status, ActivityChangeSource.MalHeldDecline, now));
+            db.ActivityLogs.Add(EntryActivityRecorder.Added(removal.AnimeId, restored.Status, now));
         }
 
         await db.SaveChangesAsync(ct);
@@ -291,7 +290,7 @@ public class HeldChangeService(
         int animeId, DateTimeOffset? lastSyncedAt, CancellationToken ct)
     {
         var query = db.ActivityLogs.AsNoTracking()
-            .Where(l => l.AnimeId == animeId && l.Source == ActivityChangeSource.BetterMal);
+            .Where(l => l.AnimeId == animeId);
 
         if (lastSyncedAt is { } since)
             query = query.Where(l => l.Timestamp > since);

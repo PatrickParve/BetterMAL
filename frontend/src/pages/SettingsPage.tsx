@@ -523,8 +523,8 @@ export function SettingsPage() {
               decision. Accepting sends the anime's stored values to MyAnimeList now, overwriting what MyAnimeList
               holds for it. Declining discards the unsent change and takes MyAnimeList's current value for that
               anime instead — unless MyAnimeList holds no entry for it, in which case declining removes the anime
-              from your list locally. Anything applied here appears in Latest updates and the full edit history,
-              marked as coming from MyAnimeList.
+              from your list locally. What declining applies is recorded in your edit history, like any other
+              change you make here.
             </p>
             <ul className="settings-held-list">
               {heldChanges.map((item) => {
@@ -597,8 +597,7 @@ export function SettingsPage() {
             <p className="settings-subsection__hint">
               Computed {formatTimestamp(diff.computedAt)} — review before applying. Accepting applies exactly
               the differences listed below and touches nothing else on your list; declining discards them and
-              applies none of them. Anything you accept appears in Latest updates and the full edit history,
-              marked as coming from MyAnimeList.
+              applies none of them. Nothing you accept is recorded in Latest updates or the full edit history.
             </p>
             <ul className="settings-diff-list">
               {diff.entries.map((entry) => (
@@ -630,7 +629,7 @@ export function SettingsPage() {
       <SettingsGroup title="Data tools" hint="Long-running corrective and backfill jobs.">
         <SettingsAction
           title="Correct imported data"
-          hint="One-time corrective re-sync: re-fetches your full MyAnimeList and full anime details, then immediately overwrites the local status, episode count, score, and dates for every anime — with no review step — and creates entries for anime not yet tracked locally. Also backfills English title, duration, and source. Takes several minutes; entries with unsynced local edits are left untouched. Anything it applies appears in Latest updates and the full edit history, marked as coming from MyAnimeList."
+          hint="One-time corrective re-sync: re-fetches your full MyAnimeList and full anime details, then immediately overwrites the local status, episode count, score, and dates for every anime — with no review step — and creates entries for anime not yet tracked locally. Also backfills English title, duration, and source. Takes several minutes; entries with unsynced local edits are left untouched. Nothing it applies is recorded in Latest updates or the full edit history."
           state={
             <JobProgress
               phase={resyncStatus ? jobPhase(resyncStatus.phase) : 'not-started'}

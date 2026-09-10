@@ -1,6 +1,4 @@
 using AnimeTracker.Api.Data;
-using AnimeTracker.Api.Models;
-using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
@@ -71,24 +69,15 @@ public class ResyncService(
                 if (existingEntries.TryGetValue(animeId, out var entry))
                 {
                     if (entry.PendingSync)
-                    {
                         skippedPending++;
-                    }
                     else
-                    {
-                        // Snapshot before ApplyTo — it overwrites in place, so the
-                        // previous values are gone once it runs.
-                        var before = EntrySnapshot.Of(entry);
                         edge.ListStatus.ApplyTo(entry, now);
-                        db.ActivityLogs.AddRange(EntryActivityRecorder.Diff(animeId, before, entry, ActivityChangeSource.MalResync, now));
-                    }
                 }
                 else
                 {
                     var newEntry = MalMappingExtensions.ToUserAnimeEntry(animeId, edge.ListStatus, now);
                     db.UserAnimeEntries.Add(newEntry);
                     existingEntries[animeId] = newEntry;
-                    db.ActivityLogs.Add(EntryActivityRecorder.Added(animeId, newEntry.Status, ActivityChangeSource.MalResync, now));
                 }
 
                 await db.SaveChangesAsync(ct);

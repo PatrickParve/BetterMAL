@@ -11,9 +11,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AnimeTracker.Api.Tests.Services.Sync;
 
-// record-mal-origin-activity design D9 (tasks.md 8.4): ResyncService.RunAsync
-// records what it applied per anime with MalResync, inside the same per-anime
-// try/save so a failure records nothing for that anime and doesn't stop the run.
+// log-only-my-own-edits (design D1): ResyncService.RunAsync is a sync path and
+// records nothing, whatever it applies, on any run — including a per-anime
+// failure that leaves a later anime in the same run still applied.
 // Also anime-updates: a corrective re-sync is still a write to cached anime
 // metadata, so it goes through IAnimeMetadataChangeDetector like every other
 // refresh path.
@@ -34,7 +34,7 @@ public class ResyncServiceActivityTests
     };
 
     [Fact]
-    public async Task AReSyncThatChangesFieldsRecordsThemWithMalResync()
+    public async Task AReSyncThatChangesFieldsAppliesThemAndRecordsNothing()
     {
         using var db = CreateDb();
         var anime = new AnimeMetadata { Id = 1, Title = "Anime 1" };
@@ -46,10 +46,9 @@ public class ResyncServiceActivityTests
 
         await CreateService(db, malClient).RunAsync(CancellationToken.None);
 
-        var row = Assert.Single(await db.ActivityLogs.Where(a => a.AnimeId == 1).ToListAsync());
-        Assert.Equal(ActivityChangeType.EpisodeIncremented, row.ChangeType);
-        Assert.Equal("Episode 7", row.ChangeDetail);
-        Assert.Equal(ActivityChangeSource.MalResync, row.Source);
+        var stored = await db.UserAnimeEntries.AsNoTracking().SingleAsync(e => e.AnimeId == 1);
+        Assert.Equal(7, stored.EpisodesWatched);
+        Assert.Empty(await db.ActivityLogs.Where(a => a.AnimeId == 1).ToListAsync());
     }
 
     [Fact]
@@ -69,17 +68,16 @@ public class ResyncServiceActivityTests
     }
 
     [Fact]
-    public async Task ANewEntryRecordsAdded()
+    public async Task ANewEntryIsAddedAndRecordsNothing()
     {
         using var db = CreateDb();
         var malClient = new FakeMalClient([Edge(1, "completed", 12)]);
 
         await CreateService(db, malClient).RunAsync(CancellationToken.None);
 
-        var row = Assert.Single(await db.ActivityLogs.Where(a => a.AnimeId == 1).ToListAsync());
-        Assert.Equal(ActivityChangeType.Added, row.ChangeType);
-        Assert.Equal("Added as Completed", row.ChangeDetail);
-        Assert.Equal(ActivityChangeSource.MalResync, row.Source);
+        var stored = await db.UserAnimeEntries.AsNoTracking().SingleAsync(e => e.AnimeId == 1);
+        Assert.Equal(WatchStatus.Completed, stored.Status);
+        Assert.Empty(await db.ActivityLogs.Where(a => a.AnimeId == 1).ToListAsync());
     }
 
     [Fact]
@@ -101,18 +99,16 @@ public class ResyncServiceActivityTests
     }
 
     [Fact]
-    public async Task APerAnimeFailureRecordsNothingForThatAnimeAndDoesNotStopTheRun()
+    public async Task APerAnimeFailureDoesNotStopTheRunAndNeitherAnimeIsRecorded()
     {
         using var db = CreateDb();
         var malClient = new FakeMalClient([Edge(1, "watching", 5), Edge(2, "completed", 12)], failDetailsForAnimeId: 1);
 
         await CreateService(db, malClient).RunAsync(CancellationToken.None);
 
-        Assert.Empty(await db.ActivityLogs.Where(a => a.AnimeId == 1).ToListAsync());
         Assert.Empty(await db.UserAnimeEntries.Where(e => e.AnimeId == 1).ToListAsync());
-
-        var row = Assert.Single(await db.ActivityLogs.Where(a => a.AnimeId == 2).ToListAsync());
-        Assert.Equal(ActivityChangeType.Added, row.ChangeType);
+        Assert.Single(await db.UserAnimeEntries.Where(e => e.AnimeId == 2).ToListAsync());
+        Assert.Empty(await db.ActivityLogs.ToListAsync());
     }
 
     [Fact]

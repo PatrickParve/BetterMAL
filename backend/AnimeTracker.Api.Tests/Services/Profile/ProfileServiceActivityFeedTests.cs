@@ -9,11 +9,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Tests.Services.Profile;
 
-// record-mal-origin-activity (profile-stats spec "Changes that came from
-// MyAnimeList appear alongside my own", tasks.md 8.6): MAL-origin rows ride
-// the same feed/history lists as local edits, with every existing filtering
-// and collapsing rule applying unchanged, and now carry Source through.
-public class ProfileServiceMalOriginTests
+// The Latest-updates feed and full edit history share one composer
+// (ActivityFeedComposer): rows interleave by time, the feed drops every
+// status/date change but a completion, and a completion-plus-score or a run
+// of consecutive episode rows for the same anime collapse to one row.
+public class ProfileServiceActivityFeedTests
 {
     private static AnimeTrackerDbContext CreateDb() =>
         new(new DbContextOptionsBuilder<AnimeTrackerDbContext>()
@@ -34,7 +34,7 @@ public class ProfileServiceMalOriginTests
 
     private static ActivityLog Log(
         long id, int animeId, ActivityChangeType changeType, DateTimeOffset timestamp,
-        ActivityChangeSource source = ActivityChangeSource.BetterMal, string? detail = null, int? previousEpisodesWatched = null) => new()
+        string? detail = null, int? previousEpisodesWatched = null) => new()
     {
         Id = id,
         AnimeId = animeId,
@@ -43,57 +43,51 @@ public class ProfileServiceMalOriginTests
         ChangeDetail = detail,
         PreviousEpisodesWatched = previousEpisodesWatched,
         Timestamp = timestamp,
-        Source = source,
     };
 
     [Fact]
-    public async Task MalOriginRowsAppearInterleavedByTimeWithLocalRowsInTheFeed()
+    public async Task RowsAppearInterleavedByTimeInTheFeed()
     {
         using var db = CreateDb();
         var now = DateTimeOffset.UtcNow;
         List<ActivityLog> window =
         [
-            Log(3, 1, ActivityChangeType.Added, now, ActivityChangeSource.MalStartupImport, "Added as Watching"),
-            Log(2, 2, ActivityChangeType.ScoreChanged, now.AddMinutes(-1), ActivityChangeSource.BetterMal, "Score 9"),
-            Log(1, 3, ActivityChangeType.EpisodeIncremented, now.AddMinutes(-2), ActivityChangeSource.MalReconciliation, "Episode 7"),
+            Log(3, 1, ActivityChangeType.Added, now, "Added as Watching"),
+            Log(2, 2, ActivityChangeType.ScoreChanged, now.AddMinutes(-1), "Score 9"),
+            Log(1, 3, ActivityChangeType.EpisodeIncremented, now.AddMinutes(-2), "Episode 7"),
         ];
 
         var profile = await CreateService(db, window).GetProfileAsync();
 
         Assert.Equal([1, 2, 3], profile.RecentActivity.Select(i => i.AnimeId));
-        Assert.Equal("MalStartupImport", profile.RecentActivity[0].Source.ToString());
-        Assert.Equal("BetterMal", profile.RecentActivity[1].Source.ToString());
-        Assert.Equal("MalReconciliation", profile.RecentActivity[2].Source.ToString());
     }
 
     [Fact]
-    public async Task MalOriginRowsAppearInterleavedByTimeWithLocalRowsInTheHistory()
+    public async Task RowsAppearInterleavedByTimeInTheHistory()
     {
         using var db = CreateDb();
         var now = DateTimeOffset.UtcNow;
         List<ActivityLog> all =
         [
-            Log(2, 1, ActivityChangeType.StatusChanged, now, ActivityChangeSource.MalResync, "Watching -> Dropped"),
-            Log(1, 2, ActivityChangeType.ScoreChanged, now.AddMinutes(-1), ActivityChangeSource.BetterMal, "Score 9"),
+            Log(2, 1, ActivityChangeType.StatusChanged, now, "Watching -> Dropped"),
+            Log(1, 2, ActivityChangeType.ScoreChanged, now.AddMinutes(-1), "Score 9"),
         ];
 
         var history = await CreateService(db, recent: [], all: all).GetActivityHistoryAsync();
 
-        Assert.Equal(2, history.Count);
-        Assert.Equal("MalResync", history[0].Source.ToString());
-        Assert.Equal("BetterMal", history[1].Source.ToString());
+        Assert.Equal([1, 2], history.Select(i => i.AnimeId));
     }
 
     [Fact]
-    public async Task TheFeedStillDropsNonCompletionStatusChangesAndDateChangesRegardlessOfOrigin()
+    public async Task TheFeedDropsNonCompletionStatusChangesAndDateChanges()
     {
         using var db = CreateDb();
         var now = DateTimeOffset.UtcNow;
         List<ActivityLog> window =
         [
-            Log(3, 1, ActivityChangeType.StatusChanged, now, ActivityChangeSource.MalResync, "Watching -> Dropped"),
-            Log(2, 2, ActivityChangeType.StartDateChanged, now.AddMinutes(-1), ActivityChangeSource.MalReconciliation, "Start date 2026-01-01"),
-            Log(1, 3, ActivityChangeType.FinishDateChanged, now.AddMinutes(-2), ActivityChangeSource.MalResync, "Finish date 2026-02-01"),
+            Log(3, 1, ActivityChangeType.StatusChanged, now, "Watching -> Dropped"),
+            Log(2, 2, ActivityChangeType.StartDateChanged, now.AddMinutes(-1), "Start date 2026-01-01"),
+            Log(1, 3, ActivityChangeType.FinishDateChanged, now.AddMinutes(-2), "Finish date 2026-02-01"),
         ];
 
         var profile = await CreateService(db, window).GetProfileAsync();
@@ -102,21 +96,20 @@ public class ProfileServiceMalOriginTests
     }
 
     [Fact]
-    public async Task AMalOriginCompletionReachesTheFeed()
+    public async Task ACompletionReachesTheFeed()
     {
         using var db = CreateDb();
         var now = DateTimeOffset.UtcNow;
-        List<ActivityLog> window = [Log(1, 1, ActivityChangeType.Completed, now, ActivityChangeSource.MalResync, "Completed")];
+        List<ActivityLog> window = [Log(1, 1, ActivityChangeType.Completed, now, "Completed")];
 
         var profile = await CreateService(db, window).GetProfileAsync();
 
         var item = Assert.Single(profile.RecentActivity);
         Assert.Equal(ActivityChangeType.Completed, item.ChangeType);
-        Assert.Equal("MalResync", item.Source.ToString());
     }
 
     [Fact]
-    public async Task AMalOriginCompletionPlusScoreWrittenInOneApplicationCollapsesToOneRow()
+    public async Task ACompletionPlusScoreWrittenInOneApplicationCollapsesToOneRow()
     {
         using var db = CreateDb();
         var now = DateTimeOffset.UtcNow;
@@ -124,8 +117,8 @@ public class ProfileServiceMalOriginTests
         // score, score taking the higher Id (design D5).
         List<ActivityLog> window =
         [
-            Log(2, 1, ActivityChangeType.ScoreChanged, now, ActivityChangeSource.MalResync, "Score 9"),
-            Log(1, 1, ActivityChangeType.Completed, now, ActivityChangeSource.MalResync, "Completed"),
+            Log(2, 1, ActivityChangeType.ScoreChanged, now, "Score 9"),
+            Log(1, 1, ActivityChangeType.Completed, now, "Completed"),
         ];
 
         var profile = await CreateService(db, window).GetProfileAsync();
@@ -136,15 +129,15 @@ public class ProfileServiceMalOriginTests
     }
 
     [Fact]
-    public async Task ConsecutiveMalOriginEpisodeRowsCollapseInTheHistory()
+    public async Task ConsecutiveEpisodeRowsCollapseInTheHistory()
     {
         using var db = CreateDb();
         var now = DateTimeOffset.UtcNow;
         List<ActivityLog> all =
         [
-            Log(3, 1, ActivityChangeType.EpisodeIncremented, now, ActivityChangeSource.MalResync, "Episode 9", previousEpisodesWatched: 8),
-            Log(2, 1, ActivityChangeType.EpisodeIncremented, now.AddMinutes(-1), ActivityChangeSource.MalResync, "Episode 8", previousEpisodesWatched: 7),
-            Log(1, 1, ActivityChangeType.EpisodeIncremented, now.AddMinutes(-2), ActivityChangeSource.MalResync, "Episode 7", previousEpisodesWatched: 6),
+            Log(3, 1, ActivityChangeType.EpisodeIncremented, now, "Episode 9", previousEpisodesWatched: 8),
+            Log(2, 1, ActivityChangeType.EpisodeIncremented, now.AddMinutes(-1), "Episode 8", previousEpisodesWatched: 7),
+            Log(1, 1, ActivityChangeType.EpisodeIncremented, now.AddMinutes(-2), "Episode 7", previousEpisodesWatched: 6),
         ];
 
         var history = await CreateService(db, recent: [], all: all).GetActivityHistoryAsync();

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using AnimeTracker.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AnimeTracker.Api.Migrations
 {
     [DbContext(typeof(AnimeTrackerDbContext))]
-    partial class AnimeTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260910091005_RemoveActivityLogSource")]
+    partial class RemoveActivityLogSource
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -18,19 +18,18 @@ public readonly record struct EntrySnapshot(
         entry.Status, entry.EpisodesWatched, entry.MyScore, entry.StartedAt, entry.CompletedAt, entry.RewatchCount);
 }
 
-/// <summary>Builds the ActivityLog rows a MAL-origin path applies to an
-/// entry — one Added row for a new entry, or a field-by-field Diff for an
-/// existing one — at the same granularity UserAnimeEntryEditService already
-/// produces for a local edit (design D2).</summary>
+/// <summary>Builds the ActivityLog rows for applying MyAnimeList's current
+/// value to an entry when I decline a held change (its only caller) — one
+/// Added row for a new entry, or a field-by-field Diff for an existing one —
+/// at the same granularity the local edit path produces (design D2, D8).</summary>
 public static class EntryActivityRecorder
 {
-    public static ActivityLog Added(int animeId, WatchStatus status, ActivityChangeSource source, DateTimeOffset now) => new()
+    public static ActivityLog Added(int animeId, WatchStatus status, DateTimeOffset now) => new()
     {
         AnimeId = animeId,
         Timestamp = now,
         ChangeType = ActivityChangeType.Added,
         ChangeDetail = ActivityDetail.Added(status),
-        Source = source,
     };
 
     /// <summary>One row per field that actually changed, in the order the
@@ -38,7 +37,7 @@ public static class EntryActivityRecorder
     /// score, then rewatch count. The score row is emitted last so it takes
     /// the higher identity, letting ActivityFeedComposer.FindCompletionScoreMerges
     /// fold a completion-plus-score application into one row (design D5).</summary>
-    public static List<ActivityLog> Diff(int animeId, EntrySnapshot before, UserAnimeEntry after, ActivityChangeSource source, DateTimeOffset now)
+    public static List<ActivityLog> Diff(int animeId, EntrySnapshot before, UserAnimeEntry after, DateTimeOffset now)
     {
         var rows = new List<ActivityLog>();
 
@@ -50,7 +49,6 @@ public static class EntryActivityRecorder
                 ChangeType = ActivityChangeType.EpisodeIncremented,
                 ChangeDetail = ActivityDetail.Episode(after.EpisodesWatched),
                 PreviousEpisodesWatched = before.EpisodesWatched,
-                Source = source,
             });
 
         if (after.Status != before.Status)
@@ -67,7 +65,6 @@ public static class EntryActivityRecorder
                 Timestamp = now,
                 ChangeType = changeType,
                 ChangeDetail = detail,
-                Source = source,
             });
         }
 
@@ -78,7 +75,6 @@ public static class EntryActivityRecorder
                 Timestamp = now,
                 ChangeType = ActivityChangeType.StartDateChanged,
                 ChangeDetail = ActivityDetail.StartDate(after.StartedAt),
-                Source = source,
             });
 
         if (after.CompletedAt != before.CompletedAt)
@@ -88,7 +84,6 @@ public static class EntryActivityRecorder
                 Timestamp = now,
                 ChangeType = ActivityChangeType.FinishDateChanged,
                 ChangeDetail = ActivityDetail.FinishDate(after.CompletedAt),
-                Source = source,
             });
 
         if (after.MyScore != before.MyScore)
@@ -98,7 +93,6 @@ public static class EntryActivityRecorder
                 Timestamp = now,
                 ChangeType = ActivityChangeType.ScoreChanged,
                 ChangeDetail = ActivityDetail.Score(after.MyScore),
-                Source = source,
             });
 
         if (after.RewatchCount != before.RewatchCount)
@@ -108,7 +102,6 @@ public static class EntryActivityRecorder
                 Timestamp = now,
                 ChangeType = ActivityChangeType.RewatchCountChanged,
                 ChangeDetail = ActivityDetail.RewatchCount(after.RewatchCount),
-                Source = source,
             });
 
         return rows;

@@ -177,7 +177,7 @@ public class ProfileService(
 
     private static ActivityFeedItemDto ToActivityFeedItem(ActivityLog log, int? mergedScore = null, EpisodeRun? episodeRun = null) =>
         new(log.Id, log.Timestamp, log.AnimeId, log.Anime.Title, log.Anime.EnglishTitle, log.Anime.PictureUrl, log.ChangeType, log.ChangeDetail,
-            ActivityFeedComposer.Summarize(log, mergedScore, episodeRun), log.Source);
+            ActivityFeedComposer.Summarize(log, mergedScore, episodeRun));
 
     // history is most-recent-first and, unlike BuildActivityFeed, unfiltered:
     // the full history is meant to show everything. A score merged into an

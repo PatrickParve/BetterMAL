@@ -354,11 +354,6 @@ export type ActivityChangeType =
   | 'StartDateChanged'
   | 'FinishDateChanged'
 
-// Where a change came from — BetterMal is my own editing in the app; the
-// other three are the sync paths. A row with no `source` at all (an older
-// payload) renders unmarked (record-mal-origin-activity design D7).
-export type ActivityChangeSource = 'BetterMal' | 'MalStartupImport' | 'MalReconciliation' | 'MalResync' | 'MalHeldDecline'
-
 export type ActivityFeedItemDto = {
   id: number
   timestamp: string
@@ -369,7 +364,6 @@ export type ActivityFeedItemDto = {
   changeType: ActivityChangeType
   changeDetail: string | null
   summary: string
-  source?: ActivityChangeSource
 }
 
 export type AnimeStatsDto = {
