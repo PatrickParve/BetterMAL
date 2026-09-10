@@ -21,6 +21,7 @@ using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Season;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Sync;
+using AnimeTracker.Api.Services.Transfer;
 using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
@@ -191,6 +192,10 @@ builder.Services.AddScoped<IAnimeDetailService, AnimeDetailService>();
 builder.Services.AddScoped<SeriesGraphBuilder>();
 builder.Services.AddScoped<ISeriesService, SeriesService>();
 
+// --- Device-to-device transfer ---
+builder.Services.AddScoped<IDeviceIdentityInitializer, DeviceIdentityInitializer>();
+builder.Services.AddScoped<IExportService, ExportService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -207,6 +212,12 @@ using (var startupScope = app.Services.CreateScope())
 {
     var db = startupScope.ServiceProvider.GetRequiredService<AnimeTrackerDbContext>();
     db.Database.Migrate();
+
+    // Right after the migration, so a device identity exists before
+    // anything — a hosted service, a controller, an export request — could
+    // read it (export-data-mal-cannot-carry design.md D6).
+    var deviceIdentityInitializer = startupScope.ServiceProvider.GetRequiredService<IDeviceIdentityInitializer>();
+    await deviceIdentityInitializer.EnsureAsync();
 
     // Stamped here, immediately after the migration and before app.Run(), so
     // it is committed before any hosted service, controller, or debounce

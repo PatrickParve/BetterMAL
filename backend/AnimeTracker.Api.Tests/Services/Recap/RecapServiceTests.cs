@@ -201,6 +201,7 @@ public class RecapServiceTests
         public Task<List<int>> GetOrderedAnimeIdsAsync(CancellationToken ct = default) => Task.FromResult(new List<int>());
         public Task ReplaceOrderAsync(IReadOnlyList<int> editedIds, CancellationToken ct = default) => throw new NotImplementedException();
         public Task ReplaceAllAsync(IReadOnlyList<int> animeIds, DateTimeOffset modifiedAt, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<DateTimeOffset?> GetModifiedAtAsync(CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     private sealed class FakeActivityLogRepository(List<ActivityLog>? rows = null) : IActivityLogRepository
@@ -216,6 +217,7 @@ public class RecapServiceTests
                 .Where(r => r.ChangeType == ActivityChangeType.EpisodeIncremented && r.Timestamp >= fromUtc && r.Timestamp < toUtc)
                 .OrderBy(r => r.Timestamp)
                 .ToList());
+        public Task<List<ActivityLog>> GetAllOldestFirstAsync(CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     private sealed class FakeBroadcastLocalTimeConverter : IBroadcastLocalTimeConverter

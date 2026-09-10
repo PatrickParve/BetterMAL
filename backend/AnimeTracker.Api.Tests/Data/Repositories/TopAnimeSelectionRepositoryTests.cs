@@ -238,4 +238,44 @@ public class TopAnimeSelectionRepositoryTests
         var state = await db.RankingStates.SingleAsync();
         Assert.Equal(time, state.ModifiedAt);
     }
+
+    // --- 5.1: GetModifiedAtAsync (device-transfer's ranking-time read) ---
+
+    [Fact]
+    public async Task GetModifiedAtAsyncReturnsNullWhenNoRankingStateRowExists()
+    {
+        using var db = CreateDb();
+        var repository = new TopAnimeSelectionRepository(db);
+
+        Assert.Null(await repository.GetModifiedAtAsync());
+    }
+
+    [Fact]
+    public async Task GetModifiedAtAsyncReturnsTheStoredTimeAfterReplaceAllAsync()
+    {
+        using var db = CreateDb();
+        SeedKnown(db, 1, 2);
+        await db.SaveChangesAsync();
+        var repository = new TopAnimeSelectionRepository(db);
+        var time = DateTimeOffset.UtcNow.AddDays(-1);
+
+        await repository.ReplaceAllAsync([1, 2], time);
+
+        Assert.Equal(time, await repository.GetModifiedAtAsync());
+    }
+
+    [Fact]
+    public async Task GetModifiedAtAsyncReturnsTheStoredTimeAfterAnEmptyingReplaceAllAsync()
+    {
+        using var db = CreateDb();
+        SeedKnown(db, 1, 2);
+        SeedStoredOrder(db, 1, 2);
+        await db.SaveChangesAsync();
+        var repository = new TopAnimeSelectionRepository(db);
+        var time = DateTimeOffset.UtcNow;
+
+        await repository.ReplaceAllAsync([], time);
+
+        Assert.Equal(time, await repository.GetModifiedAtAsync());
+    }
 }

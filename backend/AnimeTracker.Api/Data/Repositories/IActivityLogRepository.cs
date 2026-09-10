@@ -21,4 +21,11 @@ public interface IActivityLogRepository
     /// cref="AnimeTracker.Api.Services.Recap.RecapWatchLog"/> does that
     /// reduction.</summary>
     Task<List<ActivityLog>> GetEpisodeProgressInRangeAsync(DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default);
+
+    /// <summary>Every record, oldest first: <see cref="GetRecentAsync"/> and
+    /// <see cref="GetAllAsync"/>'s <c>(Timestamp, Id)</c> descending order,
+    /// reversed. That order is what lets an import reproduce each save's
+    /// internal order (device-transfer). No <c>Include</c>: the export reads
+    /// anime ids only, never anime metadata.</summary>
+    Task<List<ActivityLog>> GetAllOldestFirstAsync(CancellationToken ct = default);
 }

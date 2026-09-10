@@ -97,6 +97,7 @@ public class RecapAvailabilityServiceTests
                 .Where(r => r.ChangeType == ActivityChangeType.EpisodeIncremented && r.Timestamp >= fromUtc && r.Timestamp < toUtc)
                 .OrderBy(r => r.Timestamp)
                 .ToList());
+        public Task<List<ActivityLog>> GetAllOldestFirstAsync(CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     private sealed class FakeBroadcastLocalTimeConverter : IBroadcastLocalTimeConverter

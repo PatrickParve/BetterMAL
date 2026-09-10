@@ -54,6 +54,11 @@ public class TopAnimeSelectionRepository(AnimeTrackerDbContext db) : ITopAnimeSe
         await WriteOrderAsync(existing, distinctIds, modifiedAt, ct);
     }
 
+    public Task<DateTimeOffset?> GetModifiedAtAsync(CancellationToken ct = default) =>
+        db.RankingStates.AsNoTracking()
+            .Select(s => s.ModifiedAt)
+            .FirstOrDefaultAsync(ct);
+
     private async Task EnsureKnownIdsAsync(IReadOnlyList<int> distinctIds, CancellationToken ct)
     {
         var knownIds = await db.AnimeMetadata

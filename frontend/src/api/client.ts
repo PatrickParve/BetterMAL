@@ -523,3 +523,18 @@ export function triggerSeriesBulkBuild(): Promise<SeriesBulkBuildStatusDto> {
 export function getSeriesBulkBuildStatus(): Promise<SeriesBulkBuildStatusDto> {
   return fetchJson<SeriesBulkBuildStatusDto>('/api/series/build-all/status')
 }
+
+// Fetches the device-transfer export as a blob rather than JSON (settings
+// page's Transfer group, design.md D7 of export-data-mal-cannot-carry). The
+// browser sends its own User-Agent, so nothing is passed for the device
+// name. fetchRaw's in-flight de-duplication is harmless here since the
+// export button is disabled while a request is outstanding.
+export async function exportData(): Promise<{ blob: Blob; fileName: string }> {
+  const url = '/api/transfer/export'
+  const res = await fetchRaw(url)
+  if (!res.ok) throw new ApiError(url, res.status, await readErrorReason(res))
+  const blob = await res.blob()
+  const disposition = res.headers.get('Content-Disposition')
+  const fileName = disposition?.match(/filename="?([^";]+)"?/)?.[1] ?? 'bettermal-export.json'
+  return { blob, fileName }
+}

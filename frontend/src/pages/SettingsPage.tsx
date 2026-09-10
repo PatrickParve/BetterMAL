@@ -6,6 +6,7 @@ import {
   cancelReconciliationDiff,
   declineAllHeldChanges,
   declineHeldChange,
+  exportData,
   getAiringFullRefreshStatus,
   getHeldChanges,
   getMalAuthStatus,
@@ -43,7 +44,7 @@ import './SettingsPage.css'
 // A named group of controls (design.md decision 10): every control on the
 // page belongs to exactly one of these, in an order that runs cheapest/most
 // reversible first — instant preferences, the routine sync, the minutes-long
-// jobs, the account connection last.
+// jobs, the transfer between devices, the account connection last.
 function SettingsGroup({ title, hint, children }: { title: string; hint: string; children: ReactNode }) {
   return (
     <section className="settings-group">
@@ -218,6 +219,9 @@ export function SettingsPage() {
   const [startingFullResync, setStartingFullResync] = useState(false)
   const [startingAiringRefresh, setStartingAiringRefresh] = useState(false)
   const [startingSeriesBulkBuild, setStartingSeriesBulkBuild] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [exportedFileName, setExportedFileName] = useState<string | null>(null)
 
   const { alwaysShowCompletedScores, toggleAlwaysShowCompletedScores } = useScoreVisibility()
   const { hideHentai, toggleHideHentai } = useContentFilter()
@@ -440,6 +444,30 @@ export function SettingsPage() {
       setHeldError('Could not discard the held changes. Please try again.')
     } finally {
       setHeldActingId(null)
+    }
+  }
+
+  // Saves the file via a temporary object-URL anchor rather than a plain
+  // `<a href>` link, so a failure shows the page's own in-place error
+  // instead of a bare browser error page (design.md D7).
+  async function handleExport() {
+    if (exporting) return
+    setExporting(true)
+    setExportError(null)
+    setExportedFileName(null)
+    try {
+      const { blob, fileName } = await exportData()
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = fileName
+      anchor.click()
+      URL.revokeObjectURL(url)
+      setExportedFileName(fileName)
+    } catch {
+      setExportError('The export could not be produced. Please try again.')
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -698,6 +726,24 @@ export function SettingsPage() {
           <p className="settings-subsection__hint">Search for a specific anime to refresh its cached metadata immediately.</p>
           <AnimeRefreshPicker />
         </div>
+      </SettingsGroup>
+
+      <SettingsGroup title="Transfer" hint="Move what only this app holds between your devices, as a file.">
+        <SettingsAction
+          title="Export to a file"
+          hint="Holds your ranking, chosen anime pictures, chosen series titles and pictures, and your edit history. Holds nothing from MyAnimeList — not your MyAnimeList connection, and not your display preferences. Producing it changes nothing here and sends nothing anywhere; the browser saves the file, and getting it to your other device is up to you."
+          state={
+            <>
+              {exportedFileName && <p className="settings-box__hint">Saved {exportedFileName}.</p>}
+              {exportError && <p className="settings-box__error">{exportError}</p>}
+            </>
+          }
+          button={
+            <button type="button" onClick={handleExport} disabled={exporting}>
+              {exporting ? 'Exporting…' : 'Export'}
+            </button>
+          }
+        />
       </SettingsGroup>
 
       <SettingsGroup title="Account" hint="Your MyAnimeList connection.">

@@ -92,4 +92,44 @@ public class ActivityLogRepositoryTests
 
         Assert.Equal(eventId, row.EventId);
     }
+
+    // --- 5.2: GetAllOldestFirstAsync (device-transfer's activity-log read) ---
+
+    [Fact]
+    public async Task GetAllOldestFirstAsyncOrdersByTimestampAscending()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1" };
+        db.AnimeMetadata.Add(anime);
+        var t1 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var t2 = t1.AddDays(1);
+        var t3 = t1.AddDays(2);
+        db.ActivityLogs.AddRange(
+            new ActivityLog { AnimeId = 1, Timestamp = t3, ChangeType = ActivityChangeType.Added },
+            new ActivityLog { AnimeId = 1, Timestamp = t1, ChangeType = ActivityChangeType.Added },
+            new ActivityLog { AnimeId = 1, Timestamp = t2, ChangeType = ActivityChangeType.Added });
+        await db.SaveChangesAsync();
+
+        var rows = await new ActivityLogRepository(db).GetAllOldestFirstAsync();
+
+        Assert.Equal([t1, t2, t3], rows.Select(r => r.Timestamp));
+    }
+
+    [Fact]
+    public async Task GetAllOldestFirstAsyncBreaksASharedTimestampByStorageOrder()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1" };
+        db.AnimeMetadata.Add(anime);
+        var timestamp = DateTimeOffset.UtcNow;
+        var first = new ActivityLog { AnimeId = 1, Timestamp = timestamp, ChangeType = ActivityChangeType.EpisodeIncremented };
+        var second = new ActivityLog { AnimeId = 1, Timestamp = timestamp, ChangeType = ActivityChangeType.ScoreChanged };
+        var third = new ActivityLog { AnimeId = 1, Timestamp = timestamp, ChangeType = ActivityChangeType.Completed };
+        db.ActivityLogs.AddRange(first, second, third);
+        await db.SaveChangesAsync();
+
+        var rows = await new ActivityLogRepository(db).GetAllOldestFirstAsync();
+
+        Assert.Equal([first.Id, second.Id, third.Id], rows.Select(r => r.Id));
+    }
 }

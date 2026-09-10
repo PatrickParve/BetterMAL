@@ -35,4 +35,10 @@ public interface ITopAnimeSelectionRepository
     /// time unchanged; a repeated id takes its first occurrence's
     /// position.</summary>
     Task ReplaceAllAsync(IReadOnlyList<int> animeIds, DateTimeOffset modifiedAt, CancellationToken ct = default);
+
+    /// <summary>The ranking's last-modified time, or null when the ranking has
+    /// never been arranged on this database. Read by the export
+    /// (device-transfer) and by 04's newer-wins comparison between two
+    /// devices' rankings.</summary>
+    Task<DateTimeOffset?> GetModifiedAtAsync(CancellationToken ct = default);
 }

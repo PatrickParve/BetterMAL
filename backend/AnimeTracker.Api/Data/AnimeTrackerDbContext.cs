@@ -11,6 +11,7 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<OAuthToken> OAuthTokens => Set<OAuthToken>();
     public DbSet<TopAnimeSelection> TopAnimeSelections => Set<TopAnimeSelection>();
     public DbSet<RankingState> RankingStates => Set<RankingState>();
+    public DbSet<DeviceIdentity> DeviceIdentities => Set<DeviceIdentity>();
     public DbSet<PendingEntryDeletion> PendingEntryDeletions => Set<PendingEntryDeletion>();
     public DbSet<PendingReconciliationDiff> PendingReconciliationDiffs => Set<PendingReconciliationDiff>();
     public DbSet<PendingReconciliationDiffEntry> PendingReconciliationDiffEntries => Set<PendingReconciliationDiffEntry>();

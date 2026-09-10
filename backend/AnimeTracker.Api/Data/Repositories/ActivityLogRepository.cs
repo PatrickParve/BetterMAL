@@ -32,4 +32,11 @@ public class ActivityLogRepository(AnimeTrackerDbContext db) : IActivityLogRepos
                 && l.Timestamp >= fromUtc && l.Timestamp < toUtc)
             .OrderBy(l => l.Timestamp)
             .ToListAsync(ct);
+
+    public Task<List<ActivityLog>> GetAllOldestFirstAsync(CancellationToken ct = default) =>
+        db.ActivityLogs.AsNoTracking()
+            .OrderBy(l => l.Timestamp)
+            // See the comment on the same ordering, reversed, in GetRecentAsync.
+            .ThenBy(l => l.Id)
+            .ToListAsync(ct);
 }

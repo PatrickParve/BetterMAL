@@ -130,6 +130,7 @@ public class ProfileServiceTopAnimeRankingTests
         public Task<List<ActivityLog>> GetAllAsync(CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<ActivityLog>> GetEpisodeProgressInRangeAsync(DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
             throw new NotImplementedException();
+        public Task<List<ActivityLog>> GetAllOldestFirstAsync(CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     private sealed class FakeTopAnimeSelectionRepository(List<int> orderedAnimeIds) : ITopAnimeSelectionRepository
@@ -139,6 +140,7 @@ public class ProfileServiceTopAnimeRankingTests
             throw new NotImplementedException();
         public Task ReplaceAllAsync(IReadOnlyList<int> animeIds, DateTimeOffset modifiedAt, CancellationToken ct = default) =>
             throw new NotImplementedException();
+        public Task<DateTimeOffset?> GetModifiedAtAsync(CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     private sealed class FakeSeriesBuildTrigger : ISeriesBuildTrigger
