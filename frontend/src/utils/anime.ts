@@ -295,6 +295,7 @@ export type SortKey =
   | 'alphabetical'
   | 'myScore'
   | 'malScore'
+  | 'popularity'
   | 'episodesWatched'
   | 'progress'
   | 'totalEpisodes'
@@ -304,8 +305,9 @@ export type SortKey =
   | 'finishDate'
 
 // 'natural' is each key's own natural order (descending for scores/counts/
-// dates, ascending for alphabetical/type, the airing-status cycle for airing
-// status); 'reversed' flips it. The tiebreaker always applies in 'natural'.
+// dates, ascending for alphabetical/type, most popular first for Popularity,
+// the airing-status cycle for airing status); 'reversed' flips it. The
+// tiebreaker always applies in 'natural'.
 export type SortDirection = 'natural' | 'reversed'
 
 export type SortableListItem = {
@@ -318,6 +320,7 @@ export type SortableListItem = {
   // ranking — breaks a My-score tie wherever My score is the primary or the
   // tiebreaker key (see composeComparator below).
   myRank: number | null
+  popularityRank: number | null
   entry: {
     myScore: number | null
     episodesWatched: number
@@ -370,6 +373,12 @@ const SORT_KEY_FACTORIES: Record<
   malScore: nullsLast<SortableListItem, number>(
     (item) => item.malScore,
     (a, b) => b - a,
+  ),
+  // Rank 1 is the most popular, so its natural direction sorts ascending by
+  // rank — unlike the other numeric keys above, which sort descending.
+  popularity: nullsLast<SortableListItem, number>(
+    (item) => item.popularityRank,
+    (a, b) => a - b,
   ),
   episodesWatched: nullsLast<SortableListItem, number>(
     (item) => item.entry.episodesWatched,

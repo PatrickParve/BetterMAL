@@ -193,6 +193,23 @@ public class ProfileServiceEpisodeProgressTests
         Assert.Equal(12, profile.EpisodeProgress.EpisodesTotal);
     }
 
+    // Mirrors WatchMath.FirstViewingEpisodes, the same helper Anime stats'
+    // Episodes figure uses (design.md D4): a Rewatching entry counts its
+    // completed first viewing (the full total), not just how far the
+    // current rewatch has gotten, so the two figures agree.
+    [Fact]
+    public async Task ARewatchingEntryCountsAFullFirstViewingRun()
+    {
+        using var db = CreateDb();
+        List<UserAnimeEntry> entries =
+            [Entry(1, totalEpisodes: 12, episodesWatched: 3, status: WatchStatus.Rewatching, rewatchCount: 1)];
+
+        var profile = await CreateService(db, entries).GetProfileAsync();
+
+        Assert.Equal(12, profile.EpisodeProgress.EpisodesWatched);
+        Assert.Equal(12, profile.EpisodeProgress.EpisodesTotal);
+    }
+
     // A not-yet-aired anime with no published total and no aired rows has
     // nothing to progress against yet — that's a legitimate "not applicable",
     // not a data gap, so it's excluded from the figure entirely rather than

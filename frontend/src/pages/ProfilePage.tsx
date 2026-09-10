@@ -180,9 +180,8 @@ const REWATCHED_EMPTY_MESSAGES: Record<RewatchedScope, string> = {
 }
 
 const STAT_LABELS: { key: keyof ProfileDto['stats']; label: string }[] = [
-  { key: 'completed', label: 'Completed' },
-  { key: 'meanScore', label: 'Mean score' },
   { key: 'totalEntries', label: 'Total entries' },
+  { key: 'completed', label: 'Completed' },
   { key: 'watching', label: 'Watching' },
   { key: 'rewatching', label: 'Rewatching' },
   { key: 'planToWatch', label: 'Plan to watch' },
@@ -190,6 +189,7 @@ const STAT_LABELS: { key: keyof ProfileDto['stats']; label: string }[] = [
   { key: 'dropped', label: 'Dropped' },
   { key: 'days', label: 'Days' },
   { key: 'rewatched', label: 'Rewatched' },
+  { key: 'rewatchedEpisodes', label: 'Rewatched ep' },
   { key: 'episodes', label: 'Episodes' },
   { key: 'movies', label: 'Movies' },
 ]
@@ -197,7 +197,6 @@ const STAT_LABELS: { key: keyof ProfileDto['stats']; label: string }[] = [
 function formatStatValue(key: keyof ProfileDto['stats'], value: number | null): string {
   if (value === null) return '—'
   if (key === 'days') return value.toFixed(1)
-  if (key === 'meanScore') return value.toFixed(2)
   return String(value)
 }
 
@@ -479,6 +478,7 @@ export function ProfilePage() {
           <ScoreDistribution
             buckets={profile.scoreDistribution.buckets}
             meanScore={profile.scoreDistribution.meanScore}
+            scoredCount={profile.scoreDistribution.buckets.reduce((sum, b) => sum + b.count, 0)}
           />
         </section>
 

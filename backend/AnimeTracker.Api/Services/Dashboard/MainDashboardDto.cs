@@ -4,6 +4,22 @@ namespace AnimeTracker.Api.Services.Dashboard;
 
 public record NextEpisodeEtaDto(int Days, int Hours);
 
+// Shared by MainDashboardService and AnimeDetailService (design.md D1) so the
+// currently-watching carousel and the detail page's countdown always agree
+// for the same episode. Rounds up to the next whole hour before splitting
+// into days/hours, so a remainder under an hour never reads 0d 0h.
+public static class NextEpisodeEta
+{
+    public static NextEpisodeEtaDto? From(DateTimeOffset? nextInstant, DateTimeOffset now)
+    {
+        if (nextInstant is not { } instant)
+            return null;
+
+        var totalHours = (int)Math.Ceiling((instant - now).TotalHours);
+        return new NextEpisodeEtaDto(totalHours / 24, totalHours % 24);
+    }
+}
+
 public record CurrentlyWatchingItemDto(
     int AnimeId,
     string Title,

@@ -6,7 +6,6 @@ namespace AnimeTracker.Api.Services.Profile;
 
 public record AnimeStatsDto(
     double Days,
-    double? MeanScore,
     int Watching,
     int Completed,
     int OnHold,
@@ -14,6 +13,7 @@ public record AnimeStatsDto(
     int PlanToWatch,
     int TotalEntries,
     int Rewatched,
+    int RewatchedEpisodes,
     int Episodes,
     int Movies,
     int Rewatching);

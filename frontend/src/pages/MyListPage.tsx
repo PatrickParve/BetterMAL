@@ -55,6 +55,7 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'alphabetical', label: 'Alphabetical' },
   { value: 'myScore', label: 'My score' },
   { value: 'malScore', label: 'MAL score' },
+  { value: 'popularity', label: 'Popularity' },
   { value: 'episodesWatched', label: 'Episodes watched' },
   { value: 'progress', label: 'Progress' },
   { value: 'totalEpisodes', label: 'Total episodes' },

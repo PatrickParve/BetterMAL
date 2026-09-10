@@ -398,6 +398,8 @@ export function AnimeDetailPage() {
     detail.entry?.status === "Rewatching";
   const pictureOptions = animePictureOptions(detail);
   const showPicturePickerButton = detail.entry != null && pictureOptions.length > 1;
+  const hasSynopsis = Boolean(detail.synopsis && detail.synopsis.trim().length > 0);
+  const hasBackground = Boolean(detail.background && detail.background.trim().length > 0);
 
   return (
     <div className="anime-detail-page">
@@ -722,20 +724,22 @@ export function AnimeDetailPage() {
             </dl>
           </section>
 
-          <section className="detail-box">
-            <h2>Synopsis</h2>
-            <p className="anime-detail-page__synopsis">
-              {detail.synopsis ?? "No synopsis available."}
-            </p>
-            {detail.background && (
-              <>
-                <h2>Background</h2>
-                <p className="anime-detail-page__synopsis">
-                  {detail.background}
-                </p>
-              </>
-            )}
-          </section>
+          {(hasSynopsis || hasBackground) && (
+            <section className="detail-box">
+              {hasSynopsis && (
+                <>
+                  <h2>Synopsis</h2>
+                  <p className="anime-detail-page__synopsis">{detail.synopsis}</p>
+                </>
+              )}
+              {hasBackground && (
+                <>
+                  <h2>Background</h2>
+                  <p className="anime-detail-page__synopsis">{detail.background}</p>
+                </>
+              )}
+            </section>
+          )}
         </div>
       </div>
     </div>

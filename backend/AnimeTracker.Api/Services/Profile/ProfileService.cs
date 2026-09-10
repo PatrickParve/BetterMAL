@@ -313,21 +313,24 @@ public class ProfileService(
     }
 
     // profile-stats "Anime stats computed from local data" (design.md
-    // decisions 1, 2, 4): Episodes is rewatch-inclusive and excludes movies
-    // and music (neither is episodic); Movies picks up exactly what Episodes
-    // dropped. Days is a different, wider population by design — every
-    // entry, whatever its media type or status — since a film or a dropped
-    // show still consumed the time I spent on it even though it contributes
-    // no episodes.
+    // decision D4, page-polish-and-first-run-defaults): Episodes counts only
+    // first-viewing episodes and excludes movies and music (neither is
+    // episodic); Movies picks up exactly what Episodes dropped. Rewatched
+    // episodes counts every rewatched episode, films included. Days sums
+    // both populations, without the movie/music exclusion, across every
+    // entry whatever its media type or status — a film or a dropped show
+    // still consumed the time I spent on it even though it contributes no
+    // episodes.
     private static AnimeStatsDto BuildStats(List<UserAnimeEntry> entries)
     {
-        var scored = entries.Where(e => e.MyScore is not null).ToList();
         var episodeEligible = entries.Where(e => !WatchMath.IsMovie(e.Anime) && !WatchMath.IsMusic(e.Anime));
-        var totalSeconds = entries.Sum(e => (long)WatchMath.RewatchInclusiveEpisodes(e) * WatchMath.EpisodeSeconds(e.Anime));
+        var rewatchedEpisodesOf = (UserAnimeEntry e) =>
+            WatchMath.RewatchEpisodesIncludingCurrentRun(e.RewatchCount, e.Anime.TotalEpisodes, e.EpisodesWatched, e.Status);
+        var totalSeconds = entries.Sum(e =>
+            (long)(WatchMath.FirstViewingEpisodes(e) + rewatchedEpisodesOf(e)) * WatchMath.EpisodeSeconds(e.Anime));
 
         return new AnimeStatsDto(
             Days: Math.Round(totalSeconds / 86400.0, 1),
-            MeanScore: scored.Count > 0 ? Math.Round(scored.Average(e => e.MyScore!.Value), 2) : null,
             Watching: entries.Count(e => e.Status == WatchStatus.Watching),
             Completed: entries.Count(e => e.Status == WatchStatus.Completed),
             OnHold: entries.Count(e => e.Status == WatchStatus.OnHold),
@@ -335,7 +338,8 @@ public class ProfileService(
             PlanToWatch: entries.Count(e => e.Status == WatchStatus.PlanToWatch),
             TotalEntries: entries.Count,
             Rewatched: entries.Count(e => e.RewatchCount > 0),
-            Episodes: episodeEligible.Sum(WatchMath.RewatchInclusiveEpisodes),
+            RewatchedEpisodes: entries.Sum(rewatchedEpisodesOf),
+            Episodes: episodeEligible.Sum(WatchMath.FirstViewingEpisodes),
             Movies: entries.Count(e => WatchMath.IsMovie(e.Anime) && e.EpisodesWatched > 0),
             Rewatching: entries.Count(e => e.Status == WatchStatus.Rewatching));
     }
@@ -351,9 +355,11 @@ public class ProfileService(
     // missing data and is unresolved: it sits out of both sides of the
     // figure but is still returned in full (alphabetical by title) so the
     // frontend's unresolved-entries overlay can list exactly what the count
-    // covers. Watched is clamped to the resolved total so a stored
-    // over-count (or a rewatch, which doesn't multiply the contribution)
-    // can never push the bar past 100%.
+    // covers. Watched uses WatchMath.FirstViewingEpisodes, same as the Anime
+    // stats Episodes figure, so a Rewatching entry counts its completed
+    // first viewing rather than just the current rewatch's progress; it's
+    // still clamped to the resolved total so a stored over-count can never
+    // push the bar past 100%.
     private static EpisodeProgressDto BuildEpisodeProgress(List<UserAnimeEntry> entries, IReadOnlyDictionary<int, int> airedCounts)
     {
         var episodesWatched = 0;
@@ -368,7 +374,7 @@ public class ProfileService(
             if (total is { } resolvedTotal)
             {
                 episodesTotal += resolvedTotal;
-                episodesWatched += Math.Min(entry.EpisodesWatched, resolvedTotal);
+                episodesWatched += Math.Min(WatchMath.FirstViewingEpisodes(entry), resolvedTotal);
                 continue;
             }
 

@@ -4,37 +4,51 @@
 TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
 ## Requirements
 ### Requirement: Anime stats computed from local data
-The system SHALL show anime stats computed entirely from the local database: Days, Mean Score, Watching, Completed, On-Hold, Dropped, Plan to Watch, Total Entries, Rewatched, Episodes, and Movies.
+The system SHALL show anime stats computed entirely from the local database: Days, Watching, Completed, On-Hold, Dropped, Plan to Watch, Total Entries, Rewatched, Rewatched episodes, Episodes, and Movies. A Mean Score SHALL NOT be shown among these stats; my mean score is shown under the rating distribution instead (see "All-anime score distribution").
 
-**Episodes** SHALL be the total number of episodes I have watched, counting rewatches. An entry SHALL contribute its episodes watched plus one further complete run of the anime for every recorded rewatch, so an entry with a rewatch count of one and a published total of twelve contributes twenty-four. The complete run SHALL be measured by the anime's published total episode count; when no total is published, it SHALL be measured by the entry's own episodes watched, since that is the only length the app knows.
+**Episodes** SHALL be the total number of episodes I have watched on a first viewing, NOT counting rewatches. An entry SHALL contribute its episodes watched. An entry currently marked Rewatching SHALL contribute one complete run of the anime — I finished its first viewing before starting the rewatch, and its episodes watched now describe the rewatch in progress — measured by the anime's published total episode count, or by the entry's own episodes watched when no total is published.
 
 **Episodes** SHALL exclude entries whose media type is `movie` or `music`, which are not episodic and would otherwise each add one to a count of episodes. Every other media type — TV, OVA, ONA, special, and unrecognised values — SHALL count. Entries of every status SHALL count, dropped entries included: episodes I watched before abandoning a show are episodes I watched.
 
-**Movies** SHALL count entries whose media type is `movie` and which have at least one episode watched, whatever their status. It SHALL be presented directly below Episodes, so the count Episodes no longer carries is visible beside it. A film rewatched several times SHALL count once — the stat counts films watched, not viewings.
+**Rewatched episodes** SHALL be the total number of episodes I have rewatched, across **every** media type — TV, OVA, ONA, special, movie, music, and unrecognised values alike, so a film counts as one episode for each time I rewatched it. An entry SHALL contribute one further complete run of the anime for every recorded rewatch, plus, when the entry is currently marked Rewatching, the episodes watched so far in the rewatch in progress. The complete run SHALL be measured by the anime's published total episode count; when no total is published, it SHALL be measured by the entry's own episodes watched, since that is the only length the app knows. Entries of every status SHALL count. Rewatched episodes SHALL be presented directly below Rewatched.
 
-**Days** SHALL be the total runtime of everything I have watched, expressed in days to one decimal. It SHALL be computed per entry as that entry's rewatch-inclusive episode count — the same count Episodes uses — multiplied by that anime's runtime per episode, and summed across **every** entry in my list whatever its media type or status: TV, movies, music, dropped, and in-progress alike. Days therefore covers a wider population than Episodes by design, since a film consumes time even though it contributes no episodes.
+**Movies** SHALL count entries whose media type is `movie` and which have at least one episode watched, whatever their status. It SHALL be presented directly below Episodes. A film rewatched several times SHALL count once — the stat counts films watched, not viewings.
+
+**Days** SHALL be the total runtime of everything I have watched, first viewings and rewatches alike, expressed in days to one decimal. It SHALL be computed per entry as that entry's first-viewing episodes — counted as for Episodes but without the movie/music exclusion — plus its rewatched episodes as counted for Rewatched episodes, multiplied by that anime's runtime per episode, and summed across **every** entry in my list whatever its media type or status: TV, movies, music, dropped, and in-progress alike. Days therefore covers a wider population than Episodes by design, since a film consumes time even though it contributes no episodes.
 
 An anime's runtime per episode SHALL be its cached average episode duration where one is stored, and SHALL otherwise fall back to the same standing per-episode assumption the recap and series pages use, so no two surfaces report different runtimes for the same anime.
 
 #### Scenario: Rendering stats
 - **WHEN** the profile page loads
-- **THEN** all listed stat values are computed from the local DB without a live API call
+- **THEN** all listed stat values are computed from the local DB without a live API call, and no Mean Score is among them
 
-#### Scenario: A rewatch adds a full run to the episode count
+#### Scenario: A rewatch no longer adds to Episodes
 - **WHEN** my list holds a completed twelve-episode series with a rewatch count of one
-- **THEN** it contributes twenty-four to Episodes
+- **THEN** it contributes twelve to Episodes and twelve to Rewatched episodes
 
-#### Scenario: A rewatch in progress counts the completed runs plus current progress
-- **WHEN** my list holds a twelve-episode series with a rewatch count of two whose episodes watched currently reads one
-- **THEN** it contributes twenty-five to Episodes
+#### Scenario: A rewatch in progress
+- **WHEN** my list holds a twelve-episode series marked Rewatching, with a rewatch count of two and episodes watched currently reading one
+- **THEN** it contributes twelve to Episodes and twenty-five to Rewatched episodes
 
 #### Scenario: Rewatch of an anime with no published total
 - **WHEN** my list holds an entry with eight episodes watched, a rewatch count of one, and no published total episode count
-- **THEN** it contributes sixteen to Episodes
+- **THEN** it contributes eight to Episodes and eight to Rewatched episodes
+
+#### Scenario: Never rewatched
+- **WHEN** my list holds an entry with a rewatch count of zero that is not marked Rewatching
+- **THEN** it contributes nothing to Rewatched episodes
 
 #### Scenario: Movies and music are not episodes
-- **WHEN** my list holds a watched film and a watched music video
+- **WHEN** my list holds a watched film and a watched music video, neither rewatched
 - **THEN** neither contributes to Episodes
+
+#### Scenario: A rewatched film counts toward rewatched episodes
+- **WHEN** my list holds a film with a rewatch count of two
+- **THEN** it contributes two to Rewatched episodes and nothing to Episodes
+
+#### Scenario: Rewatched episodes sits under Rewatched
+- **WHEN** the profile page renders its anime stats
+- **THEN** Rewatched episodes is shown directly below Rewatched, and Movies is still shown directly below Episodes
 
 #### Scenario: Other media types still count as episodes
 - **WHEN** my list holds a watched OVA and a watched special
@@ -53,7 +67,7 @@ An anime's runtime per episode SHALL be its cached average episode duration wher
 - **THEN** Movies counts it once
 
 #### Scenario: Days uses each anime's own runtime
-- **WHEN** my list holds a twelve-episode series with a cached average episode duration of twenty-three minutes and a film with a cached duration of one hundred and twenty minutes, both fully watched
+- **WHEN** my list holds a twelve-episode series with a cached average episode duration of twenty-three minutes and a film with a cached duration of one hundred and twenty minutes, both fully watched and never rewatched
 - **THEN** Days reflects two hundred and seventy-six minutes plus one hundred and twenty minutes, rather than thirteen episodes at the standing assumption
 
 #### Scenario: Days falls back when no duration is cached
@@ -67,6 +81,10 @@ An anime's runtime per episode SHALL be its cached average episode duration wher
 #### Scenario: Rewatches add to time spent
 - **WHEN** I rewatch a twelve-episode series once
 - **THEN** Days grows by the runtime of twelve further episodes
+
+#### Scenario: A rewatch in progress counts its first viewing in Days
+- **WHEN** my list holds a twelve-episode series marked Rewatching, with a rewatch count of two and episodes watched reading one
+- **THEN** its contribution to Days is the runtime of thirty-seven episodes — the first viewing, two completed rewatches, and one episode of the current rewatch
 
 ### Requirement: Rewatching has its own place in the status breakdown
 

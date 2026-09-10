@@ -51,7 +51,7 @@ public class ProfileServiceStatsTests
         };
 
     [Fact]
-    public async Task ARewatchAddsAFullRunToBothEpisodesAndDays()
+    public async Task ARewatchAddsAFullRunToBothRewatchedEpisodesAndDaysButNotEpisodes()
     {
         using var db = CreateDb();
         List<UserAnimeEntry> entries =
@@ -59,7 +59,8 @@ public class ProfileServiceStatsTests
 
         var profile = await CreateService(db, entries).GetProfileAsync();
 
-        Assert.Equal(24, profile.Stats.Episodes);
+        Assert.Equal(12, profile.Stats.Episodes);
+        Assert.Equal(12, profile.Stats.RewatchedEpisodes);
         Assert.Equal(Math.Round(24 * 1500 / 86400.0, 1), profile.Stats.Days);
     }
 
@@ -157,17 +158,62 @@ public class ProfileServiceStatsTests
     }
 
     [Fact]
-    public async Task ARewatchInProgressContributesTheSameEpisodeFigureAsUnderThePreviousRepresentation()
+    public async Task ARewatchInProgressSplitsIntoFirstViewingAndRewatchedEpisodes()
     {
         using var db = CreateDb();
         // "a twelve-episode series with a rewatch count of two whose episodes
-        // watched currently reads one" (design.md D7) -> 2*12 + 1 = 25.
+        // watched currently reads one" (design.md D4): Episodes is one
+        // complete first-viewing run (12), RewatchedEpisodes is 2*12 + 1 = 25,
+        // and Days covers both populations (12 + 25 = 37 episodes). This
+        // replaces the old expectation of 25 Episodes under the previous
+        // rewatch-inclusive representation.
         List<UserAnimeEntry> entries =
             [Entry(1, "tv", episodesWatched: 1, totalEpisodes: 12, rewatchCount: 2, status: WatchStatus.Rewatching)];
 
         var profile = await CreateService(db, entries).GetProfileAsync();
 
-        Assert.Equal(25, profile.Stats.Episodes);
+        Assert.Equal(12, profile.Stats.Episodes);
+        Assert.Equal(25, profile.Stats.RewatchedEpisodes);
+        var expectedSeconds = 37L * ProfileService.AssumedMinutesPerEpisode * 60;
+        Assert.Equal(Math.Round(expectedSeconds / 86400.0, 1), profile.Stats.Days);
+    }
+
+    [Fact]
+    public async Task ARewatchedFilmContributesToRewatchedEpisodesButNotEpisodes()
+    {
+        using var db = CreateDb();
+        List<UserAnimeEntry> entries =
+            [Entry(1, "movie", episodesWatched: 1, rewatchCount: 2, status: WatchStatus.Completed)];
+
+        var profile = await CreateService(db, entries).GetProfileAsync();
+
+        Assert.Equal(0, profile.Stats.Episodes);
+        Assert.Equal(2, profile.Stats.RewatchedEpisodes);
+    }
+
+    [Fact]
+    public async Task RewatchWithNoPublishedTotalFallsBackToEpisodesWatched()
+    {
+        using var db = CreateDb();
+        List<UserAnimeEntry> entries =
+            [Entry(1, "tv", episodesWatched: 8, totalEpisodes: null, rewatchCount: 1, status: WatchStatus.Completed)];
+
+        var profile = await CreateService(db, entries).GetProfileAsync();
+
+        Assert.Equal(8, profile.Stats.Episodes);
+        Assert.Equal(8, profile.Stats.RewatchedEpisodes);
+    }
+
+    [Fact]
+    public async Task NeverRewatchedContributesNoRewatchedEpisodes()
+    {
+        using var db = CreateDb();
+        List<UserAnimeEntry> entries =
+            [Entry(1, "tv", episodesWatched: 5, rewatchCount: 0, status: WatchStatus.Watching)];
+
+        var profile = await CreateService(db, entries).GetProfileAsync();
+
+        Assert.Equal(0, profile.Stats.RewatchedEpisodes);
     }
 
     private sealed class FakeUserAnimeEntryRepository(List<UserAnimeEntry> entries) : IUserAnimeEntryRepository

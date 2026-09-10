@@ -101,7 +101,10 @@
 
 .profile-box__header-row {
   display: flex;
-  align-items: center;
+  /* flex-start, not center: the control button is taller than a bare h2
+     (its own padding/border), so centering pushed this box's title down
+     relative to the other profile boxes' flush-top titles. */
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }

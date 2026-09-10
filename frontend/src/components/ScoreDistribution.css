@@ -93,6 +93,15 @@ a.score-distribution__row--link:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* Groups the Scored/Mean score lines with a tighter gap than the profile
+   box's own 12px flex gap, which would otherwise apply between them too and
+   read as two unrelated lines rather than one summary. */
+.score-distribution__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .score-distribution__mean {
   margin: 0;
   color: var(--text-h);

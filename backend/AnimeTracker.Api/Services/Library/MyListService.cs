@@ -46,7 +46,8 @@ public class MyListService(
                 e.Anime.AiringStatus,
                 airedSoFarByAnimeId.TryGetValue(e.AnimeId, out var episodesAired) ? episodesAired : null,
                 UserAnimeEntryDto.FromEntity(e),
-                snapshot.RankOf(e.AnimeId)));
+                snapshot.RankOf(e.AnimeId),
+                e.Anime.PopularityRank));
         }
         return items;
     }

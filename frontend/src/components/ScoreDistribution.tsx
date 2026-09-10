@@ -17,6 +17,7 @@ function formatShare(count: number, totalRated: number): string | null {
 type ScoreDistributionProps = {
   buckets: ScoreDistributionBucketDto[]
   meanScore?: number | null
+  scoredCount?: number
   compact?: boolean
   hrefForScore?: (score: number) => string
   tiered?: boolean
@@ -39,7 +40,7 @@ type ScoreDistributionProps = {
 // same scoreTier the score board reads, rather than the flat accent — used
 // only by the recap page, so the profile page's whole-list distribution,
 // which never sets it, renders exactly as it did before this existed.
-export function ScoreDistribution({ buckets, meanScore, compact, hrefForScore, tiered }: ScoreDistributionProps) {
+export function ScoreDistribution({ buckets, meanScore, scoredCount, compact, hrefForScore, tiered }: ScoreDistributionProps) {
   const totalRated = buckets.reduce((sum, b) => sum + b.count, 0)
   const maxBucketCount = Math.max(0, ...buckets.map((b) => b.count))
 
@@ -80,8 +81,13 @@ export function ScoreDistribution({ buckets, meanScore, compact, hrefForScore, t
           )
         })}
       </div>
-      {meanScore !== undefined && (
-        <p className="score-distribution__mean">Mean score: {meanScore?.toFixed(2) ?? '—'}</p>
+      {(scoredCount !== undefined || meanScore !== undefined) && (
+        <div className="score-distribution__summary">
+          {scoredCount !== undefined && <p className="score-distribution__mean">Scored: {scoredCount}</p>}
+          {meanScore !== undefined && (
+            <p className="score-distribution__mean">Mean score: {meanScore?.toFixed(2) ?? '—'}</p>
+          )}
+        </div>
       )}
     </>
   )

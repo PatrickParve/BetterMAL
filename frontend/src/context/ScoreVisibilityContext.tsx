@@ -14,14 +14,18 @@ const ScoreVisibilityContext = createContext<ScoreVisibilityContextValue | null>
 const STORAGE_KEY = 'bettermal.scoresHidden'
 const ALWAYS_SHOW_COMPLETED_STORAGE_KEY = 'bettermal.alwaysShowCompletedScores'
 
+// Both default to on whenever nothing is stored, including on a first run
+// (design.md D7) — a stored choice, true or false, always wins.
 function readInitialHidden(): boolean {
-  if (typeof window === 'undefined') return false
-  return window.localStorage.getItem(STORAGE_KEY) === 'true'
+  if (typeof window === 'undefined') return true
+  const stored = window.localStorage.getItem(STORAGE_KEY)
+  return stored === null ? true : stored === 'true'
 }
 
 function readInitialAlwaysShowCompletedScores(): boolean {
-  if (typeof window === 'undefined') return false
-  return window.localStorage.getItem(ALWAYS_SHOW_COMPLETED_STORAGE_KEY) === 'true'
+  if (typeof window === 'undefined') return true
+  const stored = window.localStorage.getItem(ALWAYS_SHOW_COMPLETED_STORAGE_KEY)
+  return stored === null ? true : stored === 'true'
 }
 
 export function ScoreVisibilityProvider({ children }: { children: ReactNode }) {

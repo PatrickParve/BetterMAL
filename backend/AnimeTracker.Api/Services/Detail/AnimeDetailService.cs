@@ -79,7 +79,7 @@ public class AnimeDetailService(
             await airingWatchStatusService.SettleAsync([entry], new Dictionary<int, int> { [animeId] = aired }, ct);
         }
 
-        var nextEpisode = ToEta(await scheduleService.NextAiringInstantAsync(anime, now, ct), now);
+        var nextEpisode = NextEpisodeEta.From(await scheduleService.NextAiringInstantAsync(anime, now, ct), now);
         var aniListId = await db.AnimeAiringSyncs.AsNoTracking()
             .Where(s => s.AnimeId == animeId)
             .Select(s => s.AniListId)
@@ -119,14 +119,5 @@ public class AnimeDetailService(
         return await db.AnimeMetadata.AsNoTracking()
             .Where(m => ids.Contains(m.Id))
             .ToDictionaryAsync(m => m.Id, m => new RelatedMetadata(m.MediaType, m.EnglishTitle), ct);
-    }
-
-    private static NextEpisodeEtaDto? ToEta(DateTimeOffset? nextInstant, DateTimeOffset now)
-    {
-        if (nextInstant is not { } instant)
-            return null;
-
-        var remaining = instant - now;
-        return new NextEpisodeEtaDto(remaining.Days, remaining.Hours);
     }
 }

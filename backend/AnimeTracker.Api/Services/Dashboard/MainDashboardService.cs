@@ -62,7 +62,7 @@ public class MainDashboardService(
                 e.Anime.TotalEpisodes,
                 airedSoFarByAnimeId.TryGetValue(e.AnimeId, out var aired) ? aired : null,
                 e.Anime.AiringStatus == "currently_airing",
-                ToEta(await scheduleService.NextAiringInstantAsync(e.Anime, now, ct), now),
+                NextEpisodeEta.From(await scheduleService.NextAiringInstantAsync(e.Anime, now, ct), now),
                 e.Status,
                 e.Anime.AiringStatus));
         }
@@ -117,13 +117,4 @@ public class MainDashboardService(
         entries
             .OrderByDescending(e => e.EpisodesWatched)
             .ThenBy(e => e.Anime.Title, StringComparer.OrdinalIgnoreCase);
-
-    private static NextEpisodeEtaDto? ToEta(DateTimeOffset? nextInstant, DateTimeOffset now)
-    {
-        if (nextInstant is not { } instant)
-            return null;
-
-        var remaining = instant - now;
-        return new NextEpisodeEtaDto(remaining.Days, remaining.Hours);
-    }
 }

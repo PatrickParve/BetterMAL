@@ -4,7 +4,9 @@
 TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
 ## Requirements
 ### Requirement: Single anime detail layout
-The system SHALL show a single anime page whose title sits in the page's own header block, per the `page-header-design` capability, above a body carrying a large picture on the left and, near the top-right, two separate side-by-side boxes: one showing rank and MAL score (MAL score respecting the hide/unhide toggle), and one showing my score and rewatch count. Below those it SHALL show an info box (type, status, source, duration, studio, aired-from/to, and genres) and, beneath it, a synopsis/background box. Any info field for which no data is available SHALL display "No info" rather than being blank.
+The system SHALL show a single anime page whose title sits in the page's own header block, per the `page-header-design` capability, above a body carrying a large picture on the left and, near the top-right, two separate side-by-side boxes: one showing rank and MAL score (MAL score respecting the hide/unhide toggle), and one showing my score and rewatch count. Below those it SHALL show an info box (type, status, source, duration, studio, aired-from/to, and genres) and, beneath it, a synopsis/background box whenever the anime has a synopsis or a background. Any info field for which no data is available SHALL display "No info" rather than being blank.
+
+The synopsis/background box SHALL carry a Synopsis section only when the anime has a synopsis, and a Background section only when it has a background. When the anime has neither, the box SHALL be omitted entirely: no empty box, no heading, and no placeholder text such as "No synopsis available." A synopsis or background that is empty or consists only of whitespace SHALL count as absent. The "No info" rule applies to the info box's fields only, not to the synopsis/background box.
 
 The title SHALL NOT sit flush against the top of the page's content area: the header block SHALL own the spacing above and below the title so it reads as this page's header rather than as a line of text the body was pushed down by. The related-entry links (Series, Main series, More, Prequel, Sequel) SHALL keep sharing the title's row, positioned as they are today, rather than moving into the body.
 
@@ -19,8 +21,24 @@ The info box's Status field SHALL, when the anime is currently airing and an air
 The aired-episode count SHALL come from the anime's stored per-episode airing rows and SHALL NOT be estimated from its broadcast cadence or from elapsed time since its start date. An anime with no stored airing rows SHALL be treated as having no known aired count.
 
 #### Scenario: Rendering the detail layout
-- **WHEN** I open an anime's detail page
+- **WHEN** I open the detail page of an anime that has a synopsis
 - **THEN** it shows the title in the page's header block above a body with a large picture on the left, a "rank and MAL score" box and a separate "my score and rewatch count" box side by side, an info box (type, status, source, duration, studio, aired-from/to, genres), and a synopsis/background box
+
+#### Scenario: No synopsis and no background
+- **WHEN** I open the detail page of an anime that has neither a synopsis nor a background
+- **THEN** no synopsis/background box is rendered at all — no empty box, no "Synopsis" heading, and no "No synopsis available." text — and the info box is the last box in the main column
+
+#### Scenario: Synopsis without a background
+- **WHEN** I open the detail page of an anime that has a synopsis but no background
+- **THEN** the box shows the Synopsis section only, with no Background heading
+
+#### Scenario: Background without a synopsis
+- **WHEN** I open the detail page of an anime that has a background but no synopsis
+- **THEN** the box shows the Background section only, with no Synopsis heading and no placeholder in its place
+
+#### Scenario: Whitespace-only text counts as absent
+- **WHEN** an anime's synopsis is stored as an empty or whitespace-only string and it has no background
+- **THEN** the synopsis/background box is omitted, exactly as when no synopsis is stored
 
 #### Scenario: The title has room above it
 - **WHEN** I open an anime's detail page
@@ -48,7 +66,7 @@ The aired-episode count SHALL come from the anime's stored per-episode airing ro
 
 #### Scenario: The boxes below keep their width
 - **WHEN** I open an anime's detail page
-- **THEN** the info box and the synopsis box below the score boxes still span the full width of the main column
+- **THEN** the info box and, when present, the synopsis box below the score boxes still span the full width of the main column
 
 #### Scenario: MAL score respects the hide toggle
 - **WHEN** the hide toggle is on
@@ -215,16 +233,26 @@ The placeholder shown when an anime has no picture at all SHALL keep the existin
 ### Requirement: Next-episode countdown in the Status field
 When an anime has a stored per-episode airing row whose air instant is in the future, the detail page's Status field SHALL append a countdown to that next episode, expressed in whole days and whole hours (e.g. `Currently airing: 5/12 ep aired · next in 2d 7h`). The countdown SHALL be derived from the earliest stored future air instant, and SHALL NOT be estimated from the broadcast cadence, the start date, or elapsed time.
 
-An anime with no stored future airing row SHALL show no countdown, whatever its airing status — including a currently-airing anime whose upcoming episodes have not been fetched. When the next air instant is less than an hour away, the countdown SHALL read `0d 0h` rather than being hidden.
+The time remaining SHALL be rounded **up** to the next whole hour before being split into days and hours, so the countdown never reads fewer hours than actually remain: any remainder under an hour reads `0d 1h`, a remainder of 2 days, 6 hours and 20 minutes reads `2d 7h`, and a remainder of 23 hours and 30 minutes reads `1d 0h`. A remainder that is already a whole number of hours SHALL be shown unchanged. The countdown SHALL never read `0d 0h` while the next episode is still in the future.
 
-The countdown SHALL be computed server-side against the request instant and delivered as a days/hours pair, matching the shape the currently-watching carousel already consumes.
+An anime with no stored future airing row SHALL show no countdown, whatever its airing status — including a currently-airing anime whose upcoming episodes have not been fetched.
+
+The countdown SHALL be computed server-side against the request instant and delivered as a days/hours pair, through the same computation the currently-watching carousel's countdown uses, so the two surfaces always agree for the same episode.
 
 #### Scenario: Currently airing with a stored future episode
-- **WHEN** I open the detail page of a currently airing anime with 12 total episodes, 5 stored episodes in the past, and the next stored episode 2 days and 7 hours away
+- **WHEN** I open the detail page of a currently airing anime with 12 total episodes, 5 stored episodes in the past, and the next stored episode exactly 2 days and 7 hours away
 - **THEN** the Status field reads "Currently airing: 5/12 ep aired · next in 2d 7h"
 
+#### Scenario: A partial hour rounds up
+- **WHEN** the next stored air instant is 2 days, 6 hours and 20 minutes from now
+- **THEN** the countdown reads "next in 2d 7h"
+
+#### Scenario: Rounding up carries into a day
+- **WHEN** the next stored air instant is 23 hours and 30 minutes from now
+- **THEN** the countdown reads "next in 1d 0h"
+
 #### Scenario: Not yet aired with a stored premiere
-- **WHEN** I open the detail page of an anime that has not yet aired and whose stored first episode is 10 days away
+- **WHEN** I open the detail page of an anime that has not yet aired and whose stored first episode is exactly 10 days away
 - **THEN** the Status field reads "Not yet aired · next in 10d 0h"
 
 #### Scenario: Currently airing with no stored future episode
@@ -237,7 +265,11 @@ The countdown SHALL be computed server-side against the request instant and deli
 
 #### Scenario: Next episode less than an hour away
 - **WHEN** the next stored air instant is 40 minutes from now
-- **THEN** the countdown reads "next in 0d 0h" rather than being omitted
+- **THEN** the countdown reads "next in 0d 1h" rather than "0d 0h" or being omitted
+
+#### Scenario: One minute left
+- **WHEN** the next stored air instant is 1 minute from now
+- **THEN** the countdown reads "next in 0d 1h"
 
 ### Requirement: Rating and season in the info box
 The info box SHALL show the anime's MAL content rating (e.g. G, PG, PG-13, R, R+, Rx) and the season it aired in (e.g. "Spring 2026"), the latter derived from its aired-from date the same way the app already derives season membership elsewhere. The season value SHALL be a link to that season's browse page. When aired-from is unknown, no season link SHALL be shown.

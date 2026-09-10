@@ -310,6 +310,7 @@ export type MyListItemDto = {
   // ranking (unscored, Plan to watch, unaired) — feeds the my-score sort's
   // rank tiebreak (utils/anime.ts composeComparator).
   myRank: number | null
+  popularityRank: number | null
 }
 
 export type TopAnimeItemDto = {
@@ -368,7 +369,6 @@ export type ActivityFeedItemDto = {
 
 export type AnimeStatsDto = {
   days: number
-  meanScore: number | null
   watching: number
   completed: number
   onHold: number
@@ -376,6 +376,7 @@ export type AnimeStatsDto = {
   planToWatch: number
   totalEntries: number
   rewatched: number
+  rewatchedEpisodes: number
   episodes: number
   movies: number
   rewatching: number

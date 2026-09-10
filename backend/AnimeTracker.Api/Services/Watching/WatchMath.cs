@@ -71,6 +71,22 @@ internal static class WatchMath
     public static int RewatchInclusiveEpisodes(UserAnimeEntry entry) =>
         entry.EpisodesWatched + RewatchOnlyEpisodes(entry);
 
+    /// <summary>An entry's first-viewing episode count only, with no rewatch
+    /// folded in (page-polish-and-first-run-defaults design.md D4). An entry
+    /// not marked <see cref="WatchStatus.Rewatching"/> is still on (or has
+    /// only ever had) its first viewing, so its episodes watched already are
+    /// the first-viewing figure. An entry marked Rewatching has, by
+    /// definition, finished its first viewing before starting the rewatch —
+    /// its episodes watched now describe the rewatch in progress instead —
+    /// so its first viewing is counted as one complete run: the anime's
+    /// published total, or its own episodes watched when no total is
+    /// published (Rewatching requires a finished-airing anime, so a total is
+    /// almost always available).</summary>
+    public static int FirstViewingEpisodes(UserAnimeEntry entry) =>
+        entry.Status == WatchStatus.Rewatching
+            ? entry.Anime.TotalEpisodes ?? entry.EpisodesWatched
+            : entry.EpisodesWatched;
+
     /// <summary>The episodes an entry counts as watched for "how much of the
     /// main line have I watched" purposes: the greater of its own
     /// episodes-watched and its aired-so-far figure when the entry is marked

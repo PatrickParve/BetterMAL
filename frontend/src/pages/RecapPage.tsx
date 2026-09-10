@@ -925,13 +925,14 @@ export function RecapPage() {
   // than stacking its two season-level rankings full-width in a single
   // column, they sit side by side — the score ranking and the time-watched
   // ranking directly comparing a period's seasons. A multi-year recap keeps
-  // the season-column/year-column grouping, but as a flat row-aligned grid
-  // (design.md decision 8) rather than two independently-stacking flex
-  // columns: each present section is placed directly with its own
-  // grid-column/grid-row, so the season-level and year-level time-watched
-  // rankings always start on the same line regardless of whether the score
-  // ranking above either carries a "See all". Either way the grid collapses
-  // to one column when only one side has anything to show.
+  // the year-column/season-column grouping with the year column leading
+  // (design.md decision 3), as a flat row-aligned grid (design.md decision 8)
+  // rather than two independently-stacking flex columns: each present
+  // section is placed directly with its own grid-column/grid-row, so the
+  // season-level and year-level time-watched rankings always start on the
+  // same line regardless of whether the score ranking above either carries a
+  // "See all". Either way the grid collapses to one column when only one
+  // side has anything to show.
   function renderRankings(recap: RecapDto) {
     if (mode === 'yearly') {
       const seasonRanking = renderSeasonRankingSection(recap)
@@ -950,16 +951,16 @@ export function RecapPage() {
     const hasYearColumn = recap.yearRanking.length > 0 || recap.yearTimeRanking.length > 0
     if (!hasSeasonColumn && !hasYearColumn) return null
 
-    const seasonColumnIndex = hasSeasonColumn ? 1 : null
-    const yearColumnIndex = hasYearColumn ? (hasSeasonColumn ? 2 : 1) : null
+    const yearColumnIndex = hasYearColumn ? 1 : null
+    const seasonColumnIndex = hasSeasonColumn ? (hasYearColumn ? 2 : 1) : null
     const single = hasSeasonColumn !== hasYearColumn
 
     return (
       <div className={single ? 'recap-page__rankings recap-page__rankings--single' : 'recap-page__rankings'}>
-        {seasonColumnIndex && renderSeasonRankingSection(recap, { gridColumn: seasonColumnIndex, gridRow: 1 })}
-        {seasonColumnIndex && renderSeasonTimeRankingSection(recap, { gridColumn: seasonColumnIndex, gridRow: 2 })}
         {yearColumnIndex && renderYearRankingSection(recap, { gridColumn: yearColumnIndex, gridRow: 1 })}
         {yearColumnIndex && renderYearTimeRankingSection(recap, { gridColumn: yearColumnIndex, gridRow: 2 })}
+        {seasonColumnIndex && renderSeasonRankingSection(recap, { gridColumn: seasonColumnIndex, gridRow: 1 })}
+        {seasonColumnIndex && renderSeasonTimeRankingSection(recap, { gridColumn: seasonColumnIndex, gridRow: 2 })}
       </div>
     )
   }

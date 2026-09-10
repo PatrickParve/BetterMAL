@@ -11,9 +11,12 @@ const ContentFilterContext = createContext<ContentFilterContextValue | null>(nul
 // hides NSFW sees it reappear on every refresh.
 const STORAGE_KEY = 'bettermal.hideNsfw'
 
+// Defaults to hidden whenever nothing is stored, including on a first run
+// (design.md D7) — a stored choice, true or false, always wins.
 function readInitialHideHentai(): boolean {
-  if (typeof window === 'undefined') return false
-  return window.localStorage.getItem(STORAGE_KEY) === 'true'
+  if (typeof window === 'undefined') return true
+  const stored = window.localStorage.getItem(STORAGE_KEY)
+  return stored === null ? true : stored === 'true'
 }
 
 export function ContentFilterProvider({ children }: { children: ReactNode }) {

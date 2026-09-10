@@ -913,16 +913,16 @@ a.recap-page__stat--link:focus-visible {
 /* Season/year rankings (the row list, poster, and "See all" styles live in
    components/RankingSection.css — RankingSection.tsx owns that markup now). */
 
-/* Rankings grouped into a season column and a year column (design.md
-   decision 4/8): the season ranking and seasons-by-time-watched share the
-   leading column, the year ranking and years-by-time-watched the other. Each
-   ranking section is placed directly (RecapPage.tsx's renderRankings, via
-   RankingSection's `style` prop) rather than wrapped in a per-column flex
-   container, so a row's height is the tallest item placed in it — the two
-   time-watched rankings always start on row 2's line together, whether or
-   not the score ranking above either carries a "See all". Collapses to one
-   column (--single, applied whenever only one side has anything to show) and
-   below the breakpoint stacks season-first (DOM order — no `order`
+/* Rankings grouped into a year column and a season column (design.md
+   decision 3/4/8): the year ranking and years-by-time-watched share the
+   leading column, the season ranking and seasons-by-time-watched the other.
+   Each ranking section is placed directly (RecapPage.tsx's renderRankings,
+   via RankingSection's `style` prop) rather than wrapped in a per-column
+   flex container, so a row's height is the tallest item placed in it — the
+   two time-watched rankings always start on row 2's line together, whether
+   or not the score ranking above either carries a "See all". Collapses to
+   one column (--single, applied whenever only one side has anything to
+   show) and below the breakpoint stacks year-first (DOM order — no `order`
    property). */
 .recap-page__rankings {
   display: grid;
