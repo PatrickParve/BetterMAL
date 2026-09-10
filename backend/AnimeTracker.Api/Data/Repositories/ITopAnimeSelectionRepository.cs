@@ -22,4 +22,17 @@ public interface ITopAnimeSelectionRepository
     /// interleave in the existing stored order, since slot assignment only
     /// ever advances forward through both the walk and the queue.</summary>
     Task ReplaceOrderAsync(IReadOnlyList<int> editedIds, CancellationToken ct = default);
+
+    /// <summary>Replaces the stored order outright with exactly
+    /// <paramref name="animeIds"/>, unlike <see cref="ReplaceOrderAsync"/>'s
+    /// slot-preserving merge: an id missing from the list holds no stored
+    /// position afterwards. Records <paramref name="modifiedAt"/> as the
+    /// ranking's last-modified time rather than the time the call runs —
+    /// adopting another device's ranking is not arranging one, and stamping
+    /// "now" on adoption would let a stale ranking outrank a newer edit made
+    /// on the other device meanwhile (design.md D3). Unknown ids are
+    /// rejected before any row is touched, leaving the stored order and its
+    /// time unchanged; a repeated id takes its first occurrence's
+    /// position.</summary>
+    Task ReplaceAllAsync(IReadOnlyList<int> animeIds, DateTimeOffset modifiedAt, CancellationToken ct = default);
 }

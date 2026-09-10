@@ -9,6 +9,11 @@ public class ActivityLogRepository(AnimeTrackerDbContext db) : IActivityLogRepos
         db.ActivityLogs.AsNoTracking()
             .Include(l => l.Anime)
             .OrderByDescending(l => l.Timestamp)
+            // Id breaks same-timestamp ties by storage order on this
+            // database — it's local, never exported, but ordering by it is
+            // what lets ActivityFeedComposer fold a completion and its score
+            // into one row. An import must preserve this order when it
+            // inserts (design.md D6, Open Questions).
             .ThenByDescending(l => l.Id)
             .Take(count)
             .ToListAsync(ct);
@@ -17,6 +22,7 @@ public class ActivityLogRepository(AnimeTrackerDbContext db) : IActivityLogRepos
         db.ActivityLogs.AsNoTracking()
             .Include(l => l.Anime)
             .OrderByDescending(l => l.Timestamp)
+            // See the comment on the same ordering in GetRecentAsync.
             .ThenByDescending(l => l.Id)
             .ToListAsync(ct);
 

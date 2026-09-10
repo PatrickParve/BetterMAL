@@ -137,4 +137,24 @@ public class EntryActivityRecorderTests
         Assert.True(completedIndex >= 0 && scoreIndex >= 0);
         Assert.True(scoreIndex > completedIndex, "the score row must be emitted after the completion row so it takes the higher identity (design D5)");
     }
+
+    [Fact]
+    public void AddedProducesARowWithANonEmptyEventId()
+    {
+        var log = EntryActivityRecorder.Added(1, WatchStatus.Watching, DateTimeOffset.UtcNow);
+
+        Assert.NotEqual(Guid.Empty, log.EventId);
+    }
+
+    [Fact]
+    public void EveryRowDiffProducesCarriesAPairwiseDistinctNonEmptyEventId()
+    {
+        var before = EntrySnapshot.Of(EntryWith(WatchStatus.Watching, 3, null, null, null, 0));
+        var after = EntryWith(WatchStatus.Dropped, 7, 8, new DateOnly(2026, 1, 1), new DateOnly(2026, 2, 1), 1);
+
+        var rows = EntryActivityRecorder.Diff(1, before, after, DateTimeOffset.UtcNow);
+
+        Assert.All(rows, r => Assert.NotEqual(Guid.Empty, r.EventId));
+        Assert.Equal(rows.Count, rows.Select(r => r.EventId).Distinct().Count());
+    }
 }

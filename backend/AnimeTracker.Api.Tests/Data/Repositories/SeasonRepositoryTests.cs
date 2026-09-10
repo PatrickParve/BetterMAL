@@ -186,8 +186,8 @@ public class SeasonRepositoryTests
         var placedFirst = Seed(db, 2, "Placed first", popularityRank: 2);
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Anime = placedSecond, MyScore = 7 });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 2, Anime = placedFirst, MyScore = 7 });
-        db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = 2, Anime = placedFirst, Position = 0, SelectedAt = DateTimeOffset.UtcNow });
-        db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = 1, Anime = placedSecond, Position = 1, SelectedAt = DateTimeOffset.UtcNow });
+        db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = 2, Anime = placedFirst, Position = 0 });
+        db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = 1, Anime = placedSecond, Position = 1 });
         List(db, 1, 2020, "winter");
         List(db, 2, 2020, "spring");
         await db.SaveChangesAsync();

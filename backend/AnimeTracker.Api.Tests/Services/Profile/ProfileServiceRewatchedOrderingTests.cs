@@ -96,6 +96,8 @@ public class ProfileServiceRewatchedOrderingTests
             throw new NotImplementedException();
         public Task ReplaceOrderAsync(IReadOnlyList<int> orderedAnimeIds, CancellationToken ct = default) =>
             throw new NotImplementedException();
+        public Task ReplaceAllAsync(IReadOnlyList<int> animeIds, DateTimeOffset modifiedAt, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 
     private sealed class FakeSeriesBuildTrigger : ISeriesBuildTrigger

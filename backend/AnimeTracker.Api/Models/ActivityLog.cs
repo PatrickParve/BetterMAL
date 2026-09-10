@@ -19,8 +19,17 @@ public enum ActivityChangeType
 /// "latest updates" feed, since UserAnimeEntry only holds current state.</summary>
 public class ActivityLog
 {
+    /// <summary>Local to this database and never exported. Only meaning: it
+    /// breaks ties between rows that share a <see cref="Timestamp"/>, in the
+    /// order they were stored here (see <c>ActivityLogRepository</c>).</summary>
     public long Id { get; set; }
     public DateTimeOffset Timestamp { get; set; }
+
+    /// <summary>The identity that travels between devices. Assigned when the
+    /// object is created, so every writer — now and later — produces one
+    /// without doing anything. A row stored while already carrying an
+    /// <see cref="EventId"/> (an imported row) keeps that value.</summary>
+    public Guid EventId { get; set; } = Guid.NewGuid();
 
     public int AnimeId { get; set; }
     public AnimeMetadata Anime { get; set; } = null!;

@@ -60,4 +60,36 @@ public class ActivityLogRepositoryTests
         Assert.Equal(2, (await repository.GetRecentAsync(20)).Count);
         Assert.Equal(2, (await repository.GetAllAsync()).Count);
     }
+
+    [Fact]
+    public async Task RowsSavedWithoutSettingEventIdGetDistinctNonEmptyValues()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1" };
+        db.AnimeMetadata.Add(anime);
+        db.ActivityLogs.AddRange(
+            new ActivityLog { AnimeId = 1, Timestamp = DateTimeOffset.UtcNow, ChangeType = ActivityChangeType.Added },
+            new ActivityLog { AnimeId = 1, Timestamp = DateTimeOffset.UtcNow, ChangeType = ActivityChangeType.Added });
+        await db.SaveChangesAsync();
+
+        var rows = await new ActivityLogRepository(db).GetAllAsync();
+
+        Assert.All(rows, r => Assert.NotEqual(Guid.Empty, r.EventId));
+        Assert.Equal(2, rows.Select(r => r.EventId).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task ARowSavedWithAnExplicitEventIdKeepsIt()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1" };
+        db.AnimeMetadata.Add(anime);
+        var eventId = Guid.NewGuid();
+        db.ActivityLogs.Add(new ActivityLog { AnimeId = 1, Timestamp = DateTimeOffset.UtcNow, ChangeType = ActivityChangeType.Added, EventId = eventId });
+        await db.SaveChangesAsync();
+
+        var row = (await new ActivityLogRepository(db).GetAllAsync()).Single();
+
+        Assert.Equal(eventId, row.EventId);
+    }
 }

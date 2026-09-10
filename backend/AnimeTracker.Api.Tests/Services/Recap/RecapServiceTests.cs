@@ -200,6 +200,7 @@ public class RecapServiceTests
     {
         public Task<List<int>> GetOrderedAnimeIdsAsync(CancellationToken ct = default) => Task.FromResult(new List<int>());
         public Task ReplaceOrderAsync(IReadOnlyList<int> editedIds, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task ReplaceAllAsync(IReadOnlyList<int> animeIds, DateTimeOffset modifiedAt, CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     private sealed class FakeActivityLogRepository(List<ActivityLog>? rows = null) : IActivityLogRepository

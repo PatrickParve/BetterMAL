@@ -10,6 +10,7 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<OAuthToken> OAuthTokens => Set<OAuthToken>();
     public DbSet<TopAnimeSelection> TopAnimeSelections => Set<TopAnimeSelection>();
+    public DbSet<RankingState> RankingStates => Set<RankingState>();
     public DbSet<PendingEntryDeletion> PendingEntryDeletions => Set<PendingEntryDeletion>();
     public DbSet<PendingReconciliationDiff> PendingReconciliationDiffs => Set<PendingReconciliationDiff>();
     public DbSet<PendingReconciliationDiffEntry> PendingReconciliationDiffEntries => Set<PendingReconciliationDiffEntry>();
@@ -64,6 +65,11 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
                 .OnDelete(DeleteBehavior.Cascade);
             entity.Property(e => e.ChangeType).HasConversion<string>();
             entity.HasIndex(e => e.Timestamp);
+            // No default value: EF always sends the object's EventId, so a
+            // database default would never fire for the app, and an
+            // EF-scaffolded zero-GUID default would turn a forgotten value
+            // into a unique-index collision on the second row (design.md D5).
+            entity.HasIndex(e => e.EventId).IsUnique();
         });
 
         modelBuilder.Entity<TopAnimeSelection>(entity =>

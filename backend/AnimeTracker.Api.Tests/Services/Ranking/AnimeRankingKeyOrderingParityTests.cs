@@ -54,6 +54,6 @@ public class AnimeRankingKeyOrderingParityTests
         db.AnimeMetadata.Add(anime);
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = animeId, Anime = anime, Status = status, MyScore = myScore });
         if (position is { } p)
-            db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = animeId, Anime = anime, Position = p, SelectedAt = DateTimeOffset.UtcNow });
+            db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = animeId, Anime = anime, Position = p });
     }
 }

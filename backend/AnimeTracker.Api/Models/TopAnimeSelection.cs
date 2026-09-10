@@ -7,11 +7,12 @@ namespace AnimeTracker.Api.Models;
 /// is always derived from its current score, not stored here, so re-scoring
 /// an anime moves it between tiers without touching its stored order.
 /// Anime with no row here fall back to alphabetical order within their tier,
-/// after any explicitly ordered members.</summary>
+/// after any explicitly ordered members. The ranking's last-modified time is
+/// not stored per row — it lives on the singleton <see cref="RankingState"/>
+/// row instead.</summary>
 public class TopAnimeSelection
 {
     public int AnimeId { get; set; }
     public AnimeMetadata Anime { get; set; } = null!;
-    public DateTimeOffset SelectedAt { get; set; }
     public int Position { get; set; }
 }

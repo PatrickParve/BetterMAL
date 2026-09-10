@@ -73,6 +73,40 @@ public class UserAnimeEntryEditServiceRankingPlacementTests
     }
 
     [Fact]
+    public async Task SavingANewScoreAdvancesTheRankingTime()
+    {
+        using var db = CreateDb();
+        Seed(db, 1, "Existing", myScore: 8, WatchStatus.Completed);
+        Seed(db, 2, "Newly scored", myScore: null, WatchStatus.Completed);
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        var before = DateTimeOffset.UtcNow;
+        await service.UpdateEntryAsync(2, new UserAnimeEntryEditRequest { MyScore = 8 });
+        var after = DateTimeOffset.UtcNow;
+
+        var state = await db.RankingStates.SingleAsync();
+        Assert.InRange(state.ModifiedAt!.Value, before, after);
+    }
+
+    [Fact]
+    public async Task ReSavingTheSameScoreDoesNotAdvanceTheRankingTime()
+    {
+        using var db = CreateDb();
+        Seed(db, 1, "Existing", myScore: 8, WatchStatus.Completed);
+        Seed(db, 2, "Newly scored", myScore: null, WatchStatus.Completed);
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+        await service.UpdateEntryAsync(2, new UserAnimeEntryEditRequest { MyScore = 8 });
+        var before = (await db.RankingStates.SingleAsync()).ModifiedAt;
+
+        await service.UpdateEntryAsync(2, new UserAnimeEntryEditRequest { MyScore = 8 });
+
+        var after = (await db.RankingStates.SingleAsync()).ModifiedAt;
+        Assert.Equal(before, after);
+    }
+
+    [Fact]
     public async Task ChangingTheScoreMovesTheEntryToTheEndOfTheNewTierAndLeavesTheOldTierIntact()
     {
         using var db = CreateDb();

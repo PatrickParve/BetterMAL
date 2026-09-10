@@ -102,4 +102,56 @@ public class AnimeRankingServiceTests
         var slotAfterUndrop = (await selectionRepository.GetOrderedAnimeIdsAsync()).IndexOf(3);
         Assert.Equal(slotBefore, slotAfterUndrop);
     }
+
+    [Fact]
+    public async Task ApplyTierOrderAsyncAdvancesTheRankingTime()
+    {
+        using var db = CreateDb();
+        Seed(db, 1, "A", myScore: 7);
+        Seed(db, 2, "B", myScore: 7);
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        var before = DateTimeOffset.UtcNow;
+        await service.ApplyTierOrderAsync([new AnimeRankingTierOrderRequest(7, [2, 1])]);
+        var after = DateTimeOffset.UtcNow;
+
+        var state = await db.RankingStates.SingleAsync();
+        Assert.InRange(state.ModifiedAt!.Value, before, after);
+    }
+
+    [Fact]
+    public async Task MoveAdjacentAsyncAdvancesTheRankingTime()
+    {
+        using var db = CreateDb();
+        Seed(db, 1, "A", myScore: 7);
+        Seed(db, 2, "B", myScore: 7);
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        var before = DateTimeOffset.UtcNow;
+        await service.MoveAdjacentAsync(2, 1);
+        var after = DateTimeOffset.UtcNow;
+
+        var state = await db.RankingStates.SingleAsync();
+        Assert.InRange(state.ModifiedAt!.Value, before, after);
+    }
+
+    [Fact]
+    public async Task MoveAdjacentAsyncThatReturnsEarlyLeavesTheRankingTimeUntouched()
+    {
+        using var db = CreateDb();
+        Seed(db, 1, "A", myScore: 7);
+        Seed(db, 2, "B", myScore: 8); // different score: MoveAdjacentAsync returns early
+        Seed(db, 3, "C", myScore: 7);
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+        await service.MoveAdjacentAsync(3, 1); // a real write, so a RankingState row exists
+        var before = (await db.RankingStates.SingleAsync()).ModifiedAt;
+
+        await service.MoveAdjacentAsync(2, 1); // different scores: returns early
+
+        var after = (await db.RankingStates.SingleAsync()).ModifiedAt;
+        Assert.Equal(before, after);
+    }
 }

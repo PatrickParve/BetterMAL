@@ -28,7 +28,7 @@ public class TopAnimeSelectionRepositoryTests
     private static void SeedStoredOrder(AnimeTrackerDbContext db, params int[] orderedAnimeIds)
     {
         for (var i = 0; i < orderedAnimeIds.Length; i++)
-            db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = orderedAnimeIds[i], Position = i, SelectedAt = DateTimeOffset.UtcNow });
+            db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = orderedAnimeIds[i], Position = i });
     }
 
     [Fact]
@@ -76,5 +76,166 @@ public class TopAnimeSelectionRepositoryTests
         var repository = new TopAnimeSelectionRepository(db);
 
         await Assert.ThrowsAsync<UnknownAnimeIdsException>(() => repository.ReplaceOrderAsync([1, 404]));
+    }
+
+    [Fact]
+    public async Task NoRankingStateRowExistsBeforeAnyWrite()
+    {
+        using var db = CreateDb();
+        SeedKnown(db, 1, 2, 3);
+        SeedStoredOrder(db, 1, 2, 3);
+        await db.SaveChangesAsync();
+
+        Assert.Null(await db.RankingStates.FirstOrDefaultAsync());
+    }
+
+    [Fact]
+    public async Task ReplaceOrderAsyncStampsTheRankingEvenWhenTheWrittenOrderMatchesTheStoredOne()
+    {
+        using var db = CreateDb();
+        SeedKnown(db, 1, 2, 3);
+        SeedStoredOrder(db, 1, 2, 3);
+        await db.SaveChangesAsync();
+        var repository = new TopAnimeSelectionRepository(db);
+
+        var before = DateTimeOffset.UtcNow;
+        await repository.ReplaceOrderAsync([1, 2, 3]); // identical to the stored order
+        var after = DateTimeOffset.UtcNow;
+
+        var state = await db.RankingStates.SingleAsync();
+        Assert.InRange(state.ModifiedAt!.Value, before, after);
+    }
+
+    [Fact]
+    public async Task ASecondReplaceOrderAsyncWriteAdvancesTheRankingTime()
+    {
+        using var db = CreateDb();
+        SeedKnown(db, 1, 2, 3);
+        SeedStoredOrder(db, 1, 2, 3);
+        await db.SaveChangesAsync();
+        var repository = new TopAnimeSelectionRepository(db);
+
+        await repository.ReplaceOrderAsync([2, 1]);
+        var first = (await db.RankingStates.SingleAsync()).ModifiedAt;
+
+        await repository.ReplaceOrderAsync([1, 2]);
+        var second = (await db.RankingStates.SingleAsync()).ModifiedAt;
+
+        Assert.True(second > first);
+    }
+
+    [Fact]
+    public async Task ReplaceOrderAsyncMergeExample()
+    {
+        using var db = CreateDb();
+        SeedKnown(db, 1, 2, 3); // A=1, B=2, C=3
+        SeedStoredOrder(db, 1, 2, 3);
+        await db.SaveChangesAsync();
+        var repository = new TopAnimeSelectionRepository(db);
+
+        await repository.ReplaceOrderAsync([3, 1]); // [C, A]
+
+        var order = await repository.GetOrderedAnimeIdsAsync();
+        Assert.Equal([3, 2, 1], order); // [C, B, A]
+    }
+
+    [Fact]
+    public async Task ReplaceAllAsyncDropsAnimeMissingFromTheList()
+    {
+        using var db = CreateDb();
+        SeedKnown(db, 1, 2, 3);
+        SeedStoredOrder(db, 1, 2, 3);
+        await db.SaveChangesAsync();
+        var repository = new TopAnimeSelectionRepository(db);
+
+        await repository.ReplaceAllAsync([3, 1], DateTimeOffset.UtcNow);
+
+        var order = await repository.GetOrderedAnimeIdsAsync();
+        Assert.Equal([3, 1], order);
+    }
+
+    [Fact]
+    public async Task ReplaceAllAsyncStoresTheGivenTimeNotNow()
+    {
+        using var db = CreateDb();
+        SeedKnown(db, 1, 2);
+        SeedStoredOrder(db, 1, 2);
+        await db.SaveChangesAsync();
+        var repository = new TopAnimeSelectionRepository(db);
+        var pastTime = DateTimeOffset.UtcNow.AddDays(-3);
+
+        await repository.ReplaceAllAsync([1, 2], pastTime);
+
+        var state = await db.RankingStates.SingleAsync();
+        Assert.Equal(pastTime, state.ModifiedAt);
+    }
+
+    [Fact]
+    public async Task ReplaceAllAsyncARepeatedIdTakesItsFirstPosition()
+    {
+        using var db = CreateDb();
+        SeedKnown(db, 1, 2);
+        SeedStoredOrder(db, 1, 2);
+        await db.SaveChangesAsync();
+        var repository = new TopAnimeSelectionRepository(db);
+
+        await repository.ReplaceAllAsync([1, 2, 1], DateTimeOffset.UtcNow);
+
+        var order = await repository.GetOrderedAnimeIdsAsync();
+        Assert.Equal([1, 2], order);
+    }
+
+    [Fact]
+    public async Task ReplaceAllAsyncWithAnEmptyListLeavesNoRowsAndRecordsTheGivenTime()
+    {
+        using var db = CreateDb();
+        SeedKnown(db, 1, 2);
+        SeedStoredOrder(db, 1, 2);
+        await db.SaveChangesAsync();
+        var repository = new TopAnimeSelectionRepository(db);
+        var time = DateTimeOffset.UtcNow;
+
+        await repository.ReplaceAllAsync([], time);
+
+        Assert.Empty(await repository.GetOrderedAnimeIdsAsync());
+        var state = await db.RankingStates.SingleAsync();
+        Assert.Equal(time, state.ModifiedAt);
+    }
+
+    [Fact]
+    public async Task ReplaceAllAsyncAnUnknownIdThrowsAndLeavesOrderAndTimeUnchanged()
+    {
+        using var db = CreateDb();
+        SeedKnown(db, 1, 2);
+        SeedStoredOrder(db, 1, 2);
+        await db.SaveChangesAsync();
+        var repository = new TopAnimeSelectionRepository(db);
+        await repository.ReplaceAllAsync([2, 1], DateTimeOffset.UtcNow.AddDays(-1));
+        var stateBefore = (await db.RankingStates.SingleAsync()).ModifiedAt;
+
+        await Assert.ThrowsAsync<UnknownAnimeIdsException>(
+            () => repository.ReplaceAllAsync([1, 404], DateTimeOffset.UtcNow));
+
+        var order = await repository.GetOrderedAnimeIdsAsync();
+        Assert.Equal([2, 1], order);
+        var stateAfter = (await db.RankingStates.SingleAsync()).ModifiedAt;
+        Assert.Equal(stateBefore, stateAfter);
+    }
+
+    [Fact]
+    public async Task ReplaceAllAsyncWorksWhenNoRankingStateRowExistedYet()
+    {
+        using var db = CreateDb();
+        SeedKnown(db, 1, 2);
+        await db.SaveChangesAsync();
+        var repository = new TopAnimeSelectionRepository(db);
+        var time = DateTimeOffset.UtcNow;
+
+        await repository.ReplaceAllAsync([1, 2], time);
+
+        var order = await repository.GetOrderedAnimeIdsAsync();
+        Assert.Equal([1, 2], order);
+        var state = await db.RankingStates.SingleAsync();
+        Assert.Equal(time, state.ModifiedAt);
     }
 }

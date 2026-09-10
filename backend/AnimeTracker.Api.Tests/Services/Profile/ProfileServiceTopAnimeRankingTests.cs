@@ -137,6 +137,8 @@ public class ProfileServiceTopAnimeRankingTests
         public Task<List<int>> GetOrderedAnimeIdsAsync(CancellationToken ct = default) => Task.FromResult(orderedAnimeIds);
         public Task ReplaceOrderAsync(IReadOnlyList<int> editedIds, CancellationToken ct = default) =>
             throw new NotImplementedException();
+        public Task ReplaceAllAsync(IReadOnlyList<int> animeIds, DateTimeOffset modifiedAt, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 
     private sealed class FakeSeriesBuildTrigger : ISeriesBuildTrigger

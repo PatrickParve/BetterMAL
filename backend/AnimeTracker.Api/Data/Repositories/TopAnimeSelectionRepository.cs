@@ -18,14 +18,7 @@ public class TopAnimeSelectionRepository(AnimeTrackerDbContext db) : ITopAnimeSe
     public async Task ReplaceOrderAsync(IReadOnlyList<int> editedIds, CancellationToken ct = default)
     {
         var distinctEditedIds = editedIds.Distinct().ToList();
-
-        var knownIds = await db.AnimeMetadata
-            .Where(a => distinctEditedIds.Contains(a.Id))
-            .Select(a => a.Id)
-            .ToListAsync(ct);
-        var unknownIds = distinctEditedIds.Except(knownIds).ToList();
-        if (unknownIds.Count > 0)
-            throw new UnknownAnimeIdsException(unknownIds);
+        await EnsureKnownIdsAsync(distinctEditedIds, ct);
 
         var existing = await db.TopAnimeSelections.ToListAsync(ct);
         var existingOrder = existing.OrderBy(s => s.Position).ThenBy(s => s.AnimeId).Select(s => s.AnimeId).ToList();
@@ -47,11 +40,56 @@ public class TopAnimeSelectionRepository(AnimeTrackerDbContext db) : ITopAnimeSe
         // existing slot is filled (design.md D6).
         finalOrder.AddRange(editedQueue);
 
-        db.TopAnimeSelections.RemoveRange(existing);
+        await WriteOrderAsync(existing, finalOrder, DateTimeOffset.UtcNow, ct);
+    }
 
-        var now = DateTimeOffset.UtcNow;
+    public async Task ReplaceAllAsync(IReadOnlyList<int> animeIds, DateTimeOffset modifiedAt, CancellationToken ct = default)
+    {
+        // Distinct() keeps each id's first occurrence, the same rule
+        // ReplaceOrderAsync's merge applies to its own edited ids.
+        var distinctIds = animeIds.Distinct().ToList();
+        await EnsureKnownIdsAsync(distinctIds, ct);
+
+        var existing = await db.TopAnimeSelections.ToListAsync(ct);
+        await WriteOrderAsync(existing, distinctIds, modifiedAt, ct);
+    }
+
+    private async Task EnsureKnownIdsAsync(IReadOnlyList<int> distinctIds, CancellationToken ct)
+    {
+        var knownIds = await db.AnimeMetadata
+            .Where(a => distinctIds.Contains(a.Id))
+            .Select(a => a.Id)
+            .ToListAsync(ct);
+        var unknownIds = distinctIds.Except(knownIds).ToList();
+        if (unknownIds.Count > 0)
+            throw new UnknownAnimeIdsException(unknownIds);
+    }
+
+    /// <summary>The one place every write of the stored order passes through,
+    /// so "every write sets the ranking's last-modified time" is structural
+    /// rather than a convention each caller must remember (design.md D2).
+    /// Replaces <paramref name="existingRows"/> outright with
+    /// <paramref name="finalOrder"/> at positions <c>0..n-1</c>, and records
+    /// <paramref name="modifiedAt"/> on the singleton <see cref="RankingState"/>
+    /// row, all in one save.</summary>
+    private async Task WriteOrderAsync(
+        IReadOnlyList<TopAnimeSelection> existingRows,
+        IReadOnlyList<int> finalOrder,
+        DateTimeOffset modifiedAt,
+        CancellationToken ct)
+    {
+        db.TopAnimeSelections.RemoveRange(existingRows);
+
         for (var i = 0; i < finalOrder.Count; i++)
-            db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = finalOrder[i], SelectedAt = now, Position = i });
+            db.TopAnimeSelections.Add(new TopAnimeSelection { AnimeId = finalOrder[i], Position = i });
+
+        var state = await db.RankingStates.FirstOrDefaultAsync(ct);
+        if (state is null)
+        {
+            state = new RankingState();
+            db.RankingStates.Add(state);
+        }
+        state.ModifiedAt = modifiedAt;
 
         await db.SaveChangesAsync(ct);
     }
