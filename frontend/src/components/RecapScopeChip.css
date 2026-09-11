@@ -1,0 +1,44 @@
+/* One line tall and visibly smaller than --control-h (design D8) — a chip,
+   not a tab, so it never reads as a seventh status filter sitting in the
+   results line. */
+.recap-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Bold + the accent colour reads as clickable on its own, without an
+   underline competing with the chip's small text at rest. */
+.recap-scope-chip__link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.recap-scope-chip__link:hover {
+  text-decoration: underline;
+}
+
+.recap-scope-chip__dismiss {
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.recap-scope-chip__dismiss:hover {
+  opacity: 0.75;
+}

@@ -1,0 +1,203 @@
+/* Two-column grid of label + wrapping controls row (design D2 of
+   redo-my-list-filtering-and-sorting): a group's controls can only wrap
+   inside its own row, and the other group is a different grid row, so a
+   wrap never reshuffles alignment. No margin-left: auto anywhere in the
+   block — that was what let the old order-cluster drift depending on
+   window width. */
+.my-list-controls {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: start;
+  column-gap: 16px;
+  row-gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.my-list-controls__label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.75;
+  line-height: var(--control-h);
+  white-space: nowrap;
+}
+
+.my-list-controls__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* The hairline between the two groups (design D2) — on both the label and
+   the row so it spans the block even when the row wraps onto several
+   lines, and even after the narrow-viewport collapse below stacks the two
+   cells into one column. */
+.my-list-controls__label--filter,
+.my-list-controls__row--filter {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+@media (max-width: 560px) {
+  .my-list-controls {
+    grid-template-columns: 1fr;
+  }
+  .my-list-controls__label {
+    line-height: normal;
+  }
+}
+
+/* Every rectangular control in the block shares --control-h and the 6px
+   radius the selects already use (design D3) — pills stay exclusive to the
+   status tabs. */
+.my-list-controls__select {
+  font: inherit;
+  font-size: 14px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.my-list-controls__find {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 14rem;
+  max-width: 22rem;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.my-list-controls__find svg {
+  flex: 0 0 auto;
+  opacity: 0.6;
+}
+
+.my-list-controls__find-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 14px;
+  border: none;
+  background: transparent;
+  color: inherit;
+}
+
+.my-list-controls__find-input:focus {
+  outline: none;
+}
+
+/* Sits within the field's own bounds (library-views "Find in list") — its
+   appearance neither resizes the field nor moves the Type filter beside
+   it. */
+.my-list-controls__find-clear {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.my-list-controls__find-clear:hover {
+  color: var(--text-h);
+}
+
+/* The direction button's text comes entirely through StableLabel, so its
+   own padding/height match the selects beside it and its width never
+   changes as the label does (design D5). */
+.my-list-controls__direction {
+  font: inherit;
+  font-size: 14px;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.my-list-controls__direction:hover:not(:disabled) {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.my-list-controls__direction:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.my-list-controls__then-word {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+/* Two rectangles joined into one control (design D3) — a shared border
+   line down the middle rather than two separately bordered buttons. */
+.my-list-controls__segmented {
+  display: flex;
+  height: var(--control-h);
+  box-sizing: border-box;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.my-list-controls__segmented-button {
+  font: inherit;
+  font-size: 14px;
+  padding: 0 12px;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.my-list-controls__segmented-button:first-child {
+  border-left: none;
+}
+
+.my-list-controls__segmented-button:hover {
+  color: var(--text-h);
+}
+
+/* The segmented control's own pressed state — which of the two is chosen,
+   always exactly one — kept as its own modifier rather than the Filter
+   group's --active mark below: "Grouping" has no default/off state to
+   narrow away from, so it never joins the "filters in force" signal. */
+.my-list-controls__segmented-button--selected {
+  background: var(--accent-bg);
+  color: var(--text-h);
+}
+
+/* Colours only (design D10) — the app's active accent, shared with the
+   shared multi-select trigger's own --active treatment, so every narrowing
+   Filter control reads the same way. Sort-group controls never get this
+   modifier: ordering hides nothing. */
+.my-list-controls--active {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--text-h);
+}

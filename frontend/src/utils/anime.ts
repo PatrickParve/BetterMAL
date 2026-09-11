@@ -306,7 +306,8 @@ export type SortKey =
 
 // 'natural' is each key's own natural order (descending for scores/counts/
 // dates, ascending for alphabetical/type, most popular first for Popularity,
-// the airing-status cycle for airing status); 'reversed' flips it. The
+// the airing-status cycle for airing status); 'reversed' flips every key
+// except Airing status, whose order is fixed by its chosen first status. The
 // tiebreaker always applies in 'natural'.
 export type SortDirection = 'natural' | 'reversed'
 
@@ -355,9 +356,11 @@ function dateValue(iso: string | null): number | null {
   return iso ? new Date(iso).getTime() : null
 }
 
-// Airing status isn't here — its order additionally depends on the "show
-// first" control, so it's resolved separately in sortComparator below,
-// reusing compareByAiringStatus rather than duplicating its cycle logic.
+// Airing status isn't here — direction doesn't apply to it (sortComparator
+// returns compareByAiringStatus unchanged regardless of direction), and its
+// order additionally depends on the "show first" control, so it's resolved
+// separately in sortComparator below, reusing compareByAiringStatus rather
+// than duplicating its cycle logic.
 const SORT_KEY_FACTORIES: Record<
   Exclude<SortKey, 'airingStatus'>,
   (direction: SortDirection) => Comparator<SortableListItem>
@@ -414,8 +417,10 @@ export function sortComparator(
   airingStatusFirst: AiringStatus,
 ): Comparator<SortableListItem> {
   if (key === 'airingStatus') {
-    const cmp = compareByAiringStatus<SortableListItem>(airingStatusFirst)
-    return direction === 'reversed' ? (a, b) => -cmp(a, b) : cmp
+    // The chosen first status *is* the order, whatever `direction` is.
+    // Negating the cycle comparator for 'reversed' used to put unknown-airing
+    // entries first, contrary to "missing values sort last".
+    return compareByAiringStatus<SortableListItem>(airingStatusFirst)
   }
   return SORT_KEY_FACTORIES[key](direction)
 }

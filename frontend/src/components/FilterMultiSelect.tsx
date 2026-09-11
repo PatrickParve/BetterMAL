@@ -1,5 +1,6 @@
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useClickOutside } from '../hooks/useClickOutside.ts'
+import { StableLabel } from './StableLabel.tsx'
 import './FilterMultiSelect.css'
 
 export type FilterMultiSelectOption = { value: string; label: string }
@@ -23,9 +24,31 @@ type FilterMultiSelectProps = {
 // summary label, and behaves badly for multi-selection on macOS (D7).
 export function FilterMultiSelect({ label, options, selected, onChange }: FilterMultiSelectProps) {
   const [open, setOpen] = useState(false)
+  const [alignEnd, setAlignEnd] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   useClickOutside(containerRef, () => setOpen(false))
+
+  // A layout effect, not a plain effect: the first painted frame must
+  // already be aligned, or the panel would visibly jump once its rect is
+  // measured. Resets alignEnd on close too, so the next open always starts
+  // from the left-aligned baseline it measures against, rather than
+  // inheriting whichever edge the previous open settled on.
+  useLayoutEffect(() => {
+    if (!open) {
+      setAlignEnd(false)
+      return
+    }
+    function evaluate() {
+      const panel = panelRef.current
+      if (!panel) return
+      setAlignEnd(panel.getBoundingClientRect().right > window.innerWidth - 8)
+    }
+    evaluate()
+    window.addEventListener('resize', evaluate)
+    return () => window.removeEventListener('resize', evaluate)
+  }, [open])
 
   // Every emission goes through here so All has exactly one representation
   // however it's reached — the shortcut, a fresh visit, or ticking the last
@@ -83,28 +106,24 @@ export function FilterMultiSelect({ label, options, selected, onChange }: Filter
     }
   }
 
-  const live = summary()
-
   return (
     <div className="filter-multi-select" ref={containerRef} onKeyDown={handleKeyDown}>
       <button
         type="button"
-        className="filter-multi-select__button"
+        className={`filter-multi-select__button${selected !== null ? ' filter-multi-select--active' : ''}`}
         aria-haspopup="true"
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
       >
-        {summaryCandidates().map((candidate) => {
-          const text = `${label}: ${candidate}`
-          return (
-            <span key={candidate} className="filter-multi-select__button-text" aria-hidden={text === live ? undefined : true}>
-              {text}
-            </span>
-          )
-        })}
+        <StableLabel current={summary()} candidates={summaryCandidates().map((candidate) => `${label}: ${candidate}`)} />
       </button>
       {open && (
-        <div className="filter-multi-select__panel" role="group" aria-label={label}>
+        <div
+          ref={panelRef}
+          className={`filter-multi-select__panel${alignEnd ? ' filter-multi-select__panel--end' : ''}`}
+          role="group"
+          aria-label={label}
+        >
           <div className="filter-multi-select__shortcuts">
             {/* All deliberately does not write out every value: two states
                 that render identically (every box ticked vs. no restriction

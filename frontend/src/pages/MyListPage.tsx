@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { getMyList, getRecap, updateEntry } from '../api/client.ts'
 import { RECAP_SEASONS, type IncrementTarget, type MyListItemDto, type RecapDto, type RecapMode, type RecapSeasonName, type RecapTimeFilter, type UserAnimeEntryDto, type WatchStatus } from '../api/types.ts'
-import { FilterMultiSelect, type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
+import type { FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
+import { MyListControls, fromSortChoice, type ScoreFilter, type SortChoice } from '../components/MyListControls.tsx'
 import { MyListRow } from '../components/MyListRow.tsx'
 import { RecapPickerOverlay } from '../components/RecapPickerOverlay.tsx'
+import { RecapScopeChip } from '../components/RecapScopeChip.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useEpisodeIncrement, useSetEpisodesWatched } from '../context/CompletionPromptContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
@@ -28,13 +30,6 @@ import './MyListPage.css'
 // than being a seventh member of the type, so there is no representable
 // contradiction (e.g. `['All', 'Watching']`) to guard against.
 type StatusFilter = WatchStatus[]
-// Widened (design.md decision 5) to carry a specific score value alongside
-// the three original options — stored as the plain number string ("8"), not
-// the `score-8` form the recap handoff's `focus` token uses; see parseFocus.
-type ScoreFilter = 'any' | 'rated' | 'unrated' | `${number}`
-
-// 10 down to 1, between Rated and Unrated in the select (tasks.md 4.1).
-const SCORE_FILTER_VALUES = Array.from({ length: 10 }, (_, i) => 10 - i)
 
 // Rewatching sits directly after Currently watching — both are runs in
 // progress (library-views spec, "My list grouped and ordered by status").
@@ -51,44 +46,21 @@ const STATUS_TABS: { value: WatchStatus; label: string }[] = [
   { value: 'Dropped', label: 'Dropped' },
 ]
 
-const SORT_OPTIONS: { value: SortKey; label: string }[] = [
-  { value: 'alphabetical', label: 'Alphabetical' },
-  { value: 'myScore', label: 'My score' },
-  { value: 'malScore', label: 'MAL score' },
-  { value: 'popularity', label: 'Popularity' },
-  { value: 'episodesWatched', label: 'Episodes watched' },
-  { value: 'progress', label: 'Progress' },
-  { value: 'totalEpisodes', label: 'Total episodes' },
-  { value: 'airingStatus', label: 'Airing status' },
-  { value: 'type', label: 'Type' },
-  { value: 'startDate', label: 'Start date' },
-  { value: 'finishDate', label: 'Finish date' },
-]
-
-const AIRING_STATUS_FIRST_OPTIONS: { value: AiringStatus; label: string }[] = [
-  { value: 'currently_airing', label: AIRING_STATUS_LABELS.currently_airing },
-  { value: 'finished_airing', label: AIRING_STATUS_LABELS.finished_airing },
-  { value: 'not_yet_aired', label: AIRING_STATUS_LABELS.not_yet_aired },
-]
-
 // The recap handoff's `focus` token (design.md decision 1/3), translated
 // into this page's own control values — a *seed* for useRestorableState's
 // `initial`, read once per fresh visit rather than an arrival effect (design.md
 // decision 2). An unknown or absent token maps to "no narrowing": every
-// control stays at its ordinary default. `movies` needs the Started flag
-// because the stat it mirrors is status-agnostic (tasks.md 5.1). `status` is
-// a one-element array (or `[]`) — every deep link still lands on exactly the
-// single status it names today (polish-rewatch-more-and-filters design.md
-// D6, tasks.md 5.2).
+// control stays at its ordinary default. `status` is a one-element array (or
+// `[]`) — every deep link still lands on exactly the single status it names
+// today (polish-rewatch-more-and-filters design.md D6, tasks.md 5.2).
 type FocusSeed = {
   status: StatusFilter
   typeFilter: string[] | null
   scoreFilter: ScoreFilter
-  startedFilter: boolean
 }
 
 function parseFocus(token: string | null): FocusSeed {
-  const none: FocusSeed = { status: [], typeFilter: null, scoreFilter: 'any', startedFilter: false }
+  const none: FocusSeed = { status: [], typeFilter: null, scoreFilter: 'any' }
   switch (token) {
     case 'completed':
       return { ...none, status: ['Completed'] }
@@ -97,7 +69,11 @@ function parseFocus(token: string | null): FocusSeed {
     case 'watching':
       return { ...none, status: ['Watching'] }
     case 'movies':
-      return { ...none, typeFilter: ['movie'], startedFilter: true }
+      // The stat this mirrors ("Movies watched") counts a movie regardless
+      // of status, which the removed Started filter used to narrow to. The
+      // status tabs don't have an equivalent (Dropped can still have zero
+      // episodes watched), so this deep link is now type-only.
+      return { ...none, typeFilter: ['movie'] }
     default: {
       const scoreMatch = token?.match(/^score-([1-9]|10)$/)
       return scoreMatch ? { ...none, scoreFilter: scoreMatch[1] as ScoreFilter } : none
@@ -148,10 +124,16 @@ type Derivation =
   | { mode: 'grouped'; total: number; shown: number; groups: { status: WatchStatus; items: MyListItemDto[] }[] }
   | { mode: 'flat'; total: number; shown: number; items: MyListItemDto[] }
 
-// My list page: grouped by status (Watching -> On hold -> Plan to watch ->
-// Completed -> Dropped) by default, with a filter bar (find-in-list, type,
-// airing status, score) and a two-level sort (primary + tiebreaker) that
-// composes over the whole page instead of per status group.
+// My list page: five bands stacked top to bottom — a header (title only),
+// the status tabs (with Recap a period and, while off-default, Reset
+// filters & sort together at the far end), the controls block (a Filter
+// group and a Sort group, rendered by MyListControls), a results line (the
+// recap scope chip, only while scoped), and the list itself, grouped by
+// status (Watching -> Rewatching -> On hold -> Plan to watch -> Completed ->
+// Dropped) by default, each section's own count next to its title alongside
+// the ALL total (see derived.shown in renderBody). Filtering and the
+// two-level sort (primary + tiebreaker) compose over the whole page instead
+// of per status group.
 export function MyListPage() {
   const { data, loading, setData: setItems, reload } = usePageData<MyListItemDto[]>('my-list', getMyList)
   const items = data ?? []
@@ -175,7 +157,6 @@ export function MyListPage() {
   const [typeFilter, setTypeFilter] = useRestorableState<string[] | null>('typeFilter', focusSeed.typeFilter)
   const [airingFilter, setAiringFilter] = useRestorableState<string[] | null>('airingFilter', null)
   const [scoreFilter, setScoreFilter] = useRestorableState<ScoreFilter>('scoreFilter', focusSeed.scoreFilter)
-  const [startedFilter, setStartedFilter] = useRestorableState('startedFilter', focusSeed.startedFilter)
   const [sort, setSort] = useRestorableState<SortKey>('sort', 'alphabetical')
   const [sortDirection, setSortDirection] = useRestorableState<SortDirection>('sortDirection', 'natural')
   const [sortThen, setSortThen] = useRestorableState<SortKey | null>('sortThen', null)
@@ -324,8 +305,10 @@ export function MyListPage() {
           ? String(recapStartYear)
           : `${seasonLabel(recapSeason)} ${recapStartYear}`
     const filterLabel = recapMode === 'season' ? 'What aired' : recapFilter === 'aired' ? 'What aired' : 'What I watched'
-    const typeLabel = recapType === 'all' ? 'All types' : mediaTypeLabel(recapType)
-    return `${periodLabel} · ${filterLabel} · ${typeLabel}`
+    // "All types" is the common case and adds nothing the period/filter
+    // don't already say — only a real narrowing (a specific media type) is
+    // worth the chip's limited space.
+    return recapType === 'all' ? `${periodLabel} · ${filterLabel}` : `${periodLabel} · ${filterLabel} · ${mediaTypeLabel(recapType)}`
   }
 
   const [pendingIncrementId, setPendingIncrementId] = useState<number | null>(null)
@@ -427,11 +410,13 @@ export function MyListPage() {
     let hasUnknownType = false
     const presentAiring = new Set<string>()
     let hasUnknownAiring = false
+    const presentScores = new Set<number>()
     for (const item of scopedItems) {
       if (item.mediaType) presentTypes.add(item.mediaType)
       else hasUnknownType = true
       if (item.airingStatus) presentAiring.add(item.airingStatus)
       else hasUnknownAiring = true
+      if (item.entry.myScore != null) presentScores.add(item.entry.myScore)
     }
 
     const typeOptions: FilterMultiSelectOption[] = MEDIA_TYPE_ORDER.filter((value) => presentTypes.has(value)).map(
@@ -444,7 +429,11 @@ export function MyListPage() {
       .map((status) => ({ value: status, label: AIRING_STATUS_LABELS[status] }))
     if (hasUnknownAiring) airingOptions.push({ value: 'unknown', label: 'Unknown' })
 
-    return { typeOptions, airingOptions }
+    // 10 down to 1, same order as the old fixed list — narrowed to scores at
+    // least one entry actually has, same rule as Type/Airing above.
+    const scoreOptions = Array.from({ length: 10 }, (_, i) => 10 - i).filter((value) => presentScores.has(value))
+
+    return { typeOptions, airingOptions, scoreOptions }
   }, [scopedItems])
 
   // One derivation: filter (status -> text -> type -> airing -> score), sort
@@ -468,7 +457,6 @@ export function MyListPage() {
       if (scoreFilter === 'unrated' && item.entry.myScore != null) return false
       if (scoreFilter !== 'any' && scoreFilter !== 'rated' && scoreFilter !== 'unrated' && item.entry.myScore !== Number(scoreFilter))
         return false
-      if (startedFilter && item.entry.episodesWatched <= 0) return false
       return true
     })
 
@@ -494,7 +482,6 @@ export function MyListPage() {
     typeFilter,
     airingFilter,
     scoreFilter,
-    startedFilter,
     sort,
     sortDirection,
     sortThen,
@@ -502,13 +489,11 @@ export function MyListPage() {
     groupByStatus,
   ])
 
-  const isNarrowed = derived.shown !== derived.total
   const isOffDefault =
     query !== '' ||
     typeFilter !== null ||
     airingFilter !== null ||
     scoreFilter !== 'any' ||
-    startedFilter ||
     sort !== 'alphabetical' ||
     sortDirection !== 'natural' ||
     sortThen !== null ||
@@ -527,18 +512,34 @@ export function MyListPage() {
     setTypeFilter(null)
     setAiringFilter(null)
     setScoreFilter('any')
-    setStartedFilter(false)
     setSort('alphabetical')
     setSortDirection('natural')
     setSortThen(null)
     setGroupByStatus(true)
+    setAiringStatusFirst('finished_airing')
   }
 
-  function handleSortChange(next: SortKey) {
-    setSort(next)
+  // One stored `airingStatusFirst` serves both the primary and the
+  // tiebreaker select, because the two can never both be Airing status at
+  // once (design D4) — whichever select just chose an airing choice is the
+  // one that gets to set it.
+  function handleSortChange(choice: SortChoice) {
+    const { key, first } = fromSortChoice(choice)
+    setSort(key)
+    if (first !== null) setAiringStatusFirst(first)
     // A key can't tiebreak itself — drop it rather than leave a stale
     // selection the "then by" control no longer offers.
-    setSortThen((prev) => (prev === next ? null : prev))
+    setSortThen((prev) => (prev === key ? null : prev))
+  }
+
+  function handleThenChange(choice: SortChoice | null) {
+    if (choice === null) {
+      setSortThen(null)
+      return
+    }
+    const { key, first } = fromSortChoice(choice)
+    setSortThen(key)
+    if (first !== null) setAiringStatusFirst(first)
   }
 
   // Rank numbers follow the grouping toggle, not the sort key: shown only
@@ -566,127 +567,28 @@ export function MyListPage() {
     )
   }
 
-  function renderFilterBar() {
-    const tiebreakOptions = SORT_OPTIONS.filter((option) => option.value !== sort)
-    return (
-      <div className="my-list-page__filter-bar">
-        <div className="my-list-page__filter-cluster">
-          <input
-            type="text"
-            className="my-list-page__query"
-            placeholder="Find in list…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            aria-label="Find in list"
-          />
-          <FilterMultiSelect label="Type" options={filterOptions.typeOptions} selected={typeFilter} onChange={setTypeFilter} />
-          <FilterMultiSelect
-            label="Airing"
-            options={filterOptions.airingOptions}
-            selected={airingFilter}
-            onChange={setAiringFilter}
-          />
-          <select
-            className="my-list-page__sort"
-            value={scoreFilter}
-            onChange={(event) => setScoreFilter(event.target.value as ScoreFilter)}
-            aria-label="Filter by score"
-          >
-            <option value="any">Score: Any</option>
-            <option value="rated">Score: Rated</option>
-            {SCORE_FILTER_VALUES.map((value) => (
-              <option key={value} value={value}>
-                Score: {value}
-              </option>
-            ))}
-            <option value="unrated">Score: Unrated</option>
-          </select>
-          <button
-            type="button"
-            className={`my-list-page__tab${startedFilter ? ' my-list-page__tab--active' : ''}`}
-            aria-pressed={startedFilter}
-            onClick={() => setStartedFilter((prev) => !prev)}
-          >
-            Started
-          </button>
-        </div>
-        <div className="my-list-page__order-cluster">
-          <select
-            className="my-list-page__sort"
-            value={sort}
-            onChange={(event) => handleSortChange(event.target.value as SortKey)}
-            aria-label="Sort by"
-          >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className={`my-list-page__tab${sortDirection === 'reversed' ? ' my-list-page__tab--active' : ''}`}
-            aria-pressed={sortDirection === 'reversed'}
-            onClick={() => setSortDirection((prev) => (prev === 'natural' ? 'reversed' : 'natural'))}
-          >
-            Reverse
-          </button>
-          {sort === 'airingStatus' && (
-            <select
-              className="my-list-page__sort"
-              value={airingStatusFirst}
-              onChange={(event) => setAiringStatusFirst(event.target.value as AiringStatus)}
-              aria-label="Show which airing status first"
-            >
-              {AIRING_STATUS_FIRST_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label} first
-                </option>
-              ))}
-            </select>
-          )}
-          <select
-            className="my-list-page__sort"
-            value={sortThen ?? ''}
-            onChange={(event) => setSortThen(event.target.value === '' ? null : (event.target.value as SortKey))}
-            aria-label="Then by"
-          >
-            <option value="">— then by —</option>
-            {tiebreakOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className={`my-list-page__tab${groupByStatus ? ' my-list-page__tab--active' : ''}`}
-            aria-pressed={groupByStatus}
-            onClick={() => setGroupByStatus((prev) => !prev)}
-          >
-            Group by status
-          </button>
-          {isOffDefault && (
-            <button type="button" className="my-list-page__clear-filters" onClick={clearFilters}>
-              Clear filters
-            </button>
-          )}
-        </div>
-      </div>
-    )
-  }
-
   function renderBody() {
     if (loading || (hasRecapScope && recapScopeLoading)) return <p className="my-list-page__loading">Loading…</p>
 
-    if (derived.total === 0) return <p className="my-list-page__empty">Nothing here yet.</p>
+    if (derived.total === 0) {
+      return (
+        <div className="my-list-page__empty-block">
+          <p className="my-list-page__empty-primary">Nothing here yet</p>
+          <p className="my-list-page__empty-secondary">
+            {statusFiltersLabel(statusFilters)}
+            {hasRecapScope ? ' in this recap period' : ''}
+          </p>
+        </div>
+      )
+    }
 
     if (derived.shown === 0) {
       return (
-        <div className="my-list-page__empty">
-          <p>Nothing matches these filters.</p>
+        <div className="my-list-page__empty-block">
+          <p className="my-list-page__empty-primary">Nothing matches these filters</p>
+          <p className="my-list-page__empty-secondary">Try removing a filter, or reset them all.</p>
           <button type="button" className="my-list-page__clear-filters" onClick={clearFilters}>
-            Clear filters
+            Reset filters &amp; sort
           </button>
         </div>
       )
@@ -697,8 +599,18 @@ export function MyListPage() {
         <>
           {derived.groups.map((group) => (
             <section key={group.status} className="my-list-page__group">
-              <div className="my-list-page__group-header">
-                <h2>{STATUS_LABELS[group.status]}</h2>
+              {/* role="status" (not on the h2 itself, which would drop its
+                  heading semantics): announces each status's count changing
+                  as filters narrow it, same as the flat title below. The ALL
+                  total repeats on every section rather than living once
+                  above the list, so it reads next to whichever status
+                  you're looking at instead of a separate line. */}
+              <div className="my-list-page__group-header" role="status">
+                <h2>
+                  {STATUS_LABELS[group.status]}{' '}
+                  <span className="my-list-page__group-count">({group.items.length})</span>{' '}
+                  <span className="my-list-page__group-count">(ALL: {derived.shown})</span>
+                </h2>
               </div>
               <ul className="my-list-page__list">{group.items.map((item) => renderRow(item))}</ul>
             </section>
@@ -709,8 +621,10 @@ export function MyListPage() {
 
     return (
       <section className="my-list-page__group">
-        <div className="my-list-page__group-header">
-          <h2>{statusFiltersLabel(statusFilters)}</h2>
+        <div className="my-list-page__group-header" role="status">
+          <h2>
+            {statusFiltersLabel(statusFilters)} <span className="my-list-page__group-count">({derived.shown})</span>
+          </h2>
         </div>
         <ul className="my-list-page__list">
           {derived.items.map((item, index) => renderRow(item, showRanks ? index + 1 : undefined))}
@@ -718,6 +632,9 @@ export function MyListPage() {
       </section>
     )
   }
+
+  const resultsVisible = !loading
+  const hasResultsLine = resultsVisible && hasRecapScope
 
   return (
     <div className="my-list-page">
@@ -754,32 +671,58 @@ export function MyListPage() {
             </button>
           )
         })}
-        <button
-          type="button"
-          className="my-list-page__tab my-list-page__recap-button"
-          onClick={() => setPickerOpen(true)}
-        >
-          Recap a period
-        </button>
+        {/* Both page-action buttons together, pushed to the far end as one
+            unit — a single margin-left: auto here rather than on each
+            button, so Reset appearing/disappearing can't shift Recap. */}
+        <div className="my-list-page__tabs-actions">
+          <button type="button" className="my-list-page__clear-filters" onClick={() => setPickerOpen(true)}>
+            Recap a period
+          </button>
+          {isOffDefault && (
+            <button type="button" className="my-list-page__clear-filters" onClick={clearFilters}>
+              Reset filters &amp; sort
+            </button>
+          )}
+        </div>
       </div>
 
-      {hasRecapScope && (
-        <div className="my-list-page__recap-scope">
-          <span>Recap scope: {recapScopeLabel()}</span>
-          <Link to={`/recap?${recapSearchFromScope()}`} className="my-list-page__recap-scope-link">
-            View recap
-          </Link>
-          <button type="button" className="my-list-page__recap-scope-dismiss" onClick={dismissRecapScope} aria-label="Dismiss recap scope">
-            &times;
-          </button>
-        </div>
-      )}
+      <MyListControls
+        filters={{
+          query,
+          onQueryChange: setQuery,
+          typeFilter,
+          onTypeFilterChange: setTypeFilter,
+          airingFilter,
+          onAiringFilterChange: setAiringFilter,
+          scoreFilter,
+          onScoreFilterChange: setScoreFilter,
+        }}
+        sort={{
+          sort,
+          sortDirection,
+          sortThen,
+          groupByStatus,
+          airingStatusFirst,
+          onSortChange: handleSortChange,
+          onThenChange: handleThenChange,
+          onDirectionToggle: () => setSortDirection((prev) => (prev === 'natural' ? 'reversed' : 'natural')),
+          onGroupByStatusChange: setGroupByStatus,
+        }}
+        typeOptions={filterOptions.typeOptions}
+        airingOptions={filterOptions.airingOptions}
+        scoreOptions={filterOptions.scoreOptions}
+      />
 
-      {renderFilterBar()}
-      {isNarrowed && (
-        <p className="my-list-page__count">
-          Showing {derived.shown} of {derived.total}
-        </p>
+      {hasResultsLine && (
+        <div className="my-list-page__results">
+          {hasRecapScope && (
+            <RecapScopeChip
+              label={recapScopeLabel()}
+              href={`/recap?${recapSearchFromScope()}`}
+              onDismiss={dismissRecapScope}
+            />
+          )}
+        </div>
       )}
 
       {renderBody()}

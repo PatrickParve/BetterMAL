@@ -35,11 +35,14 @@
   border-color: var(--accent-border);
 }
 
+/* Same soft accent-tint treatment as the status tabs and segmented control
+   on the page this opens from (My List), rather than a solid fill — colours
+   only, so an active pill's size never changes. */
 .recap-picker-overlay__tab--active,
 .recap-picker-overlay__tab--active:hover {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
 }
 
 .recap-picker-overlay__tab:disabled {
@@ -116,10 +119,18 @@
   cursor: pointer;
 }
 
+.recap-picker-overlay__cancel:hover,
+.recap-picker-overlay__confirm:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+
+/* Same soft accent-tint treatment as the mode/filter pills above, rather
+   than a solid fill — colours only, so it reads as the primary action
+   without standing out from the rest of this now-toned-down popup. */
 .recap-picker-overlay__confirm {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
 }
 
 .recap-picker-overlay__confirm:disabled {

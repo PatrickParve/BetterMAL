@@ -1,0 +1,19 @@
+/* Every candidate the label could ever show shares this one grid cell: the
+   one in force renders, the rest sit underneath it with visibility: hidden,
+   and the cell — so the control around it — is exactly as wide as the
+   widest of them. A pixel min-width was rejected: the root font size is
+   fluid (page-header-design's "Height holds as the font scales"), and these
+   labels are option data ("Currently airing", "TV special") a stylesheet has
+   no fixed string to size for in advance. */
+.stable-label {
+  display: grid;
+  grid-template-areas: 'value';
+}
+
+.stable-label__candidate {
+  grid-area: value;
+}
+
+.stable-label__candidate[aria-hidden='true'] {
+  visibility: hidden;
+}

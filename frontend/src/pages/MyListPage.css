@@ -19,37 +19,6 @@
   letter-spacing: normal;
 }
 
-.my-list-page__filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.my-list-page__filter-cluster,
-.my-list-page__order-cluster {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.my-list-page__order-cluster {
-  margin-left: auto;
-}
-
-.my-list-page__query {
-  font: inherit;
-  font-size: 14px;
-  height: var(--control-h);
-  box-sizing: border-box;
-  padding: 0 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  min-width: 160px;
-}
-
 .my-list-page__clear-filters {
   font: inherit;
   font-size: 13px;
@@ -70,29 +39,67 @@
   border-color: var(--accent-border);
 }
 
-.my-list-page__count {
-  margin: -8px 0 0;
-  font-size: 13px;
+/* The results line (library-views "My list reports what is being shown"):
+   just the recap scope chip now that the ALL count lives on every group
+   header instead — only rendered while scoped (MyListPage's
+   hasResultsLine), so an unscoped view doesn't reserve a blank line. */
+.my-list-page__results {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: var(--control-h);
+}
+
+/* Framed empty-state blocks (design D7) — real visual weight in place of
+   a line of faint body text, and the two states read differently: one
+   offers a way out, the other is just a statement of fact. */
+.my-list-page__empty-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 48px 16px;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+.my-list-page__empty-primary {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+.my-list-page__empty-secondary {
+  margin: 0;
   color: var(--text);
   opacity: 0.75;
 }
 
-.my-list-page__sort {
-  font: inherit;
-  font-size: 14px;
-  height: var(--control-h);
-  box-sizing: border-box;
-  padding: 0 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
+.my-list-page__empty-block .my-list-page__clear-filters {
+  margin-top: 8px;
 }
 
 .my-list-page__tabs {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* Recap a period + (while off-default) Reset filters & sort, pushed
+   together to the far end of the tabs row as one unit. The margin-left:
+   auto sits on this wrapper rather than on either button, so Reset
+   appearing/disappearing can't shift Recap — the drift design D2 ruled out
+   for the controls block was several controls each fighting for their own
+   push, not one wrapper with a fixed pair inside it. */
+.my-list-page__tabs-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .my-list-page__tab {
@@ -164,6 +171,14 @@
 
 .my-list-page__group-header h2 {
   margin: 0;
+}
+
+.my-list-page__group-count {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text);
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
 }
 
 .my-list-page__list {
@@ -360,61 +375,9 @@
   border-color: var(--accent-border);
 }
 
-.my-list-page__loading,
-.my-list-page__empty {
+.my-list-page__loading {
   padding: 48px 0;
   text-align: center;
   color: var(--text);
   opacity: 0.75;
-}
-
-.my-list-page__empty .my-list-page__clear-filters {
-  margin-top: 8px;
-  opacity: 1;
-}
-
-/* Shares .my-list-page__tab's chrome (design.md decision 4) so it reads as
-   part of the same control row rather than a separate feature; set apart
-   from the status tabs only by margin-left: auto within that same flex row
-   (.my-list-page__tabs), not by a different shape. */
-.my-list-page__recap-button {
-  margin-left: auto;
-}
-
-.my-list-page__recap-scope {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--accent-border);
-  background: var(--accent-bg);
-  color: var(--text-h);
-  font-size: 13px;
-}
-
-.my-list-page__recap-scope-link {
-  color: var(--text-h);
-  text-decoration: underline;
-  white-space: nowrap;
-}
-
-.my-list-page__recap-scope-link:hover {
-  color: var(--accent);
-}
-
-.my-list-page__recap-scope-dismiss {
-  margin-left: auto;
-  font: inherit;
-  font-size: 16px;
-  line-height: 1;
-  padding: 2px 6px;
-  border: none;
-  background: none;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.my-list-page__recap-scope-dismiss:hover {
-  color: var(--text-h);
 }

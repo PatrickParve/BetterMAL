@@ -2,15 +2,23 @@
   position: relative;
 }
 
+/* Single-area grid, matching the StableLabel cell's own sizing exactly
+   (same technique the old inline version used before StableLabel was
+   extracted) — giving the button a *second* grid track for the chevron
+   made a nested-grid intrinsic-size query return the wrong answer on first
+   paint (a sibling on the page would wrap its text, then un-wrap a render
+   later, as the browser corrected itself). The chevron is positioned
+   absolutely instead, so it never needs to be a grid/flex track. */
 .filter-multi-select__button {
+  position: relative;
   font: inherit;
   font-size: 14px;
   height: var(--control-h);
   box-sizing: border-box;
   display: grid;
-  grid-template-areas: 'summary';
+  grid-template-areas: 'value';
   align-items: center;
-  padding: 0 10px;
+  padding: 0 22px 0 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -25,35 +33,54 @@
   border-color: var(--accent-border);
 }
 
-/* Every summary the button could ever show for its current options shares
-   this one grid cell (design D3): the one in force renders, the rest sit
-   underneath it with visibility: hidden, and the cell — so the button — is
-   exactly as wide as the widest of them. A pixel min-width was rejected:
-   the root font size is fluid (page-header-design's "Height holds as the
-   font scales"), and these labels are option data ("Currently airing", "TV
-   special") a stylesheet has no fixed string to size for in advance. */
-.filter-multi-select__button-text {
-  grid-area: summary;
+/* Reads as a dropdown like the selects beside it. Positioned within the
+   button's own reserved right padding, outside the StableLabel cell, so it
+   neither shares nor disturbs the label's reserved width. */
+.filter-multi-select__button::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 11px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-65%) rotate(45deg);
 }
 
-.filter-multi-select__button-text[aria-hidden='true'] {
-  visibility: hidden;
+/* Colours only (design D9/D10) — selection or None both count as
+   "narrowing", so both get the accent; the trigger's size is untouched. */
+.filter-multi-select__button.filter-multi-select--active {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--text-h);
 }
 
 .filter-multi-select__panel {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
+  /* Above every part of the page's own content, which never exceeds 20;
+     below the modal (100) and the action-failure notice (95). */
   z-index: 90;
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-width: 180px;
+  max-width: calc(100vw - 16px);
   padding: 8px;
   border-radius: 6px;
   border: 1px solid var(--border);
+  border-top-color: var(--accent-border);
   background: var(--bg);
   box-shadow: var(--shadow);
+}
+
+/* Set by FilterMultiSelect's useLayoutEffect when the left-aligned default
+   would run the panel off the viewport's trailing edge. */
+.filter-multi-select__panel--end {
+  left: auto;
+  right: 0;
 }
 
 /* Two equal-width columns so the pair reads as a segmented pair rather than
