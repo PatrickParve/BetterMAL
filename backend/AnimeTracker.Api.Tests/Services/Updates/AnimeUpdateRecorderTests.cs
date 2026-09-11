@@ -59,4 +59,22 @@ public class AnimeUpdateRecorderTests
         var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
         Assert.Equal(kinds, update.Kinds);
     }
+
+    // The CLR default (store-seen-updates-on-server design.md D1) — the
+    // recorder needs no change to leave a new row unseen.
+    [Fact]
+    public async Task ARecordedRowHasSeenFalse()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "My show" };
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        await db.SaveChangesAsync();
+
+        await CreateRecorder(db).RecordAsync(anime, AnimeUpdateKinds.Announced, new ScheduleMoveDetails(), DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync();
+
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.False(update.Seen);
+    }
 }

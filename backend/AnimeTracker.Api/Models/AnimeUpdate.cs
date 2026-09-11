@@ -47,4 +47,9 @@ public class AnimeUpdate
     public int? MovedEpisode { get; set; }
     public DateOnly? PreviousEpisodeDate { get; set; }
     public DateOnly? NewEpisodeDate { get; set; }
+
+    // A plain flag — when it was seen is not stored (store-seen-updates-on-server
+    // design.md D1). New rows start unseen through the CLR default, so
+    // AnimeUpdateRecorder needs no change.
+    public bool Seen { get; set; }
 }

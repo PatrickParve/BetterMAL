@@ -28,4 +28,5 @@ public record AnimeUpdateDto(
     // Why this update concerns me: the affiliated entry + its relation
     // ("Sequel to <title>"), or, when there is no affiliation, my own entry's
     // own status ("Plan to watch") — task 6.3.
-    string Reason);
+    string Reason,
+    bool Seen);

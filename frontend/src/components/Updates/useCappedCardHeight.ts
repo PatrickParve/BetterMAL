@@ -26,7 +26,11 @@ export const VISIBLE_CARD_CAP = 3
 // out with nothing observed. A callback ref re-fires exactly when the `<ul>`
 // itself mounts (every time the dropdown opens), which is what needs to
 // retrigger the measurement.
-export function useCappedCardHeight(itemCount: number): { listRef: (node: HTMLUListElement | null) => void; maxHeight: number | undefined } {
+export function useCappedCardHeight(itemCount: number): {
+  listRef: (node: HTMLUListElement | null) => void
+  maxHeight: number | undefined
+  listNode: HTMLUListElement | null
+} {
   const [node, setNode] = useState<HTMLUListElement | null>(null)
   const [maxHeight, setMaxHeight] = useState<number | undefined>(undefined)
   const listRef = useCallback((el: HTMLUListElement | null) => setNode(el), [])
@@ -67,5 +71,5 @@ export function useCappedCardHeight(itemCount: number): { listRef: (node: HTMLUL
     }
   }, [node, itemCount])
 
-  return { listRef, maxHeight }
+  return { listRef, maxHeight, listNode: node }
 }

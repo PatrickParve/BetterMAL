@@ -188,6 +188,7 @@ export type AnimeUpdateDto = {
   previousEpisodeDate: string | null
   newEpisodeDate: string | null
   reason: string
+  seen: boolean
 }
 
 export type MainDashboardDto = {

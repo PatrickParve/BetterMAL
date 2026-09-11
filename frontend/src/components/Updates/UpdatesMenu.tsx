@@ -1,27 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
 import { useClickOutside } from '../../hooks/useClickOutside.ts'
 import { UpdatesHistoryOverlay } from './UpdatesHistoryOverlay.tsx'
-import { UpdateCard } from './UpdateCard.tsx'
-import { useCappedCardHeight } from './useCappedCardHeight.ts'
+import { UpdatesDropdown } from './UpdatesDropdown.tsx'
 import { useRecentUpdates } from './useRecentUpdates.ts'
-import { hasUnseen, markSeen, readSeenMarker } from './updatesSeen.ts'
+import { useUpdatesSeen } from './updatesSeenStore.ts'
 import './UpdatesMenu.css'
 
 // The navbar's Updates control (navigation-and-search, anime-updates): a
-// bell button opening a dropdown over the last 30 days of updates, capped to
-// its newest cards on open (VISIBLE_CARD_CAP), with an unseen indicator and
-// the History overlay reachable from its header.
+// bell button opening a dropdown over the last 30 days of updates, with an
+// unseen indicator derived from the server-held seen flags and the History
+// overlay reachable from its header. Opening the dropdown does not itself
+// mark anything seen — an update becomes seen only once its card has
+// actually been looked at, inside UpdatesDropdown (store-seen-updates-on-server
+// design.md D6/D10).
 export function UpdatesMenu() {
   const [open, setOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [seenMarker, setSeenMarker] = useState<string | null>(readSeenMarker)
   const { items, refresh } = useRecentUpdates()
+  const { isSeen } = useUpdatesSeen()
 
   const containerRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
-  const { listRef, maxHeight: listMaxHeight } = useCappedCardHeight(items.length)
-  const unseen = hasUnseen(items, seenMarker)
+  const unseen = items.some((item) => !isSeen(item))
 
   useClickOutside(containerRef, () => setOpen(false))
 
@@ -45,12 +46,7 @@ export function UpdatesMenu() {
       return
     }
     setOpen(true)
-    // Marked seen only once the in-flight fetch resolves, so opening
-    // mid-load can't mark a set seen that hasn't arrived yet (design.md D2).
-    refresh().then((data) => {
-      if (!data) return
-      setSeenMarker(markSeen(data))
-    })
+    refresh()
   }
 
   function closeDropdown() {
@@ -81,32 +77,7 @@ export function UpdatesMenu() {
         {unseen && <span className="updates-menu__dot" aria-hidden="true" />}
       </button>
 
-      {open && (
-        <div className="updates-menu__dropdown">
-          <div className="updates-menu__header">
-            <span className="updates-menu__title">Updates</span>
-            <button type="button" className="updates-menu__history-button" onClick={openHistory}>
-              History
-            </button>
-          </div>
-
-          {items.length === 0 ? (
-            <p className="updates-menu__empty">No recent updates.</p>
-          ) : (
-            <ul
-              className="updates-menu__list"
-              ref={listRef}
-              style={listMaxHeight !== undefined ? { maxHeight: listMaxHeight } : undefined}
-            >
-              {items.map((item) => (
-                <li key={item.id}>
-                  <UpdateCard item={item} variant="menu" onNavigate={closeDropdown} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {open && <UpdatesDropdown items={items} onNavigate={closeDropdown} onOpenHistory={openHistory} />}
 
       {historyOpen && <UpdatesHistoryOverlay onClose={() => setHistoryOpen(false)} />}
     </div>

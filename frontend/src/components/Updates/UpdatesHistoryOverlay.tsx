@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Modal } from '../Modal.tsx'
 import { UpdateCard } from './UpdateCard.tsx'
 import { useCappedCardHeight } from './useCappedCardHeight.ts'
+import { useUpdateLook } from './useUpdateLook.ts'
+import { useSeenTracking } from './useSeenTracking.ts'
+import { useUpdatesSeen, flushSeenReports } from './updatesSeenStore.ts'
 import { getUpdatesHistory } from '../../api/client.ts'
 import type { AnimeUpdateDto } from '../../api/types.ts'
 import './UpdatesHistoryOverlay.css'
@@ -71,7 +74,19 @@ export function UpdatesHistoryOverlay({ onClose }: UpdatesHistoryOverlayProps) {
   // happened to fit at that height, since it wasn't measured from the
   // cards themselves. Capping to the same three-card count keeps the two
   // surfaces' opening heights consistent.
-  const { listRef, maxHeight: listMaxHeight } = useCappedCardHeight(filteredHistory.length)
+  const { listRef, maxHeight: listMaxHeight, listNode } = useCappedCardHeight(filteredHistory.length)
+
+  // Looking at History's cards counts on the same terms as the dropdown's,
+  // through the same shared store (store-seen-updates-on-server design.md
+  // D6/D7). A search or date filter change re-narrows filteredHistory,
+  // which the tracker and the look both re-evaluate against.
+  const { isSeen, reportSeen } = useUpdatesSeen()
+  const newIds = useUpdateLook(filteredHistory, isSeen)
+  useSeenTracking(listNode, filteredHistory, isSeen, reportSeen)
+
+  useEffect(() => {
+    return () => flushSeenReports()
+  }, [])
 
   return (
     <Modal onClose={onClose} labelledBy="updates-history-title" className="modal--wide">
@@ -134,8 +149,8 @@ export function UpdatesHistoryOverlay({ onClose }: UpdatesHistoryOverlayProps) {
               style={listMaxHeight !== undefined ? { maxHeight: listMaxHeight } : undefined}
             >
               {filteredHistory.map((item) => (
-                <li key={item.id}>
-                  <UpdateCard item={item} variant="history" onNavigate={onClose} />
+                <li key={item.id} data-update-id={item.id}>
+                  <UpdateCard item={item} variant="history" onNavigate={onClose} isNew={newIds.has(item.id)} />
                 </li>
               ))}
             </ul>

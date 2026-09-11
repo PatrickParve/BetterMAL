@@ -34,6 +34,48 @@
   outline-offset: 2px;
 }
 
+/* Drawn inside the border box, so width, padding and wrapping are identical
+   to an unmarked card, and hover's tinted background and accent border
+   still read as hover on top of it (store-seen-updates-on-server design.md
+   D9). */
+.update-card--new {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.update-card__title-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  min-width: 0;
+  gap: 6px;
+}
+
+/* TruncatedTitle already carries min-width: 0 and the ellipsis on this same
+   class; scoped to the row so the shared .update-card__title used by the
+   history variant's own (column-flex) layout is unaffected. */
+.update-card__title-row .update-card__title {
+  flex: 1 1 auto;
+}
+
+.update-card__new {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-h);
+  line-height: 1;
+}
+
+.update-card__new-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+
 /* Bounded on both axes by flat pixel values — never a percentage, never a
    value computed from the container's own size — and drawn at its own
    proportions within that box (design.md D4): a portrait poster is

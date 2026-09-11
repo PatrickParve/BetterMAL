@@ -318,6 +318,18 @@ export function refreshAnime(animeId: number): Promise<void> {
   return fetchVoid(`/api/anime/${animeId}/refresh`, { method: 'POST' })
 }
 
+// keepalive lets the pagehide flush (updatesSeenStore.ts) survive the page
+// going away, without fighting the controller's JSON [FromBody] the way
+// navigator.sendBeacon's forced text/plain would.
+export function markUpdatesSeen(ids: number[], options?: { keepalive?: boolean }): Promise<void> {
+  return fetchVoid('/api/updates/seen', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+    keepalive: options?.keepalive,
+  })
+}
+
 // artwork-selection: picking MAL's own picture pins it as a choice; only
 // the reset clears one. Both endpoints return the displayed value alongside
 // the stored choice so a page can update both from one response.

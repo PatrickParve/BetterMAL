@@ -44,6 +44,25 @@ public class AnimeUpdateService(
         return await BuildEligibleAsync(updates, ct);
     }
 
+    // Tracked load + save rather than ExecuteUpdateAsync: the in-memory test
+    // provider throws on it, and a seen batch is a handful of rows (design.md
+    // D4). Two browsers racing on the same id both write true harmlessly,
+    // since AnimeUpdate carries no concurrency token.
+    public async Task MarkSeenAsync(IReadOnlyCollection<long> ids, CancellationToken ct = default)
+    {
+        if (ids.Count == 0)
+            return;
+
+        var updates = await db.AnimeUpdates
+            .Where(u => ids.Contains(u.Id) && !u.Seen)
+            .ToListAsync(ct);
+
+        foreach (var update in updates)
+            update.Seen = true;
+
+        await db.SaveChangesAsync(ct);
+    }
+
     private IQueryable<AnimeUpdate> Query() =>
         db.AnimeUpdates.AsNoTracking()
             .Include(u => u.Anime).ThenInclude(a => a.RelatedAnime)
@@ -167,7 +186,8 @@ public class AnimeUpdateService(
             update.MovedEpisode,
             update.PreviousEpisodeDate,
             update.NewEpisodeDate,
-            reason);
+            reason,
+            update.Seen);
     }
 
     private static IReadOnlyList<string> DecomposeKinds(AnimeUpdateKinds kinds)
