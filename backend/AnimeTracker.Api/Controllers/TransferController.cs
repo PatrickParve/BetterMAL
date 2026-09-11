@@ -7,7 +7,7 @@ namespace AnimeTracker.Api.Controllers;
 /// file (device-transfer spec). Sits under <c>api/transfer/</c>, not
 /// <c>api/export</c>, so 04's import can land beside it (<c>POST
 /// api/transfer/import</c>) under the same name as the Settings page's
-/// Transfer group (design.md D1).</summary>
+/// Files group (design.md D1).</summary>
 [ApiController]
 public class TransferController(IExportService exportService, ITransferImportService importService, ITransferImportProgressTracker importProgress) : ControllerBase
 {

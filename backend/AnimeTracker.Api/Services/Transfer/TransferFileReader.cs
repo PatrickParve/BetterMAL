@@ -53,13 +53,23 @@ public static class TransferFileReader
     /// <summary>Reads <c>formatVersion</c> alone, ahead of the full
     /// deserialize, so a newer format is refused as newer rather than as
     /// damaged even when the rest of its shape has since changed (design.md
-    /// D2: the version is checked before the rest of the file's shape).</summary>
+    /// D2: the version is checked before the rest of the file's shape).
+    /// Refuses a list backup by its <c>kind</c> first (list-backup spec D6),
+    /// so a backup — which carries its own <c>formatVersion</c> 1 — is never
+    /// compared against this format's version at all.</summary>
     private static int PeekFormatVersion(byte[] bytes)
     {
         using JsonDocument document = ParseOrRefuse(bytes);
 
-        if (document.RootElement.ValueKind != JsonValueKind.Object
-            || !document.RootElement.TryGetProperty("formatVersion", out var versionElement)
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw new TransferFileRefusedException("This is not a BetterMAL export file.");
+
+        if (document.RootElement.TryGetProperty("kind", out var kindElement)
+            && kindElement.ValueKind == JsonValueKind.String
+            && kindElement.GetString() == "listBackup")
+            throw new TransferFileRefusedException("This is a backup of your list. A list backup is never imported.");
+
+        if (!document.RootElement.TryGetProperty("formatVersion", out var versionElement)
             || versionElement.ValueKind != JsonValueKind.Number
             || !versionElement.TryGetInt32(out var formatVersion)
             || formatVersion < 1)

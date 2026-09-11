@@ -9,6 +9,7 @@ using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Import;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Library;
+using AnimeTracker.Api.Services.ListBackup;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Auth;
 using AnimeTracker.Api.Services.Metadata;
@@ -195,6 +196,7 @@ builder.Services.AddScoped<ISeriesService, SeriesService>();
 // --- Device-to-device transfer ---
 builder.Services.AddScoped<IDeviceIdentityInitializer, DeviceIdentityInitializer>();
 builder.Services.AddScoped<IExportService, ExportService>();
+builder.Services.AddScoped<IListBackupService, ListBackupService>();
 builder.Services.AddSingleton<ITransferImportProgressTracker, TransferImportProgressTracker>();
 builder.Services.AddSingleton<ITransferImportTrigger, TransferImportTrigger>();
 builder.Services.AddScoped<ITransferImportService, TransferImportService>();

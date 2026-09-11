@@ -525,19 +525,32 @@ export function getSeriesBulkBuildStatus(): Promise<SeriesBulkBuildStatusDto> {
   return fetchJson<SeriesBulkBuildStatusDto>('/api/series/build-all/status')
 }
 
-// Fetches the device-transfer export as a blob rather than JSON (settings
-// page's Transfer group, design.md D7 of export-data-mal-cannot-carry). The
-// browser sends its own User-Agent, so nothing is passed for the device
-// name. fetchRaw's in-flight de-duplication is harmless here since the
-// export button is disabled while a request is outstanding.
-export async function exportData(): Promise<{ blob: Blob; fileName: string }> {
-  const url = '/api/transfer/export'
+// Shared by exportData and exportListBackup (design.md D8 of
+// export-my-list-backup): fetches a file download as a blob rather than
+// JSON, reading its name from Content-Disposition and falling back when the
+// header is missing. fetchRaw's in-flight de-duplication is harmless here
+// since each caller's button is disabled while a request is outstanding.
+async function fetchDownload(url: string, fallbackName: string): Promise<{ blob: Blob; fileName: string }> {
   const res = await fetchRaw(url)
   if (!res.ok) throw new ApiError(url, res.status, await readErrorReason(res))
   const blob = await res.blob()
   const disposition = res.headers.get('Content-Disposition')
-  const fileName = disposition?.match(/filename="?([^";]+)"?/)?.[1] ?? 'bettermal-export.json'
+  const fileName = disposition?.match(/filename="?([^";]+)"?/)?.[1] ?? fallbackName
   return { blob, fileName }
+}
+
+// Fetches the device-transfer export as a blob rather than JSON (settings
+// page's Transfer group, design.md D7 of export-data-mal-cannot-carry). The
+// browser sends its own User-Agent, so nothing is passed for the device
+// name.
+export function exportData(): Promise<{ blob: Blob; fileName: string }> {
+  return fetchDownload('/api/transfer/export', 'bettermal-export.json')
+}
+
+// Fetches the list backup as a blob rather than JSON (settings page's Files
+// group, design.md D8 of export-my-list-backup).
+export function exportListBackup(): Promise<{ blob: Blob; fileName: string }> {
+  return fetchDownload('/api/my-list/backup', 'bettermal-list.json')
 }
 
 // device-transfer import (04, design.md D14): the backend reads the raw

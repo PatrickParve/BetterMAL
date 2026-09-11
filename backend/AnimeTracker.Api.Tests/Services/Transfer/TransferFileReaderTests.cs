@@ -50,6 +50,38 @@ public class TransferFileReaderTests
         Assert.Throws<TransferFileRefusedException>(() => TransferFileReader.Read(Bytes("""{"formatVersion": 0}""")));
     }
 
+    // --- A list backup (list-backup spec D6, tasks.md 3.4) ---
+
+    [Fact]
+    public void Read_AListBackupIsRefusedWithItsMessage()
+    {
+        var ex = Assert.Throws<TransferFileRefusedException>(
+            () => TransferFileReader.Read(Bytes("""{"kind": "listBackup", "formatVersion": 1}""")));
+        Assert.Equal("This is a backup of your list. A list backup is never imported.", ex.Message);
+    }
+
+    [Fact]
+    public void Read_AListBackupCarryingFormatVersion2IsStillRefusedAsAListBackup()
+    {
+        // The kind check runs before the version check, so a backup is never
+        // compared against this build's readable format at all.
+        var ex = Assert.Throws<TransferFileRefusedException>(
+            () => TransferFileReader.Read(Bytes("""{"kind": "listBackup", "formatVersion": 2}""")));
+        Assert.Equal("This is a backup of your list. A list backup is never imported.", ex.Message);
+    }
+
+    [Fact]
+    public void Read_ATransferFileCarryingAKindWithAnyOtherValueReadsAsBefore()
+    {
+        var json = MinimalValidFile().Replace(
+            "\"formatVersion\": 1,",
+            "\"kind\": \"somethingElse\", \"formatVersion\": 1,");
+
+        var file = TransferFileReader.Read(Bytes(json));
+
+        Assert.Equal(1, file.FormatVersion);
+    }
+
     // --- A newer format ---
 
     [Fact]

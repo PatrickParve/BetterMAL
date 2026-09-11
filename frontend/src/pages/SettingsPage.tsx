@@ -8,6 +8,7 @@ import {
   declineAllHeldChanges,
   declineHeldChange,
   exportData,
+  exportListBackup,
   getAiringFullRefreshStatus,
   getHeldChanges,
   getImportStatus,
@@ -258,6 +259,9 @@ export function SettingsPage() {
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [exportedFileName, setExportedFileName] = useState<string | null>(null)
+  const [backingUp, setBackingUp] = useState(false)
+  const [backupError, setBackupError] = useState<string | null>(null)
+  const [backupFileName, setBackupFileName] = useState<string | null>(null)
   const [importStatus, setImportStatus] = useState<TransferImportStatusDto | null>(null)
   const [importing, setImporting] = useState(false)
   const [importRefusal, setImportRefusal] = useState<string | null>(null)
@@ -505,7 +509,17 @@ export function SettingsPage() {
 
   // Saves the file via a temporary object-URL anchor rather than a plain
   // `<a href>` link, so a failure shows the page's own in-place error
-  // instead of a bare browser error page (design.md D7).
+  // instead of a bare browser error page (design.md D7). Shared by the
+  // export and the list backup (design.md D8 of export-my-list-backup).
+  function saveFile(blob: Blob, fileName: string) {
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = fileName
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
   async function handleExport() {
     if (exporting) return
     setExporting(true)
@@ -513,17 +527,28 @@ export function SettingsPage() {
     setExportedFileName(null)
     try {
       const { blob, fileName } = await exportData()
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = fileName
-      anchor.click()
-      URL.revokeObjectURL(url)
+      saveFile(blob, fileName)
       setExportedFileName(fileName)
     } catch {
       setExportError('The export could not be produced. Please try again.')
     } finally {
       setExporting(false)
+    }
+  }
+
+  async function handleListBackup() {
+    if (backingUp) return
+    setBackingUp(true)
+    setBackupError(null)
+    setBackupFileName(null)
+    try {
+      const { blob, fileName } = await exportListBackup()
+      saveFile(blob, fileName)
+      setBackupFileName(fileName)
+    } catch {
+      setBackupError('The backup could not be produced. Please try again.')
+    } finally {
+      setBackingUp(false)
     }
   }
 
@@ -837,7 +862,26 @@ export function SettingsPage() {
         </div>
       </SettingsGroup>
 
-      <SettingsGroup title="Transfer" hint="Move what only this app holds between your devices, as a file.">
+      <SettingsGroup
+        title="Files"
+        hint="Save a copy of your list, or move what only this app holds between your devices, as a file."
+      >
+        <SettingsAction
+          title="Back up my list"
+          hint="Saves every anime in your list — its status, progress, score, dates and rewatch count — as a file. Rewatching stays Rewatching, which MyAnimeList can't hold. Holds nothing else: not your ranking, pictures or edit history, and not your MyAnimeList connection. It's a copy to keep: the app never imports it, and it isn't the file for your other device. Producing it changes nothing here and sends nothing anywhere; the browser saves the file."
+          state={
+            <>
+              {backupFileName && <p className="settings-box__hint">Saved {backupFileName}.</p>}
+              {backupError && <p className="settings-box__error">{backupError}</p>}
+            </>
+          }
+          button={
+            <button type="button" onClick={handleListBackup} disabled={backingUp}>
+              {backingUp ? 'Backing up…' : 'Back up'}
+            </button>
+          }
+        />
+
         <SettingsAction
           title="Export to a file"
           hint="Holds your ranking, chosen anime pictures, chosen series titles and pictures, and your edit history. Holds nothing from MyAnimeList — not your MyAnimeList connection, and not your display preferences. Producing it changes nothing here and sends nothing anywhere; the browser saves the file, and getting it to your other device is up to you."
