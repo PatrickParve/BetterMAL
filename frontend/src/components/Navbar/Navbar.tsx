@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { SearchBar } from '../SearchBar.tsx'
 import { UpdatesMenu } from '../Updates/UpdatesMenu.tsx'
 import { useScoreVisibility } from '../../context/ScoreVisibilityContext.tsx'
+import { SettingsLink } from './SettingsLink.tsx'
 import './Navbar.css'
 
 type NavLinkSpec = { to: string; label: string; end?: boolean }
@@ -28,10 +29,6 @@ function leftNavLinks(recapLink: string, yearLink: string): NavLinkSpec[] {
 
 function linkClassName({ isActive }: { isActive: boolean }) {
   return isActive ? 'navbar__link navbar__link--active' : 'navbar__link'
-}
-
-function settingsClassName({ isActive }: { isActive: boolean }) {
-  return isActive ? 'navbar__settings navbar__settings--active' : 'navbar__settings'
 }
 
 export function Navbar() {
@@ -79,21 +76,10 @@ export function Navbar() {
           <NavLink to="/profile" className={linkClassName}>
             Profile
           </NavLink>
-          <NavLink to="/settings" className={settingsClassName} aria-label="Settings">
-            <GearIcon />
-          </NavLink>
+          <SettingsLink />
         </div>
       </div>
     </header>
-  )
-}
-
-function GearIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-      <circle cx="12" cy="12" r="3.2" />
-      <circle cx="12" cy="12" r="7.5" strokeDasharray="2.4 2.6" />
-    </svg>
   )
 }
 

@@ -48,20 +48,6 @@
   border-color: var(--accent);
 }
 
-/* The dot is one carrier of "unseen" — the accessible name states it too,
-   so appearance alone doesn't carry the fact (anime-updates, "signals
-   unseen news"). */
-.updates-menu__dot {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 1.5px solid var(--bg);
-}
-
 /* Absolutely positioned under the button and right-aligned to the navbar
    edge so it can never overflow the window's right side; a dropdown, not
    one of the app's Modal overlays, so it doesn't lock the page behind it

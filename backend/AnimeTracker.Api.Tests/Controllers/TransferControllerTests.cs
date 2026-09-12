@@ -48,6 +48,7 @@ public class TransferControllerTests
         public void ReportProgress(int done) => throw new NotImplementedException();
         public void Complete(TransferImportReport report) => throw new NotImplementedException();
         public void Fail(string reason) => throw new NotImplementedException();
+        public void MarkOutcomeSeen(DateTimeOffset finishedAt) => throw new NotImplementedException();
 
         public JobSnapshot ToJobSnapshot()
         {

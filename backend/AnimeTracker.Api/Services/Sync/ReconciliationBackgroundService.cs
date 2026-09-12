@@ -90,6 +90,7 @@ public class ReconciliationBackgroundService(
             log.LastRunAt = now;
             log.LastRunFailed = null;
             log.LastRunError = null;
+            log.LastRunOutcomeSeen = false;
         }
 
         await db.SaveChangesAsync(ct);

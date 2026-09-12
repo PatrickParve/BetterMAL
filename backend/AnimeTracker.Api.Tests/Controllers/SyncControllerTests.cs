@@ -1,6 +1,4 @@
 using AnimeTracker.Api.Controllers;
-using AnimeTracker.Api.Data.Repositories;
-using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Sync;
 using Microsoft.AspNetCore.Mvc;
@@ -34,7 +32,6 @@ public class SyncControllerTests
         return new SyncController(
             reconciliationService,
             heldChangeService,
-            new UnusedUserAnimeEntryRepository(),
             resyncTrigger ?? new ResyncTrigger(),
             resyncProgress ?? new ResyncProgress(),
             runner ?? new BackgroundJobRunner(new FakeServiceScopeFactory(new FakeServiceProvider(pushService, reconciliationService, heldChangeService))),
@@ -271,13 +268,6 @@ public class SyncControllerTests
         public Task<HeldChangeDecisionResult> DeclineAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<HeldChangeBulkResult> AcceptAllAsync(IJobProgressSink? progress = null, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<HeldChangeBulkResult> DeclineAllAsync(IJobProgressSink? progress = null, CancellationToken ct = default) => throw new NotImplementedException();
-    }
-
-    private sealed class UnusedUserAnimeEntryRepository : IUserAnimeEntryRepository
-    {
-        public Task<UserAnimeEntry?> GetByAnimeIdAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<List<UserAnimeEntry>> GetAllAsync(CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<(int PendingCount, int HeldCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     private sealed class FakeServiceProvider(

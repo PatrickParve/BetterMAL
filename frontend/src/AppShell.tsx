@@ -5,6 +5,7 @@ import { ActionFailureNotice } from './components/ActionFailureNotice.tsx'
 import { ScoreVisibilityProvider } from './context/ScoreVisibilityContext.tsx'
 import { EntryEditorProvider } from './context/EntryEditorContext.tsx'
 import { ActionFailureProvider } from './context/ActionFailureContext.tsx'
+import { AppStatusProvider } from './context/AppStatusContext.tsx'
 import { CompletionPromptProvider } from './context/CompletionPromptContext.tsx'
 import { AnimeRankProvider } from './context/AnimeRankContext.tsx'
 import { ContentFilterProvider } from './context/ContentFilterContext.tsx'
@@ -27,7 +28,11 @@ import { SeriesPage } from './pages/SeriesPage.tsx'
 // Mounted once the "Connect to MAL" gate in App.tsx confirms a token is on
 // file. Providers here (score visibility, entry editor, content filter) are
 // app-wide, not per-page, since the navbar toggle and the editor overlay are
-// used from anywhere in the routed content below.
+// used from anywhere in the routed content below. AppStatusProvider wraps
+// only the navbar and the routes, not the whole tree, since it's the one
+// poll the navbar's Settings control and the Settings page share
+// (navbar-settings-status-indicator design.md D7) — App.tsx's connect gate
+// above this component has no navbar to read it.
 export function AppShell() {
   return (
     <ScoreVisibilityProvider>
@@ -38,25 +43,27 @@ export function AppShell() {
               <CompletionPromptProvider>
                 <PageStateProvider>
                   <ScrollRestorationMount />
-                  <Navbar />
-                  <main className="page-content">
-                    <Routes>
-                      <Route path="/" element={<HomePage />} />
-                      <Route path="/season" element={<SeasonPage />} />
-                      <Route path="/year" element={<YearPage />} />
-                      <Route path="/top" element={<TopAnimePage />} />
-                      <Route path="/airing" element={<AiringPage />} />
-                      <Route path="/my-list" element={<MyListPage />} />
-                      <Route path="/recap" element={<RecapPage />} />
-                      <Route path="/profile" element={<ProfilePage />} />
-                      <Route path="/settings" element={<SettingsPage />} />
-                      <Route path="/anime/:id" element={<AnimeDetailPage />} />
-                      <Route path="/search" element={<SearchPage />} />
-                      <Route path="/series" element={<SeriesBrowserPage />} />
-                      <Route path="/series/:animeId" element={<SeriesPage />} />
-                      <Route path="*" element={<HomePage />} />
-                    </Routes>
-                  </main>
+                  <AppStatusProvider>
+                    <Navbar />
+                    <main className="page-content">
+                      <Routes>
+                        <Route path="/" element={<HomePage />} />
+                        <Route path="/season" element={<SeasonPage />} />
+                        <Route path="/year" element={<YearPage />} />
+                        <Route path="/top" element={<TopAnimePage />} />
+                        <Route path="/airing" element={<AiringPage />} />
+                        <Route path="/my-list" element={<MyListPage />} />
+                        <Route path="/recap" element={<RecapPage />} />
+                        <Route path="/profile" element={<ProfilePage />} />
+                        <Route path="/settings" element={<SettingsPage />} />
+                        <Route path="/anime/:id" element={<AnimeDetailPage />} />
+                        <Route path="/search" element={<SearchPage />} />
+                        <Route path="/series" element={<SeriesBrowserPage />} />
+                        <Route path="/series/:animeId" element={<SeriesPage />} />
+                        <Route path="*" element={<HomePage />} />
+                      </Routes>
+                    </main>
+                  </AppStatusProvider>
                   <ConnectionStatusNotice />
                   <ActionFailureNotice />
                 </PageStateProvider>

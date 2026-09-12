@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Controllers;
 using AnimeTracker.Api.Data;
+using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Import;
 using AnimeTracker.Api.Services.Jobs;
@@ -21,8 +22,10 @@ public class AppStatusControllerTests
         new(new DbContextOptionsBuilder<AnimeTrackerDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
     private static AppStatusController CreateController(
-        AnimeTrackerDbContext db, IMalTokenStore tokenStore, ListImportProgress? listImportProgress = null) =>
-        new(db, tokenStore, listImportProgress ?? new ListImportProgress(), new SyncNowProgress(), new ReconcileProgress(),
+        AnimeTrackerDbContext db, IMalTokenStore tokenStore, ListImportProgress? listImportProgress = null,
+        IUserAnimeEntryRepository? entryRepository = null, SyncNowProgress? syncNowProgress = null) =>
+        new(db, tokenStore, entryRepository ?? new FakeUserAnimeEntryRepository(0, 0, null),
+            listImportProgress ?? new ListImportProgress(), syncNowProgress ?? new SyncNowProgress(), new ReconcileProgress(),
             new HeldDecisionProgress(), new ResyncProgress(), new AiringFullRefreshProgress(), new SeriesBulkBuildProgress(),
             new FakeTransferImportProgressTracker());
 
@@ -102,12 +105,134 @@ public class AppStatusControllerTests
         Assert.Equal("NotConnected", (string)body.malConnection.state);
     }
 
+    // design.md D1/D15: the sync block comes from the same GetSyncStatusAsync
+    // GET api/sync/status used, and outcomeSeen rides every job DTO and the
+    // weekly check.
+    [Fact]
+    public async Task TheResponseCarriesSyncAndOutcomeSeenOnEveryJobAndTheWeeklyCheck()
+    {
+        using var db = CreateDb();
+        db.ReconciliationRunLogs.Add(new ReconciliationRunLog
+        {
+            LastRunAt = DateTimeOffset.UtcNow, LastRunFailed = true, LastRunError = "boom", LastRunOutcomeSeen = true,
+        });
+        await db.SaveChangesAsync();
+        var tokenStore = new FakeMalTokenStore(null);
+        var lastSyncedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        var controller = CreateController(db, tokenStore, entryRepository: new FakeUserAnimeEntryRepository(3, 2, lastSyncedAt));
+
+        var result = Assert.IsType<OkObjectResult>(await controller.Get(CancellationToken.None));
+        dynamic body = result.Value!;
+
+        Assert.Equal(3, (int)body.sync.pendingCount);
+        Assert.Equal(2, (int)body.sync.heldCount);
+        Assert.Equal(lastSyncedAt, (DateTimeOffset?)body.sync.lastSyncedAt);
+        Assert.False((bool)body.sync.diffPending);
+
+        Assert.False(((JobDto)body.jobs.listImport).OutcomeSeen);
+        Assert.False(((JobDto)body.jobs.syncNow).OutcomeSeen);
+        Assert.False(((JobDto)body.jobs.reconcile).OutcomeSeen);
+        Assert.False(((HeldDecisionJobDto)body.jobs.heldDecision).OutcomeSeen);
+        Assert.False(((JobDto)body.jobs.resync).OutcomeSeen);
+        Assert.False(((JobDto)body.jobs.airingRefresh).OutcomeSeen);
+        Assert.False(((JobDto)body.jobs.seriesBuild).OutcomeSeen);
+        Assert.False(((JobDto)body.jobs.fileImport).OutcomeSeen);
+
+        Assert.True((bool)body.weeklyCheck.outcomeSeen);
+    }
+
+    [Fact]
+    public async Task DiffPendingIsTrueOnlyWhileAPendingReconciliationDiffRowExists()
+    {
+        using var db = CreateDb();
+        var controller = CreateController(db, new FakeMalTokenStore(null));
+
+        var beforeResult = Assert.IsType<OkObjectResult>(await controller.Get(CancellationToken.None));
+        dynamic before = beforeResult.Value!;
+        Assert.False((bool)before.sync.diffPending);
+
+        db.PendingReconciliationDiffs.Add(new PendingReconciliationDiff { ComputedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+
+        var afterResult = Assert.IsType<OkObjectResult>(await controller.Get(CancellationToken.None));
+        dynamic after = afterResult.Value!;
+        Assert.True((bool)after.sync.diffPending);
+    }
+
+    [Fact]
+    public async Task MarkSeenMarksANamedJobsOutcome()
+    {
+        using var db = CreateDb();
+        var syncNowProgress = new SyncNowProgress();
+        syncNowProgress.TryBegin();
+        syncNowProgress.Complete();
+        var finishedAt = syncNowProgress.Snapshot.FinishedAt!.Value;
+        var controller = CreateController(db, new FakeMalTokenStore(null), syncNowProgress: syncNowProgress);
+
+        var result = await controller.MarkSeen(new AppStatusSeenRequest([new AppStatusSeenJob("syncNow", finishedAt)], null), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.True(syncNowProgress.Snapshot.OutcomeSeen);
+    }
+
+    [Fact]
+    public async Task MarkSeenWithAStaleFinishedAtMarksNothingAndStillAnswers204()
+    {
+        using var db = CreateDb();
+        var syncNowProgress = new SyncNowProgress();
+        syncNowProgress.TryBegin();
+        syncNowProgress.Complete();
+        var controller = CreateController(db, new FakeMalTokenStore(null), syncNowProgress: syncNowProgress);
+
+        var result = await controller.MarkSeen(
+            new AppStatusSeenRequest([new AppStatusSeenJob("syncNow", DateTimeOffset.UtcNow.AddMinutes(-5))], null), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.False(syncNowProgress.Snapshot.OutcomeSeen);
+    }
+
+    [Fact]
+    public async Task MarkSeenWithAnUnknownNameAnswers400()
+    {
+        using var db = CreateDb();
+        var controller = CreateController(db, new FakeMalTokenStore(null));
+
+        var result = await controller.MarkSeen(
+            new AppStatusSeenRequest([new AppStatusSeenJob("notARealJob", DateTimeOffset.UtcNow)], null), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task MarkSeenMarksTheWeeklyCheckOnlyOnAMatchingLastRunAt()
+    {
+        using var db = CreateDb();
+        var lastRunAt = DateTimeOffset.UtcNow;
+        db.ReconciliationRunLogs.Add(new ReconciliationRunLog { LastRunAt = lastRunAt, LastRunFailed = true, LastRunError = "boom" });
+        await db.SaveChangesAsync();
+        var controller = CreateController(db, new FakeMalTokenStore(null));
+
+        await controller.MarkSeen(new AppStatusSeenRequest(null, lastRunAt.AddMinutes(-1)), CancellationToken.None); // stale
+        Assert.False((await db.ReconciliationRunLogs.AsNoTracking().FirstAsync()).LastRunOutcomeSeen);
+
+        await controller.MarkSeen(new AppStatusSeenRequest(null, lastRunAt), CancellationToken.None); // matches
+        Assert.True((await db.ReconciliationRunLogs.AsNoTracking().FirstAsync()).LastRunOutcomeSeen);
+    }
+
     private sealed class FakeMalTokenStore(OAuthToken? token) : IMalTokenStore
     {
         public Task<OAuthToken?> GetAsync(CancellationToken ct = default) => Task.FromResult(token);
         public Task SaveAsync(string accessToken, string refreshToken, DateTimeOffset expiresAt, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task MarkConnectionLostAsync(DateTimeOffset at, CancellationToken ct = default) => throw new NotImplementedException();
+    }
+
+    private sealed class FakeUserAnimeEntryRepository(int pendingCount, int heldCount, DateTimeOffset? lastSyncedAt) : IUserAnimeEntryRepository
+    {
+        public Task<UserAnimeEntry?> GetByAnimeIdAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<List<UserAnimeEntry>> GetAllAsync(CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<(int PendingCount, int HeldCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default) =>
+            Task.FromResult((pendingCount, heldCount, lastSyncedAt));
     }
 
     private sealed class FakeTransferImportProgressTracker : ITransferImportProgressTracker
@@ -119,6 +244,7 @@ public class AppStatusControllerTests
         public void ReportProgress(int done) => throw new NotImplementedException();
         public void Complete(TransferImportReport report) => throw new NotImplementedException();
         public void Fail(string reason) => throw new NotImplementedException();
+        public void MarkOutcomeSeen(DateTimeOffset finishedAt) => throw new NotImplementedException();
         public JobSnapshot ToJobSnapshot() => new(JobPhase.NotStarted, 0, null, null, null, null);
     }
 }

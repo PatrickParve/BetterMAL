@@ -83,6 +83,59 @@ public class ReconciliationBackgroundServiceTests
         }
     }
 
+    [Fact]
+    public async Task ANewAttemptResetsLastRunOutcomeSeenAlongWithTheOutcomeFields()
+    {
+        var options = CreateOptions();
+        var seededLastRunAt = DateTimeOffset.UtcNow.AddDays(-8); // overdue, so the service runs immediately
+        using (var seedDb = new AnimeTrackerDbContext(options))
+        {
+            seedDb.ReconciliationRunLogs.Add(new ReconciliationRunLog
+            {
+                LastRunAt = seededLastRunAt,
+                LastRunFailed = true,
+                LastRunError = "previous failure",
+                LastRunOutcomeSeen = true,
+            });
+            await seedDb.SaveChangesAsync();
+        }
+
+        var service = new ReconciliationBackgroundService(
+            new FakeServiceScopeFactory(options, new StubReconciliationService(ex: null)),
+            NullLogger<ReconciliationBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            // WaitForOutcomeAsync would match the seeded row's already-non-null
+            // LastRunFailed before the service resets anything, so wait for the
+            // new attempt's own LastRunAt instead.
+            var log = await WaitForNewOutcomeAsync(options, seededLastRunAt);
+
+            Assert.NotNull(log);
+            Assert.False(log!.LastRunOutcomeSeen);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private static async Task<ReconciliationRunLog?> WaitForNewOutcomeAsync(DbContextOptions<AnimeTrackerDbContext> options, DateTimeOffset previousLastRunAt)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        ReconciliationRunLog? log = null;
+        while (!cts.IsCancellationRequested)
+        {
+            using var db = new AnimeTrackerDbContext(options);
+            log = await db.ReconciliationRunLogs.AsNoTracking().FirstOrDefaultAsync();
+            if (log is not null && log.LastRunAt != previousLastRunAt && log.LastRunFailed is not null)
+                break;
+            await Task.Delay(10, CancellationToken.None);
+        }
+        return log;
+    }
+
     private sealed class StubReconciliationService(Exception? ex) : IReconciliationService
     {
         public Task<ReconciliationResult> RunAsync(IJobProgressSink? progress = null, CancellationToken ct = default) =>

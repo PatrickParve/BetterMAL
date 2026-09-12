@@ -84,4 +84,66 @@ public class JobProgressTrackerTests
 
         Assert.Null(tracker.Snapshot.Total);
     }
+
+    // OutcomeSeen (design.md D2): guarded by the exact FinishedAt the reporter
+    // saw, and cleared for free by the next run.
+    [Fact]
+    public void MarkOutcomeSeenWithAMatchingFinishedAtSetsTheFlag()
+    {
+        var tracker = new JobProgressTracker();
+        tracker.TryBegin();
+        tracker.Complete();
+        var finishedAt = tracker.Snapshot.FinishedAt!.Value;
+
+        tracker.MarkOutcomeSeen(finishedAt);
+
+        Assert.True(tracker.Snapshot.OutcomeSeen);
+    }
+
+    [Fact]
+    public void MarkOutcomeSeenWithADifferentTimeSetsNothing()
+    {
+        var tracker = new JobProgressTracker();
+        tracker.TryBegin();
+        tracker.Complete();
+
+        tracker.MarkOutcomeSeen(DateTimeOffset.UtcNow.AddMinutes(-5));
+
+        Assert.False(tracker.Snapshot.OutcomeSeen);
+    }
+
+    [Fact]
+    public void MarkOutcomeSeenOnARunningJobSetsNothing()
+    {
+        var tracker = new JobProgressTracker();
+        tracker.TryBegin();
+
+        tracker.MarkOutcomeSeen(DateTimeOffset.UtcNow);
+
+        Assert.False(tracker.Snapshot.OutcomeSeen);
+    }
+
+    [Fact]
+    public void MarkOutcomeSeenOnANeverRunJobSetsNothing()
+    {
+        var tracker = new JobProgressTracker();
+
+        tracker.MarkOutcomeSeen(DateTimeOffset.UtcNow);
+
+        Assert.False(tracker.Snapshot.OutcomeSeen);
+    }
+
+    [Fact]
+    public void TryBeginAfterASeenOutcomeReportsUnseenAgain()
+    {
+        var tracker = new JobProgressTracker();
+        tracker.TryBegin();
+        tracker.Complete();
+        tracker.MarkOutcomeSeen(tracker.Snapshot.FinishedAt!.Value);
+        Assert.True(tracker.Snapshot.OutcomeSeen);
+
+        Assert.True(tracker.TryBegin());
+
+        Assert.False(tracker.Snapshot.OutcomeSeen);
+    }
 }

@@ -13,8 +13,13 @@ namespace AnimeTracker.Api.Services.Import;
 /// from it, and it's what lets a stale run end and a fresh one begin. On top
 /// of that, this tracks whether the current run is shown, and freezes what a
 /// shown run last looked like so a later quiet run has something to fall back
-/// on. <see cref="Snapshot"/> hides the base member (`new`) to answer with
-/// whichever of those the page should currently see.</summary>
+/// on. <see cref="Snapshot"/> overrides the base member to answer with
+/// whichever of those the page should currently see, and
+/// <see cref="MarkOutcomeSeen"/> overrides it too so it acknowledges
+/// whichever snapshot <see cref="Snapshot"/> is currently showing (design.md
+/// D3). Lock order stays subclass-then-base throughout this class, as
+/// <see cref="Snapshot"/> and <see cref="Gate"/> already nest, so no new
+/// deadlock is possible.</summary>
 public sealed class ListImportProgress : JobProgressTracker
 {
     private readonly Lock _lock = new();
@@ -27,12 +32,28 @@ public sealed class ListImportProgress : JobProgressTracker
     /// <summary>What the Settings page currently sees: the live run while
     /// it's shown, or whatever the last shown run left behind while this run
     /// is quiet (design.md D8).</summary>
-    public new JobSnapshot Snapshot
+    public override JobSnapshot Snapshot
     {
         get
         {
             lock (_lock)
                 return (_visible ? base.Snapshot : _shown) with { RetryAt = _retryAt };
+        }
+    }
+
+    /// <summary>Acknowledges whichever snapshot <see cref="Snapshot"/> is
+    /// currently showing: the live run while it's shown, or the frozen
+    /// <see cref="_shown"/> snapshot while quiet — mirroring
+    /// <see cref="Snapshot"/>'s own choice, so a shown failure followed by a
+    /// quiet retry can still be acknowledged (design.md D3).</summary>
+    public override void MarkOutcomeSeen(DateTimeOffset finishedAt)
+    {
+        lock (_lock)
+        {
+            if (_visible)
+                base.MarkOutcomeSeen(finishedAt);
+            else if (_shown.FinishedAt == finishedAt)
+                _shown = _shown with { OutcomeSeen = true };
         }
     }
 

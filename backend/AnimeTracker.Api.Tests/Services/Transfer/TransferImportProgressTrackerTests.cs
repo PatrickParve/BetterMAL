@@ -89,4 +89,61 @@ public class TransferImportProgressTrackerTests
         Assert.Null(tracker.Snapshot.Report);
         Assert.Equal(TransferImportPhase.Running, tracker.Snapshot.Phase);
     }
+
+    // The shared job shape (design.md D4): a start/end time so the file
+    // import can join "the oldest job", and an unknown total before the file
+    // is read rather than a stalled-looking zero.
+    [Fact]
+    public void MarkPendingStampsAStart()
+    {
+        var tracker = new TransferImportProgressTracker();
+        var before = DateTimeOffset.UtcNow;
+
+        tracker.MarkPending("My Phone", DateTimeOffset.UtcNow);
+
+        Assert.NotNull(tracker.Snapshot.StartedAt);
+        Assert.True(tracker.Snapshot.StartedAt >= before);
+    }
+
+    [Fact]
+    public void CompleteAndFailStampAnEnd()
+    {
+        var completed = new TransferImportProgressTracker();
+        completed.MarkPending("My Phone", DateTimeOffset.UtcNow);
+        completed.Complete(new TransferImportReport([], [], [], []));
+        Assert.NotNull(completed.Snapshot.FinishedAt);
+
+        var failed = new TransferImportProgressTracker();
+        failed.MarkPending("My Phone", DateTimeOffset.UtcNow);
+        failed.Fail("Nothing from the file was applied.");
+        Assert.NotNull(failed.Snapshot.FinishedAt);
+    }
+
+    [Fact]
+    public void ToJobSnapshotReportsAnUnknownTotalBeforeStartAndTheRealTotalAfter()
+    {
+        var tracker = new TransferImportProgressTracker();
+        tracker.MarkPending("My Phone", DateTimeOffset.UtcNow);
+
+        Assert.Null(tracker.ToJobSnapshot().Total);
+
+        tracker.Start(10);
+
+        Assert.Equal(10, tracker.ToJobSnapshot().Total);
+    }
+
+    [Fact]
+    public void MarkOutcomeSeenAppliesTheGuard()
+    {
+        var tracker = new TransferImportProgressTracker();
+        tracker.MarkPending("My Phone", DateTimeOffset.UtcNow);
+        tracker.Complete(new TransferImportReport([], [], [], []));
+        var finishedAt = tracker.Snapshot.FinishedAt!.Value;
+
+        tracker.MarkOutcomeSeen(DateTimeOffset.UtcNow.AddMinutes(-5)); // stale
+        Assert.False(tracker.Snapshot.OutcomeSeen);
+
+        tracker.MarkOutcomeSeen(finishedAt);
+        Assert.True(tracker.Snapshot.OutcomeSeen);
+    }
 }

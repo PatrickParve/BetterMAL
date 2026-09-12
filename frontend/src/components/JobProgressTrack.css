@@ -1,0 +1,43 @@
+/* The shared background-job progress bar (navbar-settings-status-indicator
+   design.md D10) — moved out of SettingsPage.css so the Settings page and
+   the navbar's Settings gear render the same track and fill from one
+   definition. */
+.job-progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--code-bg);
+  overflow: hidden;
+}
+
+.job-progress-track__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+/* A running job whose total isn't known yet (design.md D17 of
+   report-jobs-and-lost-mal-connection) moves continuously rather than being
+   filled in proportion, so it never looks like a stalled or empty bar. */
+.job-progress-track__fill--indeterminate {
+  width: 30%;
+  animation: job-progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes job-progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(333%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .job-progress-track__fill--indeterminate {
+    width: 100%;
+    opacity: 0.5;
+    animation: none;
+    transform: none;
+  }
+}

@@ -13,7 +13,9 @@ public enum TransferImportPhase
 /// <summary>design.md D1's status shape. <see cref="DeviceName"/> and
 /// <see cref="ExportedAt"/> name the file the current or most recent run is
 /// for; <see cref="Report"/> and <see cref="Error"/> are that run's outcome,
-/// whichever phase it ended in.</summary>
+/// whichever phase it ended in. <see cref="StartedAt"/>/<see cref="FinishedAt"/>
+/// and <see cref="OutcomeSeen"/> join the shared job shape (design.md
+/// D4).</summary>
 public record TransferImportStatusSnapshot(
     TransferImportPhase Phase,
     int Done,
@@ -21,7 +23,10 @@ public record TransferImportStatusSnapshot(
     string? DeviceName,
     DateTimeOffset? ExportedAt,
     TransferImportReport? Report,
-    string? Error);
+    string? Error,
+    DateTimeOffset? StartedAt = null,
+    DateTimeOffset? FinishedAt = null,
+    bool OutcomeSeen = false);
 
 /// <summary>In-memory progress for the file import (device-transfer),
 /// modelled on <c>ISeriesBulkBuildProgressTracker</c>. Not persisted — a
@@ -54,6 +59,12 @@ public interface ITransferImportProgressTracker
     /// <summary>Reports a run that failed outright — nothing from the file
     /// was applied (design.md D11).</summary>
     void Fail(string reason);
+
+    /// <summary>Records that this run's ended outcome has been shown to the
+    /// user, guarded by the exact time it ended — the same guard
+    /// <see cref="JobProgressTracker.MarkOutcomeSeen"/> applies (design.md
+    /// D4).</summary>
+    void MarkOutcomeSeen(DateTimeOffset finishedAt);
 
     /// <summary>Maps into the shared job shape for the combined status read
     /// (design.md D15).</summary>

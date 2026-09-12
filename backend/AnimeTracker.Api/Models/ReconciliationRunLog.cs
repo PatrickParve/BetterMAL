@@ -15,4 +15,10 @@ public class ReconciliationRunLog
     /// the run ends (design.md D7).</summary>
     public bool? LastRunFailed { get; set; }
     public string? LastRunError { get; set; }
+
+    /// <summary>Whether the outcome of the run <see cref="LastRunAt"/> names
+    /// has been reported as seen. Reset to false at attempt time, alongside
+    /// <see cref="LastRunFailed"/>/<see cref="LastRunError"/>, so a new run's
+    /// outcome is unseen again (design.md D6).</summary>
+    public bool LastRunOutcomeSeen { get; set; }
 }

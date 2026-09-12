@@ -74,7 +74,7 @@ export function UpdatesMenu() {
         onClick={handleToggle}
       >
         <BellIcon />
-        {unseen && <span className="updates-menu__dot" aria-hidden="true" />}
+        {unseen && <span className="navbar__status-dot" aria-hidden="true" />}
       </button>
 
       {open && <UpdatesDropdown items={items} onNavigate={closeDropdown} onOpenHistory={openHistory} />}

@@ -12,7 +12,9 @@ The right group's controls SHALL be, in order from left to right: **the search f
 
 The Updates control belongs to the right group rather than the left because it opens a menu over the current page instead of navigating to one, and because it carries per-user state as the other right-group controls do. It SHALL be an icon button of the same size **and resting appearance** as the Settings gear — plain, with no persistent background of its own — rather than reading as a separately-boxed control; it SHALL open and close the updates dropdown the `anime-updates` capability specifies, and its open state SHALL be exposed to assistive technology. Opening it SHALL NOT navigate anywhere or disturb the page behind it.
 
-Every other control SHALL keep the behaviour, hover treatment, and accessible labelling it has today; only the ordering, the new Updates control, and the search field's group membership change. The search field SHALL keep its own width within the right group rather than being squeezed to the width of a button, and its type-ahead dropdown SHALL stay anchored beneath the field in its new position.
+The Settings control SHALL report, without being opened, that something on the Settings page needs me and that long-running work is in flight: it carries the same indicator the Updates control carries, and a thin progress bar along its bottom edge, both on the terms `navbar-settings-status` sets out. Neither SHALL change its size, its position in the group, its hover treatment, or the fact that clicking it opens the Settings page; and both SHALL be reflected in its accessible name, which is otherwise "Settings" as before.
+
+Every other control SHALL keep the behaviour, hover treatment, and accessible labelling it has today; only the ordering, the new Updates control, the Settings control's own status, and the search field's group membership change. The search field SHALL keep its own width within the right group rather than being squeezed to the width of a button, and its type-ahead dropdown SHALL stay anchored beneath the field in its new position.
 
 At window widths too narrow for one row, the navbar MAY wrap the search field onto its own row, and SHALL keep the two groups' internal orderings when it does. The updates dropdown SHALL stay anchored beneath its own control and within the window at every width the app supports, rather than overflowing the window's right edge.
 
@@ -63,6 +65,10 @@ At window widths too narrow for one row, the navbar MAY wrap the search field on
 #### Scenario: Opening settings from the gear
 - **WHEN** I click the Settings gear icon
 - **THEN** I am taken to the settings page
+
+#### Scenario: The gear reports without being opened
+- **WHEN** changes are held for review and a job is running
+- **THEN** the Settings gear carries the Updates control's indicator and a progress bar along its bottom edge, unchanged in size and position, and clicking it still opens the settings page
 
 #### Scenario: The dropdown follows the field
 - **WHEN** I type into the relocated search field

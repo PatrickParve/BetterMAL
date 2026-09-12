@@ -16,7 +16,10 @@ public enum JobPhase
 public record JobSnapshot(
     JobPhase Phase, int Done, int? Total, string? Error,
     DateTimeOffset? StartedAt, DateTimeOffset? FinishedAt,
-    DateTimeOffset? RetryAt = null);
+    DateTimeOffset? RetryAt = null,
+    // Only meaningful once a run has ended (Complete or Failed); a run that
+    // hasn't ended yet is always unseen (design.md D2).
+    bool OutcomeSeen = false);
 
 /// <summary>The narrow surface a service reports progress through, without
 /// the power to start or end a run itself — a service never knows which job
@@ -37,7 +40,7 @@ public class JobProgressTracker : IJobProgressSink
     private readonly Lock _lock = new();
     private JobSnapshot _snapshot = new(JobPhase.NotStarted, 0, null, null, null, null);
 
-    public JobSnapshot Snapshot
+    public virtual JobSnapshot Snapshot
     {
         get
         {
@@ -63,8 +66,24 @@ public class JobProgressTracker : IJobProgressSink
                 return false;
 
             onBeginning?.Invoke();
+            // A fresh JobSnapshot defaults OutcomeSeen to false, so starting a
+            // run clears it for free (design.md D2).
             _snapshot = new JobSnapshot(JobPhase.Running, 0, null, null, DateTimeOffset.UtcNow, null);
             return true;
+        }
+    }
+
+    /// <summary>Records that this run's ended outcome has been shown to the
+    /// user, guarded by the exact time it ended: it only takes effect while
+    /// the snapshot is still Complete or Failed with a matching
+    /// <see cref="JobSnapshot.FinishedAt"/>, so a report meant for a run that
+    /// has since moved on records nothing (design.md D2).</summary>
+    public virtual void MarkOutcomeSeen(DateTimeOffset finishedAt)
+    {
+        lock (_lock)
+        {
+            if ((_snapshot.Phase == JobPhase.Complete || _snapshot.Phase == JobPhase.Failed) && _snapshot.FinishedAt == finishedAt)
+                _snapshot = _snapshot with { OutcomeSeen = true };
         }
     }
 

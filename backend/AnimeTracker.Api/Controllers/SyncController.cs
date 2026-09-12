@@ -1,4 +1,3 @@
-using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Sync;
 using Microsoft.AspNetCore.Mvc;
@@ -9,7 +8,6 @@ namespace AnimeTracker.Api.Controllers;
 public class SyncController(
     IReconciliationService reconciliationService,
     IHeldChangeService heldChangeService,
-    IUserAnimeEntryRepository entryRepository,
     IResyncTrigger resyncTrigger,
     ResyncProgress resyncProgress,
     BackgroundJobRunner runner,
@@ -17,16 +15,6 @@ public class SyncController(
     ReconcileProgress reconcileProgress,
     HeldDecisionProgress heldDecisionProgress) : ControllerBase
 {
-    /// <summary>Sync status for the settings page: how many entries are
-    /// currently pending/retrying, how many are held for review, and when the
-    /// most recent push succeeded.</summary>
-    [HttpGet("api/sync/status")]
-    public async Task<IActionResult> GetStatus(CancellationToken ct)
-    {
-        var (pendingCount, heldCount, lastSyncedAt) = await entryRepository.GetSyncStatusAsync(ct);
-        return Ok(new { pendingCount, heldCount, lastSyncedAt });
-    }
-
     /// <summary>Manual "sync now" — flushes only pending entries immediately,
     /// without waiting out their debounce timers. Runs in the background,
     /// starting once (background-jobs "A job is started once"); the page

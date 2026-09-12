@@ -545,12 +545,6 @@ export type RewatchedSeriesSectionDto = {
   items: RewatchedSeriesItemDto[]
 }
 
-export type SyncStatusDto = {
-  pendingCount: number
-  heldCount: number
-  lastSyncedAt: string | null
-}
-
 // A change held for review since a previous process start — an unsent edit
 // or a queued removal (design.md D1-D8a). Kind distinguishes the two;
 // localValues is null for a removal, which has no field values to show.
@@ -596,7 +590,9 @@ export type HeldChangeDecisionDto = {
 // D1/D15) — every trigger POST and the combined api/app-status read serve
 // this same shape, mirroring backend JobDto. total is null while the job
 // doesn't yet know how much work there is — never zero, which means a run
-// that really has nothing to do.
+// that really has nothing to do. outcomeSeen is only meaningful once phase is
+// Complete or Failed (navbar-settings-status-indicator design.md D2) — it is
+// what the navbar's indicator and the Settings page's report both read.
 export type JobPhase = 'NotStarted' | 'Running' | 'Complete' | 'Failed'
 
 export type JobStatusDto = {
@@ -607,6 +603,7 @@ export type JobStatusDto = {
   startedAt: string | null
   finishedAt: string | null
   retryAt: string | null
+  outcomeSeen: boolean
 }
 
 // Accept all and decline all share one job (design.md D18): whichever is
@@ -622,6 +619,7 @@ export type WeeklyCheckDto = {
   lastRunAt: string
   failed: boolean | null
   error: string | null
+  outcomeSeen: boolean
 }
 
 export type AppStatusJobsDto = {
@@ -635,12 +633,35 @@ export type AppStatusJobsDto = {
   fileImport: JobStatusDto
 }
 
+// The navbar-and-Settings-page sync readout (navbar-settings-status-indicator
+// design.md D1) — pendingCount/heldCount/lastSyncedAt come from the same
+// GetSyncStatusAsync read GET api/sync/status used before that endpoint was
+// folded into this one; diffPending is a plain yes/no, never the diff itself.
+export type AppStatusSyncDto = {
+  pendingCount: number
+  heldCount: number
+  lastSyncedAt: string | null
+  diffPending: boolean
+}
+
 // GET api/app-status: one cheap read of every job's state, the MyAnimeList
-// connection state, and the weekly check's last outcome (design.md D15).
+// connection state, the weekly check's last outcome, and the sync group's
+// figures (design.md D1/D15, extended by navbar-settings-status-indicator
+// design.md D1).
 export type AppStatusDto = {
   malConnection: MalAuthStatus
   weeklyCheck: WeeklyCheckDto | null
+  sync: AppStatusSyncDto
   jobs: AppStatusJobsDto
+}
+
+// POST api/app-status/seen's body (navbar-settings-status-indicator design.md
+// D5) — every part optional. finishedAt/weeklyCheckLastRunAt are the exact
+// timestamp strings the app-status read gave the reporter, echoed back
+// unchanged so no formatting question arises.
+export type AppStatusSeenRequest = {
+  jobs?: { name: keyof AppStatusJobsDto; finishedAt: string }[]
+  weeklyCheckLastRunAt?: string
 }
 
 export type ReconciliationDiffChangeType = 'Added' | 'Updated'

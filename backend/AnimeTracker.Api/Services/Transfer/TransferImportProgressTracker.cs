@@ -19,7 +19,9 @@ public class TransferImportProgressTracker : ITransferImportProgressTracker
     public void MarkPending(string? deviceName, DateTimeOffset exportedAt)
     {
         lock (_lock)
-            _snapshot = new TransferImportStatusSnapshot(TransferImportPhase.Running, 0, 0, deviceName, exportedAt, null, null);
+            // Called from the accepting request, the same moment TryBegin
+            // stamps StartedAt for every other job (design.md D4).
+            _snapshot = new TransferImportStatusSnapshot(TransferImportPhase.Running, 0, 0, deviceName, exportedAt, null, null, StartedAt: DateTimeOffset.UtcNow);
     }
 
     public void Start(int total)
@@ -43,18 +45,30 @@ public class TransferImportProgressTracker : ITransferImportProgressTracker
     public void Complete(TransferImportReport report)
     {
         lock (_lock)
-            _snapshot = _snapshot with { Phase = TransferImportPhase.Complete, Report = report };
+            _snapshot = _snapshot with { Phase = TransferImportPhase.Complete, Report = report, FinishedAt = DateTimeOffset.UtcNow };
     }
 
     public void Fail(string reason)
     {
         lock (_lock)
-            _snapshot = _snapshot with { Phase = TransferImportPhase.Failed, Error = reason };
+            _snapshot = _snapshot with { Phase = TransferImportPhase.Failed, Error = reason, FinishedAt = DateTimeOffset.UtcNow };
+    }
+
+    /// <summary>Same guard as <see cref="JobProgressTracker.MarkOutcomeSeen"/>
+    /// (design.md D4).</summary>
+    public void MarkOutcomeSeen(DateTimeOffset finishedAt)
+    {
+        lock (_lock)
+        {
+            if ((_snapshot.Phase == TransferImportPhase.Complete || _snapshot.Phase == TransferImportPhase.Failed) && _snapshot.FinishedAt == finishedAt)
+                _snapshot = _snapshot with { OutcomeSeen = true };
+        }
     }
 
     /// <summary>Maps into the shared job shape for the combined status read
-    /// (design.md D15). The file import tracks no start/end timestamps of its
-    /// own, so those are reported as unknown rather than guessed.</summary>
+    /// (design.md D15). A total of 0 before the file has been read is reported
+    /// as unknown (null) rather than zero, so the shared bar moves instead of
+    /// sitting on an empty, zero-filled track (design.md D4).</summary>
     public JobSnapshot ToJobSnapshot()
     {
         var snapshot = Snapshot;
@@ -67,6 +81,8 @@ public class TransferImportProgressTracker : ITransferImportProgressTracker
             _ => throw new ArgumentOutOfRangeException(nameof(snapshot), snapshot.Phase, null),
         };
 
-        return new JobSnapshot(phase, snapshot.Done, snapshot.Total, snapshot.Error, null, null);
+        return new JobSnapshot(
+            phase, snapshot.Done, snapshot.Total == 0 ? null : snapshot.Total, snapshot.Error,
+            snapshot.StartedAt, snapshot.FinishedAt, OutcomeSeen: snapshot.OutcomeSeen);
     }
 }

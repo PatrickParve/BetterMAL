@@ -218,7 +218,25 @@
   }
 }
 
+/* The shared "needs attention" dot (navbar-settings-status "The Settings
+   control signals that something needs me"; anime-updates "signals unseen
+   news") — one definition the Updates bell and the Settings gear both use
+   (navbar-settings-status-indicator design.md D10), so the two can't drift
+   apart. It's one carrier of the fact; each control's accessible name states
+   it too, so appearance alone doesn't carry it. Was `.updates-menu__dot`. */
+.navbar__status-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1.5px solid var(--bg);
+}
+
 .navbar__settings {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -228,6 +246,21 @@
   border-radius: 6px;
   border: 1px solid transparent;
   color: var(--text);
+}
+
+/* The gear's decorative progress sliver (navbar-settings-status "The
+   Settings control shows a progress bar while a job runs"; design.md D10) —
+   the same JobProgressTrack (components/JobProgressTrack.css) the Settings
+   page uses, positioned as a thin strip along the gear's own bottom edge
+   instead of the page's full-width track. The compound selector outranks
+   .job-progress-track's own height regardless of stylesheet import order. */
+.job-progress-track.navbar__settings-progress {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 5px;
+  height: 2px;
+  border-radius: 1px;
 }
 
 .navbar__settings:hover {

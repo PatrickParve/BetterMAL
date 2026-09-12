@@ -11,10 +11,10 @@ import {
   exportListBackup,
   getHeldChanges,
   getPendingReconciliationDiff,
-  getSyncStatus,
   getTransferImportStatus,
   importData,
   refreshAnime,
+  reportOutcomesSeen,
   runReconciliation,
   syncNow,
   triggerAiringFullRefresh,
@@ -29,16 +29,16 @@ import type {
   HeldDecisionAction,
   JobPhase,
   PendingReconciliationDiffDto,
-  SyncStatusDto,
   TransferImportFailureDto,
   TransferImportStatusDto,
   WeeklyCheckDto,
 } from '../api/types.ts'
+import { JobProgressTrack } from '../components/JobProgressTrack.tsx'
 import { RowPicture } from '../components/RowPicture.tsx'
+import { unseenOutcomes, useAppStatus } from '../context/AppStatusContext.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { useAnimeSearch } from '../hooks/useAnimeSearch.ts'
-import { useAppStatus } from '../hooks/useAppStatus.ts'
 import { useClickOutside } from '../hooks/useClickOutside.ts'
 import { STATUS_LABELS, formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
 import './SettingsPage.css'
@@ -160,16 +160,20 @@ function progressWords(
   return total !== null ? `Complete — ${done}/${total} ${noun}` : `Complete — ${done} ${noun}`
 }
 
+// How long a completed outcome has to stay visible on this page before the
+// reporting effect (below, design.md D9) reports it as seen — long enough
+// that landing on the page is good evidence it was actually looked at,
+// rather than an instant poll marking it seen and clearing the navbar's dot
+// before I noticed anything.
+const OUTCOME_SEEN_DWELL_MS = 3000
+
 // The shared background-job readout (design.md decision 10, extended by
-// report-jobs-and-lost-mal-connection design.md D17): a role="progressbar"
-// track filled done/total plus the wording beside it, used identically by
-// every background job the page shows so a reader learns to read it once. A
-// job that has never run shows nothing rather than a zeroed state, and a
-// failed run is marked visually distinct rather than differing only in
-// wording. While the total is unknown the track moves continuously instead
-// of being filled in proportion, and ARIA leaves aria-valuenow/aria-valuemax
-// off — as the spec defines for an indeterminate progressbar — carrying the
-// words in aria-valuetext instead.
+// report-jobs-and-lost-mal-connection design.md D17): the wording beside a
+// JobProgressTrack (navbar-settings-status-indicator design.md D10), used
+// identically by every background job the page shows so a reader learns to
+// read it once. A job that has never run shows nothing rather than a zeroed
+// state, and a failed run is marked visually distinct rather than differing
+// only in wording.
 function JobProgress({
   phase,
   done,
@@ -178,6 +182,8 @@ function JobProgress({
   error,
   retryAt,
   noRetryPlanned,
+  finishedAt,
+  outcomeSeen,
 }: {
   phase: JobPhase
   done: number
@@ -186,26 +192,49 @@ function JobProgress({
   error?: string | null
   retryAt?: string | null
   noRetryPlanned?: boolean
+  finishedAt: string | null
+  outcomeSeen: boolean
 }) {
+  // Whether a completed run shows at all is decided once — the first time
+  // this run (identified by finishedAt) is seen — and frozen for the rest of
+  // this page load: the reporting effect below marking it seen a few seconds
+  // from now must not make this row vanish out from under someone still
+  // looking at it. A run already reported seen before this page loaded (an
+  // earlier visit's report already landed, or the app itself started with
+  // it already flagged) never shows at all; a fresh one stays visible for
+  // the rest of this page's life regardless of what gets reported meanwhile,
+  // and only a later page load re-checks whether it's since been seen. Not
+  // applied to Failed — a failure still wants my attention, so it never
+  // disappears on its own.
+  const [frozenRun, setFrozenRun] = useState(finishedAt)
+  const [frozenSeen, setFrozenSeen] = useState(outcomeSeen)
+  if (finishedAt !== frozenRun) {
+    setFrozenRun(finishedAt)
+    setFrozenSeen(outcomeSeen)
+  }
+
   if (phase === 'NotStarted') return null
-  const indeterminate = phase === 'Running' && total === null
-  const pct = total && total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0
+  if (phase === 'Complete' && finishedAt !== null && frozenSeen) return null
   const text = progressWords(phase, done, total, noun, error, retryAt, noRetryPlanned)
+  // JobProgressTrack moves continuously only when its own total is null
+  // (design D10) — that has to mean "running, total still unknown," not
+  // "ended without ever learning one," so a total that's still null once the
+  // run has ended is passed through as zero.
+  let trackDone = done
+  let trackTotal = phase === 'Running' ? total : (total ?? 0)
+  if (phase === 'Complete' && !trackTotal) {
+    // A completed run whose total was never meaningful — reconciliation
+    // never learns one, and a run with nothing to do reports 0 — would
+    // otherwise render that flat, empty bar right next to the word
+    // "Complete", reading as broken rather than done. A job with a real
+    // total already reaches 100% on its own once done catches up, so this
+    // only overrides the falsy-total edge case.
+    trackDone = 1
+    trackTotal = 1
+  }
   return (
     <div className={phase === 'Failed' ? 'job-progress job-progress--failed' : 'job-progress'}>
-      <div
-        className="job-progress__track"
-        role="progressbar"
-        aria-valuemin={indeterminate ? undefined : 0}
-        aria-valuenow={indeterminate ? undefined : done}
-        aria-valuemax={indeterminate ? undefined : (total ?? done)}
-        aria-valuetext={text}
-      >
-        <div
-          className={indeterminate ? 'job-progress__fill job-progress__fill--indeterminate' : 'job-progress__fill'}
-          style={indeterminate ? undefined : { width: `${pct}%` }}
-        />
-      </div>
+      <JobProgressTrack done={trackDone} total={trackTotal} valueText={text} />
       <span className="job-progress__counts">{text}</span>
     </div>
   )
@@ -259,24 +288,25 @@ function formatHeldValues(values: HeldChangeValuesDto): string {
 }
 
 // Which jobs the Settings page reloads other state for when they leave
-// Running (design.md D16 of report-jobs-and-lost-mal-connection).
+// Running (design.md D16 of report-jobs-and-lost-mal-connection) — syncNow
+// and listImport dropped out once the sync figures below started reading
+// straight from the shared status (navbar-settings-status-indicator D1),
+// which the poll already keeps current.
 type TrackedJobPhases = {
-  syncNow: JobPhase
   reconcile: JobPhase
   heldDecision: JobPhase
-  listImport: JobPhase
   fileImport: JobPhase
 }
 
 // Operational/settings page: sync status + manual triggers, pending
 // reconciliation-diff review, MAL re-authorization, and on-demand
-// force-refresh of a single anime's cached metadata. Every job's state comes
-// from one shared server read (useAppStatus) rather than the page's own
-// per-job polling, so this page, another browser, and a run started by the
-// app itself always agree (background-jobs "A job's state is read from the
-// server").
+// force-refresh of a single anime's cached metadata. Every job's state, and
+// the sync group's figures, come from the app-wide status read
+// (context/AppStatusContext, mounted once in AppShell) rather than a poll of
+// this page's own, so this page, the navbar, another browser, and a run
+// started by the app itself always agree (background-jobs "A job's state is
+// read from the server").
 export function SettingsPage() {
-  const [status, setStatus] = useState<SyncStatusDto | null>(null)
   const [diff, setDiff] = useState<PendingReconciliationDiffDto | null>(null)
   const [heldChanges, setHeldChanges] = useState<HeldChangeDto[] | null>(null)
   const [importStatus, setImportStatus] = useState<TransferImportStatusDto | null>(null)
@@ -303,16 +333,13 @@ export function SettingsPage() {
   const [importDragOver, setImportDragOver] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
 
-  const { status: appStatus, applyJob } = useAppStatus()
+  const { status: appStatus, applyJob, applyWeeklyOutcomeSeen } = useAppStatus()
 
   const { alwaysShowCompletedScores, toggleAlwaysShowCompletedScores } = useScoreVisibility()
   const { hideHentai, toggleHideHentai } = useContentFilter()
 
   const load = useCallback(() => {
     return Promise.all([
-      getSyncStatus()
-        .then(setStatus)
-        .catch(() => setStatus(null)),
       getPendingReconciliationDiff()
         .then(setDiff)
         .catch(() => setDiff(null)),
@@ -340,11 +367,6 @@ export function SettingsPage() {
     const jobs = appStatus.jobs
     const prev = prevJobPhasesRef.current
     if (prev) {
-      if (prev.syncNow === 'Running' && jobs.syncNow.phase !== 'Running') {
-        void getSyncStatus()
-          .then(setStatus)
-          .catch(() => {})
-      }
       if (prev.reconcile === 'Running' && jobs.reconcile.phase !== 'Running') {
         void getPendingReconciliationDiff()
           .then(setDiff)
@@ -354,14 +376,6 @@ export function SettingsPage() {
         void getHeldChanges()
           .then(setHeldChanges)
           .catch(() => {})
-        void getSyncStatus()
-          .then(setStatus)
-          .catch(() => {})
-      }
-      if (prev.listImport === 'Running' && jobs.listImport.phase !== 'Running') {
-        void getSyncStatus()
-          .then(setStatus)
-          .catch(() => {})
       }
       if (prev.fileImport === 'Running' && jobs.fileImport.phase !== 'Running') {
         void getTransferImportStatus()
@@ -370,13 +384,80 @@ export function SettingsPage() {
       }
     }
     prevJobPhasesRef.current = {
-      syncNow: jobs.syncNow.phase,
       reconcile: jobs.reconcile.phase,
       heldDecision: jobs.heldDecision.phase,
-      listImport: jobs.listImport.phase,
       fileImport: jobs.fileImport.phase,
     }
   }, [appStatus])
+
+  // Reports what this page is showing as seen (design.md D9), after it's
+  // been showing it a little while (OUTCOME_SEEN_DWELL_MS) — long enough to
+  // be sure I was actually on the page and not just a moment's poll —
+  // deriving the outcomes not yet seen from the shared status and skipping
+  // any already scheduled in this page's lifetime (a run's
+  // finishedAt/lastRunAt is a stable key: scheduledOutcomesRef tracks
+  // in-flight timers across every poll tick, which is why this can't just
+  // use a plain state/effect pair — a poll landing mid-wait must not restart
+  // the clock, and one landing after the server's flag flips must not
+  // schedule a second report). Merges a successful report back into the
+  // shared status at once so the navbar's dot clears without waiting for the
+  // next poll; a failed report forgets its key so the next poll retries.
+  // Leaving the page before the wait elapses cancels it — the countdown
+  // starts over on the next visit. Either way this says nothing to the
+  // reader, and JobProgress's own row is unaffected by any of it once shown
+  // (frozen at first sight, above).
+  const scheduledOutcomesRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const appStatusRef = useRef(appStatus)
+  useEffect(() => {
+    appStatusRef.current = appStatus
+  }, [appStatus])
+  useEffect(() => {
+    const scheduled = scheduledOutcomesRef.current
+    return () => {
+      for (const timeoutId of scheduled.values()) clearTimeout(timeoutId)
+      scheduled.clear()
+    }
+  }, [])
+  useEffect(() => {
+    if (!appStatus) return
+    const scheduled = scheduledOutcomesRef.current
+    const outcomes = unseenOutcomes(appStatus)
+
+    for (const { name, finishedAt } of outcomes.jobs) {
+      const key = `${name}:${finishedAt}`
+      if (scheduled.has(key)) continue
+      scheduled.set(
+        key,
+        setTimeout(() => {
+          scheduled.delete(key)
+          reportOutcomesSeen({ jobs: [{ name, finishedAt }] })
+            .then(() => {
+              const current = appStatusRef.current?.jobs[name]
+              if (current && current.finishedAt === finishedAt) applyJob(name, { ...current, outcomeSeen: true })
+            })
+            .catch(() => {})
+        }, OUTCOME_SEEN_DWELL_MS),
+      )
+    }
+
+    const weeklyLastRunAt = outcomes.weeklyCheckLastRunAt
+    if (weeklyLastRunAt !== null) {
+      const key = `weekly:${weeklyLastRunAt}`
+      if (!scheduled.has(key)) {
+        scheduled.set(
+          key,
+          setTimeout(() => {
+            scheduled.delete(key)
+            reportOutcomesSeen({ weeklyCheckLastRunAt: weeklyLastRunAt })
+              .then(() => {
+                if (appStatusRef.current?.weeklyCheck?.lastRunAt === weeklyLastRunAt) applyWeeklyOutcomeSeen()
+              })
+              .catch(() => {})
+          }, OUTCOME_SEEN_DWELL_MS),
+        )
+      }
+    }
+  }, [appStatus, applyJob, applyWeeklyOutcomeSeen])
 
   async function handleSyncNow() {
     if (startingSyncNow || appStatus?.jobs.syncNow.phase === 'Running') return
@@ -593,6 +674,7 @@ export function SettingsPage() {
         startedAt: null,
         finishedAt: null,
         retryAt: null,
+        outcomeSeen: false,
       })
     } catch (err) {
       setImportRefusal(err instanceof ApiError && err.reason ? err.reason : 'The import was refused. Please try again.')
@@ -678,35 +760,33 @@ export function SettingsPage() {
                 error={jobs.listImport.error}
                 retryAt={jobs.listImport.retryAt}
                 noRetryPlanned={jobs.listImport.phase === 'Failed' && jobs.listImport.retryAt === null}
+                finishedAt={jobs.listImport.finishedAt}
+                outcomeSeen={jobs.listImport.outcomeSeen}
               />
             }
           />
         )}
 
-        {status ? (
-          <dl className="settings-stats">
-            <div className="settings-stats__row">
-              <dt>Pending / retrying</dt>
-              <dd>{status.pendingCount}</dd>
-            </div>
-            <div className="settings-stats__row">
-              <dt>Held for review</dt>
-              {/* design.md D14: taken from the held-list payload, not
-                  status.heldCount, so it never disagrees with the rows below. */}
-              <dd>{heldChanges?.length ?? 0}</dd>
-            </div>
-            <div className="settings-stats__row">
-              <dt>Last successful sync</dt>
-              <dd>{formatTimestamp(status.lastSyncedAt)}</dd>
-            </div>
-            <div className="settings-stats__row">
-              <dt>Weekly check</dt>
-              <dd>{formatWeeklyCheck(appStatus.weeklyCheck)}</dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="settings-box__empty">Couldn't load sync status.</p>
-        )}
+        <dl className="settings-stats">
+          <div className="settings-stats__row">
+            <dt>Pending / retrying</dt>
+            <dd>{appStatus.sync.pendingCount}</dd>
+          </div>
+          <div className="settings-stats__row">
+            <dt>Held for review</dt>
+            {/* design.md D14: taken from the held-list payload, not
+                sync.heldCount, so it never disagrees with the rows below. */}
+            <dd>{heldChanges?.length ?? 0}</dd>
+          </div>
+          <div className="settings-stats__row">
+            <dt>Last successful sync</dt>
+            <dd>{formatTimestamp(appStatus.sync.lastSyncedAt)}</dd>
+          </div>
+          <div className="settings-stats__row">
+            <dt>Weekly check</dt>
+            <dd>{formatWeeklyCheck(appStatus.weeklyCheck)}</dd>
+          </div>
+        </dl>
 
         <SettingsAction
           title="Sync now"
@@ -716,7 +796,15 @@ export function SettingsPage() {
               : 'Pushes your own unsent edits to MyAnimeList right away instead of waiting for the next scheduled sync. Sends nothing else, and changes nothing on your list locally.'
           }
           state={
-            <JobProgress phase={jobs.syncNow.phase} done={jobs.syncNow.done} total={jobs.syncNow.total} noun="sent" error={jobs.syncNow.error} />
+            <JobProgress
+              phase={jobs.syncNow.phase}
+              done={jobs.syncNow.done}
+              total={jobs.syncNow.total}
+              noun="sent"
+              error={jobs.syncNow.error}
+              finishedAt={jobs.syncNow.finishedAt}
+              outcomeSeen={jobs.syncNow.outcomeSeen}
+            />
           }
           button={
             <button type="button" onClick={handleSyncNow} disabled={startingSyncNow || jobs.syncNow.phase === 'Running'}>
@@ -735,6 +823,8 @@ export function SettingsPage() {
               total={jobs.reconcile.total}
               noun="anime read"
               error={jobs.reconcile.error}
+              finishedAt={jobs.reconcile.finishedAt}
+              outcomeSeen={jobs.reconcile.outcomeSeen}
             />
           }
           button={
@@ -814,6 +904,8 @@ export function SettingsPage() {
               total={jobs.heldDecision.total}
               noun="decided"
               error={jobs.heldDecision.error}
+              finishedAt={jobs.heldDecision.finishedAt}
+              outcomeSeen={jobs.heldDecision.outcomeSeen}
             />
             {heldError && <p className="settings-box__error">{heldError}</p>}
             <div className="settings-box__buttons">
@@ -867,7 +959,15 @@ export function SettingsPage() {
           title="Correct imported data"
           hint="One-time corrective re-sync: re-fetches your full MyAnimeList and full anime details, then immediately overwrites the local status, episode count, score, and dates for every anime — with no review step — and creates entries for anime not yet tracked locally. Also backfills English title, duration, and source. Takes several minutes; entries with unsynced local edits are left untouched. Nothing it applies is recorded in Latest updates or the full edit history."
           state={
-            <JobProgress phase={jobs.resync.phase} done={jobs.resync.done} total={jobs.resync.total} noun="processed" error={jobs.resync.error} />
+            <JobProgress
+              phase={jobs.resync.phase}
+              done={jobs.resync.done}
+              total={jobs.resync.total}
+              noun="processed"
+              error={jobs.resync.error}
+              finishedAt={jobs.resync.finishedAt}
+              outcomeSeen={jobs.resync.outcomeSeen}
+            />
           }
           button={
             <button type="button" onClick={handleResyncFromMal} disabled={startingFullResync || jobs.resync.phase === 'Running'}>
@@ -886,6 +986,8 @@ export function SettingsPage() {
               total={jobs.airingRefresh.total}
               noun="processed"
               error={jobs.airingRefresh.error}
+              finishedAt={jobs.airingRefresh.finishedAt}
+              outcomeSeen={jobs.airingRefresh.outcomeSeen}
             />
           }
           button={
@@ -905,6 +1007,8 @@ export function SettingsPage() {
               total={jobs.seriesBuild.total}
               noun="processed"
               error={jobs.seriesBuild.error}
+              finishedAt={jobs.seriesBuild.finishedAt}
+              outcomeSeen={jobs.seriesBuild.outcomeSeen}
             />
           }
           button={
@@ -976,6 +1080,8 @@ export function SettingsPage() {
                     ? `${jobs.fileImport.error ?? 'Unknown error'}. Nothing from the file was applied.`
                     : jobs.fileImport.error
                 }
+                finishedAt={jobs.fileImport.finishedAt}
+                outcomeSeen={jobs.fileImport.outcomeSeen}
               />
               {importRefusal && <p className="settings-box__error">{importRefusal}</p>}
               {jobs.fileImport.phase === 'Complete' && importStatus?.report && (

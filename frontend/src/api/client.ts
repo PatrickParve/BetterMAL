@@ -6,6 +6,7 @@ import type {
   AnimeSearchResult,
   AnimeUpdateDto,
   AppStatusDto,
+  AppStatusSeenRequest,
   HealthStatus,
   HeldChangeDecisionDto,
   HeldChangeDto,
@@ -28,7 +29,6 @@ import type {
   SeriesDto,
   SeriesListDto,
   SeriesLookupResult,
-  SyncStatusDto,
   TopAnimeItemDto,
   TopAnimeMediaType,
   TopAnimeRankingType,
@@ -131,12 +131,24 @@ export function getMalAuthStatus(): Promise<MalAuthStatus> {
   return fetchJson<MalAuthStatus>('/api/mal-auth/status')
 }
 
-// One cheap read of every job's state, the MyAnimeList connection state, and
-// the weekly check's last outcome (design.md D15 of
-// report-jobs-and-lost-mal-connection) — cheap enough for useAppStatus to
-// repeat every second while a job runs.
+// One cheap read of every job's state, the MyAnimeList connection state, the
+// weekly check's last outcome, and the sync group's figures (design.md D15 of
+// report-jobs-and-lost-mal-connection, extended by navbar-settings-status-
+// indicator design.md D1) — cheap enough for AppStatusContext to repeat every
+// second while a job runs.
 export function getAppStatus(): Promise<AppStatusDto> {
   return fetchJson<AppStatusDto>('/api/app-status')
+}
+
+// Reports one or more job outcomes, and/or the weekly check's, as seen
+// (navbar-settings-status-indicator design.md D5) — same fetchVoid POST shape
+// as markUpdatesSeen above. Called only from the Settings page (design.md D9).
+export function reportOutcomesSeen(body: AppStatusSeenRequest): Promise<void> {
+  return fetchVoid('/api/app-status/seen', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 }
 
 // Touches neither the database nor MAL — a true "is the process up" probe.
@@ -438,10 +450,6 @@ export function resetSeriesPicture(seriesId: number): Promise<{ pictureUrl: stri
 // sets, and reports how many eligible members still remain unfetched.
 export function refreshSeriesPictures(animeId: number): Promise<{ remaining: number }> {
   return fetchJson<{ remaining: number }>(`/api/series/by-anime/${animeId}/pictures/refresh`, { method: 'POST' })
-}
-
-export function getSyncStatus(): Promise<SyncStatusDto> {
-  return fetchJson<SyncStatusDto>('/api/sync/status')
 }
 
 // Runs in the background and starts once (background-jobs "A job is started
