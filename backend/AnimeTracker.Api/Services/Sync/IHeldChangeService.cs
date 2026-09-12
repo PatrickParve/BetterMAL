@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal.Dto;
 
 namespace AnimeTracker.Api.Services.Sync;
@@ -102,10 +103,11 @@ public interface IHeldChangeService
 
     /// <summary>Accepts every currently held item, one at a time; an item
     /// whose push fails counts toward StillHeld, not toward failing the
-    /// call.</summary>
-    Task<HeldChangeBulkResult> AcceptAllAsync(CancellationToken ct = default);
+    /// call. <paramref name="progress"/>'s total is the number held when the
+    /// run starts, and it reports after each decision (design.md D5).</summary>
+    Task<HeldChangeBulkResult> AcceptAllAsync(IJobProgressSink? progress = null, CancellationToken ct = default);
 
     /// <summary>Declines every currently held item, one at a time; an item
     /// whose MyAnimeList read fails counts toward StillHeld.</summary>
-    Task<HeldChangeBulkResult> DeclineAllAsync(CancellationToken ct = default);
+    Task<HeldChangeBulkResult> DeclineAllAsync(IJobProgressSink? progress = null, CancellationToken ct = default);
 }

@@ -1,3 +1,5 @@
+using AnimeTracker.Api.Services.Jobs;
+
 namespace AnimeTracker.Api.Services.Sync;
 
 /// <summary>Counts from a reconciliation run — Added/Updated describe the diff
@@ -29,7 +31,14 @@ public record PendingReconciliationDiffDto(int Id, DateTimeOffset ComputedAt, Li
 /// than applied — see Accept/Cancel below.</summary>
 public interface IReconciliationService
 {
-    Task<ReconciliationResult> RunAsync(CancellationToken ct = default);
+    /// <summary>Runs full reconciliation, waiting for any other run already
+    /// in progress (design.md D6 — a manual run and the weekly run never
+    /// compute a diff at once). Reports the anime read so far through
+    /// <paramref name="progress"/> with no total, since MyAnimeList never
+    /// says how long the list is (design.md D5); a null
+    /// <paramref name="progress"/> makes the run quiet, as the weekly run
+    /// always is (design.md D6).</summary>
+    Task<ReconciliationResult> RunAsync(IJobProgressSink? progress = null, CancellationToken ct = default);
 
     /// <summary>The most recent run's diff still awaiting review, or null if
     /// none is pending.</summary>

@@ -9,14 +9,10 @@ import {
   declineHeldChange,
   exportData,
   exportListBackup,
-  getAiringFullRefreshStatus,
   getHeldChanges,
-  getImportStatus,
-  getMalAuthStatus,
   getPendingReconciliationDiff,
-  getResyncFromMalStatus,
-  getSeriesBulkBuildStatus,
   getSyncStatus,
+  getTransferImportStatus,
   importData,
   refreshAnime,
   runReconciliation,
@@ -26,23 +22,23 @@ import {
   triggerSeriesBulkBuild,
 } from '../api/client.ts'
 import type {
-  AiringFullRefreshStatusDto,
   AnimeSearchResult,
   HeldChangeDto,
   HeldChangeRecentChangeDto,
   HeldChangeValuesDto,
-  MalAuthStatus,
+  HeldDecisionAction,
+  JobPhase,
   PendingReconciliationDiffDto,
-  ResyncStatusDto,
-  SeriesBulkBuildStatusDto,
   SyncStatusDto,
   TransferImportFailureDto,
   TransferImportStatusDto,
+  WeeklyCheckDto,
 } from '../api/types.ts'
 import { RowPicture } from '../components/RowPicture.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { useAnimeSearch } from '../hooks/useAnimeSearch.ts'
+import { useAppStatus } from '../hooks/useAppStatus.ts'
 import { useClickOutside } from '../hooks/useClickOutside.ts'
 import { STATUS_LABELS, formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
 import './SettingsPage.css'
@@ -90,9 +86,10 @@ function SettingsToggleRow({
 }
 
 // An action that starts work (design.md decision 10): name, explanation,
-// optional run state (a JobProgress for the three background jobs), and one
-// button — the titled-block shape SettingsToggleRow's one-line form is built
-// to contrast with.
+// optional run state (a JobProgress for one of the page's background jobs,
+// report-jobs-and-lost-mal-connection settings-page spec "Background jobs
+// report progress the same way"), and a button — button is omitted for the
+// MyAnimeList list import, which the app starts on its own.
 // className/onDrag*/onDrop are only ever passed by the import action, which
 // is also a drop target (settings-page spec "Dropping a file starts an
 // import") — every other caller leaves them undefined, so no handlers attach.
@@ -109,7 +106,7 @@ function SettingsAction({
   title: string
   hint: string
   state?: ReactNode
-  button: ReactNode
+  button?: ReactNode
   className?: string
   onDragOver?: (event: DragEvent<HTMLDivElement>) => void
   onDragLeave?: (event: DragEvent<HTMLDivElement>) => void
@@ -127,72 +124,101 @@ function SettingsAction({
         <p className="settings-action__hint">{hint}</p>
         {state}
       </div>
-      <div className="settings-action__control">{button}</div>
+      {button && <div className="settings-action__control">{button}</div>}
     </div>
   )
 }
 
-type JobPhase = 'not-started' | 'running' | 'complete' | 'failed'
-
-// Normalises the three jobs' own phase unions (ResyncPhase/AiringFullRefreshPhase
-// lack 'Failed'; SeriesBulkBuildPhase has it) into one shape JobProgress reads.
-function jobPhase(phase: 'NotStarted' | 'Running' | 'Complete' | 'Failed'): JobPhase {
-  switch (phase) {
-    case 'NotStarted':
-      return 'not-started'
-    case 'Running':
-      return 'running'
-    case 'Complete':
-      return 'complete'
-    case 'Failed':
-      return 'failed'
+// Renders the wording table of design.md D17 (report-jobs-and-lost-mal-
+// connection): total is null while the job doesn't yet know how much work
+// there is, never zero. retryAt/noRetryPlanned are only ever passed for the
+// MyAnimeList list import, the only job that plans its own retry — every
+// other caller leaves them undefined, so no "tries again" text is ever
+// appended for them.
+function progressWords(
+  phase: JobPhase,
+  done: number,
+  total: number | null,
+  noun: string,
+  error?: string | null,
+  retryAt?: string | null,
+  noRetryPlanned?: boolean,
+): string {
+  if (phase === 'Running') {
+    if (total === null) return done > 0 ? `Running… ${done} ${noun}` : 'Starting…'
+    return `Running… ${done}/${total} ${noun}`
   }
+  if (phase === 'Failed') {
+    const base =
+      total !== null
+        ? `Failed after ${done}/${total} ${noun} — ${error ?? 'see backend logs.'}`
+        : `Failed — ${error ?? 'see backend logs.'}`
+    if (retryAt) return `${base} Tries again at ${formatTimestamp(retryAt)}.`
+    if (noRetryPlanned) return `${base} Tries again when the app next starts.`
+    return base
+  }
+  return total !== null ? `Complete — ${done}/${total} ${noun}` : `Complete — ${done} ${noun}`
 }
 
-// The shared background-job readout (design.md decision 10): a
-// role="progressbar" track filled done/total plus the counts beside it,
-// used identically by all three background jobs so a reader learns to read
-// it once. A job that has never run shows nothing rather than a zeroed
-// state, and a failed run is marked visually distinct rather than differing
-// only in wording.
-// failureReason replaces the generic "see backend logs" pointer for the
-// import job, which — unlike the other three — has a real reason to show
-// (settings-page spec "A failed import says nothing was applied").
+// The shared background-job readout (design.md decision 10, extended by
+// report-jobs-and-lost-mal-connection design.md D17): a role="progressbar"
+// track filled done/total plus the wording beside it, used identically by
+// every background job the page shows so a reader learns to read it once. A
+// job that has never run shows nothing rather than a zeroed state, and a
+// failed run is marked visually distinct rather than differing only in
+// wording. While the total is unknown the track moves continuously instead
+// of being filled in proportion, and ARIA leaves aria-valuenow/aria-valuemax
+// off — as the spec defines for an indeterminate progressbar — carrying the
+// words in aria-valuetext instead.
 function JobProgress({
   phase,
   done,
   total,
   noun,
-  failureReason,
+  error,
+  retryAt,
+  noRetryPlanned,
 }: {
   phase: JobPhase
   done: number
-  total: number
+  total: number | null
   noun: string
-  failureReason?: string
+  error?: string | null
+  retryAt?: string | null
+  noRetryPlanned?: boolean
 }) {
-  if (phase === 'not-started') return null
-  const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0
+  if (phase === 'NotStarted') return null
+  const indeterminate = phase === 'Running' && total === null
+  const pct = total && total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0
+  const text = progressWords(phase, done, total, noun, error, retryAt, noRetryPlanned)
   return (
-    <div className={phase === 'failed' ? 'job-progress job-progress--failed' : 'job-progress'}>
+    <div className={phase === 'Failed' ? 'job-progress job-progress--failed' : 'job-progress'}>
       <div
         className="job-progress__track"
         role="progressbar"
-        aria-valuenow={done}
-        aria-valuemin={0}
-        aria-valuemax={total}
+        aria-valuemin={indeterminate ? undefined : 0}
+        aria-valuenow={indeterminate ? undefined : done}
+        aria-valuemax={indeterminate ? undefined : (total ?? done)}
+        aria-valuetext={text}
       >
-        <div className="job-progress__fill" style={{ width: `${pct}%` }} />
+        <div
+          className={indeterminate ? 'job-progress__fill job-progress__fill--indeterminate' : 'job-progress__fill'}
+          style={indeterminate ? undefined : { width: `${pct}%` }}
+        />
       </div>
-      <span className="job-progress__counts">
-        {phase === 'running'
-          ? `Running… ${done}/${total} ${noun}`
-          : phase === 'failed'
-            ? `Failed after ${done}/${total} ${noun} — ${failureReason ?? 'see backend logs.'}`
-            : `Complete — ${done}/${total} ${noun}`}
-      </span>
+      <span className="job-progress__counts">{text}</span>
     </div>
   )
+}
+
+// The Sync group's "Weekly check" readout row (settings-page spec "The
+// weekly check is reported in one line").
+function formatWeeklyCheck(weekly: WeeklyCheckDto | null | undefined): string {
+  if (!weekly) return 'Not run yet'
+  const time = formatTimestamp(weekly.lastRunAt)
+  if (weekly.failed === true) return `${time} — failed: ${weekly.error ?? 'unknown error'}`
+  if (weekly.failed === false) return `${time} — no problems`
+  return time
 }
 
 // Mirrors the backend's ActivityFeedComposer.Summarize for the small,
@@ -232,26 +258,36 @@ function formatHeldValues(values: HeldChangeValuesDto): string {
   return `${STATUS_LABELS[values.status]}, ${values.episodesWatched} ep${values.myScore !== null ? `, score ${values.myScore}` : ''}`
 }
 
+// Which jobs the Settings page reloads other state for when they leave
+// Running (design.md D16 of report-jobs-and-lost-mal-connection).
+type TrackedJobPhases = {
+  syncNow: JobPhase
+  reconcile: JobPhase
+  heldDecision: JobPhase
+  listImport: JobPhase
+  fileImport: JobPhase
+}
+
 // Operational/settings page: sync status + manual triggers, pending
 // reconciliation-diff review, MAL re-authorization, and on-demand
-// force-refresh of a single anime's cached metadata. Every action here is a
-// thin wrapper around endpoints that already exist (sections 6/7) — this page
-// is the missing UI surface for them.
+// force-refresh of a single anime's cached metadata. Every job's state comes
+// from one shared server read (useAppStatus) rather than the page's own
+// per-job polling, so this page, another browser, and a run started by the
+// app itself always agree (background-jobs "A job's state is read from the
+// server").
 export function SettingsPage() {
   const [status, setStatus] = useState<SyncStatusDto | null>(null)
   const [diff, setDiff] = useState<PendingReconciliationDiffDto | null>(null)
   const [heldChanges, setHeldChanges] = useState<HeldChangeDto[] | null>(null)
-  const [authStatus, setAuthStatus] = useState<MalAuthStatus | null>(null)
-  const [resyncStatus, setResyncStatus] = useState<ResyncStatusDto | null>(null)
-  const [airingRefreshStatus, setAiringRefreshStatus] = useState<AiringFullRefreshStatusDto | null>(null)
-  const [seriesBulkBuildStatus, setSeriesBulkBuildStatus] = useState<SeriesBulkBuildStatusDto | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [importStatus, setImportStatus] = useState<TransferImportStatusDto | null>(null)
+  const [initialLoading, setInitialLoading] = useState(true)
 
-  const [resyncing, setResyncing] = useState(false)
-  const [reconciling, setReconciling] = useState(false)
+  const [startingSyncNow, setStartingSyncNow] = useState(false)
+  const [startingReconcile, setStartingReconcile] = useState(false)
   const [reviewing, setReviewing] = useState(false)
   const [diffError, setDiffError] = useState<string | null>(null)
-  const [heldActingId, setHeldActingId] = useState<number | 'all' | null>(null)
+  const [heldActingId, setHeldActingId] = useState<number | null>(null)
+  const [startingHeldAction, setStartingHeldAction] = useState<HeldDecisionAction | null>(null)
   const [heldError, setHeldError] = useState<string | null>(null)
   const [startingFullResync, setStartingFullResync] = useState(false)
   const [startingAiringRefresh, setStartingAiringRefresh] = useState(false)
@@ -262,11 +298,12 @@ export function SettingsPage() {
   const [backingUp, setBackingUp] = useState(false)
   const [backupError, setBackupError] = useState<string | null>(null)
   const [backupFileName, setBackupFileName] = useState<string | null>(null)
-  const [importStatus, setImportStatus] = useState<TransferImportStatusDto | null>(null)
   const [importing, setImporting] = useState(false)
   const [importRefusal, setImportRefusal] = useState<string | null>(null)
   const [importDragOver, setImportDragOver] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
+
+  const { status: appStatus, applyJob } = useAppStatus()
 
   const { alwaysShowCompletedScores, toggleAlwaysShowCompletedScores } = useScoreVisibility()
   const { hideHentai, toggleHideHentai } = useContentFilter()
@@ -282,95 +319,94 @@ export function SettingsPage() {
       getHeldChanges()
         .then(setHeldChanges)
         .catch(() => setHeldChanges(null)),
-      getMalAuthStatus()
-        .then(setAuthStatus)
-        .catch(() => setAuthStatus(null)),
-      getResyncFromMalStatus()
-        .then(setResyncStatus)
-        .catch(() => setResyncStatus(null)),
-      getAiringFullRefreshStatus()
-        .then(setAiringRefreshStatus)
-        .catch(() => setAiringRefreshStatus(null)),
-      getSeriesBulkBuildStatus()
-        .then(setSeriesBulkBuildStatus)
-        .catch(() => setSeriesBulkBuildStatus(null)),
-      getImportStatus()
+      getTransferImportStatus()
         .then(setImportStatus)
         .catch(() => setImportStatus(null)),
     ])
   }, [])
 
   useEffect(() => {
-    load().finally(() => setLoading(false))
+    load().finally(() => setInitialLoading(false))
   }, [load])
 
-  // Poll while a full re-sync is in flight (~1 anime/sec, so several minutes) —
-  // stops as soon as the backend reports it's no longer running.
-  useEffect(() => {
-    if (resyncStatus?.phase !== 'Running') return
-    const id = setInterval(() => {
-      getResyncFromMalStatus()
-        .then(setResyncStatus)
-        .catch(() => {})
-    }, 2000)
-    return () => clearInterval(id)
-  }, [resyncStatus?.phase])
+  const loading = initialLoading || appStatus === null
 
-  // Poll while a manual airing-data refresh is in flight (paced through
-  // AniList's rate limit, so a full list can take a while) — stops as soon as
-  // the backend reports it's no longer running.
+  // Reloads what each job changes once it leaves Running, from a ref of
+  // previous phases rather than a state variable, so this never itself
+  // triggers a re-render (design.md D16 table).
+  const prevJobPhasesRef = useRef<TrackedJobPhases | null>(null)
   useEffect(() => {
-    if (airingRefreshStatus?.phase !== 'Running') return
-    const id = setInterval(() => {
-      getAiringFullRefreshStatus()
-        .then(setAiringRefreshStatus)
-        .catch(() => {})
-    }, 2000)
-    return () => clearInterval(id)
-  }, [airingRefreshStatus?.phase])
+    if (!appStatus) return
+    const jobs = appStatus.jobs
+    const prev = prevJobPhasesRef.current
+    if (prev) {
+      if (prev.syncNow === 'Running' && jobs.syncNow.phase !== 'Running') {
+        void getSyncStatus()
+          .then(setStatus)
+          .catch(() => {})
+      }
+      if (prev.reconcile === 'Running' && jobs.reconcile.phase !== 'Running') {
+        void getPendingReconciliationDiff()
+          .then(setDiff)
+          .catch(() => {})
+      }
+      if (prev.heldDecision === 'Running' && jobs.heldDecision.phase !== 'Running') {
+        void getHeldChanges()
+          .then(setHeldChanges)
+          .catch(() => {})
+        void getSyncStatus()
+          .then(setStatus)
+          .catch(() => {})
+      }
+      if (prev.listImport === 'Running' && jobs.listImport.phase !== 'Running') {
+        void getSyncStatus()
+          .then(setStatus)
+          .catch(() => {})
+      }
+      if (prev.fileImport === 'Running' && jobs.fileImport.phase !== 'Running') {
+        void getTransferImportStatus()
+          .then(setImportStatus)
+          .catch(() => {})
+      }
+    }
+    prevJobPhasesRef.current = {
+      syncNow: jobs.syncNow.phase,
+      reconcile: jobs.reconcile.phase,
+      heldDecision: jobs.heldDecision.phase,
+      listImport: jobs.listImport.phase,
+      fileImport: jobs.fileImport.phase,
+    }
+  }, [appStatus])
 
-  // Poll while the "build all series from my list" run is in flight — stops
-  // as soon as the backend reports it's no longer running.
-  useEffect(() => {
-    if (seriesBulkBuildStatus?.phase !== 'Running') return
-    const id = setInterval(() => {
-      getSeriesBulkBuildStatus()
-        .then(setSeriesBulkBuildStatus)
-        .catch(() => {})
-    }, 2000)
-    return () => clearInterval(id)
-  }, [seriesBulkBuildStatus?.phase])
-
-  // Poll while an import is in flight — once a second (design.md D14), since
-  // an import's fetches are paced faster than the minutes-long jobs above.
-  useEffect(() => {
-    if (importStatus?.phase !== 'Running') return
-    const id = setInterval(() => {
-      getImportStatus()
-        .then(setImportStatus)
-        .catch(() => {})
-    }, 1000)
-    return () => clearInterval(id)
-  }, [importStatus?.phase])
-
-  async function handleResyncNow() {
-    if (resyncing) return
-    setResyncing(true)
+  async function handleSyncNow() {
+    if (startingSyncNow || appStatus?.jobs.syncNow.phase === 'Running') return
+    setStartingSyncNow(true)
     try {
-      await syncNow()
-      await load()
+      applyJob('syncNow', await syncNow())
     } catch {
-      // Leave the page showing whatever status was already there.
+      // Leave whatever status was already there; the button stays retryable.
     } finally {
-      setResyncing(false)
+      setStartingSyncNow(false)
+    }
+  }
+
+  async function handleReconcileNow() {
+    if (startingReconcile || appStatus?.jobs.reconcile.phase === 'Running') return
+    setStartingReconcile(true)
+    try {
+      applyJob('reconcile', await runReconciliation())
+    } catch {
+      // Leave whatever status was already there; the button stays retryable.
+    } finally {
+      setStartingReconcile(false)
     }
   }
 
   async function handleResyncFromMal() {
-    if (startingFullResync || resyncStatus?.phase === 'Running') return
+    if (startingFullResync || appStatus?.jobs.resync.phase === 'Running') return
     setStartingFullResync(true)
     try {
-      setResyncStatus(await triggerResyncFromMal())
+      applyJob('resync', await triggerResyncFromMal())
     } catch {
       // Leave whatever status was already there; the button stays retryable.
     } finally {
@@ -379,10 +415,10 @@ export function SettingsPage() {
   }
 
   async function handleAiringFullRefresh() {
-    if (startingAiringRefresh || airingRefreshStatus?.phase === 'Running') return
+    if (startingAiringRefresh || appStatus?.jobs.airingRefresh.phase === 'Running') return
     setStartingAiringRefresh(true)
     try {
-      setAiringRefreshStatus(await triggerAiringFullRefresh())
+      applyJob('airingRefresh', await triggerAiringFullRefresh())
     } catch {
       // Leave whatever status was already there; the button stays retryable.
     } finally {
@@ -391,27 +427,14 @@ export function SettingsPage() {
   }
 
   async function handleSeriesBulkBuild() {
-    if (startingSeriesBulkBuild || seriesBulkBuildStatus?.phase === 'Running') return
+    if (startingSeriesBulkBuild || appStatus?.jobs.seriesBuild.phase === 'Running') return
     setStartingSeriesBulkBuild(true)
     try {
-      setSeriesBulkBuildStatus(await triggerSeriesBulkBuild())
+      applyJob('seriesBuild', await triggerSeriesBulkBuild())
     } catch {
       // Leave whatever status was already there; the button stays retryable.
     } finally {
       setStartingSeriesBulkBuild(false)
-    }
-  }
-
-  async function handleReconcileNow() {
-    if (reconciling) return
-    setReconciling(true)
-    try {
-      await runReconciliation()
-      await load()
-    } catch {
-      // Leave the page showing whatever status was already there.
-    } finally {
-      setReconciling(false)
     }
   }
 
@@ -443,8 +466,10 @@ export function SettingsPage() {
     }
   }
 
+  const heldDecisionRunning = appStatus?.jobs.heldDecision.phase === 'Running'
+
   async function handleAcceptHeld(animeId: number) {
-    if (heldActingId !== null) return
+    if (heldActingId !== null || heldDecisionRunning) return
     setHeldActingId(animeId)
     setHeldError(null)
     try {
@@ -459,7 +484,7 @@ export function SettingsPage() {
   }
 
   async function handleDeclineHeld(animeId: number) {
-    if (heldActingId !== null) return
+    if (heldActingId !== null || heldDecisionRunning) return
     setHeldActingId(animeId)
     setHeldError(null)
     try {
@@ -474,36 +499,28 @@ export function SettingsPage() {
   }
 
   async function handleAcceptAllHeld() {
-    if (heldActingId !== null) return
-    setHeldActingId('all')
+    if (startingHeldAction || heldDecisionRunning) return
+    setStartingHeldAction('Accept')
     setHeldError(null)
     try {
-      const result = await acceptAllHeldChanges()
-      if (result.stillHeld > 0) {
-        setHeldError(`${result.stillHeld} change${result.stillHeld === 1 ? '' : 's'} could not be applied and stayed held.`)
-      }
-      await load()
+      applyJob('heldDecision', await acceptAllHeldChanges())
     } catch {
       setHeldError('Could not apply the held changes. Please try again.')
     } finally {
-      setHeldActingId(null)
+      setStartingHeldAction(null)
     }
   }
 
   async function handleDeclineAllHeld() {
-    if (heldActingId !== null) return
-    setHeldActingId('all')
+    if (startingHeldAction || heldDecisionRunning) return
+    setStartingHeldAction('Decline')
     setHeldError(null)
     try {
-      const result = await declineAllHeldChanges()
-      if (result.stillHeld > 0) {
-        setHeldError(`${result.stillHeld} change${result.stillHeld === 1 ? '' : 's'} could not be discarded and stayed held.`)
-      }
-      await load()
+      applyJob('heldDecision', await declineAllHeldChanges())
     } catch {
       setHeldError('Could not discard the held changes. Please try again.')
     } finally {
-      setHeldActingId(null)
+      setStartingHeldAction(null)
     }
   }
 
@@ -552,17 +569,31 @@ export function SettingsPage() {
     }
   }
 
-  const importRunning = importStatus?.phase === 'Running'
+  const importRunning = appStatus?.jobs.fileImport.phase === 'Running'
 
   // Shared by the file picker and the drop target (settings-page spec
   // "Choosing a file starts an import" / "Dropping a file starts an
-  // import") — a running import takes neither.
+  // import") — a running import takes neither. The response already carries
+  // the fresh Running state (design.md D1 of report-jobs-and-lost-mal-
+  // connection), so it's applied to both the transfer-specific status (for
+  // its report) and the shared job store at once, rather than waiting for
+  // the next poll.
   async function handleImportFile(file: File) {
     if (importing || importRunning) return
     setImporting(true)
     setImportRefusal(null)
     try {
-      setImportStatus(await importData(file))
+      const result = await importData(file)
+      setImportStatus(result)
+      applyJob('fileImport', {
+        phase: result.phase,
+        done: result.done,
+        total: result.total,
+        error: result.error,
+        startedAt: null,
+        finishedAt: null,
+        retryAt: null,
+      })
     } catch (err) {
       setImportRefusal(err instanceof ApiError && err.reason ? err.reason : 'The import was refused. Please try again.')
     } finally {
@@ -605,9 +636,11 @@ export function SettingsPage() {
     return failure.subject === 'Series' ? `Series ${failure.id}` : `Anime ${failure.id}`
   }
 
-  if (loading) {
+  if (loading || !appStatus) {
     return <p className="settings-page__loading">Loading…</p>
   }
+
+  const jobs = appStatus.jobs
 
   return (
     <div className="settings-page">
@@ -632,6 +665,24 @@ export function SettingsPage() {
       </SettingsGroup>
 
       <SettingsGroup title="Sync" hint="The state of your ongoing MyAnimeList sync, and the actions that drive it.">
+        {jobs.listImport.phase !== 'NotStarted' && (
+          <SettingsAction
+            title="MyAnimeList list import"
+            hint="Brings in anime on your MyAnimeList list that this device doesn't have yet — runs when the app starts and after you re-authorize."
+            state={
+              <JobProgress
+                phase={jobs.listImport.phase}
+                done={jobs.listImport.done}
+                total={jobs.listImport.total}
+                noun="anime"
+                error={jobs.listImport.error}
+                retryAt={jobs.listImport.retryAt}
+                noRetryPlanned={jobs.listImport.phase === 'Failed' && jobs.listImport.retryAt === null}
+              />
+            }
+          />
+        )}
+
         {status ? (
           <dl className="settings-stats">
             <div className="settings-stats__row">
@@ -648,6 +699,10 @@ export function SettingsPage() {
               <dt>Last successful sync</dt>
               <dd>{formatTimestamp(status.lastSyncedAt)}</dd>
             </div>
+            <div className="settings-stats__row">
+              <dt>Weekly check</dt>
+              <dd>{formatWeeklyCheck(appStatus.weeklyCheck)}</dd>
+            </div>
           </dl>
         ) : (
           <p className="settings-box__empty">Couldn't load sync status.</p>
@@ -660,9 +715,12 @@ export function SettingsPage() {
               ? "Pushes your own unsent edits to MyAnimeList right away instead of waiting for the next scheduled sync. Sends nothing else, and changes nothing on your list locally. Changes held for review below are not among what it pushes — they're waiting on your decision."
               : 'Pushes your own unsent edits to MyAnimeList right away instead of waiting for the next scheduled sync. Sends nothing else, and changes nothing on your list locally.'
           }
+          state={
+            <JobProgress phase={jobs.syncNow.phase} done={jobs.syncNow.done} total={jobs.syncNow.total} noun="sent" error={jobs.syncNow.error} />
+          }
           button={
-            <button type="button" onClick={handleResyncNow} disabled={resyncing}>
-              {resyncing ? 'Resyncing…' : 'Resync now'}
+            <button type="button" onClick={handleSyncNow} disabled={startingSyncNow || jobs.syncNow.phase === 'Running'}>
+              {jobs.syncNow.phase === 'Running' ? 'Resyncing…' : 'Resync now'}
             </button>
           }
         />
@@ -670,9 +728,18 @@ export function SettingsPage() {
         <SettingsAction
           title="Run full reconciliation"
           hint="Fetches your current MyAnimeList list, compares it against what's stored locally, and presents the differences below for you to accept or decline — changes nothing on your list until you do."
+          state={
+            <JobProgress
+              phase={jobs.reconcile.phase}
+              done={jobs.reconcile.done}
+              total={jobs.reconcile.total}
+              noun="anime read"
+              error={jobs.reconcile.error}
+            />
+          }
           button={
-            <button type="button" onClick={handleReconcileNow} disabled={reconciling}>
-              {reconciling ? 'Reconciling…' : 'Run full reconciliation'}
+            <button type="button" onClick={handleReconcileNow} disabled={startingReconcile || jobs.reconcile.phase === 'Running'}>
+              {jobs.reconcile.phase === 'Running' ? 'Reconciling…' : 'Run full reconciliation'}
             </button>
           }
         />
@@ -691,7 +758,7 @@ export function SettingsPage() {
             <ul className="settings-held-list">
               {heldChanges.map((item) => {
                 const displayTitle = pickDisplayTitle(item.title, item.englishTitle)
-                const busy = heldActingId === item.animeId || heldActingId === 'all'
+                const busy = heldActingId === item.animeId || heldDecisionRunning
                 const destructiveDecline = item.kind === 'Entry' && item.remoteValues === null && !item.remoteUnavailable
                 return (
                   <li key={item.animeId} className="settings-held-row">
@@ -741,12 +808,19 @@ export function SettingsPage() {
                 )
               })}
             </ul>
+            <JobProgress
+              phase={jobs.heldDecision.phase}
+              done={jobs.heldDecision.done}
+              total={jobs.heldDecision.total}
+              noun="decided"
+              error={jobs.heldDecision.error}
+            />
             {heldError && <p className="settings-box__error">{heldError}</p>}
             <div className="settings-box__buttons">
-              <button type="button" onClick={handleDeclineAllHeld} disabled={heldActingId !== null}>
+              <button type="button" onClick={handleDeclineAllHeld} disabled={heldDecisionRunning || startingHeldAction !== null}>
                 Decline all
               </button>
-              <button type="button" onClick={handleAcceptAllHeld} disabled={heldActingId !== null}>
+              <button type="button" onClick={handleAcceptAllHeld} disabled={heldDecisionRunning || startingHeldAction !== null}>
                 Accept all
               </button>
             </div>
@@ -793,20 +867,11 @@ export function SettingsPage() {
           title="Correct imported data"
           hint="One-time corrective re-sync: re-fetches your full MyAnimeList and full anime details, then immediately overwrites the local status, episode count, score, and dates for every anime — with no review step — and creates entries for anime not yet tracked locally. Also backfills English title, duration, and source. Takes several minutes; entries with unsynced local edits are left untouched. Nothing it applies is recorded in Latest updates or the full edit history."
           state={
-            <JobProgress
-              phase={resyncStatus ? jobPhase(resyncStatus.phase) : 'not-started'}
-              done={resyncStatus?.synced ?? 0}
-              total={resyncStatus?.total ?? 0}
-              noun="processed"
-            />
+            <JobProgress phase={jobs.resync.phase} done={jobs.resync.done} total={jobs.resync.total} noun="processed" error={jobs.resync.error} />
           }
           button={
-            <button
-              type="button"
-              onClick={handleResyncFromMal}
-              disabled={startingFullResync || resyncStatus?.phase === 'Running'}
-            >
-              {resyncStatus?.phase === 'Running' ? 'Resyncing…' : 'Run corrective re-sync'}
+            <button type="button" onClick={handleResyncFromMal} disabled={startingFullResync || jobs.resync.phase === 'Running'}>
+              {jobs.resync.phase === 'Running' ? 'Resyncing…' : 'Run corrective re-sync'}
             </button>
           }
         />
@@ -816,19 +881,16 @@ export function SettingsPage() {
           hint="Re-fetches per-episode airing dates from AniList for every anime in my list, in case something looks wrong. Skips shows that have already finished airing and were fetched successfully before — their episode dates can't change further. Paced to stay under AniList's rate limit, so a full list can take a while; runs in the background."
           state={
             <JobProgress
-              phase={airingRefreshStatus ? jobPhase(airingRefreshStatus.phase) : 'not-started'}
-              done={airingRefreshStatus?.synced ?? 0}
-              total={airingRefreshStatus?.total ?? 0}
+              phase={jobs.airingRefresh.phase}
+              done={jobs.airingRefresh.done}
+              total={jobs.airingRefresh.total}
               noun="processed"
+              error={jobs.airingRefresh.error}
             />
           }
           button={
-            <button
-              type="button"
-              onClick={handleAiringFullRefresh}
-              disabled={startingAiringRefresh || airingRefreshStatus?.phase === 'Running'}
-            >
-              {airingRefreshStatus?.phase === 'Running' ? 'Refreshing…' : 'Refresh all airing dates'}
+            <button type="button" onClick={handleAiringFullRefresh} disabled={startingAiringRefresh || jobs.airingRefresh.phase === 'Running'}>
+              {jobs.airingRefresh.phase === 'Running' ? 'Refreshing…' : 'Refresh all airing dates'}
             </button>
           }
         />
@@ -838,19 +900,16 @@ export function SettingsPage() {
           hint="Builds a franchise for every anime in my list that isn't part of one yet, so the profile page's Top series ranking can be completed on demand instead of only filling in a little on each profile visit. Runs in the background; can take a while for a large list."
           state={
             <JobProgress
-              phase={seriesBulkBuildStatus ? jobPhase(seriesBulkBuildStatus.phase) : 'not-started'}
-              done={seriesBulkBuildStatus?.built ?? 0}
-              total={seriesBulkBuildStatus?.total ?? 0}
+              phase={jobs.seriesBuild.phase}
+              done={jobs.seriesBuild.done}
+              total={jobs.seriesBuild.total}
               noun="processed"
+              error={jobs.seriesBuild.error}
             />
           }
           button={
-            <button
-              type="button"
-              onClick={handleSeriesBulkBuild}
-              disabled={startingSeriesBulkBuild || seriesBulkBuildStatus?.phase === 'Running'}
-            >
-              {seriesBulkBuildStatus?.phase === 'Running' ? 'Building…' : 'Build all series from my list'}
+            <button type="button" onClick={handleSeriesBulkBuild} disabled={startingSeriesBulkBuild || jobs.seriesBuild.phase === 'Running'}>
+              {jobs.seriesBuild.phase === 'Running' ? 'Building…' : 'Build all series from my list'}
             </button>
           }
         />
@@ -908,18 +967,18 @@ export function SettingsPage() {
           state={
             <>
               <JobProgress
-                phase={importStatus ? jobPhase(importStatus.phase) : 'not-started'}
-                done={importStatus?.done ?? 0}
-                total={importStatus?.total ?? 0}
+                phase={jobs.fileImport.phase}
+                done={jobs.fileImport.done}
+                total={jobs.fileImport.total}
                 noun="fetches"
-                failureReason={
-                  importStatus?.phase === 'Failed'
-                    ? `${importStatus.error ?? 'Unknown error'}. Nothing from the file was applied.`
-                    : undefined
+                error={
+                  jobs.fileImport.phase === 'Failed'
+                    ? `${jobs.fileImport.error ?? 'Unknown error'}. Nothing from the file was applied.`
+                    : jobs.fileImport.error
                 }
               />
               {importRefusal && <p className="settings-box__error">{importRefusal}</p>}
-              {importStatus?.phase === 'Complete' && importStatus.report && (
+              {jobs.fileImport.phase === 'Complete' && importStatus?.report && (
                 <div className="settings-import-report">
                   <p className="settings-box__hint">
                     From {importStatus.deviceName ?? 'the other device'} — exported{' '}
@@ -996,7 +1055,15 @@ export function SettingsPage() {
       </SettingsGroup>
 
       <SettingsGroup title="Account" hint="Your MyAnimeList connection.">
-        <p className="settings-box__hint">{authStatus?.connected ? 'Connected.' : 'Not connected.'}</p>
+        {appStatus.malConnection.state === 'Lost' ? (
+          <p className="settings-box__error">
+            The connection to MyAnimeList was lost on {formatTimestamp(appStatus.malConnection.lostAt)} — MyAnimeList
+            stopped accepting this app's login. Your changes are kept here but aren't being sent to MyAnimeList, and
+            anime added on MyAnimeList elsewhere aren't being brought in. Re-authorize to reconnect.
+          </p>
+        ) : (
+          <p className="settings-box__hint">{appStatus.malConnection.state === 'Connected' ? 'Connected.' : 'Not connected.'}</p>
+        )}
         <a className="settings-box__link" href="/api/mal-auth/start">
           Re-authorize with MAL
         </a>

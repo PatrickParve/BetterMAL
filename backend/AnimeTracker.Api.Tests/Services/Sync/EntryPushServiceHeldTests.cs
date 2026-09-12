@@ -83,9 +83,10 @@ public class EntryPushServiceHeldTests
         await db.SaveChangesAsync();
         var malClient = new RecordingMalClient();
 
-        var pushed = await CreateService(db, malClient).DrainPendingAsync();
+        var result = await CreateService(db, malClient).DrainPendingAsync();
 
-        Assert.Equal(2, pushed);
+        Assert.Equal(2, result.Pushed);
+        Assert.Equal(0, result.NotPushed);
         Assert.Equal([1], malClient.UpdatedAnimeIds);
         Assert.Equal([3], malClient.DeletedAnimeIds);
 
@@ -126,7 +127,7 @@ public class EntryPushServiceHeldTests
             return Task.CompletedTask;
         }
 
-        public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(CancellationToken ct = default) =>
+        public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(Action<int>? onPageRead = null, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<MalAnimeNode> GetAnimeDetailsAsync(int animeId, IReadOnlyCollection<string>? fields = null, CancellationToken ct = default) =>
             throw new NotImplementedException();

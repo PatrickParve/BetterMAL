@@ -34,8 +34,19 @@ public class MalTokenStore(AnimeTrackerDbContext db) : IMalTokenStore
             existing.RefreshToken = refreshToken;
             existing.ExpiresAt = expiresAt;
             existing.UpdatedAt = now;
+            existing.ConnectionLostAt = null;
         }
 
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task MarkConnectionLostAsync(DateTimeOffset at, CancellationToken ct = default)
+    {
+        var existing = await db.OAuthTokens.OrderByDescending(t => t.UpdatedAt).FirstOrDefaultAsync(ct);
+        if (existing is null || existing.ConnectionLostAt is not null)
+            return; // no login stored, or the first time was already recorded
+
+        existing.ConnectionLostAt = at;
         await db.SaveChangesAsync(ct);
     }
 }

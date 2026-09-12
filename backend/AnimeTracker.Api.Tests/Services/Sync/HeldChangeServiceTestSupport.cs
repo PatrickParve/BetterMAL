@@ -1,10 +1,22 @@
 using AnimeTracker.Api.Data;
+using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Sync;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AnimeTracker.Api.Tests.Services.Sync;
+
+// Records every SetTotal/ReportProgress call, in order, for asserting a
+// bulk run's progress reporting (design.md D5: AcceptAllAsync/DeclineAllAsync
+// report a total and per-item progress).
+internal sealed class RecordingProgressSink : IJobProgressSink
+{
+    public List<int> Totals { get; } = [];
+    public List<int> Progress { get; } = [];
+    public void SetTotal(int total) => Totals.Add(total);
+    public void ReportProgress(int done) => Progress.Add(done);
+}
 
 // Shared across the HeldChangeService test files (9.4-9.7): a configurable
 // IMalClient covering exactly what HeldChangeService/EntryPushService need —
@@ -46,7 +58,7 @@ internal sealed class FakeHeldChangeMalClient : IMalClient
         return Task.CompletedTask;
     }
 
-    public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(CancellationToken ct = default) =>
+    public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(Action<int>? onPageRead = null, CancellationToken ct = default) =>
         throw new NotImplementedException();
     public Task<MalAnimeNode> GetAnimeDetailsAsync(int animeId, IReadOnlyCollection<string>? fields = null, CancellationToken ct = default) =>
         throw new NotImplementedException();

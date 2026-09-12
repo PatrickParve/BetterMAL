@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
+using AnimeTracker.Api.Services.Jobs;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Series;
@@ -14,7 +15,7 @@ namespace AnimeTracker.Api.Services.Series;
 public class SeriesBulkBuildBackgroundService(
     IServiceScopeFactory scopeFactory,
     ISeriesBulkBuildTrigger trigger,
-    ISeriesBulkBuildProgressTracker progress,
+    SeriesBulkBuildProgress progress,
     ILogger<SeriesBulkBuildBackgroundService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -34,14 +35,14 @@ public class SeriesBulkBuildBackgroundService(
             {
                 await RunAsync(stoppingToken);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Manual series bulk build failed.");
-                progress.Fail();
+                progress.Fail(JobFailure.Describe(ex, "MyAnimeList"));
             }
         }
     }
@@ -54,7 +55,7 @@ public class SeriesBulkBuildBackgroundService(
         var seriesService = scope.ServiceProvider.GetRequiredService<ISeriesService>();
 
         var targets = await GetTargetsAsync(db, entryRepository, ct);
-        progress.Start(targets.Count);
+        progress.SetTotal(targets.Count);
 
         var processed = 0;
         foreach (var animeId in targets)

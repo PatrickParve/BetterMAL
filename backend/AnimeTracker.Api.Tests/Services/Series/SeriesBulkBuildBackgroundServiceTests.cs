@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,10 +26,13 @@ public class SeriesBulkBuildBackgroundServiceTests
     private static UserAnimeEntry Entry(int animeId) => new() { AnimeId = animeId, Status = WatchStatus.Watching };
 
     // Starts the service, signals a run, and waits (bounded) for the tracker
-    // to report Complete before stopping the service.
+    // to report Complete before stopping the service. TryBegin() before
+    // Signal() mirrors SeriesController.TriggerBulkBuild (design.md D2): the
+    // tracker is the start gate, and the background service itself no longer
+    // moves it into Running.
     private static async Task RunOnceAsync(
         AnimeTrackerDbContext db, List<UserAnimeEntry> entries, ISeriesService seriesService,
-        SeriesBulkBuildTrigger trigger, SeriesBulkBuildProgressTracker tracker)
+        SeriesBulkBuildTrigger trigger, SeriesBulkBuildProgress tracker)
     {
         var service = new SeriesBulkBuildBackgroundService(
             new FakeServiceScopeFactory(new FakeServiceProvider(db, new FakeUserAnimeEntryRepository(entries), seriesService)),
@@ -39,13 +43,14 @@ public class SeriesBulkBuildBackgroundServiceTests
         await service.StartAsync(CancellationToken.None);
         try
         {
+            tracker.TryBegin();
             trigger.Signal();
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            while (tracker.Snapshot.Phase != SeriesBulkBuildPhase.Complete && !cts.IsCancellationRequested)
+            while (tracker.Snapshot.Phase != JobPhase.Complete && !cts.IsCancellationRequested)
                 await Task.Delay(10, CancellationToken.None);
 
-            Assert.Equal(SeriesBulkBuildPhase.Complete, tracker.Snapshot.Phase); // fail loudly on a test timeout, not a hang
+            Assert.Equal(JobPhase.Complete, tracker.Snapshot.Phase); // fail loudly on a test timeout, not a hang
         }
         finally
         {
@@ -63,13 +68,13 @@ public class SeriesBulkBuildBackgroundServiceTests
 
         var seriesService = new FakeSeriesService();
         var trigger = new SeriesBulkBuildTrigger();
-        var tracker = new SeriesBulkBuildProgressTracker();
+        var tracker = new SeriesBulkBuildProgress();
 
         await RunOnceAsync(db, [Entry(1), Entry(2), Entry(3)], seriesService, trigger, tracker);
 
         Assert.Equal([1, 3], seriesService.CalledFor.OrderBy(id => id));
         Assert.Equal(2, tracker.Snapshot.Total); // anime 2 was never a target
-        Assert.Equal(2, tracker.Snapshot.Built);
+        Assert.Equal(2, tracker.Snapshot.Done);
     }
 
     [Fact]
@@ -90,7 +95,7 @@ public class SeriesBulkBuildBackgroundServiceTests
         });
 
         var trigger = new SeriesBulkBuildTrigger();
-        var tracker = new SeriesBulkBuildProgressTracker();
+        var tracker = new SeriesBulkBuildProgress();
 
         await RunOnceAsync(db, [Entry(1), Entry(2)], seriesService, trigger, tracker);
 
@@ -98,7 +103,7 @@ public class SeriesBulkBuildBackgroundServiceTests
         // must not trigger a second build.
         Assert.Equal([1], seriesService.CalledFor);
         Assert.Equal(2, tracker.Snapshot.Total);
-        Assert.Equal(2, tracker.Snapshot.Built);
+        Assert.Equal(2, tracker.Snapshot.Done);
     }
 
     [Fact]
@@ -111,14 +116,14 @@ public class SeriesBulkBuildBackgroundServiceTests
         seriesService.OnCall(2, () => throw new InvalidOperationException("MAL fetch failed"));
 
         var trigger = new SeriesBulkBuildTrigger();
-        var tracker = new SeriesBulkBuildProgressTracker();
+        var tracker = new SeriesBulkBuildProgress();
 
         await RunOnceAsync(db, [Entry(1), Entry(2), Entry(3)], seriesService, trigger, tracker);
 
         Assert.Equal([1, 2, 3], seriesService.CalledFor.OrderBy(id => id));
         Assert.Equal(3, tracker.Snapshot.Total);
-        Assert.Equal(3, tracker.Snapshot.Built); // the failure still counts as processed
-        Assert.Equal(SeriesBulkBuildPhase.Complete, tracker.Snapshot.Phase);
+        Assert.Equal(3, tracker.Snapshot.Done); // the failure still counts as processed
+        Assert.Equal(JobPhase.Complete, tracker.Snapshot.Phase);
     }
 
     [Fact]
@@ -131,12 +136,12 @@ public class SeriesBulkBuildBackgroundServiceTests
         seriesService.OnCall(1, () => throw new SeriesNotFoundException(1));
 
         var trigger = new SeriesBulkBuildTrigger();
-        var tracker = new SeriesBulkBuildProgressTracker();
+        var tracker = new SeriesBulkBuildProgress();
 
         await RunOnceAsync(db, [Entry(1)], seriesService, trigger, tracker);
 
-        Assert.Equal(1, tracker.Snapshot.Built);
-        Assert.Equal(SeriesBulkBuildPhase.Complete, tracker.Snapshot.Phase);
+        Assert.Equal(1, tracker.Snapshot.Done);
+        Assert.Equal(JobPhase.Complete, tracker.Snapshot.Phase);
     }
 
     [Fact]
@@ -150,7 +155,7 @@ public class SeriesBulkBuildBackgroundServiceTests
 
         var seriesService = new FakeSeriesService();
         var trigger = new SeriesBulkBuildTrigger();
-        var tracker = new SeriesBulkBuildProgressTracker();
+        var tracker = new SeriesBulkBuildProgress();
 
         await RunOnceAsync(db, [Entry(2)], seriesService, trigger, tracker);
 
@@ -159,7 +164,7 @@ public class SeriesBulkBuildBackgroundServiceTests
         // already covered.
         Assert.Equal([2], seriesService.CalledFor);
         Assert.Equal(1, tracker.Snapshot.Total);
-        Assert.Equal(1, tracker.Snapshot.Built);
+        Assert.Equal(1, tracker.Snapshot.Done);
     }
 
     // split-series-by-version task 8.5/series-versions spec "A boundary-only
@@ -183,7 +188,7 @@ public class SeriesBulkBuildBackgroundServiceTests
 
         var seriesService = new FakeSeriesService();
         var trigger = new SeriesBulkBuildTrigger();
-        var tracker = new SeriesBulkBuildProgressTracker();
+        var tracker = new SeriesBulkBuildProgress();
 
         await RunOnceAsync(db, [Entry(1)], seriesService, trigger, tracker);
 
@@ -210,7 +215,7 @@ public class SeriesBulkBuildBackgroundServiceTests
         });
 
         var trigger = new SeriesBulkBuildTrigger();
-        var tracker = new SeriesBulkBuildProgressTracker();
+        var tracker = new SeriesBulkBuildProgress();
 
         await RunOnceAsync(db, [Entry(1), Entry(2)], seriesService, trigger, tracker);
 
@@ -218,7 +223,7 @@ public class SeriesBulkBuildBackgroundServiceTests
         // reached anime 2, so anime 2 must not trigger a second build.
         Assert.Equal([1], seriesService.CalledFor);
         Assert.Equal(2, tracker.Snapshot.Total);
-        Assert.Equal(2, tracker.Snapshot.Built);
+        Assert.Equal(2, tracker.Snapshot.Done);
     }
 
     [Fact]
@@ -228,7 +233,7 @@ public class SeriesBulkBuildBackgroundServiceTests
         await db.SaveChangesAsync();
 
         var trigger = new SeriesBulkBuildTrigger();
-        var tracker = new SeriesBulkBuildProgressTracker();
+        var tracker = new SeriesBulkBuildProgress();
         var service = new SeriesBulkBuildBackgroundService(
             new FakeServiceScopeFactory(new FakeServiceProvider(db, new ThrowingUserAnimeEntryRepository(), new FakeSeriesService())),
             trigger,
@@ -238,13 +243,14 @@ public class SeriesBulkBuildBackgroundServiceTests
         await service.StartAsync(CancellationToken.None);
         try
         {
+            tracker.TryBegin();
             trigger.Signal();
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            while (tracker.Snapshot.Phase != SeriesBulkBuildPhase.Failed && !cts.IsCancellationRequested)
+            while (tracker.Snapshot.Phase != JobPhase.Failed && !cts.IsCancellationRequested)
                 await Task.Delay(10, CancellationToken.None);
 
-            Assert.Equal(SeriesBulkBuildPhase.Failed, tracker.Snapshot.Phase); // fail loudly on a test timeout, not a hang
+            Assert.Equal(JobPhase.Failed, tracker.Snapshot.Phase); // fail loudly on a test timeout, not a hang
         }
         finally
         {
@@ -263,25 +269,29 @@ public class SeriesBulkBuildBackgroundServiceTests
         seriesService.OnCall(1, () => gate.Task.Wait(TimeSpan.FromSeconds(5)));
 
         var trigger = new SeriesBulkBuildTrigger();
-        var tracker = new SeriesBulkBuildProgressTracker();
+        var tracker = new SeriesBulkBuildProgress();
 
-        Assert.Equal(SeriesBulkBuildPhase.NotStarted, tracker.Snapshot.Phase);
+        Assert.Equal(JobPhase.NotStarted, tracker.Snapshot.Phase);
 
         var runTask = RunOnceAsync(db, [Entry(1), Entry(2)], seriesService, trigger, tracker);
 
+        // TryBegin() (inside RunOnceAsync) moves the tracker to Running with
+        // Total = null at once; the background service sets the real total
+        // only once it has resolved targets, so wait for that rather than
+        // just for Running (design.md D2 decouples the two).
         using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
         {
-            while (tracker.Snapshot.Phase != SeriesBulkBuildPhase.Running && !cts.IsCancellationRequested)
+            while (tracker.Snapshot.Total is null && !cts.IsCancellationRequested)
                 await Task.Delay(10, CancellationToken.None);
         }
-        Assert.Equal(SeriesBulkBuildPhase.Running, tracker.Snapshot.Phase);
+        Assert.Equal(JobPhase.Running, tracker.Snapshot.Phase);
         Assert.Equal(2, tracker.Snapshot.Total);
 
         gate.SetResult();
         await runTask;
 
-        Assert.Equal(SeriesBulkBuildPhase.Complete, tracker.Snapshot.Phase);
-        Assert.Equal(2, tracker.Snapshot.Built);
+        Assert.Equal(JobPhase.Complete, tracker.Snapshot.Phase);
+        Assert.Equal(2, tracker.Snapshot.Done);
     }
 
     private sealed class FakeSeriesService : ISeriesService

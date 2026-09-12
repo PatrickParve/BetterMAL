@@ -1,3 +1,5 @@
+using AnimeTracker.Api.Services.Jobs;
+
 namespace AnimeTracker.Api.Services.Sync;
 
 /// <summary>Runs the corrective re-sync when signaled from the settings page
@@ -7,6 +9,7 @@ namespace AnimeTracker.Api.Services.Sync;
 public class ResyncBackgroundService(
     IServiceScopeFactory scopeFactory,
     IResyncTrigger trigger,
+    ResyncProgress progress,
     ILogger<ResyncBackgroundService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -28,13 +31,14 @@ public class ResyncBackgroundService(
                 var resyncService = scope.ServiceProvider.GetRequiredService<IResyncService>();
                 await resyncService.RunAsync(stoppingToken);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Corrective re-sync run failed.");
+                progress.Fail(JobFailure.Describe(ex, "MyAnimeList"));
             }
         }
     }

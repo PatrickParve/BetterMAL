@@ -1,4 +1,12 @@
+using AnimeTracker.Api.Services.Jobs;
+
 namespace AnimeTracker.Api.Services.Sync;
+
+/// <summary>How a drain went: <see cref="Pushed"/> succeeded, and
+/// <see cref="NotPushed"/> stayed pending for the next attempt (design.md
+/// D5) — a caller running this as a job ends failed when NotPushed is
+/// greater than zero, and complete otherwise.</summary>
+public record DrainResult(int Pushed, int NotPushed);
 
 /// <summary>Pushes a pending entry's current state to MAL. Shared by the
 /// debounce timer (DebouncedEntrySyncScheduler), the retry job
@@ -22,7 +30,11 @@ public interface IEntryPushService
     Task<bool> PushPendingDeletionAsync(int animeId, CancellationToken ct = default);
 
     /// <summary>Pushes every currently pending_sync entry and every pending
-    /// removal, excluding anything held for review. Returns how many pushes
-    /// succeeded.</summary>
-    Task<int> DrainPendingAsync(CancellationToken ct = default);
+    /// removal, excluding anything held for review. Both id lists are read
+    /// before the first push, so <paramref name="progress"/>'s total counts
+    /// exactly what this run set out to push (design.md D5). A null
+    /// <paramref name="progress"/> makes the run quiet — used by the
+    /// automatic 2-minute retry pass, whose runs are never reported as a
+    /// "sync now" job (design.md D6).</summary>
+    Task<DrainResult> DrainPendingAsync(IJobProgressSink? progress = null, CancellationToken ct = default);
 }

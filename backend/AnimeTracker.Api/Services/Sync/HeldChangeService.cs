@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Entries;
+using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using Microsoft.EntityFrameworkCore;
@@ -147,31 +148,37 @@ public class HeldChangeService(
         return new HeldChangeDecisionResult(HeldChangeDecisionOutcome.NotHeld);
     }
 
-    public async Task<HeldChangeBulkResult> AcceptAllAsync(CancellationToken ct = default)
+    public async Task<HeldChangeBulkResult> AcceptAllAsync(IJobProgressSink? progress = null, CancellationToken ct = default)
     {
         var animeIds = await GetHeldAnimeIdsAsync(ct);
-        int succeeded = 0, stillHeld = 0;
+        progress?.SetTotal(animeIds.Count);
+        int succeeded = 0, stillHeld = 0, done = 0;
 
         foreach (var animeId in animeIds)
         {
             var result = await AcceptAsync(animeId, ct);
             if (result.Outcome == HeldChangeDecisionOutcome.Applied) succeeded++;
             else stillHeld++;
+
+            progress?.ReportProgress(++done);
         }
 
         return new HeldChangeBulkResult(succeeded, stillHeld);
     }
 
-    public async Task<HeldChangeBulkResult> DeclineAllAsync(CancellationToken ct = default)
+    public async Task<HeldChangeBulkResult> DeclineAllAsync(IJobProgressSink? progress = null, CancellationToken ct = default)
     {
         var animeIds = await GetHeldAnimeIdsAsync(ct);
-        int succeeded = 0, stillHeld = 0;
+        progress?.SetTotal(animeIds.Count);
+        int succeeded = 0, stillHeld = 0, done = 0;
 
         foreach (var animeId in animeIds)
         {
             var result = await DeclineAsync(animeId, ct);
             if (result.Outcome == HeldChangeDecisionOutcome.Applied) succeeded++;
             else stillHeld++;
+
+            progress?.ReportProgress(++done);
         }
 
         return new HeldChangeBulkResult(succeeded, stillHeld);

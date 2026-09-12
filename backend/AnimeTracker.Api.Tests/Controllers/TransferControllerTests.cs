@@ -1,5 +1,6 @@
 using System.Text;
 using AnimeTracker.Api.Controllers;
+using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Transfer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -47,6 +48,19 @@ public class TransferControllerTests
         public void ReportProgress(int done) => throw new NotImplementedException();
         public void Complete(TransferImportReport report) => throw new NotImplementedException();
         public void Fail(string reason) => throw new NotImplementedException();
+
+        public JobSnapshot ToJobSnapshot()
+        {
+            var phase = Snapshot.Phase switch
+            {
+                TransferImportPhase.NotStarted => JobPhase.NotStarted,
+                TransferImportPhase.Running => JobPhase.Running,
+                TransferImportPhase.Complete => JobPhase.Complete,
+                TransferImportPhase.Failed => JobPhase.Failed,
+                _ => throw new ArgumentOutOfRangeException(nameof(Snapshot), Snapshot.Phase, null),
+            };
+            return new JobSnapshot(phase, Snapshot.Done, Snapshot.Total, Snapshot.Error, null, null);
+        }
     }
 
     private static TransferController CreateController(

@@ -11,10 +11,10 @@ The Settings page SHALL present its controls in **named groups** rather than as 
 The groups SHALL be, in this order:
 
 1. **Preferences** — the settings that change how the app displays things for me and take effect immediately: the completed/dropped score-reveal setting and the NSFW content filter.
-2. **Sync** — the state of the ongoing MyAnimeList sync (pending/retrying count, count held for review, last successful sync) together with the actions that drive it (resync now, run full reconciliation), the changes held for review when any exist, and the pending reconciliation diff when one exists.
+2. **Sync** — the state of the ongoing MyAnimeList sync (pending/retrying count, count held for review, last successful sync, and the weekly check) together with the actions that drive it (sync now, run full reconciliation), the MyAnimeList list import's report while it has one, the changes held for review when any exist, and the pending reconciliation diff when one exists.
 3. **Data tools** — the long-running corrective and backfill jobs: the corrective re-sync from MAL, the full airing-date refresh, the build-all-series run, and the single-anime metadata force-refresh.
 4. **Files** — the actions that produce or take a file, in this order: the list backup, the device-transfer export, and the device-transfer import. The group SHALL hold those three and nothing else. It SHALL NOT hold a sync action, a corrective or backfill job, or a preference.
-5. **Account** — the MyAnimeList connection state and the re-authorize action.
+5. **Account** — the MyAnimeList connection state (connected, lost, or not connected) and the re-authorize action.
 
 Ordering SHALL run from the cheapest and most reversible to the most expensive:
 - instant display preferences first
@@ -44,6 +44,14 @@ Grouping SHALL be presentational only. Every control, label, status figure, and 
 #### Scenario: Held changes appear in Sync
 - **WHEN** changes are held for review
 - **THEN** they are shown inside the Sync group with their review actions, and when none are held the group shows no held-changes section at all
+
+#### Scenario: The list import report appears in Sync
+- **WHEN** the MyAnimeList list import has something to report
+- **THEN** its report is shown inside the Sync group, and when it has nothing to report the group shows no import report at all
+
+#### Scenario: The connection state appears in Account
+- **WHEN** I look at the Account group
+- **THEN** it says whether the MyAnimeList connection is connected, lost, or not connected, next to the re-authorize action
 
 ### Requirement: The list backup action states what the file holds
 The Files group SHALL present the list backup as its first action, in the shape "A preference is visibly not a job" gives every action: a name, an explanation and one button.
@@ -166,6 +174,15 @@ Each row SHALL carry its **own** accept and decline actions, so held items are d
 
 While a decision is being applied its actions SHALL be disabled rather than pressable a second time, and a decision that fails SHALL leave the item listed and report the failure in the section, in the same way the reconciliation diff reports a failed accept.
 
+Accept-all and decline-all SHALL run in the background, as one job between them (see `mal-write-sync`, "Deciding every held change runs in the background").
+
+While that job runs:
+- the section SHALL show its progress, as the number decided out of the number held, in the shared presentation of "Background jobs report progress the same way"
+- every accept and decline action in the section, the row actions included, SHALL be disabled
+- this SHALL hold in every browser, since the state is read from the server
+
+When the job ends with items it could not decide, the section SHALL say how many are still held, and those items SHALL stay listed.
+
 #### Scenario: Held changes are listed with their context
 - **WHEN** I open Settings with two changes held from a previous session
 - **THEN** the Sync group lists both, each naming its anime, what changed and when, what would be sent, and what MyAnimeList currently holds
@@ -185,6 +202,18 @@ While a decision is being applied its actions SHALL be disabled rather than pres
 #### Scenario: The last decision closes the section
 - **WHEN** I decide the last held item
 - **THEN** the held-changes section disappears from the page
+
+#### Scenario: Accept all shows its progress
+- **WHEN** I press accept all with five items held
+- **THEN** the section shows a progress bar counting the items decided out of five, and every accept and decline action in it is disabled until the run ends
+
+#### Scenario: Accept all is disabled in another browser too
+- **WHEN** accept all is running and I open Settings in another browser
+- **THEN** that browser shows the same progress, with every accept and decline action disabled
+
+#### Scenario: Items that stayed held are reported
+- **WHEN** decline all ends with two items it could not decide
+- **THEN** the section says two are still held, and those two stay listed
 
 ### Requirement: The sync readout separates what is retrying from what is waiting on me
 
@@ -226,35 +255,63 @@ The two SHALL be distinguishable at a glance, without reading the explanations �
 - **THEN** the preference rows and the action entries are visibly different kinds of entry
 
 ### Requirement: Background jobs report progress the same way
-Every background job the page can start SHALL report its state in **one shared presentation**, so that a reader learns to read it once. The jobs are:
+Every background job the page shows SHALL report its state in **one shared presentation**, so that a reader learns to read it once. The jobs are:
+- the MyAnimeList list import, while it has something to report (see "The MyAnimeList list import is reported while it has something to report")
+- sync now
+- run full reconciliation
+- accepting or declining every held change
 - the corrective re-sync from MAL
 - the full airing-date refresh
 - the build-all-series run
 - the import from a file
 
-While a job is running, the page SHALL show a proportional progress indicator alongside the processed-of-total counts the underlying operation reports, and SHALL keep both updating while the run is in flight. The job's button SHALL be disabled for the duration and SHALL say that the job is running rather than inviting a second press.
+While a job is running, the page SHALL show a proportional progress indicator alongside the processed-of-total counts the underlying operation reports, and SHALL keep both updating while the run is in flight. The job's button, where it has one, SHALL be disabled for the duration and SHALL say that the job is running rather than inviting a second press.
+
+Where a running job does not yet know its total:
+- the indicator SHALL move continuously rather than being filled in proportion
+- the counts SHALL show what the job has counted so far, where it counts anything, and otherwise that it is starting
+- it SHALL NOT show a zero total or an empty bar that looks like no progress
+
+Where motion is reduced by the reader's system setting, the indicator SHALL stay still while remaining distinct from a proportional one.
+
+The page SHALL take every job's state from the server, so that:
+- leaving and returning shows the same run
+- another browser shows the same run
+- a job started from elsewhere, or by the app itself, appears without a reload
 
 When a job is not running, the page SHALL show its last known outcome where one exists, and SHALL leave the button enabled. The outcome is either:
 - completed, with its final counts
-- failed, with the counts reached and a pointer to where the failure is recorded
+- failed, with the counts reached and the job's reason; where the job knows no reason, it points to where the failure is recorded
 
 A job that has never run SHALL show no state rather than a zeroed-out one.
 
-The import's outcome SHALL also carry its report (see `device-transfer`, "The import reports what it did"). The report SHALL be shown beneath the shared presentation when the import completes. When the import fails, the page SHALL show the reason in place of the pointer, and state that nothing from the file was applied.
+The import's outcome SHALL also carry its report (see `device-transfer`, "The import reports what it did"). The report SHALL be shown beneath the shared presentation when the import completes. When the import fails, the page SHALL show the reason and state that nothing from the file was applied.
 
 A failed run SHALL be visibly distinct from a completed one rather than differing only in wording.
 
 #### Scenario: A running job shows proportional progress
-- **WHEN** a background job is in flight
+- **WHEN** a background job with a known total is in flight
 - **THEN** the page shows a progress indicator filled in proportion to the processed-of-total counts, with those counts beside it, both refreshing while the run continues
 
-#### Scenario: All four jobs report alike
-- **WHEN** I compare the corrective re-sync, the airing refresh, the series build, and an import while each is running
-- **THEN** all four present their progress in the same form, differing only in wording and figures
+#### Scenario: A job without a total shows a moving bar
+- **WHEN** run full reconciliation is reading my MyAnimeList list
+- **THEN** the page shows a moving indicator and the number of anime read so far, and no total
+
+#### Scenario: A job that is starting says so
+- **WHEN** a job has started but has counted nothing and knows no total
+- **THEN** the page shows a moving indicator and says it is starting
+
+#### Scenario: All jobs report alike
+- **WHEN** I compare any two of the jobs while each is running
+- **THEN** they present their progress in the same form, differing only in wording and figures
 
 #### Scenario: A running job cannot be started twice
 - **WHEN** a job is running
 - **THEN** its button is disabled and says the job is running
+
+#### Scenario: Another browser shows the same run
+- **WHEN** a job is running and I open Settings in another browser
+- **THEN** that browser shows the same progress and its button is disabled too
 
 #### Scenario: A finished run keeps its result visible
 - **WHEN** a job has finished
@@ -266,7 +323,7 @@ A failed run SHALL be visibly distinct from a completed one rather than differin
 
 #### Scenario: A failed run is marked as failed
 - **WHEN** a job's last run failed
-- **THEN** the page marks it as a failure rather than reporting it like a completed run, states how far it got, and points at where the failure is recorded
+- **THEN** the page marks it as a failure rather than reporting it like a completed run, states how far it got, and gives the job's reason
 
 #### Scenario: A failed import says nothing was applied
 - **WHEN** an import's last run failed
@@ -275,6 +332,109 @@ A failed run SHALL be visibly distinct from a completed one rather than differin
 #### Scenario: A job that never ran shows nothing
 - **WHEN** a job has never been started
 - **THEN** the page shows no run state for it rather than an empty or zeroed one
+
+### Requirement: A job starts on the first press
+
+Pressing a job's button once SHALL be enough to start it and show it. The page SHALL:
+- show the job's progress presentation as soon as the start is answered, without a second press
+- keep it updating from then on
+
+This covers every job with a button:
+- sync now
+- run full reconciliation
+- accept all
+- decline all
+- the corrective re-sync ("Correct imported data")
+- the full airing-date refresh ("Airing dates")
+- build all series
+- the import from a file
+
+While the start request is waiting for its answer, the button SHALL already be disabled.
+
+A press that arrives while the job is starting or running — from this page or another — SHALL start nothing (see `background-jobs`, "A job is started once").
+
+#### Scenario: Correct imported data shows its bar at once
+- **WHEN** I press "Run corrective re-sync" once
+- **THEN** its progress bar appears straight away, without a second press
+
+#### Scenario: Airing dates shows its bar at once
+- **WHEN** I press "Refresh all airing dates" once
+- **THEN** its progress bar appears straight away, without a second press
+
+#### Scenario: A quick second press starts nothing
+- **WHEN** I press a job's button twice in quick succession
+- **THEN** one run starts, and the second press has no effect
+
+### Requirement: The MyAnimeList list import is reported while it has something to report
+
+The Sync group SHALL show the MyAnimeList list import's report only while the import has something to report, as `initial-import`, "Visible import progress indicator" defines. While it has nothing, the page SHALL show nothing for it: no heading, no empty bar, no "complete" line.
+
+Where it is shown, the report SHALL:
+- name the import and say what it does: brings in anime on my MyAnimeList list that this device does not have yet, when the app starts and after re-authorizing
+- show its progress in the shared presentation, counting anime, with a total that counts only the anime it is bringing in
+- when it failed, give the reason, and say when it will try again, or that it will try again when the app next starts
+
+It SHALL offer no button, since the import is started by the app and not by me.
+
+#### Scenario: A start with nothing new shows nothing
+- **WHEN** the app starts and my MyAnimeList list has nothing this device lacks
+- **THEN** the Sync group shows nothing for the list import
+
+#### Scenario: Anime added on my other device are shown coming in
+- **WHEN** the app starts and my MyAnimeList list has four anime this device lacks
+- **THEN** the Sync group shows the list import with a progress bar out of four, and then how it ended
+
+#### Scenario: A failed import says when it tries again
+- **WHEN** the list import ends with anime it could not fetch and another try is planned
+- **THEN** the report marks it as failed, says how many could not be fetched, and says when it will try again
+
+### Requirement: The weekly check is reported in one line
+
+The Sync group's readout SHALL carry one line for the weekly MyAnimeList check, beside "Last successful sync". The line SHALL say when the check last ran and:
+- that it found no problems, where that run succeeded
+- that it failed, with its reason, where that run failed
+- only when it ran, where that run's ending was not recorded
+- that it has not run yet, where it never has
+
+The line SHALL NOT show progress, and the weekly check SHALL never show a progress bar. What the check found is already shown as the pending reconciliation diff.
+
+#### Scenario: A successful weekly check
+- **WHEN** the weekly check last ran on Monday and succeeded
+- **THEN** the readout's weekly line gives Monday's time and says there were no problems
+
+#### Scenario: A failed weekly check
+- **WHEN** the weekly check last failed because MyAnimeList could not be reached
+- **THEN** the weekly line gives its time and says it failed because MyAnimeList couldn't be reached
+
+#### Scenario: The weekly check never shows a bar
+- **WHEN** the weekly check is running while I have Settings open
+- **THEN** no progress bar appears for it, and "Run full reconciliation" shows no progress from it
+
+### Requirement: The Account section explains a lost connection
+
+Where the MyAnimeList connection is **lost** (see `mal-api-integration`), the Account group SHALL say so plainly, in place of "Connected". It SHALL state:
+- that the connection to MyAnimeList was lost, and when that was noticed
+- that my changes are not being sent to MyAnimeList
+- that anime added on MyAnimeList elsewhere are not being brought in
+- that I need to re-authorize to reconnect
+
+The message SHALL be styled as a problem, not as a neutral status. The re-authorize action SHALL stay where it is.
+
+Where the connection is **connected**, the group SHALL say "Connected."; where **not connected**, "Not connected.".
+
+Re-authorizing SHALL bring the group back to "Connected." without any other step.
+
+#### Scenario: A lost connection is explained
+- **WHEN** MyAnimeList has refused the app's login and I open Settings
+- **THEN** the Account group says the connection was lost and when, that my changes aren't being sent, and that I need to re-authorize, and it no longer says "Connected"
+
+#### Scenario: An outage is not a lost connection
+- **WHEN** MyAnimeList is unreachable but has not refused the login
+- **THEN** the Account group still says "Connected."
+
+#### Scenario: Re-authorizing clears the message
+- **WHEN** I re-authorize after the connection was lost
+- **THEN** the Account group says "Connected." again
 
 ### Requirement: Every sync control states what it will do
 

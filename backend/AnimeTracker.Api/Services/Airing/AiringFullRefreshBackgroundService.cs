@@ -1,3 +1,5 @@
+using AnimeTracker.Api.Services.Jobs;
+
 namespace AnimeTracker.Api.Services.Airing;
 
 /// <summary>Runs the settings page's manual "refresh all airing data" action
@@ -11,7 +13,7 @@ namespace AnimeTracker.Api.Services.Airing;
 public class AiringFullRefreshBackgroundService(
     IServiceScopeFactory scopeFactory,
     IAiringFullRefreshTrigger trigger,
-    IAiringFullRefreshProgressTracker progress,
+    AiringFullRefreshProgress progress,
     ILogger<AiringFullRefreshBackgroundService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -32,17 +34,18 @@ public class AiringFullRefreshBackgroundService(
                 using var scope = scopeFactory.CreateScope();
                 var refreshService = scope.ServiceProvider.GetRequiredService<IEpisodeScheduleRefreshService>();
                 var targets = await refreshService.GetFullRefreshTargetsAsync(stoppingToken);
-                progress.Start(targets.Count);
+                progress.SetTotal(targets.Count);
                 await refreshService.RefreshManyAsync(targets, stoppingToken, synced => progress.ReportProgress(synced));
                 progress.Complete();
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Manual airing full refresh failed.");
+                progress.Fail(JobFailure.Describe(ex, "AniList"));
             }
         }
     }

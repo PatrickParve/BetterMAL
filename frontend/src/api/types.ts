@@ -1,7 +1,14 @@
 export type WatchStatus = 'Watching' | 'OnHold' | 'PlanToWatch' | 'Completed' | 'Dropped' | 'Rewatching'
 
+// The MyAnimeList connection's three states (report-jobs-and-lost-mal-connection
+// design.md D14): Lost means MyAnimeList itself refused this app's login,
+// distinct from an outage. App.tsx shows the first-run connect screen only
+// for NotConnected — a lost connection keeps the app open.
+export type MalConnectionState = 'Connected' | 'Lost' | 'NotConnected'
+
 export type MalAuthStatus = {
-  connected: boolean
+  state: MalConnectionState
+  lostAt: string | null
 }
 
 export type HealthStatus = {
@@ -585,43 +592,55 @@ export type HeldChangeDecisionDto = {
   error?: string
 }
 
-export type HeldChangeBulkResultDto = {
-  succeeded: number
-  stillHeld: number
+// Shared background-job lifecycle (background-jobs capability, design.md
+// D1/D15) — every trigger POST and the combined api/app-status read serve
+// this same shape, mirroring backend JobDto. total is null while the job
+// doesn't yet know how much work there is — never zero, which means a run
+// that really has nothing to do.
+export type JobPhase = 'NotStarted' | 'Running' | 'Complete' | 'Failed'
+
+export type JobStatusDto = {
+  phase: JobPhase
+  done: number
+  total: number | null
+  error: string | null
+  startedAt: string | null
+  finishedAt: string | null
+  retryAt: string | null
 }
 
-export type ResyncPhase = 'NotStarted' | 'Running' | 'Complete'
+// Accept all and decline all share one job (design.md D18): whichever is
+// pressed second gets the running job's state back and starts nothing.
+// action names which of the two is running or most recently ran.
+export type HeldDecisionAction = 'Accept' | 'Decline'
 
-export type ResyncStatusDto = {
-  phase: ResyncPhase
-  synced: number
-  total: number
+export type HeldDecisionJobDto = JobStatusDto & {
+  action: HeldDecisionAction | null
 }
 
-export type AiringFullRefreshPhase = 'NotStarted' | 'Running' | 'Complete'
-
-export type AiringFullRefreshStatusDto = {
-  phase: AiringFullRefreshPhase
-  synced: number
-  total: number
+export type WeeklyCheckDto = {
+  lastRunAt: string
+  failed: boolean | null
+  error: string | null
 }
 
-export type SeriesBulkBuildPhase = 'NotStarted' | 'Running' | 'Complete' | 'Failed'
-
-// Progress of the settings page's "Build all series from my list" action.
-// Built counts targets processed, not builds run — one build can cover
-// several other targets' membership at once (design.md decision 6).
-export type SeriesBulkBuildStatusDto = {
-  phase: SeriesBulkBuildPhase
-  built: number
-  total: number
+export type AppStatusJobsDto = {
+  listImport: JobStatusDto
+  syncNow: JobStatusDto
+  reconcile: JobStatusDto
+  heldDecision: HeldDecisionJobDto
+  resync: JobStatusDto
+  airingRefresh: JobStatusDto
+  seriesBuild: JobStatusDto
+  fileImport: JobStatusDto
 }
 
-export type ReconciliationResultDto = {
-  added: number
-  updated: number
-  unchanged: number
-  skippedPending: number
+// GET api/app-status: one cheap read of every job's state, the MyAnimeList
+// connection state, and the weekly check's last outcome (design.md D15).
+export type AppStatusDto = {
+  malConnection: MalAuthStatus
+  weeklyCheck: WeeklyCheckDto | null
+  jobs: AppStatusJobsDto
 }
 
 export type ReconciliationDiffChangeType = 'Added' | 'Updated'

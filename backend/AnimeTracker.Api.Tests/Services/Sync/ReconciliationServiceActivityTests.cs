@@ -19,7 +19,7 @@ public class ReconciliationServiceActivityTests
             .Options);
 
     private static ReconciliationService CreateService(AnimeTrackerDbContext db) =>
-        new(new ThrowingMalClient(), db, NullLogger<ReconciliationService>.Instance);
+        new(new ThrowingMalClient(), db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance);
 
     private static PendingReconciliationDiffEntry DiffEntry(
         int animeId, ReconciliationDiffChangeType changeType, WatchStatus status, int episodesWatched,
@@ -132,7 +132,7 @@ public class ReconciliationServiceActivityTests
 
     private sealed class ThrowingMalClient : IMalClient
     {
-        public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(CancellationToken ct = default) =>
+        public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(Action<int>? onPageRead = null, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<MalAnimeNode> GetAnimeDetailsAsync(int animeId, IReadOnlyCollection<string>? fields = null, CancellationToken ct = default) =>
             throw new NotImplementedException();

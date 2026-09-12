@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Relations;
@@ -25,7 +26,7 @@ public class ResyncServiceActivityTests
             .Options);
 
     private static ResyncService CreateService(AnimeTrackerDbContext db, IMalClient malClient) =>
-        new(malClient, db, new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), new SeriesBuildTrigger()), new ResyncProgressTracker(), NullLogger<ResyncService>.Instance);
+        new(malClient, db, new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), new SeriesBuildTrigger()), new ResyncProgress(), NullLogger<ResyncService>.Instance);
 
     private static MalUserAnimeListEdge Edge(int animeId, string status = "watching", int episodesWatched = 0, int? score = null) => new()
     {
@@ -157,7 +158,7 @@ public class ResyncServiceActivityTests
 
     private sealed class FakeMalClient(List<MalUserAnimeListEdge> edges, int? failDetailsForAnimeId = null) : IMalClient
     {
-        public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(CancellationToken ct = default) =>
+        public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(Action<int>? onPageRead = null, CancellationToken ct = default) =>
             Task.FromResult(edges);
 
         public Task<MalAnimeNode> GetAnimeDetailsAsync(int animeId, IReadOnlyCollection<string>? fields = null, CancellationToken ct = default)

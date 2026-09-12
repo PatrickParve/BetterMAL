@@ -21,7 +21,7 @@ public class MalTokenProvider(IServiceScopeFactory scopeFactory) : IMalTokenProv
         var oauth = scope.ServiceProvider.GetRequiredService<IMalOAuthService>();
 
         var token = await tokenStore.GetAsync(ct);
-        if (token is null)
+        if (token is null || token.ConnectionLostAt is not null)
             return null;
 
         if (token.ExpiresAt - RefreshBuffer > DateTimeOffset.UtcNow)
@@ -30,16 +30,42 @@ public class MalTokenProvider(IServiceScopeFactory scopeFactory) : IMalTokenProv
         await _refreshLock.WaitAsync(ct);
         try
         {
-            // Re-read: another caller may have already refreshed while we waited.
+            // Re-read: another caller may have already refreshed, or the
+            // connection may have just been marked lost, while we waited.
             token = await tokenStore.GetAsync(ct);
-            if (token is null)
+            if (token is null || token.ConnectionLostAt is not null)
                 return null;
 
             if (token.ExpiresAt - RefreshBuffer > DateTimeOffset.UtcNow)
                 return token.AccessToken;
 
-            var refreshed = await oauth.RefreshAsync(token.RefreshToken, ct);
-            return refreshed?.AccessToken;
+            var result = await oauth.RefreshAsync(token.RefreshToken, ct);
+            return result is MalRefreshResult.Refreshed refreshed ? refreshed.Token.AccessToken : null;
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
+    }
+
+    public async Task<MalRefreshResult> RefreshAfterRejectionAsync(string rejectedAccessToken, CancellationToken ct = default)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var tokenStore = scope.ServiceProvider.GetRequiredService<IMalTokenStore>();
+        var oauth = scope.ServiceProvider.GetRequiredService<IMalOAuthService>();
+
+        await _refreshLock.WaitAsync(ct);
+        try
+        {
+            var token = await tokenStore.GetAsync(ct);
+            if (token is null || token.ConnectionLostAt is not null)
+                return new MalRefreshResult.Refused(0, null);
+
+            // A concurrent caller already refreshed while we waited for the lock.
+            if (token.AccessToken != rejectedAccessToken)
+                return new MalRefreshResult.Refreshed(token);
+
+            return await oauth.RefreshAsync(token.RefreshToken, ct);
         }
         finally
         {

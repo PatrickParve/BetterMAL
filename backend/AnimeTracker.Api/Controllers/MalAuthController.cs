@@ -12,13 +12,15 @@ public class MalAuthController(
     IImportTrigger importTrigger,
     ILogger<MalAuthController> logger) : ControllerBase
 {
-    /// <summary>Whether a token is on file — the frontend uses this to decide
-    /// whether to show the first-run "Connect to MAL" prompt.</summary>
+    /// <summary>The connection's state — Connected, Lost (MyAnimeList has
+    /// refused this login) or NotConnected (design.md D14). The frontend
+    /// shows the first-run "Connect to MAL" prompt only for NotConnected.</summary>
     [HttpGet("api/mal-auth/status")]
     public async Task<IActionResult> Status(CancellationToken ct)
     {
         var token = await tokenStore.GetAsync(ct);
-        return Ok(new { connected = token is not null });
+        var state = token is null ? "NotConnected" : token.ConnectionLostAt is not null ? "Lost" : "Connected";
+        return Ok(new { state, lostAt = token?.ConnectionLostAt });
     }
 
     /// <summary>Kicks off the one-time interactive PKCE flow by redirecting

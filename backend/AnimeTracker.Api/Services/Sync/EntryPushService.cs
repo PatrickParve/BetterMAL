@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Data;
+using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using Microsoft.EntityFrameworkCore;
@@ -90,31 +91,40 @@ public class EntryPushService(
         }
     }
 
-    public async Task<int> DrainPendingAsync(CancellationToken ct = default)
+    public async Task<DrainResult> DrainPendingAsync(IJobProgressSink? progress = null, CancellationToken ct = default)
     {
         var pendingIds = await db.UserAnimeEntries.AsNoTracking()
             .Where(e => e.PendingSync && e.HeldForReviewAt == null)
             .Select(e => e.AnimeId)
             .ToListAsync(ct);
 
-        var pushed = 0;
-        foreach (var animeId in pendingIds)
-        {
-            if (await PushIfPendingAsync(animeId, ct))
-                pushed++;
-        }
-
         var pendingDeletionIds = await db.PendingEntryDeletions.AsNoTracking()
             .Where(d => d.HeldForReviewAt == null)
             .Select(d => d.AnimeId)
             .ToListAsync(ct);
 
+        var total = pendingIds.Count + pendingDeletionIds.Count;
+        progress?.SetTotal(total);
+
+        var pushed = 0;
+        var done = 0;
+
+        foreach (var animeId in pendingIds)
+        {
+            if (await PushIfPendingAsync(animeId, ct))
+                pushed++;
+
+            progress?.ReportProgress(++done);
+        }
+
         foreach (var animeId in pendingDeletionIds)
         {
             if (await PushPendingDeletionAsync(animeId, ct))
                 pushed++;
+
+            progress?.ReportProgress(++done);
         }
 
-        return pushed;
+        return new DrainResult(pushed, total - pushed);
     }
 }

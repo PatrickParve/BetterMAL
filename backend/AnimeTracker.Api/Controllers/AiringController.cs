@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.Jobs;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AnimeTracker.Api.Controllers;
@@ -7,7 +8,7 @@ namespace AnimeTracker.Api.Controllers;
 public class AiringController(
     IAiringScheduleService airingScheduleService,
     IAiringFullRefreshTrigger fullRefreshTrigger,
-    IAiringFullRefreshProgressTracker fullRefreshProgress) : ControllerBase
+    AiringFullRefreshProgress fullRefreshProgress) : ControllerBase
 {
     /// <summary>My-list anime broadcast slots for one local week, grouped into
     /// seven day-columns. week is any date inside the desired week (defaults
@@ -23,24 +24,16 @@ public class AiringController(
     /// <summary>Kicks off the settings page's manual "refresh all airing data"
     /// action: re-fetches AniList data for every my-list anime except finished
     /// shows already fetched at least once. Runs in the background (paced
-    /// through AniList's rate limit) — poll the status endpoint below rather
-    /// than waiting on this call.</summary>
+    /// through AniList's rate limit) — starts once (background-jobs "A job is
+    /// started once") and the answer already reports it as running either
+    /// way, so the page reads its progress from the combined status read
+    /// rather than polling this endpoint.</summary>
     [HttpPost("api/airing/refresh-all")]
     public IActionResult TriggerFullRefresh()
     {
-        fullRefreshTrigger.Signal();
-        return Accepted(ToDto(fullRefreshProgress.Snapshot));
+        if (fullRefreshProgress.TryBegin())
+            fullRefreshTrigger.Signal();
+
+        return Accepted(JobDto.From(fullRefreshProgress.Snapshot));
     }
-
-    /// <summary>Progress of the manual "refresh all airing data" action, for
-    /// the settings page's progress indicator.</summary>
-    [HttpGet("api/airing/refresh-all/status")]
-    public IActionResult GetFullRefreshStatus() => Ok(ToDto(fullRefreshProgress.Snapshot));
-
-    private static object ToDto(AiringFullRefreshStatusSnapshot snapshot) => new
-    {
-        phase = snapshot.Phase.ToString(),
-        synced = snapshot.Synced,
-        total = snapshot.Total,
-    };
 }

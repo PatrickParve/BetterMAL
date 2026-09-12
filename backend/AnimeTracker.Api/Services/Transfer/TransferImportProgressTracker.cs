@@ -1,3 +1,5 @@
+using AnimeTracker.Api.Services.Jobs;
+
 namespace AnimeTracker.Api.Services.Transfer;
 
 public class TransferImportProgressTracker : ITransferImportProgressTracker
@@ -48,5 +50,23 @@ public class TransferImportProgressTracker : ITransferImportProgressTracker
     {
         lock (_lock)
             _snapshot = _snapshot with { Phase = TransferImportPhase.Failed, Error = reason };
+    }
+
+    /// <summary>Maps into the shared job shape for the combined status read
+    /// (design.md D15). The file import tracks no start/end timestamps of its
+    /// own, so those are reported as unknown rather than guessed.</summary>
+    public JobSnapshot ToJobSnapshot()
+    {
+        var snapshot = Snapshot;
+        var phase = snapshot.Phase switch
+        {
+            TransferImportPhase.NotStarted => JobPhase.NotStarted,
+            TransferImportPhase.Running => JobPhase.Running,
+            TransferImportPhase.Complete => JobPhase.Complete,
+            TransferImportPhase.Failed => JobPhase.Failed,
+            _ => throw new ArgumentOutOfRangeException(nameof(snapshot), snapshot.Phase, null),
+        };
+
+        return new JobSnapshot(phase, snapshot.Done, snapshot.Total, snapshot.Error, null, null);
     }
 }

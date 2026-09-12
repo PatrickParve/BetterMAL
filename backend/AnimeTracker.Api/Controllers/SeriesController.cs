@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Services.Artwork;
+using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,7 +11,7 @@ public class SeriesController(
     ISeriesService seriesService,
     SeriesListService seriesListService,
     ISeriesBulkBuildTrigger bulkBuildTrigger,
-    ISeriesBulkBuildProgressTracker bulkBuildProgress,
+    SeriesBulkBuildProgress bulkBuildProgress,
     IArtworkSelectionService artworkSelectionService,
     IPictureRefreshService pictureRefreshService,
     IAnimeMetadataRepository metadataRepository) : ControllerBase
@@ -146,30 +147,18 @@ public class SeriesController(
     /// list" action: builds a series for every my-list anime that belongs to
     /// no stored series yet, or whose stored series predates the current
     /// classification rules. Runs in the background (through the same fetch
-    /// budget and single-flight gate as every other build) — poll the status
-    /// endpoint below rather than waiting on this call. Marks the run pending
-    /// before returning, so the response already reports a run in flight
-    /// rather than whatever the previous run left (design.md decision
-    /// 5).</summary>
+    /// budget and single-flight gate as every other build) — starts once
+    /// (background-jobs "A job is started once") and the answer already
+    /// reports it as running either way, so the page reads its progress from
+    /// the combined status read rather than polling this endpoint.</summary>
     [HttpPost("api/series/build-all")]
     public IActionResult TriggerBulkBuild()
     {
-        bulkBuildProgress.MarkPending();
-        bulkBuildTrigger.Signal();
-        return Accepted(ToDto(bulkBuildProgress.Snapshot));
+        if (bulkBuildProgress.TryBegin())
+            bulkBuildTrigger.Signal();
+
+        return Accepted(JobDto.From(bulkBuildProgress.Snapshot));
     }
-
-    /// <summary>Progress of the manual "build all series from my list" action,
-    /// for the settings page's progress indicator.</summary>
-    [HttpGet("api/series/build-all/status")]
-    public IActionResult GetBulkBuildStatus() => Ok(ToDto(bulkBuildProgress.Snapshot));
-
-    private static object ToDto(SeriesBulkBuildStatusSnapshot snapshot) => new
-    {
-        phase = snapshot.Phase.ToString(),
-        built = snapshot.Built,
-        total = snapshot.Total,
-    };
 }
 
 public class SetSeriesTitleRequest

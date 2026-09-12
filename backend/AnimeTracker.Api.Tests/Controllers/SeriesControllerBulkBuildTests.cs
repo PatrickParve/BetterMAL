@@ -4,6 +4,7 @@ using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Artwork;
+using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.AspNetCore.Mvc;
@@ -11,31 +12,56 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Tests.Controllers;
 
-// SeriesController.TriggerBulkBuild (design.md decision 5/task 5.2): the
-// response reports the run as in flight before the background service has
-// woken up and resolved targets, so a single press is enough for the
-// Settings page to start polling and disable its button.
+// SeriesController.TriggerBulkBuild (background-jobs "A job is started
+// once"/design.md D2): the response reports the run as in flight before the
+// background service has woken up and resolved targets, so a single press is
+// enough for the Settings page to start polling and disable its button, and a
+// second press while it's already running starts nothing new.
 public class SeriesControllerBulkBuildTests
 {
-    [Fact]
-    public void TriggerReportsRunningBeforeTheBackgroundServiceHasStarted()
+    private static SeriesController CreateController(ISeriesBulkBuildTrigger trigger, SeriesBulkBuildProgress tracker)
     {
-        var trigger = new SeriesBulkBuildTrigger();
-        var tracker = new SeriesBulkBuildProgressTracker();
         using var db = new AnimeTrackerDbContext(
             new DbContextOptionsBuilder<AnimeTrackerDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
         var listService = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService(), new UnusedAnimeRankingService());
-        var controller = new SeriesController(
+        return new SeriesController(
             new UnusedSeriesService(), listService, trigger, tracker, new UnusedArtworkSelectionService(),
             new UnusedPictureRefreshService(), new UnusedAnimeMetadataRepository());
+    }
 
-        Assert.Equal(SeriesBulkBuildPhase.NotStarted, tracker.Snapshot.Phase);
+    [Fact]
+    public void TwoPressesGiveRunningBothTimes()
+    {
+        var trigger = new SeriesBulkBuildTrigger();
+        var tracker = new SeriesBulkBuildProgress();
+        var controller = CreateController(trigger, tracker);
 
-        var result = Assert.IsType<AcceptedResult>(controller.TriggerBulkBuild());
+        Assert.Equal(JobPhase.NotStarted, tracker.Snapshot.Phase);
 
-        Assert.Equal(SeriesBulkBuildPhase.Running, tracker.Snapshot.Phase);
-        dynamic dto = result.Value!;
-        Assert.Equal("Running", (string)dto.phase);
+        var first = Assert.IsType<AcceptedResult>(controller.TriggerBulkBuild());
+        Assert.Equal(JobPhase.Running, tracker.Snapshot.Phase);
+        Assert.Equal("Running", Assert.IsType<JobDto>(first.Value).Phase);
+
+        var second = Assert.IsType<AcceptedResult>(controller.TriggerBulkBuild());
+        Assert.Equal(JobPhase.Running, tracker.Snapshot.Phase);
+        Assert.Equal("Running", Assert.IsType<JobDto>(second.Value).Phase);
+    }
+
+    [Fact]
+    public async Task ExactlyOneSignalIsObservableAcrossTwoPresses()
+    {
+        var trigger = new SeriesBulkBuildTrigger();
+        var tracker = new SeriesBulkBuildProgress();
+        var controller = CreateController(trigger, tracker);
+
+        controller.TriggerBulkBuild();
+        controller.TriggerBulkBuild(); // TryBegin() is false the second time, so Signal() isn't called again
+
+        using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+            await trigger.WaitAsync(cts.Token); // completes at once: exactly one signal was queued
+
+        using var secondCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        await Assert.ThrowsAsync<OperationCanceledException>(() => trigger.WaitAsync(secondCts.Token)); // nothing left to wait for
     }
 
     private sealed class UnusedSeriesService : ISeriesService

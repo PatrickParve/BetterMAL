@@ -23,9 +23,11 @@ public class PendingSyncRetryBackgroundService(
             {
                 using var scope = scopeFactory.CreateScope();
                 var pushService = scope.ServiceProvider.GetRequiredService<IEntryPushService>();
-                var pushed = await pushService.DrainPendingAsync(stoppingToken);
-                if (pushed > 0)
-                    logger.LogInformation("Pending-sync retry pass pushed {Count} entr{Suffix}.", pushed, pushed == 1 ? "y" : "ies");
+                // No sink — this automatic pass is never reported as a "sync
+                // now" job (design.md D6).
+                var result = await pushService.DrainPendingAsync(ct: stoppingToken);
+                if (result.Pushed > 0)
+                    logger.LogInformation("Pending-sync retry pass pushed {Count} entr{Suffix}.", result.Pushed, result.Pushed == 1 ? "y" : "ies");
             }
             catch (OperationCanceledException)
             {

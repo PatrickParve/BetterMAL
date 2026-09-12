@@ -44,13 +44,28 @@ public class MalTokenRefreshBackgroundService(
         if (token is null)
             return; // not authorized yet — nothing to refresh
 
+        if (token.ConnectionLostAt is not null)
+            return; // MyAnimeList has already refused this login — wait for re-authorization
+
         if (token.ExpiresAt - RefreshBuffer > DateTimeOffset.UtcNow)
             return; // still comfortably fresh
 
         logger.LogInformation("MAL access token expires at {ExpiresAt}; refreshing ahead of expiry.", token.ExpiresAt);
-        var refreshed = await oauth.RefreshAsync(token.RefreshToken, ct);
+        var result = await oauth.RefreshAsync(token.RefreshToken, ct);
 
-        if (refreshed is null)
-            logger.LogWarning("MAL token refresh failed; re-authorization will be required.");
+        switch (result)
+        {
+            case MalRefreshResult.Refreshed:
+                break; // already saved by RefreshAsync
+
+            case MalRefreshResult.Refused refused:
+                logger.LogWarning(
+                    "MAL refused to refresh the login ({StatusCode}); re-authorization will be required.", refused.StatusCode);
+                break;
+
+            case MalRefreshResult.Unavailable unavailable:
+                logger.LogWarning("MAL token refresh could not be completed: {Detail}", unavailable.Detail);
+                break;
+        }
     }
 }

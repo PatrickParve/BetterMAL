@@ -1,16 +1,18 @@
 using System.Text;
-using System.Text.Json;
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Import;
+using AnimeTracker.Api.Services.Mal.Auth;
 using AnimeTracker.Api.Services.Transfer;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Tests.Services.Transfer;
 
 // TransferImportService.AcceptAsync (device-transfer design.md D2/D12,
-// tasks.md 5.1-5.3): the refusals, in order, each writing nothing and
-// offering no file, and the accepted path that reaches the trigger.
+// report-jobs-and-lost-mal-connection design.md D10, tasks.md 5.1-5.3, 6.4):
+// the refusals, in order, each writing nothing and offering no file, and the
+// accepted path that reaches the trigger once the list import's gate has
+// opened — even a run that ended with fetch failures still opens it.
 public class TransferImportServiceTests
 {
     private static AnimeTrackerDbContext CreateDb() =>
@@ -38,9 +40,29 @@ public class TransferImportServiceTests
         }
         """);
 
+    // A gate that has already opened and is currently quiet — the default
+    // "nothing in the way" state for tests that aren't about the gate itself.
+    private static ListImportProgress GoneThroughGate()
+    {
+        var progress = new ListImportProgress();
+        progress.BeginRun(visibleFromStart: false);
+        progress.EndWithoutWork();
+        return progress;
+    }
+
+    private static OAuthToken HealthyToken() => new()
+    {
+        AccessToken = "access",
+        RefreshToken = "refresh",
+        ExpiresAt = DateTimeOffset.UtcNow.AddDays(30),
+        UpdatedAt = DateTimeOffset.UtcNow,
+        ConnectionLostAt = null,
+    };
+
     private static TransferImportService CreateService(
-        AnimeTrackerDbContext db, ITransferImportTrigger trigger, ImportPhase listPhase = ImportPhase.Complete, int synced = 0, int total = 0) =>
-        new(db, new FakeImportProgressTracker(new ImportStatusSnapshot(listPhase, synced, total)), trigger, new TransferImportProgressTracker());
+        AnimeTrackerDbContext db, ITransferImportTrigger trigger,
+        ListImportProgress? listImportProgress = null, OAuthToken? token = null) =>
+        new(db, listImportProgress ?? GoneThroughGate(), new FakeMalTokenStore(token ?? HealthyToken()), trigger, new TransferImportProgressTracker());
 
     private sealed class RecordingTrigger : ITransferImportTrigger
     {
@@ -58,15 +80,16 @@ public class TransferImportServiceTests
         public void Release() => throw new NotImplementedException();
     }
 
-    private sealed class FakeImportProgressTracker(ImportStatusSnapshot snapshot) : IImportProgressTracker
+    private sealed class FakeMalTokenStore(OAuthToken? token) : IMalTokenStore
     {
-        public ImportStatusSnapshot Snapshot => snapshot;
-        public void Start(int total) => throw new NotImplementedException();
-        public void ReportProgress(int synced) => throw new NotImplementedException();
-        public void Complete() => throw new NotImplementedException();
+        public Task<OAuthToken?> GetAsync(CancellationToken ct = default) => Task.FromResult(token);
+        public Task SaveAsync(string accessToken, string refreshToken, DateTimeOffset expiresAt, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task MarkConnectionLostAsync(DateTimeOffset at, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 
-    // --- Order and refusals ---
+    // --- Refusals that come before the gate ---
 
     [Fact]
     public async Task AcceptAsync_ADamagedFileIsRefusedBeforeAnythingElseIsChecked()
@@ -99,14 +122,22 @@ public class TransferImportServiceTests
         Assert.Null(trigger.Offered);
     }
 
+    // --- The list import's gate (design.md D10) ---
+
     [Fact]
-    public async Task AcceptAsync_RefusedWhileTheListIsStillBeingImported()
+    public async Task AcceptAsync_RefusedWhileTheListIsStillBeingImportedAndShown()
     {
         using var db = CreateDb();
         SeedDevice(db);
         await db.SaveChangesAsync();
+
+        var listImportProgress = new ListImportProgress();
+        listImportProgress.BeginRun(visibleFromStart: true);
+        listImportProgress.SetTotal(380);
+        listImportProgress.ReportProgress(142);
+
         var trigger = new RecordingTrigger();
-        var service = CreateService(db, trigger, ImportPhase.Running, synced: 142, total: 380);
+        var service = CreateService(db, trigger, listImportProgress);
 
         var ex = await Assert.ThrowsAsync<TransferImportBlockedException>(
             () => service.AcceptAsync(ValidFileBytes(Guid.NewGuid())));
@@ -117,17 +148,134 @@ public class TransferImportServiceTests
     }
 
     [Fact]
+    public async Task AcceptAsync_RefusedWhileTheListIsRunningButQuiet()
+    {
+        using var db = CreateDb();
+        SeedDevice(db);
+        await db.SaveChangesAsync();
+
+        // Running, but hasn't found work yet, so the page shows nothing —
+        // the gate still refuses, with a different message than a shown run.
+        var listImportProgress = new ListImportProgress();
+        listImportProgress.BeginRun(visibleFromStart: false);
+
+        var trigger = new RecordingTrigger();
+        var service = CreateService(db, trigger, listImportProgress);
+
+        var ex = await Assert.ThrowsAsync<TransferImportBlockedException>(
+            () => service.AcceptAsync(ValidFileBytes(Guid.NewGuid())));
+
+        Assert.Equal("The list is being checked against MyAnimeList.", ex.Message);
+        Assert.Null(trigger.Offered);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_RefusedWhileTheConnectionToMalIsLost()
+    {
+        using var db = CreateDb();
+        SeedDevice(db);
+        await db.SaveChangesAsync();
+
+        // No run has gone through yet, and the stored login is lost.
+        var listImportProgress = new ListImportProgress();
+        var lostToken = HealthyToken();
+        lostToken.ConnectionLostAt = DateTimeOffset.UtcNow;
+
+        var trigger = new RecordingTrigger();
+        var service = CreateService(db, trigger, listImportProgress, lostToken);
+
+        var ex = await Assert.ThrowsAsync<TransferImportBlockedException>(
+            () => service.AcceptAsync(ValidFileBytes(Guid.NewGuid())));
+
+        Assert.Equal(
+            "The list can't be checked while the connection to MyAnimeList is lost. Re-authorize in Settings.",
+            ex.Message);
+        Assert.Null(trigger.Offered);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_RefusedWhenNoTokenIsStoredEitherAndNoRunHasGoneThrough()
+    {
+        using var db = CreateDb();
+        SeedDevice(db);
+        await db.SaveChangesAsync();
+
+        // Construct directly rather than through CreateService: its `token
+        // ?? HealthyToken()` default can't represent "explicitly no token".
+        var listImportProgress = new ListImportProgress();
+        var trigger = new RecordingTrigger();
+        var service = new TransferImportService(
+            db, listImportProgress, new FakeMalTokenStore(null), trigger, new TransferImportProgressTracker());
+
+        var ex = await Assert.ThrowsAsync<TransferImportBlockedException>(
+            () => service.AcceptAsync(ValidFileBytes(Guid.NewGuid())));
+
+        Assert.Equal(
+            "The list can't be checked while the connection to MyAnimeList is lost. Re-authorize in Settings.",
+            ex.Message);
+    }
+
+    [Fact]
     public async Task AcceptAsync_RefusedWhenTheListHasNeverFinishedImportingSinceStart()
     {
         using var db = CreateDb();
         SeedDevice(db);
         await db.SaveChangesAsync();
-        var trigger = new RecordingTrigger();
-        var service = CreateService(db, trigger, ImportPhase.NotStarted);
 
-        await Assert.ThrowsAsync<TransferImportBlockedException>(
+        var listImportProgress = new ListImportProgress(); // fresh: no run has ever gone through
+        var trigger = new RecordingTrigger();
+        var service = CreateService(db, trigger, listImportProgress);
+
+        var ex = await Assert.ThrowsAsync<TransferImportBlockedException>(
             () => service.AcceptAsync(ValidFileBytes(Guid.NewGuid())));
 
+        Assert.Equal("The list hasn't finished importing since the app started.", ex.Message);
+        Assert.Null(trigger.Offered);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_RefusedWithTheRetryTimeWhenTheLastReadFailedAndARetryIsPlanned()
+    {
+        using var db = CreateDb();
+        SeedDevice(db);
+        await db.SaveChangesAsync();
+
+        var listImportProgress = new ListImportProgress();
+        listImportProgress.BeginRun(visibleFromStart: false);
+        listImportProgress.FailBeforeRead("MyAnimeList couldn't be reached.");
+        var retryAt = DateTimeOffset.UtcNow.AddMinutes(5);
+        listImportProgress.SetRetryAt(retryAt);
+
+        var trigger = new RecordingTrigger();
+        var service = CreateService(db, trigger, listImportProgress);
+
+        var ex = await Assert.ThrowsAsync<TransferImportBlockedException>(
+            () => service.AcceptAsync(ValidFileBytes(Guid.NewGuid())));
+
+        Assert.Equal($"The list couldn't be read from MyAnimeList. It will try again at {retryAt:u}.", ex.Message);
+        Assert.Null(trigger.Offered);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_RefusedSayingItWillTryAgainOnNextStartWhenNoRetryIsPlanned()
+    {
+        using var db = CreateDb();
+        SeedDevice(db);
+        await db.SaveChangesAsync();
+
+        var listImportProgress = new ListImportProgress();
+        listImportProgress.BeginRun(visibleFromStart: false);
+        listImportProgress.FailBeforeRead("MyAnimeList couldn't be reached."); // no SetRetryAt: no more retries planned
+
+        var trigger = new RecordingTrigger();
+        var service = CreateService(db, trigger, listImportProgress);
+
+        var ex = await Assert.ThrowsAsync<TransferImportBlockedException>(
+            () => service.AcceptAsync(ValidFileBytes(Guid.NewGuid())));
+
+        Assert.Equal(
+            "The list couldn't be read from MyAnimeList. It will try again when the app next starts.",
+            ex.Message);
         Assert.Null(trigger.Offered);
     }
 
@@ -160,5 +308,30 @@ public class TransferImportServiceTests
         Assert.NotNull(trigger.Offered);
         Assert.Equal(TransferImportPhase.Running, status.Phase);
         Assert.Equal("Other Device", status.DeviceName);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_AGateThatWentThroughWithFetchFailuresStillAccepts()
+    {
+        using var db = CreateDb();
+        SeedDevice(db);
+        await db.SaveChangesAsync();
+
+        // The list import ran, read the whole list, but couldn't fetch every
+        // anime — the gate still counts it as gone through (design.md D8
+        // point 6 / D10): those anime surface as failures in the file
+        // import's own report instead of blocking it.
+        var listImportProgress = new ListImportProgress();
+        listImportProgress.BeginRun(visibleFromStart: false);
+        listImportProgress.Reveal(2);
+        listImportProgress.Fail("1 of 2 anime couldn't be fetched.");
+
+        var trigger = new RecordingTrigger();
+        var service = CreateService(db, trigger, listImportProgress);
+
+        var status = await service.AcceptAsync(ValidFileBytes(Guid.NewGuid(), "Other Device"));
+
+        Assert.NotNull(trigger.Offered);
+        Assert.Equal(TransferImportPhase.Running, status.Phase);
     }
 }

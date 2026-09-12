@@ -35,7 +35,7 @@ function App() {
     )
   }
 
-  if (!status.connected) {
+  if (status.state === 'NotConnected') {
     return (
       <section id="center">
         <div className="hero">

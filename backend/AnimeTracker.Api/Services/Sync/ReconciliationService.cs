@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,11 +9,29 @@ namespace AnimeTracker.Api.Services.Sync;
 public class ReconciliationService(
     IMalClient malClient,
     AnimeTrackerDbContext db,
+    ReconciliationRunGate runGate,
     ILogger<ReconciliationService> logger) : IReconciliationService
 {
-    public async Task<ReconciliationResult> RunAsync(CancellationToken ct = default)
+    public async Task<ReconciliationResult> RunAsync(IJobProgressSink? progress = null, CancellationToken ct = default)
     {
-        var remoteEdges = await malClient.GetFullUserAnimeListAsync(ct);
+        await runGate.WaitAsync(ct);
+        try
+        {
+            return await RunLockedAsync(progress, ct);
+        }
+        finally
+        {
+            runGate.Release();
+        }
+    }
+
+    private async Task<ReconciliationResult> RunLockedAsync(IJobProgressSink? progress, CancellationToken ct)
+    {
+        // MyAnimeList never says how long the list is, so this never calls
+        // SetTotal — the run stays "Starting…"/"N anime read" throughout
+        // (design.md D5).
+        var remoteEdges = await malClient.GetFullUserAnimeListAsync(
+            onPageRead: done => progress?.ReportProgress(done), ct: ct);
         var now = DateTimeOffset.UtcNow;
 
         var localEntries = await db.UserAnimeEntries.ToDictionaryAsync(e => e.AnimeId, ct);

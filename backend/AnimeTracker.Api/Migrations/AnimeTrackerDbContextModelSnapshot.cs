@@ -359,6 +359,9 @@ namespace AnimeTracker.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTimeOffset?>("ConnectionLostAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -476,6 +479,12 @@ namespace AnimeTracker.Api.Migrations
 
                     b.Property<DateTimeOffset>("LastRunAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastRunError")
+                        .HasColumnType("text");
+
+                    b.Property<bool?>("LastRunFailed")
+                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 

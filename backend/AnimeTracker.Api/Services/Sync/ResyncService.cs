@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Data;
+using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
@@ -24,15 +25,15 @@ public class ResyncService(
     IMalClient malClient,
     AnimeTrackerDbContext db,
     IAnimeMetadataChangeDetector changeDetector,
-    IResyncProgressTracker progress,
+    ResyncProgress progress,
     ILogger<ResyncService> logger) : IResyncService
 {
     public async Task RunAsync(CancellationToken ct)
     {
         logger.LogInformation("Starting corrective MAL re-sync.");
 
-        var edges = await malClient.GetFullUserAnimeListAsync(ct);
-        progress.Start(edges.Count);
+        var edges = await malClient.GetFullUserAnimeListAsync(ct: ct);
+        progress.SetTotal(edges.Count);
 
         // Related-anime must be loaded before ApplyTo replaces the collection —
         // without a tracked snapshot, EF has nothing to diff against and would

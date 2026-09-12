@@ -8,6 +8,7 @@ using AnimeTracker.Api.Services.Detail;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Import;
 using AnimeTracker.Api.Services.Infrastructure;
+using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Library;
 using AnimeTracker.Api.Services.ListBackup;
 using AnimeTracker.Api.Services.Mal;
@@ -70,8 +71,23 @@ builder.Services.AddHttpClient();
 
 builder.Services.AddHostedService<MalTokenRefreshBackgroundService>();
 
+// --- Background jobs (shared lifecycle, design.md D1) ---
+// One typed singleton per job, so DI and constructors stay typed rather than
+// keyed. sync-now, reconciliation and the held-decision pair also run through
+// the shared BackgroundJobRunner (design.md D4); the other four keep their
+// existing trigger/background-service shape (Non-Goals: not moved onto the
+// runner in this change).
+builder.Services.AddSingleton<ResyncProgress>();
+builder.Services.AddSingleton<AiringFullRefreshProgress>();
+builder.Services.AddSingleton<SeriesBulkBuildProgress>();
+builder.Services.AddSingleton<SyncNowProgress>();
+builder.Services.AddSingleton<ReconcileProgress>();
+builder.Services.AddSingleton<HeldDecisionProgress>();
+builder.Services.AddSingleton<BackgroundJobRunner>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<BackgroundJobRunner>());
+
 // --- Initial import ---
-builder.Services.AddSingleton<IImportProgressTracker, ImportProgressTracker>();
+builder.Services.AddSingleton<ListImportProgress>();
 builder.Services.AddSingleton<IImportTrigger, ImportTrigger>();
 builder.Services.AddScoped<IInitialImportService, InitialImportService>();
 builder.Services.AddHostedService<InitialImportBackgroundService>();
@@ -83,6 +99,7 @@ builder.Services.AddScoped<IAiringWatchStatusService, AiringWatchStatusService>(
 
 // --- Write-sync retry & reconciliation ---
 builder.Services.AddScoped<IEntryPushService, EntryPushService>();
+builder.Services.AddSingleton<ReconciliationRunGate>();
 builder.Services.AddScoped<IReconciliationService, ReconciliationService>();
 builder.Services.AddScoped<IHeldChangeService, HeldChangeService>();
 builder.Services.AddScoped<IStartupPendingSyncHold, StartupPendingSyncHold>();
@@ -90,7 +107,6 @@ builder.Services.AddHostedService<PendingSyncRetryBackgroundService>();
 builder.Services.AddHostedService<ReconciliationBackgroundService>();
 
 // --- Corrective full re-sync (one-time, manually triggered) ---
-builder.Services.AddSingleton<IResyncProgressTracker, ResyncProgressTracker>();
 builder.Services.AddSingleton<IResyncTrigger, ResyncTrigger>();
 builder.Services.AddScoped<IResyncService, ResyncService>();
 builder.Services.AddHostedService<ResyncBackgroundService>();
@@ -160,13 +176,11 @@ builder.Services.AddHostedService<SeriesBuildTriggerBackgroundService>();
 // Manual "refresh all airing data" (settings page) — mirrors the corrective
 // MAL re-sync's trigger/progress-tracker/background-service shape.
 builder.Services.AddSingleton<IAiringFullRefreshTrigger, AiringFullRefreshTrigger>();
-builder.Services.AddSingleton<IAiringFullRefreshProgressTracker, AiringFullRefreshProgressTracker>();
 builder.Services.AddHostedService<AiringFullRefreshBackgroundService>();
 
 // Manual "build all series from my list" (settings page) — mirrors the same
 // trigger/progress-tracker/background-service shape (design.md decision 6).
 builder.Services.AddSingleton<ISeriesBulkBuildTrigger, SeriesBulkBuildTrigger>();
-builder.Services.AddSingleton<ISeriesBulkBuildProgressTracker, SeriesBulkBuildProgressTracker>();
 builder.Services.AddHostedService<SeriesBulkBuildBackgroundService>();
 
 // --- Season browsing ---

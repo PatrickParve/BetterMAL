@@ -18,7 +18,7 @@ public class InitialImportServiceActivityTests
             .Options);
 
     private static InitialImportService CreateService(AnimeTrackerDbContext db, IMalClient malClient) =>
-        new(malClient, db, new ImportProgressTracker(), NullLogger<InitialImportService>.Instance);
+        new(malClient, db, new ListImportProgress(), NullLogger<InitialImportService>.Instance);
 
     private static MalUserAnimeListEdge Edge(int animeId, string status = "watching", int episodesWatched = 0) => new()
     {
@@ -94,7 +94,7 @@ public class InitialImportServiceActivityTests
 
     private sealed class FakeMalClient(List<MalUserAnimeListEdge> edges) : IMalClient
     {
-        public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(CancellationToken ct = default) =>
+        public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(Action<int>? onPageRead = null, CancellationToken ct = default) =>
             Task.FromResult(edges);
 
         public Task<MalAnimeNode> GetAnimeDetailsAsync(int animeId, IReadOnlyCollection<string>? fields = null, CancellationToken ct = default) =>

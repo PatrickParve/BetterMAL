@@ -93,7 +93,7 @@ public class AnimeSearchServiceTests
             throw new NotImplementedException();
         public Task<MalPagedResponse<MalUserAnimeListEdge>> GetUserAnimeListAsync(string? status = null, int limit = 100, int offset = 0, CancellationToken ct = default) =>
             throw new NotImplementedException();
-        public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(Action<int>? onPageRead = null, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<MalListStatus> UpdateMyListStatusAsync(int animeId, MalListStatusUpdate update, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task DeleteMyListStatusAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();

@@ -1,32 +1,30 @@
 import type {
   ActivityFeedItemDto,
-  AiringFullRefreshStatusDto,
   AiringWeekDto,
   AnimeDetailDto,
   AnimeRankingResponseDto,
   AnimeSearchResult,
   AnimeUpdateDto,
+  AppStatusDto,
   HealthStatus,
-  HeldChangeBulkResultDto,
   HeldChangeDecisionDto,
   HeldChangeDto,
+  HeldDecisionJobDto,
+  JobStatusDto,
   MainDashboardDto,
   MalAuthStatus,
   MyListItemDto,
   PendingReconciliationDiffDto,
   ProfileDto,
-  ReconciliationResultDto,
   RecapAvailabilityDto,
   RecapDto,
   RecapQuery,
-  ResyncStatusDto,
   RewatchedSectionDto,
   RewatchedSeriesSectionDto,
   SearchPageDto,
   SeasonBoundsDto,
   SeasonPageDto,
   SeasonRefreshResultDto,
-  SeriesBulkBuildStatusDto,
   SeriesDto,
   SeriesListDto,
   SeriesLookupResult,
@@ -131,6 +129,14 @@ async function fetchVoid(input: string, init?: RequestInit): Promise<void> {
 
 export function getMalAuthStatus(): Promise<MalAuthStatus> {
   return fetchJson<MalAuthStatus>('/api/mal-auth/status')
+}
+
+// One cheap read of every job's state, the MyAnimeList connection state, and
+// the weekly check's last outcome (design.md D15 of
+// report-jobs-and-lost-mal-connection) — cheap enough for useAppStatus to
+// repeat every second while a job runs.
+export function getAppStatus(): Promise<AppStatusDto> {
+  return fetchJson<AppStatusDto>('/api/app-status')
 }
 
 // Touches neither the database nor MAL — a true "is the process up" probe.
@@ -438,12 +444,15 @@ export function getSyncStatus(): Promise<SyncStatusDto> {
   return fetchJson<SyncStatusDto>('/api/sync/status')
 }
 
-export function syncNow(): Promise<{ pushed: number }> {
-  return fetchJson<{ pushed: number }>('/api/sync/now', { method: 'POST' })
+// Runs in the background and starts once (background-jobs "A job is started
+// once"); the response is already the job's state, and the page reads it
+// onward from the combined api/app-status read.
+export function syncNow(): Promise<JobStatusDto> {
+  return fetchJson<JobStatusDto>('/api/sync/now', { method: 'POST' })
 }
 
-export function runReconciliation(): Promise<ReconciliationResultDto> {
-  return fetchJson<ReconciliationResultDto>('/api/sync/reconcile', { method: 'POST' })
+export function runReconciliation(): Promise<JobStatusDto> {
+  return fetchJson<JobStatusDto>('/api/sync/reconcile', { method: 'POST' })
 }
 
 // 204 (no pending diff) resolves to null rather than throwing.
@@ -476,10 +485,15 @@ export function getHeldChanges(): Promise<HeldChangeDto[]> {
   return fetchJson<HeldChangeDto[]>('/api/sync/held')
 }
 
-// 404 (nothing held for that anime, e.g. it self-cleared under us) resolves
-// to a reported failure rather than throwing, so the section can say so.
+// 404 (nothing held for that anime, e.g. it self-cleared under us) and 409
+// (accept-all/decline-all is deciding every held change, design.md D18)
+// resolve to a reported failure rather than throwing, so the section can say
+// so.
 async function heldDecisionResponse(res: Response, path: string): Promise<HeldChangeDecisionDto> {
   if (res.status === 404) return { applied: false, error: 'That change is no longer held.' }
+  if (res.status === 409) {
+    return { applied: false, error: (await readErrorReason(res)) ?? 'Held changes are being decided; try again when that finishes.' }
+  }
   if (!res.ok) throw new Error(`${path} responded with ${res.status}`)
   return res.json() as Promise<HeldChangeDecisionDto>
 }
@@ -496,45 +510,34 @@ export async function declineHeldChange(animeId: number): Promise<HeldChangeDeci
   return heldDecisionResponse(res, path)
 }
 
-export function acceptAllHeldChanges(): Promise<HeldChangeBulkResultDto> {
-  return fetchJson<HeldChangeBulkResultDto>('/api/sync/held/accept', { method: 'POST' })
+// Accept all and decline all share one job (design.md D18): whichever is
+// pressed second gets the running job's state back and starts nothing.
+export function acceptAllHeldChanges(): Promise<HeldDecisionJobDto> {
+  return fetchJson<HeldDecisionJobDto>('/api/sync/held/accept', { method: 'POST' })
 }
 
-export function declineAllHeldChanges(): Promise<HeldChangeBulkResultDto> {
-  return fetchJson<HeldChangeBulkResultDto>('/api/sync/held/decline', { method: 'POST' })
+export function declineAllHeldChanges(): Promise<HeldDecisionJobDto> {
+  return fetchJson<HeldDecisionJobDto>('/api/sync/held/decline', { method: 'POST' })
 }
 
 // One-time corrective re-sync: kicks off a background run (~1 req/s per
-// anime) rather than waiting on it; poll getResyncFromMalStatus for progress.
-export function triggerResyncFromMal(): Promise<ResyncStatusDto> {
-  return fetchJson<ResyncStatusDto>('/api/sync/resync-from-mal', { method: 'POST' })
-}
-
-export function getResyncFromMalStatus(): Promise<ResyncStatusDto> {
-  return fetchJson<ResyncStatusDto>('/api/sync/resync-from-mal/status')
+// anime), starting once (background-jobs "A job is started once"); the page
+// reads its progress from the combined api/app-status read.
+export function triggerResyncFromMal(): Promise<JobStatusDto> {
+  return fetchJson<JobStatusDto>('/api/sync/resync-from-mal', { method: 'POST' })
 }
 
 // Manual "refresh all airing data" (settings page): kicks off a background
 // run, paced through AniList's rate limit and skipping finished shows already
-// fetched before, rather than waiting on it; poll getAiringFullRefreshStatus
-// for progress.
-export function triggerAiringFullRefresh(): Promise<AiringFullRefreshStatusDto> {
-  return fetchJson<AiringFullRefreshStatusDto>('/api/airing/refresh-all', { method: 'POST' })
-}
-
-export function getAiringFullRefreshStatus(): Promise<AiringFullRefreshStatusDto> {
-  return fetchJson<AiringFullRefreshStatusDto>('/api/airing/refresh-all/status')
+// fetched before.
+export function triggerAiringFullRefresh(): Promise<JobStatusDto> {
+  return fetchJson<JobStatusDto>('/api/airing/refresh-all', { method: 'POST' })
 }
 
 // Manual "build all series from my list" (settings page): kicks off a
-// background run rather than waiting on it; poll getSeriesBulkBuildStatus
-// for progress.
-export function triggerSeriesBulkBuild(): Promise<SeriesBulkBuildStatusDto> {
-  return fetchJson<SeriesBulkBuildStatusDto>('/api/series/build-all', { method: 'POST' })
-}
-
-export function getSeriesBulkBuildStatus(): Promise<SeriesBulkBuildStatusDto> {
-  return fetchJson<SeriesBulkBuildStatusDto>('/api/series/build-all/status')
+// background run.
+export function triggerSeriesBulkBuild(): Promise<JobStatusDto> {
+  return fetchJson<JobStatusDto>('/api/series/build-all', { method: 'POST' })
 }
 
 // Shared by exportData and exportListBackup (design.md D8 of
@@ -579,6 +582,6 @@ export async function importData(file: File): Promise<TransferImportStatusDto> {
   })
 }
 
-export function getImportStatus(): Promise<TransferImportStatusDto> {
+export function getTransferImportStatus(): Promise<TransferImportStatusDto> {
   return fetchJson<TransferImportStatusDto>('/api/transfer/import/status')
 }

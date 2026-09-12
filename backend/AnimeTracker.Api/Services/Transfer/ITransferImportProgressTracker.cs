@@ -1,3 +1,5 @@
+using AnimeTracker.Api.Services.Jobs;
+
 namespace AnimeTracker.Api.Services.Transfer;
 
 public enum TransferImportPhase
@@ -52,4 +54,8 @@ public interface ITransferImportProgressTracker
     /// <summary>Reports a run that failed outright — nothing from the file
     /// was applied (design.md D11).</summary>
     void Fail(string reason);
+
+    /// <summary>Maps into the shared job shape for the combined status read
+    /// (design.md D15).</summary>
+    JobSnapshot ToJobSnapshot();
 }

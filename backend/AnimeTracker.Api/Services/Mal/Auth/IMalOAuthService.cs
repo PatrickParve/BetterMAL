@@ -12,8 +12,8 @@ public interface IMalOAuthService
     /// tokens, and persists them.</summary>
     Task<OAuthToken> HandleCallbackAsync(string code, string state, CancellationToken ct = default);
 
-    /// <summary>Exchanges a refresh token for a new token set and persists it.
-    /// Returns null if the refresh token itself is no longer valid (the
-    /// account requires re-authorization).</summary>
-    Task<OAuthToken?> RefreshAsync(string refreshToken, CancellationToken ct = default);
+    /// <summary>Exchanges a refresh token for a new token set. Tells MyAnimeList
+    /// refusing this login apart from an outage, and records a refusal as a
+    /// lost connection (design.md D11).</summary>
+    Task<MalRefreshResult> RefreshAsync(string refreshToken, CancellationToken ct = default);
 }

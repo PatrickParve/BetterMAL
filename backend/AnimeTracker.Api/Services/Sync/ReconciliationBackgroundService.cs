@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Jobs;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Sync;
@@ -32,19 +33,27 @@ public class ReconciliationBackgroundService(
                 using var scope = scopeFactory.CreateScope();
                 // Recorded at attempt time, not on success, so a persistently
                 // failing run still waits a full interval before retrying —
-                // matching the original always-wait-a-week cadence.
+                // matching the original always-wait-a-week cadence. Resets
+                // LastRunFailed/LastRunError to null: this attempt hasn't
+                // recorded an ending yet.
                 await RecordRunAttemptAsync(scope.ServiceProvider.GetRequiredService<AnimeTrackerDbContext>(), stoppingToken);
 
                 var reconciliation = scope.ServiceProvider.GetRequiredService<IReconciliationService>();
-                await reconciliation.RunAsync(stoppingToken);
+                // No sink — the weekly run is never reported as "Run full
+                // reconciliation" (design.md D6).
+                await reconciliation.RunAsync(ct: stoppingToken);
+
+                await RecordRunOutcomeAsync(failed: false, error: null, stoppingToken);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Scheduled reconciliation run failed.");
+                // A fresh scope: the run's own DbContext may be in a failed state.
+                await RecordRunOutcomeAsync(failed: true, JobFailure.Describe(ex, "MyAnimeList"), stoppingToken);
             }
         }
     }
@@ -73,10 +82,29 @@ public class ReconciliationBackgroundService(
         var log = await db.ReconciliationRunLogs.FirstOrDefaultAsync(ct);
         var now = DateTimeOffset.UtcNow;
         if (log is null)
+        {
             db.ReconciliationRunLogs.Add(new ReconciliationRunLog { LastRunAt = now });
+        }
         else
+        {
             log.LastRunAt = now;
+            log.LastRunFailed = null;
+            log.LastRunError = null;
+        }
 
+        await db.SaveChangesAsync(ct);
+    }
+
+    private async Task RecordRunOutcomeAsync(bool failed, string? error, CancellationToken ct)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AnimeTrackerDbContext>();
+        var log = await db.ReconciliationRunLogs.FirstOrDefaultAsync(ct);
+        if (log is null)
+            return; // RecordRunAttemptAsync always creates the row before a run starts
+
+        log.LastRunFailed = failed;
+        log.LastRunError = error;
         await db.SaveChangesAsync(ct);
     }
 }

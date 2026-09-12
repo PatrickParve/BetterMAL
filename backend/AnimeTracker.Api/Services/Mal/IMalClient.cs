@@ -23,7 +23,12 @@ public interface IMalClient
 
     // --- User endpoints (bearer token) ---
     Task<MalPagedResponse<MalUserAnimeListEdge>> GetUserAnimeListAsync(string? status = null, int limit = 100, int offset = 0, CancellationToken ct = default);
-    Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(CancellationToken ct = default);
+
+    /// <summary>Pages through the full my-list. MAL's list endpoint carries no
+    /// total, so <paramref name="onPageRead"/>, when given, is called after
+    /// each page with the running entry count read so far — the only
+    /// progress a caller can report while this is in flight (design.md D5).</summary>
+    Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(Action<int>? onPageRead = null, CancellationToken ct = default);
     Task<MalListStatus> UpdateMyListStatusAsync(int animeId, MalListStatusUpdate update, CancellationToken ct = default);
 
     /// <summary>Removes an anime from my MAL list. A 404 (MAL already has no

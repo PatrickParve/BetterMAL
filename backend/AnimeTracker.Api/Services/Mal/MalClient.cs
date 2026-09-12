@@ -119,8 +119,8 @@ public class MalClient(HttpClient http) : IMalClient
 
     /// <summary>Pages through the full my-list (import and reconciliation both
     /// need the entire list, not one page).</summary>
-    public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(CancellationToken ct = default) =>
-        GetAllPagesAsync(offset => GetUserAnimeListAsync(limit: FullListPageSize, offset: offset, ct: ct));
+    public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(Action<int>? onPageRead = null, CancellationToken ct = default) =>
+        GetAllPagesAsync(offset => GetUserAnimeListAsync(limit: FullListPageSize, offset: offset, ct: ct), onPageRead);
 
     public async Task<MalListStatus> UpdateMyListStatusAsync(int animeId, MalListStatusUpdate update, CancellationToken ct = default)
     {
@@ -186,8 +186,9 @@ public class MalClient(HttpClient http) : IMalClient
 
     /// <summary>Pages through a MAL cursor-paginated endpoint (season listing,
     /// full my-list) until a page comes back empty or without a next link,
-    /// concatenating every page's data.</summary>
-    private static async Task<List<T>> GetAllPagesAsync<T>(Func<int, Task<MalPagedResponse<T>>> fetchPage)
+    /// concatenating every page's data. <paramref name="onPageRead"/>, when
+    /// given, is called after each page with the running entry count.</summary>
+    private static async Task<List<T>> GetAllPagesAsync<T>(Func<int, Task<MalPagedResponse<T>>> fetchPage, Action<int>? onPageRead = null)
     {
         var all = new List<T>();
         var offset = 0;
@@ -196,6 +197,7 @@ public class MalClient(HttpClient http) : IMalClient
         {
             var page = await fetchPage(offset);
             all.AddRange(page.Data);
+            onPageRead?.Invoke(all.Count);
 
             if (page.Paging?.Next is null || page.Data.Count == 0)
                 break;
