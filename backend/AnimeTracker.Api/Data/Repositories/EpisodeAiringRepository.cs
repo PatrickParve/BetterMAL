@@ -29,6 +29,18 @@ public class EpisodeAiringRepository(AnimeTrackerDbContext db) : IEpisodeAiringR
             .Select(e => (DateTimeOffset?)e.AirsAtUtc)
             .MinAsync(ct);
 
+    public async Task<Dictionary<int, DateTimeOffset>> GetNextAiringInstantsAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset afterUtc, CancellationToken ct = default)
+    {
+        if (animeIds.Count == 0)
+            return [];
+
+        return await db.EpisodeAirings.AsNoTracking()
+            .Where(e => animeIds.Contains(e.AnimeId) && e.AirsAtUtc > afterUtc)
+            .GroupBy(e => e.AnimeId)
+            .Select(g => new { AnimeId = g.Key, NextInstant = g.Min(e => e.AirsAtUtc) })
+            .ToDictionaryAsync(x => x.AnimeId, x => x.NextInstant, ct);
+    }
+
     public Task<List<EpisodeAiring>> GetRowsInRangeAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
         db.EpisodeAirings.AsNoTracking()
             .Where(e => animeIds.Contains(e.AnimeId) && e.AirsAtUtc >= fromUtc && e.AirsAtUtc < toUtc)

@@ -42,6 +42,12 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
   // it stuck true forever with nothing left to reset it.
   const loadingGenerationRef = useRef<number | null>(null)
 
+  // Tracks the key the data currently held belongs to, so the load effect
+  // below can tell a fresh history entry for an unchanged key (e.g. a filter
+  // written via setSearchParams) apart from a key that genuinely needs
+  // loading.
+  const loadedKeyRef = useRef<string | null>(null)
+
   const isSeeded = isRestore && snapshot.data.has(key)
   const seededValue = () => (isSeeded ? (snapshot.data.get(key) as T) : null)
 
@@ -63,6 +69,7 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
     (update) => {
       setDataState((prev) => {
         const next = typeof update === 'function' ? (update as (prev: T | null) => T | null)(prev) : update
+        loadedKeyRef.current = key
         snapshot.data.set(key, next)
         return next
       })
@@ -81,6 +88,7 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
         .current()
         .then((result) => {
           if (generationRef.current !== generation) return
+          loadedKeyRef.current = key
           snapshot.data.set(key, result)
           setDataState(result)
         })
@@ -103,9 +111,24 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
   const reload = useCallback(() => runLoad(false), [runLoad])
 
   useEffect(() => {
+    // A URL change that leaves this resource's key untouched (e.g. a filter
+    // toggled via setSearchParams) still creates a new history entry, and
+    // therefore a new snapshot — but the key's contract already covers every
+    // parameter the data depends on, so an unchanged key means this change
+    // isn't one of them. Skip the reload and carry the data already in hand
+    // into the new entry's snapshot, so a later back/forward restore of it
+    // is still seeded. A restore keeps its silent background refresh
+    // regardless.
+    if (!isRestore && key === loadedKeyRef.current && data !== null) {
+      snapshot.data.set(key, data)
+      return
+    }
     runLoad(!isSeeded)
     // Re-runs only when the resource key or restore context changes, not on
-    // every render — `loadRef` carries the latest closure regardless.
+    // every render — `loadRef` carries the latest closure regardless. `data`
+    // is read above but deliberately left out of the deps: it changes on
+    // every load, and depending on it would refire this effect right after
+    // committing that load's own result.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, isRestore, snapshot])
 

@@ -974,13 +974,13 @@ Figures no edit can change — the studios and genres the series spans, the long
 
 Each More group's heading SHALL be the control that opens that group, with collapse as its off state. Activating a heading SHALL show **every** extra in that group — including the extras not in my list — unless the group is already showing every one of them, in which case it SHALL collapse the group so that none of its tiles is rendered.
 
-Opening a group this way SHALL exempt that group, and only that group, from the "in my list" filter: every other group SHALL keep showing exactly what it was showing. An exempted group SHALL stay exempt until the filter is turned back on.
+Opening a group this way while the "in my list" filter is on SHALL exempt that group, and only that group, from the filter: every other group SHALL keep showing exactly what it was showing. An exempted group SHALL stay exempt until the filter is turned back on.
 
-While the "in my list" filter is off, a group has nothing to be exempted from, so a heading SHALL simply expand and collapse its group.
+While the "in my list" filter is off — its state on a freshly opened page — a group has nothing to be exempted from, so a heading SHALL simply expand and collapse its group.
 
-The "in my list" control SHALL report itself as **on** only while the filter is in force across every group — that is, while it is on and no group has been opened in full. Opening any group in full SHALL therefore make that control read as off, so the section never reports itself as filtered while showing a group whole.
+The "in my list" control SHALL report itself as **on** exactly while the filter is in force across every group — that is, while the filter is on and no group has been opened in full. Opening any group in full SHALL therefore make that control read as off, so the section never reports itself as filtered while showing a group whole. The control's reported state SHALL depend on nothing else: in particular it SHALL NOT depend on whether any group is expanded, so opening or collapsing groups — from a heading, from the expand/collapse-all control, or by selecting a media type — SHALL never change what the control reads while the filter itself is unchanged.
 
-The "in my list" control SHALL govern **what an expanded group shows**, and SHALL NOT change any group's collapsed state in either direction. Activating it while it reads as off SHALL turn the filter on and drop every group's exemption, so every expanded group returns to showing only the extras in my list. Activating it while it reads as on SHALL show every extra of every expanded group. Because the section opens with its groups collapsed, coupling this control to collapse would make turning the filter on hide everything; the expand/collapse-all control is the one that changes collapse.
+The "in my list" control SHALL govern **what an expanded group shows**. Activating it while it reads as off SHALL turn the filter on and drop every group's exemption, so every expanded group returns to showing only the extras in my list, and SHALL additionally open the groups holding my extras as the More section requirement describes. Activating it while it reads as on SHALL turn the filter off, showing every extra of every expanded group and changing no group's collapsed state.
 
 #### Scenario: Opening a group that holds nothing of mine
 
@@ -1002,10 +1002,15 @@ The "in my list" control SHALL govern **what an expanded group shows**, and SHAL
 - **WHEN** I open one group in full while the filter is on
 - **THEN** every other group is unchanged — an expanded one still shows only the extras in my list with its own hidden-count control if it has one, and a collapsed one is still collapsed
 
+#### Scenario: Opening a group does not turn the filter on
+
+- **WHEN** the filter is off, as on a freshly opened page, and I open one group from its heading
+- **THEN** that group shows every one of its extras and the "in my list" control still reads as off
+
 #### Scenario: Turning the filter back on re-filters without collapsing
 
 - **WHEN** a group has been opened in full and I activate the "in my list" control, which reads as off
-- **THEN** every group's exemption is dropped and every expanded group shows only the extras in my list, no group's collapsed state has changed, and the control reads as on again
+- **THEN** every group's exemption is dropped, every expanded group shows only the extras in my list, the groups holding an extra of mine are opened, and the control reads as on
 
 #### Scenario: Turning the filter off does not collapse anything
 
@@ -1035,15 +1040,15 @@ The More section SHALL offer three section-wide controls: an "in my list" contro
 
 **Every group SHALL render collapsed when a series page is opened.** The section SHALL therefore open as a column of relation-group headings, each carrying its count, with no tiles rendered at all — a franchise with a dozen relation groups is not made to fill the page before the reader has asked for any of it. A group opens from its own heading, from the expand/collapse-all control, from the "in my list" control, or by selecting a media type it holds, per the media-type filter requirement.
 
-The "in my list" filter SHALL be on when a series page is opened. While it is on, an expanded group SHALL show only the extras that are in my list — whatever their status: Watching, Completed, On hold, Plan to watch, or Dropped alike — hiding every extra that is not.
+**The "in my list" filter SHALL be off when a series page is opened**, with no media type selected, so that no section control reads as on and nothing has been narrowed on the user's behalf. An expanded group SHALL therefore show every extra it holds until the filter is turned on. While the filter is on, an expanded group SHALL show only the extras that are in my list — whatever their status: Watching, Completed, On hold, Plan to watch, or Dropped alike — hiding every extra that is not.
 
-**Activating the "in my list" control SHALL show my entries.** It SHALL turn the filter on, drop every per-group exemption from it, and open every group holding at least one extra of mine that the media-type filter admits, so that what the section shows afterwards is exactly my own extras — narrowed to the selected media types when any are selected, and across every group when none are. A group holding none of mine SHALL be left collapsed, so the section is not padded with headings that would show nothing. When no group holds an extra of mine at all, every group SHALL stay collapsed.
+**Activating the "in my list" control while it reads as off SHALL show my entries.** It SHALL turn the filter on, drop every per-group exemption from it, and open every group holding at least one extra of mine that the media-type filter admits, so that what the section shows afterwards is exactly my own extras — narrowed to the selected media types when any are selected, and across every group when none are. A group holding none of mine SHALL be left collapsed, so the section is not padded with headings that would show nothing. When no group holds an extra of mine at all, every group SHALL stay collapsed.
 
-Activating the control again SHALL collapse every group, returning the section to its headings alone with the filter still on — the same "show it / put it away" pair the expand/collapse-all control offers for everything.
+**Activating the control while it reads as on SHALL turn the filter off**, so every expanded group widens to show every extra it holds. It SHALL change no group's collapsed state in that direction: a collapsed group stays collapsed, and nothing the user had opened is put away. The control is therefore a two-way toggle over one fact — whether the filter is in force — and never reads as on while the section is showing extras that are not mine.
 
-The control SHALL report which of those two states the section is in: it SHALL read as on only while the filter is in force, no group is exempt from it, and at least one group is open. A freshly opened series page — filter on, every group collapsed — SHALL therefore read as off, so the first press does something visible rather than nothing; and opening one group in full from its heading SHALL make it read off, per "A More group's heading opens that group in full".
+The control SHALL report which of those two states the filter is in: it SHALL read as on exactly while the filter is in force and no group is exempt from it, per "A More group's heading opens that group in full". A freshly opened series page SHALL therefore read as off because the filter is off, not because nothing is expanded.
 
-Turning the filter **off** is done by the expand/collapse-all control, which shows everything, or by a group's heading, which exempts that one group; the "in my list" control itself never turns the filter off.
+Putting the section away is the expand/collapse-all control's job, not the "in my list" control's.
 
 The expand/collapse-all control SHALL read "Expand" while anything is hidden — whether by the filter, by a collapsed group, or by both — and activating it SHALL show every extra of every group, expanding them all and turning the filter off. It SHALL therefore read "Expand" on a freshly opened series page, whose groups are all collapsed. Once every extra is shown it SHALL read "Collapse", and activating it SHALL collapse every group so that no tile is rendered at all, including the extras in my list. It SHALL read "Expand all"/"Collapse all" when the series has more than one More group, and "Expand"/"Collapse" without the word "all" when it has exactly one group, since "all" is meaningless applied to a single category.
 
@@ -1069,17 +1074,17 @@ An edit saved from a tile SHALL update it in place without reloading the page.
 - **WHEN** a tile's media type, year, and episode count are longer still than that worst case
 - **THEN** the line truncates with an ellipsis on one line, and the tile's score chips and footer stay aligned with the other tiles in its row
 
-#### Scenario: Opening a series shows the headings alone
+#### Scenario: Opening a series shows the headings alone with nothing narrowed
 - **WHEN** I open a series with twenty extras across five relation groups, four of the extras being in my list
-- **THEN** all five groups are collapsed with their counts in their headings, no tile is rendered, the all-groups control reads "Expand all", and the "in my list" control reads as off
+- **THEN** all five groups are collapsed with their counts in their headings, no tile is rendered, the all-groups control reads "Expand all", no media type is selected, and the "in my list" control reads as off because the filter is off
 
 #### Scenario: Pressing "in my list" shows my extras
 - **WHEN** I then activate the "in my list" control
 - **THEN** every group holding at least one of those four extras opens showing exactly those, the groups holding none of mine stay collapsed, and the control reads as on
 
-#### Scenario: Pressing it again puts them away
+#### Scenario: Pressing it again turns the filter off
 - **WHEN** the section is showing my extras and I activate the "in my list" control again
-- **THEN** every group collapses, no tile is rendered, and the control reads as off
+- **THEN** the filter is off, every group that was open now shows every extra it holds, every group that was collapsed is still collapsed, and the control reads as off
 
 #### Scenario: With a media type selected, only that type of mine is shown
 - **WHEN** I select "Movie" and then activate the "in my list" control
@@ -1119,7 +1124,7 @@ An edit saved from a tile SHALL update it in place without reloading the page.
 
 #### Scenario: A large More section is not treated differently
 - **WHEN** I open a series with twenty extras and one with four extras
-- **THEN** both open with every group collapsed and the filter on, rather than one of them starting expanded
+- **THEN** both open with every group collapsed and the filter off, rather than one of them starting expanded or filtered
 
 #### Scenario: Editing from a tile
 - **WHEN** I use a tile's edit control and save a new score
@@ -1152,6 +1157,10 @@ Selecting a type SHALL narrow every group to the entries of that type. Selecting
 
 **Selecting a type SHALL open every group that holds at least one entry of that type**, so the entries it admits are actually rendered rather than merely counted in a heading. Because the section opens with every group collapsed, a type filter that only narrowed the groups would tell the reader which relation group holds a music entry without ever showing the entry itself. A group opened this way SHALL be opened exactly as the expand/collapse-all control opens one: its collapsed state becomes expanded and stays that way until something collapses it. It SHALL NOT be exempted from the "in my list" filter — only a group heading grants that exemption. Deselecting a type SHALL NOT collapse anything.
 
+**Selecting or deselecting a type SHALL NOT change the "in my list" filter, nor what its control reads.** Opening groups is the only effect a type button has beyond narrowing. A user who selects "Music" on a freshly opened page — where the filter is off — SHALL therefore see every music entry the series holds, mine and not mine alike, with the "in my list" control still reading as off.
+
+**While the "in my list" filter is on, a media type that no extra of mine carries SHALL NOT be selectable**: its button SHALL be offered in a disabled state, so the section cannot be narrowed to a combination that holds nothing. Such a button SHALL make the reason available to assistive technology rather than only greying out. Turning the filter on SHALL drop any already-selected type that no extra of mine carries; when that leaves no type selected, no type restriction applies and the section shows my extras across every group — which is what the user asked for by pressing "in my list" last. A dropped selection SHALL NOT be restored when the filter is later turned off; every type present among the series' extras SHALL simply become selectable again.
+
 The type filter SHALL compose with the "in my list" filter and with each group's collapsed or opened state rather than replacing them: an entry is shown when its type is admitted **and** the other controls admit it. Each group's heading count SHALL report the entries the type filter admits.
 
 While at least one type is selected, a group left with no admitted entries SHALL NOT be rendered at all, since a column of empty headings across a dozen relation groups tells the reader nothing.
@@ -1165,6 +1174,30 @@ The type buttons SHALL NOT narrow the main-line timeline. The main line is a wat
 #### Scenario: Selecting a type opens the collapsed groups holding it
 - **WHEN** every group is collapsed, as on a freshly opened series page, and I select "Music"
 - **THEN** every group holding a music entry is expanded and renders the music entries the other controls admit, rather than showing its heading alone
+
+#### Scenario: Selecting a type does not turn the "in my list" filter on
+- **WHEN** I open a series page and select "Music"
+- **THEN** every music entry in the series is shown, whether or not it is in my list, and the "in my list" control still reads as off
+
+#### Scenario: Selecting my list after a type narrows to that type of mine
+- **WHEN** I have "Music" selected and I then activate the "in my list" control
+- **THEN** the groups holding a music entry of mine show only those, and the control reads as on
+
+#### Scenario: A type I hold nothing of is dropped rather than showing nothing
+- **WHEN** I have "Music" selected on a series in which none of my own extras is a music entry, and I activate the "in my list" control
+- **THEN** the "Music" selection is dropped, the section shows my extras across every group with no type restriction, and the "Music" button is offered disabled while the filter is on
+
+#### Scenario: An unavailable type cannot be selected while the filter is on
+- **WHEN** the "in my list" filter is on and the series holds music entries but none of mine is one
+- **THEN** the "Music" button is disabled and selecting it does nothing
+
+#### Scenario: A partly unavailable selection keeps the types I hold
+- **WHEN** I have "Movie" and "Music" selected, I own a movie among the extras but no music entry, and I activate the "in my list" control
+- **THEN** "Movie" stays selected and the section shows my movies, while "Music" is dropped and offered disabled
+
+#### Scenario: Turning the filter off makes every present type selectable again
+- **WHEN** a type has been dropped because I hold nothing of it and I then turn the "in my list" filter off
+- **THEN** that type's button is selectable again, unselected, and selecting it shows every entry of that type
 
 #### Scenario: Several types are additive
 - **WHEN** I select "Movie" and then "OVA"
@@ -1183,7 +1216,7 @@ The type buttons SHALL NOT narrow the main-line timeline. The main line is a wat
 - **THEN** no "Music" button is offered
 
 #### Scenario: The type filter composes with the list filter
-- **WHEN** the "in my list" filter is on and I select "OVA"
+- **WHEN** the "in my list" filter is on and I select "OVA", of which I hold at least one
 - **THEN** the groups holding OVAs are opened and show only the OVAs that are in my list, each offering its hidden-count control if it hides others
 
 #### Scenario: Counts follow the type filter

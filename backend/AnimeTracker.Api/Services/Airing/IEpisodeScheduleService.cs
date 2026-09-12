@@ -14,9 +14,41 @@ public interface IEpisodeScheduleService
 {
     Task<ResolvedEpisode?> ResolveOnLocalDateAsync(AnimeMetadata anime, DateOnly localDate, CancellationToken ct = default);
 
+    /// <summary>The same local-date read as <see
+    /// cref="ResolveOnLocalDateAsync(AnimeMetadata,DateOnly,CancellationToken)"/>,
+    /// for many anime at once. Default implementation loops over the
+    /// per-anime member, so a test double need not restate it — but any
+    /// implementation backed by a database MUST override this with a single
+    /// read (design.md D6), since the default still issues one query per
+    /// anime.</summary>
+    async Task<Dictionary<int, ResolvedEpisode>> ResolveOnLocalDateAsync(IReadOnlyCollection<AnimeMetadata> anime, DateOnly localDate, CancellationToken ct = default)
+    {
+        var result = new Dictionary<int, ResolvedEpisode>();
+        foreach (var a in anime)
+            if (await ResolveOnLocalDateAsync(a, localDate, ct) is { } episode)
+                result[a.Id] = episode;
+        return result;
+    }
+
     /// <summary>The earliest stored air instant after afterUtc, or null when no
     /// future episode is stored. Backs the currently-watching countdown.</summary>
     Task<DateTimeOffset?> NextAiringInstantAsync(AnimeMetadata anime, DateTimeOffset afterUtc, CancellationToken ct = default);
+
+    /// <summary>The same next-instant read as <see
+    /// cref="NextAiringInstantAsync(AnimeMetadata,DateTimeOffset,CancellationToken)"/>,
+    /// for many anime at once. Default implementation loops over the
+    /// per-anime member, so a test double need not restate it — but any
+    /// implementation backed by a database MUST override this with a single
+    /// read (design.md D6), since the default still issues one query per
+    /// anime.</summary>
+    async Task<Dictionary<int, DateTimeOffset>> NextAiringInstantAsync(IReadOnlyCollection<AnimeMetadata> anime, DateTimeOffset afterUtc, CancellationToken ct = default)
+    {
+        var result = new Dictionary<int, DateTimeOffset>();
+        foreach (var a in anime)
+            if (await NextAiringInstantAsync(a, afterUtc, ct) is { } instant)
+                result[a.Id] = instant;
+        return result;
+    }
 
     /// <summary>The highest stored episode number whose air instant has passed
     /// as of nowUtc, or null when none has. Backs the home page's

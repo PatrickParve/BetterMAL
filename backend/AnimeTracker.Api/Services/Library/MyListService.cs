@@ -22,13 +22,11 @@ public class MyListService(
         var storedOrder = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
         var snapshot = AnimeRankingSnapshot.Build(entries, storedOrder);
 
-        // Resolved for every entry regardless, so settling one (design.md D6)
-        // costs nothing extra here beyond the lookup this page already needed
-        // for its own EpisodesAired column.
-        var airedSoFarByAnimeId = new Dictionary<int, int>();
-        foreach (var e in entries)
-            if (await scheduleService.EpisodesAiredAsOfAsync(e.Anime, now, ct) is { } aired)
-                airedSoFarByAnimeId[e.AnimeId] = aired;
+        // Resolved once in bulk for the whole list (episode-airing-data), so
+        // settling one (design.md D6) costs nothing extra here beyond the
+        // single read this page already needed for its own EpisodesAired
+        // column — the same dictionary backs both.
+        var airedSoFarByAnimeId = await scheduleService.EpisodesAiredAsOfAsync(entries.Select(e => e.Anime).ToList(), now, ct);
 
         await airingWatchStatusService.SettleAsync(entries, airedSoFarByAnimeId, ct);
 

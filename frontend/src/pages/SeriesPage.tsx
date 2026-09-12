@@ -457,14 +457,16 @@ export function SeriesPage() {
       })
   }, [data, animeId, setData])
 
-  // More-section view state (design.md decision 3): `mineOnly` is the "in my
-  // list" filter, on by default; `collapsedGroups` is per-group collapse, all
-  // collapsed by default (polish-series-page-more-and-routes design.md
-  // decision 1 — an absent key reads as collapsed) but now also the thing
-  // activating the "in my list" control writes to, opening every group that
-  // holds one of my extras (polish-detail-dates-and-error-messages design.md
-  // D9); `unfilteredGroups` tracks groups where "+N more" was used to see
-  // past the filter without disabling it everywhere.
+  // More-section view state: `mineOnly` is the "in my list" filter, **off**
+  // by default (fix-score-reveal-and-nplus1 design.md D3) — a freshly opened
+  // series page narrows nothing on the user's behalf; `collapsedGroups` is
+  // per-group collapse, all collapsed by default (polish-series-page-more-
+  // and-routes design.md decision 1 — an absent key reads as collapsed) but
+  // now also the thing activating the "in my list" control writes to,
+  // opening every group that holds one of my extras (polish-detail-dates-
+  // and-error-messages design.md D9); `unfilteredGroups` tracks groups where
+  // "+N more" was used to see past the filter without disabling it
+  // everywhere.
   // Restorable like the page's other view controls (polish-rewatch-more-
   // and-filters design.md D3): the `pageStateStore` snapshot holds live
   // object references and never serialises, so the `Set` and `Record`
@@ -472,7 +474,7 @@ export function SeriesPage() {
   // series' pages from sharing this state. A fresh visit still seeds the
   // documented defaults below, since useRestorableState falls back to
   // `initial` whenever there's no snapshot to restore from.
-  const [mineOnly, setMineOnly] = useRestorableState('moreMineOnly', true)
+  const [mineOnly, setMineOnly] = useRestorableState('moreMineOnly', false)
   const [collapsedGroups, setCollapsedGroups] = useRestorableState<Record<string, boolean>>('moreCollapsedGroups', {})
   const [unfilteredGroups, setUnfilteredGroups] = useRestorableState<Set<string>>('moreUnfilteredGroups', new Set())
   // The media-type filter row above More (series-page spec "The More section
@@ -781,6 +783,14 @@ export function SeriesPage() {
   function typeAdmits(entry: SeriesEntryDto): boolean {
     return !typeFilterActive || activeMediaTypes.has(entry.mediaType ?? 'unknown')
   }
+  // series-page "a media type that no extra of mine carries SHALL NOT be
+  // selectable" (fix-score-reveal-and-nplus1 design.md D5): the types my own
+  // extras actually carry, regardless of the type filter. Used to disable a
+  // type button while the "in my list" filter is on and to narrow the
+  // selection when the filter is turned on.
+  const myMediaTypes = new Set(
+    series.extras.filter((e) => e.entry != null).map((e) => e.mediaType ?? 'unknown'),
+  )
 
   const extrasGroups = groupExtras(series.extras)
   // Membership, not status, per group's visible tiles (design.md decision 3);
@@ -812,12 +822,13 @@ export function SeriesPage() {
   )
 
   // series-page "The control SHALL report which of those two states the
-  // section is in" (design.md D9): reads as on only while the filter is
-  // actually in force everywhere (no per-group exemption) *and* at least one
-  // group is open — the third clause is what makes a freshly opened page,
-  // whose groups are all collapsed, read as off even though `mineOnly`
-  // itself starts true, so the first press does something visible.
-  const filterActive = mineOnly && unfilteredGroups.size === 0 && extrasGroupView.some(({ isCollapsed }) => !isCollapsed)
+  // filter is in" (fix-score-reveal-and-nplus1 design.md D3): reads as on
+  // exactly while the filter is actually in force everywhere, i.e. on with
+  // no per-group exemption. Group expansion plays no part — opening or
+  // collapsing a group, from a heading, the expand/collapse-all control, or
+  // a media-type button, never changes what this reads while the filter
+  // itself is unchanged.
+  const filterActive = mineOnly && unfilteredGroups.size === 0
 
   // Multi-select toggle for the media-type filter row (design.md decision 3):
   // selecting narrows every group to that type, alongside whatever else is
@@ -851,30 +862,37 @@ export function SeriesPage() {
     }
   }
 
-  // series-page "Activating the "in my list" control SHALL show my entries"
-  // (design.md D9): activating while off turns the filter on, drops every
-  // per-group exemption, and opens every group holding at least one extra of
-  // mine the media-type filter admits — the same "adding opens every group
-  // holding one" shape toggleMediaType uses above, so the two section
-  // controls behave alike. A group holding none of mine is left collapsed
-  // rather than padding the section with an empty heading. Activating while
-  // on instead collapses every group, leaving `mineOnly` on: turning the
-  // filter fully off is the expand-all control's job, and a group heading's,
-  // not this one's.
+  // series-page "Activating the control while it reads as on SHALL turn the
+  // filter off" / "Activating it while off SHALL show my entries" (fix-
+  // score-reveal-and-nplus1 design.md D4, D5): a plain two-way toggle over
+  // one fact — whether the filter is in force.
+  //
+  // While on: turn the filter off and touch no collapsed state, so every
+  // expanded group widens to all its extras and nothing the user opened is
+  // put away. "Collapse all" remains the way to put the section away.
+  //
+  // While off: turn the filter on, drop every per-group exemption, and open
+  // every group holding at least one extra of mine that the *narrowed* type
+  // filter admits. The selection is narrowed to `myMediaTypes` first — a type
+  // nothing of mine carries is dropped rather than left selected over an
+  // empty group — and `keysToOpen` is computed from that same narrowed set
+  // so the selection and the opened groups agree within this render, per
+  // D5's invariant. An empty narrowed selection means no type restriction, so
+  // the section shows my extras across every group.
   function toggleMineOnly() {
     if (filterActive) {
-      const next: Record<string, boolean> = {}
-      extrasGroups.forEach((group, index) => {
-        next[extrasGroupKey(group, index)] = true
-      })
-      setCollapsedGroups(next)
+      setMineOnly(false)
       return
     }
     setMineOnly(true)
     setUnfilteredGroups(new Set())
+    const narrowedTypes = new Set([...activeMediaTypes].filter((type) => myMediaTypes.has(type)))
+    setSelectedMediaTypes(narrowedTypes)
+    const narrowedTypeAdmits = (entry: SeriesEntryDto) =>
+      narrowedTypes.size === 0 || narrowedTypes.has(entry.mediaType ?? 'unknown')
     const next: Record<string, boolean> = {}
     extrasGroups.forEach((group, index) => {
-      const holdsMine = group.items.some((e) => e.entry != null && typeAdmits(e))
+      const holdsMine = group.items.some((e) => e.entry != null && narrowedTypeAdmits(e))
       next[extrasGroupKey(group, index)] = !holdsMine
     })
     setCollapsedGroups(next)
@@ -1250,15 +1268,23 @@ export function SeriesPage() {
             <div className="series-page__type-filter" aria-label="Filter by media type (multi-select)">
               {availableMediaTypes.map((type) => {
                 const active = activeMediaTypes.has(type)
+                const label = mediaTypeLabel(type === 'unknown' ? null : type)
+                // series-page "a media type that no extra of mine carries
+                // SHALL NOT be selectable" while the filter is on (design.md
+                // D5): disabled, with the reason in its accessible name
+                // rather than only in its greyed-out styling.
+                const unavailable = mineOnly && !myMediaTypes.has(type)
                 return (
                   <button
                     key={type}
                     type="button"
                     aria-pressed={active}
+                    disabled={unavailable}
+                    aria-label={unavailable ? `${label} (none of mine is this type)` : undefined}
                     className={`series-page__type-filter-button${active ? ' series-page__type-filter-button--active' : ''}`}
                     onClick={() => toggleMediaType(type)}
                   >
-                    {mediaTypeLabel(type === 'unknown' ? null : type)}
+                    {label}
                   </button>
                 )
               })}

@@ -23,8 +23,28 @@ public class EpisodeScheduleService(
         return new ResolvedEpisode(converter.GetLocalTime(row.AirsAtUtc), row.Episode);
     }
 
+    public async Task<Dictionary<int, ResolvedEpisode>> ResolveOnLocalDateAsync(IReadOnlyCollection<AnimeMetadata> anime, DateOnly localDate, CancellationToken ct = default)
+    {
+        var animeIds = anime.Select(a => a.Id).ToList();
+        var dayStartUtc = converter.LocalMidnightUtc(localDate);
+        var dayEndUtc = converter.LocalMidnightUtc(localDate.AddDays(1));
+        var rows = await repository.GetRowsInRangeAsync(animeIds, dayStartUtc, dayEndUtc, ct);
+
+        // Rows come back ordered by AirsAtUtc (GetRowsInRangeAsync's contract),
+        // so the first row seen per anime is the same earliest row the
+        // per-anime read takes.
+        var result = new Dictionary<int, ResolvedEpisode>();
+        foreach (var row in rows)
+            if (!result.ContainsKey(row.AnimeId))
+                result[row.AnimeId] = new ResolvedEpisode(converter.GetLocalTime(row.AirsAtUtc), row.Episode);
+        return result;
+    }
+
     public Task<DateTimeOffset?> NextAiringInstantAsync(AnimeMetadata anime, DateTimeOffset afterUtc, CancellationToken ct = default) =>
         repository.GetNextAiringInstantAsync(anime.Id, afterUtc, ct);
+
+    public Task<Dictionary<int, DateTimeOffset>> NextAiringInstantAsync(IReadOnlyCollection<AnimeMetadata> anime, DateTimeOffset afterUtc, CancellationToken ct = default) =>
+        repository.GetNextAiringInstantsAsync(anime.Select(a => a.Id).ToList(), afterUtc, ct);
 
     public Task<int?> EpisodesAiredAsOfAsync(AnimeMetadata anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
         repository.GetMaxAiredEpisodeAsync(anime.Id, nowUtc, ct);

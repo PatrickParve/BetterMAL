@@ -22,6 +22,15 @@ public interface IEpisodeAiringRepository
     /// future row is stored.</summary>
     Task<DateTimeOffset?> GetNextAiringInstantAsync(int animeId, DateTimeOffset afterUtc, CancellationToken ct = default);
 
+    /// <summary>The same next-airing-instant read as <see
+    /// cref="GetNextAiringInstantAsync(int,DateTimeOffset,CancellationToken)"/>,
+    /// for many anime at once in a single database read. An anime with no
+    /// stored future row is absent from the result rather than present with a
+    /// placeholder instant, so "nothing scheduled" stays distinguishable from
+    /// any real instant. Returns an empty dictionary without touching the
+    /// database when animeIds is empty.</summary>
+    Task<Dictionary<int, DateTimeOffset>> GetNextAiringInstantsAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset afterUtc, CancellationToken ct = default);
+
     /// <summary>Every stored row for the given anime whose AirsAtUtc falls in
     /// [fromUtc, toUtc), across all of them in one query.</summary>
     Task<List<EpisodeAiring>> GetRowsInRangeAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default);

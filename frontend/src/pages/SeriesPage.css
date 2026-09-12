@@ -417,6 +417,16 @@
   border-color: var(--accent-border);
 }
 
+.series-page__type-filter-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.series-page__type-filter-button:disabled:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
 .series-page__extras-group {
   display: flex;
   flex-direction: column;

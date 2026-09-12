@@ -20,8 +20,9 @@ public class MainDashboardService(
 
         // design.md D7: resolved once in bulk for the whole list, rather than
         // per card inside the DTO loop below — SettleAsync's completion
-        // direction, the caught-up filter below, and the carousel's own
-        // episodesAired field all read this same dictionary.
+        // direction, the caught-up filter below, the carousel's own
+        // episodesAired field, and the current-season section further down
+        // all read this same dictionary rather than re-querying.
         var airedSoFarByAnimeId = await scheduleService.EpisodesAiredAsOfAsync(entries.Select(e => e.Anime).ToList(), now, ct);
 
         // design.md D6: must run before the Watching/Rewatching selection
@@ -51,7 +52,14 @@ public class MainDashboardService(
         // moved it to Completed above.
         var caughtUp = entries.Where(e => e.Status is WatchStatus.Watching or WatchStatus.Rewatching
             && !(airedSoFarByAnimeId.TryGetValue(e.AnimeId, out var a) && a > 0 && e.EpisodesWatched >= a));
-        foreach (var e in OrderCurrentlyWatching(caughtUp))
+
+        // Materialised so the same ordered set backs both the bulk countdown
+        // read below and the DTO loop — one read for every card's next
+        // episode instead of one per card (episode-airing-data), the same
+        // shape as AiringScheduleService.GetWeekAsync's single range query.
+        var orderedCurrentlyWatching = OrderCurrentlyWatching(caughtUp).ToList();
+        var nextAiringInstantByAnimeId = await scheduleService.NextAiringInstantAsync(orderedCurrentlyWatching.Select(e => e.Anime).ToList(), now, ct);
+        foreach (var e in orderedCurrentlyWatching)
         {
             currentlyWatching.Add(new CurrentlyWatchingItemDto(
                 e.AnimeId,
@@ -62,18 +70,22 @@ public class MainDashboardService(
                 e.Anime.TotalEpisodes,
                 airedSoFarByAnimeId.TryGetValue(e.AnimeId, out var aired) ? aired : null,
                 e.Anime.AiringStatus == "currently_airing",
-                NextEpisodeEta.From(await scheduleService.NextAiringInstantAsync(e.Anime, now, ct), now),
+                NextEpisodeEta.From(nextAiringInstantByAnimeId.TryGetValue(e.AnimeId, out var nextInstant) ? nextInstant : null, now),
                 e.Status,
                 e.Anime.AiringStatus));
         }
 
-        // Resolve each show against today's local date through the shared
-        // schedule service: it reads only stored AniList rows, so a finished
-        // show or a show on hiatus today no longer leaks in.
+        // Resolved once in bulk for the whole list against today's local
+        // date (episode-airing-data), rather than per entry: it reads only
+        // stored AniList rows, so a finished show or a show on hiatus today
+        // still never leaks in, and an anime absent from the result means
+        // nothing airs — the same shape AiringScheduleService.GetWeekAsync
+        // uses for its week-wide range query.
+        var airingTodayByAnimeId = await scheduleService.ResolveOnLocalDateAsync(entries.Select(e => e.Anime).ToList(), today, ct);
         var airingToday = new List<(UserAnimeEntry Entry, ResolvedEpisode Episode)>();
         foreach (var e in entries)
         {
-            if (await scheduleService.ResolveOnLocalDateAsync(e.Anime, today, ct) is { } episode)
+            if (airingTodayByAnimeId.TryGetValue(e.AnimeId, out var episode))
                 airingToday.Add((e, episode));
         }
 
@@ -103,7 +115,7 @@ public class MainDashboardService(
                 e.Anime.TotalEpisodes,
                 e.Anime.MalScore,
                 e.Anime.PopularityRank,
-                await scheduleService.EpisodesAiredAsOfAsync(e.Anime, now, ct),
+                airedSoFarByAnimeId.TryGetValue(e.AnimeId, out var seasonAired) ? seasonAired : null,
                 e.Anime.AiringStatus == "finished_airing"));
         }
 

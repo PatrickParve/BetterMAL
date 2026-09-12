@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import './ScoreValue.css'
 
@@ -11,14 +12,32 @@ type ScoreValueProps = {
 // Renders a MAL score respecting the global hide toggle. While hidden and not
 // individually revealed, the numeric value is never placed in the DOM at all —
 // only the reveal control is rendered, alone — so it can't leak via
-// devtools/text-selection. `revealed` is local state, so it naturally
-// resets (re-hides) whenever the surrounding page unmounts on navigation.
-// `completed` opts a score into the "always show for completed shows"
-// setting: when that setting is on, a completed entry's score is shown in
-// full with no reveal control, regardless of the global hide state.
+// devtools/text-selection. `completed` opts a score into the "always show for
+// completed shows" setting: when that setting is on, a completed entry's
+// score is shown in full with no reveal control, regardless of the global
+// hide state.
 export function ScoreValue({ value, placeholder = '—', completed = false }: ScoreValueProps) {
   const { hidden, alwaysShowCompletedScores } = useScoreVisibility()
+  const { pathname } = useLocation()
+
+  // `revealed` must re-hide whenever the page the reveal was granted on goes
+  // away — but a route like `/anime/:id` keeps one component mounted across
+  // params, so unmounting can't be relied on. Pathname (not `location.key`)
+  // is the identity: it changes exactly when the user leaves a page, not on
+  // every history entry a same-page filter writes to the URL. `hidden` rides
+  // along so that switching the global toggle off and back on also drops the
+  // reveal, keeping "while hidden, every score is replaced" true at the
+  // moment it is switched back on. Compared during render, the same pattern
+  // `useRestorableState`/`usePageData` use, so a hidden score never paints
+  // revealed for one frame on the new identity.
+  const identity = `${pathname}|${hidden}`
+  const [renderedIdentity, setRenderedIdentity] = useState(identity)
   const [revealed, setRevealed] = useState(false)
+
+  if (identity !== renderedIdentity) {
+    setRenderedIdentity(identity)
+    setRevealed(false)
+  }
 
   if (value == null) return <span className="score-value">{placeholder}</span>
 
