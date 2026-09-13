@@ -7,19 +7,16 @@ using Microsoft.Extensions.DependencyInjection;
 namespace AnimeTracker.Api.Tests.Controllers;
 
 // SyncController's job-starting endpoints (background-jobs "A job is started
-// once"/design.md D2, D4, D18): re-sync starts once like the other
-// trigger-based jobs; sync now, reconciliation and the held-decision pair
-// start once through BackgroundJobRunner and answer 202 with the job's state
-// either way; a single held decision is refused with 409 while the bulk pair
-// is deciding.
+// once"/design.md D2, D4, D18): sync now, reconciliation and the
+// held-decision pair start once through BackgroundJobRunner and answer 202
+// with the job's state either way; a single held decision is refused with
+// 409 while the bulk pair is deciding.
 public class SyncControllerTests
 {
     private static SyncController CreateController(
         IReconciliationService? reconciliationService = null,
         IHeldChangeService? heldChangeService = null,
         IEntryPushService? pushService = null,
-        IResyncTrigger? resyncTrigger = null,
-        ResyncProgress? resyncProgress = null,
         BackgroundJobRunner? runner = null,
         SyncNowProgress? syncNowProgress = null,
         ReconcileProgress? reconcileProgress = null,
@@ -32,41 +29,10 @@ public class SyncControllerTests
         return new SyncController(
             reconciliationService,
             heldChangeService,
-            resyncTrigger ?? new ResyncTrigger(),
-            resyncProgress ?? new ResyncProgress(),
             runner ?? new BackgroundJobRunner(new FakeServiceScopeFactory(new FakeServiceProvider(pushService, reconciliationService, heldChangeService))),
             syncNowProgress ?? new SyncNowProgress(),
             reconcileProgress ?? new ReconcileProgress(),
             heldDecisionProgress ?? new HeldDecisionProgress());
-    }
-
-    [Fact]
-    public void TriggerResyncFromMalGivesRunningOnBothOfTwoPresses()
-    {
-        var progress = new ResyncProgress();
-        var controller = CreateController(resyncProgress: progress);
-
-        var first = Assert.IsType<AcceptedResult>(controller.TriggerResyncFromMal());
-        Assert.Equal("Running", Assert.IsType<JobDto>(first.Value).Phase);
-
-        var second = Assert.IsType<AcceptedResult>(controller.TriggerResyncFromMal());
-        Assert.Equal("Running", Assert.IsType<JobDto>(second.Value).Phase);
-    }
-
-    [Fact]
-    public async Task TriggerResyncFromMalSignalsExactlyOnceAcrossTwoPresses()
-    {
-        var trigger = new ResyncTrigger();
-        var controller = CreateController(resyncTrigger: trigger);
-
-        controller.TriggerResyncFromMal();
-        controller.TriggerResyncFromMal();
-
-        using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
-            await trigger.WaitAsync(cts.Token);
-
-        using var secondCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-        await Assert.ThrowsAsync<OperationCanceledException>(() => trigger.WaitAsync(secondCts.Token));
     }
 
     [Fact]

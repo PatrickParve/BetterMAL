@@ -8,8 +8,6 @@ namespace AnimeTracker.Api.Controllers;
 public class SyncController(
     IReconciliationService reconciliationService,
     IHeldChangeService heldChangeService,
-    IResyncTrigger resyncTrigger,
-    ResyncProgress resyncProgress,
     BackgroundJobRunner runner,
     SyncNowProgress syncNowProgress,
     ReconcileProgress reconcileProgress,
@@ -166,21 +164,4 @@ public class SyncController(
         HeldChangeDecisionOutcome.Failed => Ok(new { applied = false, error = result.Error }),
         _ => Ok(new { applied = true }),
     };
-
-    /// <summary>Kicks off the one-time corrective full re-sync (settings page):
-    /// re-fetches full detail for every anime in the MAL list and upserts
-    /// AnimeMetadata + UserAnimeEntry, correcting rows imported before
-    /// list_status/nsfw/English-title/duration/source were fetched correctly.
-    /// Runs in the background (~1 req/s per anime) — starts once
-    /// (background-jobs "A job is started once") and the answer already
-    /// reports it as running either way, so the page reads its progress from
-    /// the combined status read rather than polling this endpoint.</summary>
-    [HttpPost("api/sync/resync-from-mal")]
-    public IActionResult TriggerResyncFromMal()
-    {
-        if (resyncProgress.TryBegin())
-            resyncTrigger.Signal();
-
-        return Accepted(JobDto.From(resyncProgress.Snapshot));
-    }
 }

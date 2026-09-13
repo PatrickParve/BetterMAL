@@ -18,7 +18,6 @@ import {
   runReconciliation,
   syncNow,
   triggerAiringFullRefresh,
-  triggerResyncFromMal,
   triggerSeriesBulkBuild,
 } from '../api/client.ts'
 import type {
@@ -319,7 +318,6 @@ export function SettingsPage() {
   const [heldActingId, setHeldActingId] = useState<number | null>(null)
   const [startingHeldAction, setStartingHeldAction] = useState<HeldDecisionAction | null>(null)
   const [heldError, setHeldError] = useState<string | null>(null)
-  const [startingFullResync, setStartingFullResync] = useState(false)
   const [startingAiringRefresh, setStartingAiringRefresh] = useState(false)
   const [startingSeriesBulkBuild, setStartingSeriesBulkBuild] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -480,18 +478,6 @@ export function SettingsPage() {
       // Leave whatever status was already there; the button stays retryable.
     } finally {
       setStartingReconcile(false)
-    }
-  }
-
-  async function handleResyncFromMal() {
-    if (startingFullResync || appStatus?.jobs.resync.phase === 'Running') return
-    setStartingFullResync(true)
-    try {
-      applyJob('resync', await triggerResyncFromMal())
-    } catch {
-      // Leave whatever status was already there; the button stays retryable.
-    } finally {
-      setStartingFullResync(false)
     }
   }
 
@@ -955,27 +941,6 @@ export function SettingsPage() {
       </SettingsGroup>
 
       <SettingsGroup title="Data tools" hint="Long-running corrective and backfill jobs.">
-        <SettingsAction
-          title="Correct imported data"
-          hint="One-time corrective re-sync: re-fetches your full MyAnimeList and full anime details, then immediately overwrites the local status, episode count, score, and dates for every anime — with no review step — and creates entries for anime not yet tracked locally. Also backfills English title, duration, and source. Takes several minutes; entries with unsynced local edits are left untouched. Nothing it applies is recorded in Latest updates or the full edit history."
-          state={
-            <JobProgress
-              phase={jobs.resync.phase}
-              done={jobs.resync.done}
-              total={jobs.resync.total}
-              noun="processed"
-              error={jobs.resync.error}
-              finishedAt={jobs.resync.finishedAt}
-              outcomeSeen={jobs.resync.outcomeSeen}
-            />
-          }
-          button={
-            <button type="button" onClick={handleResyncFromMal} disabled={startingFullResync || jobs.resync.phase === 'Running'}>
-              {jobs.resync.phase === 'Running' ? 'Resyncing…' : 'Run corrective re-sync'}
-            </button>
-          }
-        />
-
         <SettingsAction
           title="Airing dates"
           hint="Re-fetches per-episode airing dates from AniList for every anime in my list, in case something looks wrong. Skips shows that have already finished airing and were fetched successfully before — their episode dates can't change further. Paced to stay under AniList's rate limit, so a full list can take a while; runs in the background."

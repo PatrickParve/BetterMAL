@@ -74,10 +74,9 @@ builder.Services.AddHostedService<MalTokenRefreshBackgroundService>();
 // --- Background jobs (shared lifecycle, design.md D1) ---
 // One typed singleton per job, so DI and constructors stay typed rather than
 // keyed. sync-now, reconciliation and the held-decision pair also run through
-// the shared BackgroundJobRunner (design.md D4); the other four keep their
+// the shared BackgroundJobRunner (design.md D4); the other three keep their
 // existing trigger/background-service shape (Non-Goals: not moved onto the
 // runner in this change).
-builder.Services.AddSingleton<ResyncProgress>();
 builder.Services.AddSingleton<AiringFullRefreshProgress>();
 builder.Services.AddSingleton<SeriesBulkBuildProgress>();
 builder.Services.AddSingleton<SyncNowProgress>();
@@ -105,11 +104,6 @@ builder.Services.AddScoped<IHeldChangeService, HeldChangeService>();
 builder.Services.AddScoped<IStartupPendingSyncHold, StartupPendingSyncHold>();
 builder.Services.AddHostedService<PendingSyncRetryBackgroundService>();
 builder.Services.AddHostedService<ReconciliationBackgroundService>();
-
-// --- Corrective full re-sync (one-time, manually triggered) ---
-builder.Services.AddSingleton<IResyncTrigger, ResyncTrigger>();
-builder.Services.AddScoped<IResyncService, ResyncService>();
-builder.Services.AddHostedService<ResyncBackgroundService>();
 
 // --- Metadata & score refresh ---
 builder.Services.AddScoped<IAnimeUpdateRelevance, AnimeUpdateRelevance>();
@@ -173,8 +167,8 @@ builder.Services.AddHostedService<RelationAdjudicationBackgroundService>();
 builder.Services.AddSingleton<ISeriesBuildTrigger, SeriesBuildTrigger>();
 builder.Services.AddHostedService<SeriesBuildTriggerBackgroundService>();
 
-// Manual "refresh all airing data" (settings page) — mirrors the corrective
-// MAL re-sync's trigger/progress-tracker/background-service shape.
+// Manual "refresh all airing data" (settings page) — mirrors the
+// build-all-series trigger/progress-tracker/background-service shape.
 builder.Services.AddSingleton<IAiringFullRefreshTrigger, AiringFullRefreshTrigger>();
 builder.Services.AddHostedService<AiringFullRefreshBackgroundService>();
 

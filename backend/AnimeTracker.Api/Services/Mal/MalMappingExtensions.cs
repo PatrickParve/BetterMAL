@@ -206,9 +206,11 @@ public static class MalMappingExtensions
     }
 
     /// <summary>Copies MAL list-status fields onto an existing user-list entry —
-    /// the update-in-place counterpart of <see cref="ToUserAnimeEntry"/>, so a
-    /// corrective re-sync can refresh an already-imported entry the same way
-    /// import builds a new one. Does not touch PendingSync — callers guard that.
+    /// the update-in-place counterpart of <see cref="ToUserAnimeEntry"/>, so an
+    /// already-existing entry can be refreshed the same way import builds a new
+    /// one, as when a held change is declined
+    /// (<see cref="AnimeTracker.Api.Services.Sync.HeldChangeService"/>). Does not
+    /// touch PendingSync — callers guard that.
     /// Resolves the incoming status against the entry's current one
     /// (design.md D1) so a local Rewatching entry survives; inert when called
     /// from <see cref="ToUserAnimeEntry"/>, whose fresh entry defaults to

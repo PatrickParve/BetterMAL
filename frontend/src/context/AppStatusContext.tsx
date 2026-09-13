@@ -122,7 +122,6 @@ const JOB_KEY_ORDER: (keyof AppStatusJobsDto)[] = [
   'syncNow',
   'reconcile',
   'heldDecision',
-  'resync',
   'airingRefresh',
   'seriesBuild',
   'fileImport',

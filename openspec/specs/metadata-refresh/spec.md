@@ -237,7 +237,7 @@ A failed fetch SHALL release the turn without marking the subject as fetched, so
 - **THEN** that request attempts the fetch again rather than being treated as already refreshed
 
 ### Requirement: Full detail fetch reserved for import, tiered refresh, and detail view
-The system SHALL only fetch full anime-detail fields (genres, synopsis, background, studio, aired dates, broadcast schedule, related anime) via initial import, corrective re-sync, device-transfer import, the scheduled tiered refresh, the one-time resolution of a newly-discovered relation edge, opening that specific anime's own detail page, or its manual refresh action — never as a side effect of a season or Top Anime listing refresh.
+The system SHALL only fetch full anime-detail fields (genres, synopsis, background, studio, aired dates, broadcast schedule, related anime) via initial import, device-transfer import, the scheduled tiered refresh, the one-time resolution of a newly-discovered relation edge, opening that specific anime's own detail page, or its manual refresh action — never as a side effect of a season or Top Anime listing refresh.
 
 Outside those paths the system SHALL NOT fetch on behalf of an anime the user has not opened. The two paths that reach an unopened anime are bounded: the scheduled tiered refresh reaches one only through the adjacent set, and resolution reaches one exactly once, because a franchise announced a new entry.
 

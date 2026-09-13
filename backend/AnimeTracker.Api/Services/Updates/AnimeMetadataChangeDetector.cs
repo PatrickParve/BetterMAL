@@ -36,8 +36,7 @@ public readonly record struct AnimeMetadataSnapshot(
 /// before calling <c>ApplyTo</c>, then hands both to <see cref="RecordAsync"/>
 /// after, so no future write path can refresh metadata without also feeding
 /// the updates feed — originally <c>MetadataRefreshService</c>'s own private
-/// methods, extracted here once <c>ResyncService</c> needed the same
-/// detection on its own full-detail fetch.</summary>
+/// methods, extracted here for reuse across every metadata writer.</summary>
 public interface IAnimeMetadataChangeDetector
 {
     /// <summary>Captures <paramref name="anime"/>'s update-relevant state.

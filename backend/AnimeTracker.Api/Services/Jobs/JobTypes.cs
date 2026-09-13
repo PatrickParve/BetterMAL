@@ -5,9 +5,6 @@ namespace AnimeTracker.Api.Services.Jobs;
 // Alternatives) — constructors that need a specific job's tracker just ask
 // for its type.
 
-/// <summary>The corrective re-sync from MAL ("Correct imported data").</summary>
-public sealed class ResyncProgress : JobProgressTracker { }
-
 /// <summary>The full airing-date refresh ("Airing dates").</summary>
 public sealed class AiringFullRefreshProgress : JobProgressTracker { }
 

@@ -2,7 +2,7 @@ namespace AnimeTracker.Api.Services.Airing;
 
 /// <summary>Drains IAiringRefreshTrigger's queue: an anime enqueued on add
 /// (UserAnimeEntryEditService) gets its airing data fetched right away rather
-/// than waiting for the next hourly tick — mirrors ImportTrigger/ResyncTrigger's
+/// than waiting for the next hourly tick — mirrors ImportTrigger's
 /// signal-plus-dedicated-loop pattern.</summary>
 public class AiringRefreshTriggerBackgroundService(
     IServiceScopeFactory scopeFactory,

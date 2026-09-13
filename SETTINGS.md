@@ -37,7 +37,6 @@ default and takes effect immediately without refetching from MAL.
 |---|---|---|---|---|
 | **Resync now** | Local → MAL (push) | Yes | Cheap | Your recent edits aren't on MAL yet and you don't want to wait |
 | **Run full reconciliation** | MAL → Local (pull) | No — held for review | Medium | You changed your list *outside* this app and want those changes in |
-| **Run corrective re-sync** | MAL → Local (pull) | Yes | **Heavy** (minutes) | Imported data is wrong/missing across many entries |
 | **Re-authorize with MAL** | — (auth) | — | Cheap | Syncs fail with auth errors, or you're "Not connected" |
 | **Force-refresh anime metadata** | MAL → Local (one anime) | Yes | Cheap | One specific show's cached info (score, air dates, etc.) is stale |
 
@@ -89,34 +88,6 @@ a week; the button just triggers it on demand.
   metadata is cached right away, but the *list entry* (your status/score) still
   goes through the review step.
 
-## Run corrective re-sync
-
-**What it does.** A one-time, heavyweight repair. It re-fetches your entire MAL
-list and then does a **full-detail fetch for every single anime**, overwriting
-the cached catalog metadata (backfilling English title, duration, source,
-broadcast schedule, aired dates) and correcting each entry's status, episodes,
-and score. Unlike reconciliation, it **applies changes immediately** — there's
-no review step. It runs in the background at roughly one anime per second, so a
-large list takes **several minutes**; the page shows live `synced/total`
-progress.
-
-**When to use it.**
-- Data imported before certain fields were fetched correctly is wrong or blank
-  across many entries — e.g. missing English titles, missing duration/source,
-  or off episode counts.
-- Reconciliation isn't enough because the problem is in the cached *catalog*
-  metadata (which reconciliation doesn't touch), not just your list values.
-
-**Why / notes.**
-- This is a **repair tool, not routine maintenance.** Reconciliation is the
-  everyday pull path (light, review-gated); the corrective re-sync is the
-  bulk "fix everything from scratch" option.
-- It's the most API-intensive action here — only run it when you actually have
-  bad data to fix.
-- Like reconciliation, entries with unsynced local edits are left untouched.
-- If an individual anime fails to fetch, it's logged and skipped, and the run
-  keeps going — just run it again later to retry the stragglers.
-
 ## Re-authorize with MAL
 
 **What it does.** Sends you through MyAnimeList's OAuth login flow again and
@@ -132,7 +103,7 @@ whether a token is currently on file (*Connected* / *Not connected*).
 - You switched MAL accounts, or re-created your MAL API application/credentials.
 
 **Why / notes.** This is the fix for anything auth-related. If *Resync now*
-won't clear its pending count, or reconciliation/re-sync fail immediately,
+won't clear its pending count, or reconciliation fails immediately,
 re-authorizing is the first thing to try.
 
 ## Force-refresh anime metadata

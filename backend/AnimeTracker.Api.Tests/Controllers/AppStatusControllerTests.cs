@@ -26,7 +26,7 @@ public class AppStatusControllerTests
         IUserAnimeEntryRepository? entryRepository = null, SyncNowProgress? syncNowProgress = null) =>
         new(db, tokenStore, entryRepository ?? new FakeUserAnimeEntryRepository(0, 0, null),
             listImportProgress ?? new ListImportProgress(), syncNowProgress ?? new SyncNowProgress(), new ReconcileProgress(),
-            new HeldDecisionProgress(), new ResyncProgress(), new AiringFullRefreshProgress(), new SeriesBulkBuildProgress(),
+            new HeldDecisionProgress(), new AiringFullRefreshProgress(), new SeriesBulkBuildProgress(),
             new FakeTransferImportProgressTracker());
 
     [Fact]
@@ -46,7 +46,6 @@ public class AppStatusControllerTests
         Assert.IsType<JobDto>(body.jobs.syncNow);
         Assert.IsType<JobDto>(body.jobs.reconcile);
         Assert.IsType<HeldDecisionJobDto>(body.jobs.heldDecision);
-        Assert.IsType<JobDto>(body.jobs.resync);
         Assert.IsType<JobDto>(body.jobs.airingRefresh);
         Assert.IsType<JobDto>(body.jobs.seriesBuild);
         Assert.IsType<JobDto>(body.jobs.fileImport);
@@ -133,7 +132,6 @@ public class AppStatusControllerTests
         Assert.False(((JobDto)body.jobs.syncNow).OutcomeSeen);
         Assert.False(((JobDto)body.jobs.reconcile).OutcomeSeen);
         Assert.False(((HeldDecisionJobDto)body.jobs.heldDecision).OutcomeSeen);
-        Assert.False(((JobDto)body.jobs.resync).OutcomeSeen);
         Assert.False(((JobDto)body.jobs.airingRefresh).OutcomeSeen);
         Assert.False(((JobDto)body.jobs.seriesBuild).OutcomeSeen);
         Assert.False(((JobDto)body.jobs.fileImport).OutcomeSeen);

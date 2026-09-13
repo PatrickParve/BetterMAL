@@ -39,7 +39,7 @@ The Settings control SHALL otherwise keep what it does today: it navigates to th
 - **THEN** the Settings control shows its indicator
 
 #### Scenario: A failed job raises it
-- **WHEN** the corrective re-sync fails because MyAnimeList couldn't be reached
+- **WHEN** the full airing-date refresh fails because AniList couldn't be reached
 - **THEN** the Settings control shows its indicator
 
 #### Scenario: Nothing waiting shows nothing
@@ -144,7 +144,7 @@ The bar SHALL be the same bar the Settings page shows for that job, in look and 
 - **moving continuously** while the job does not yet know its total, rather than sitting empty or showing a zero total;
 - **still, and distinct from a proportional bar**, where the reader's system asks for reduced motion.
 
-The jobs that draw it are the ones the system reports (see `background-jobs`, "Every background job shares one lifecycle"): the MyAnimeList list import while it has anime to fetch, sync now, run full reconciliation, accepting or declining every held change, the corrective re-sync, the full airing-date refresh, the build-all-series run, and the import from a file.
+The jobs that draw it are the ones the system reports (see `background-jobs`, "Every background job shares one lifecycle"): the MyAnimeList list import while it has anime to fetch, sync now, run full reconciliation, accepting or declining every held change, the full airing-date refresh, the build-all-series run, and the import from a file.
 
 The bar SHALL disappear as soon as no reported job is running.
 

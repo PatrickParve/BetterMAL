@@ -1,7 +1,7 @@
 # settings-page Specification
 
 ## Purpose
-The settings-page capability governs how the app's Settings page is organised and presented: the grouping of its controls into named groups ordered from cheapest to most expensive, the visual distinction between an instant preference and a control that starts a long-running background job, the shared shape a background job's progress and outcome are reported in, and the page's overall layout. It exists so that a page holding both a display toggle and a several-minute MAL re-sync reads as two different kinds of thing rather than as nine visually identical boxes, without changing what any setting, status figure, or action actually does.
+The settings-page capability governs how the app's Settings page is organised and presented: the grouping of its controls into named groups ordered from cheapest to most expensive, the visual distinction between an instant preference and a control that starts a long-running background job, the shared shape a background job's progress and outcome are reported in, and the page's overall layout. It exists so that a page holding both a display toggle and a minutes-long airing-date refresh reads as two different kinds of thing rather than as nine visually identical boxes, without changing what any setting, status figure, or action actually does.
 
 ## Requirements
 
@@ -12,7 +12,7 @@ The groups SHALL be, in this order:
 
 1. **Preferences** — the settings that change how the app displays things for me and take effect immediately: the completed/dropped score-reveal setting and the NSFW content filter.
 2. **Sync** — the state of the ongoing MyAnimeList sync (pending/retrying count, count held for review, last successful sync, and the weekly check) together with the actions that drive it (sync now, run full reconciliation), the MyAnimeList list import's report while it has one, the changes held for review when any exist, and the pending reconciliation diff when one exists.
-3. **Data tools** — the long-running corrective and backfill jobs: the corrective re-sync from MAL, the full airing-date refresh, the build-all-series run, and the single-anime metadata force-refresh.
+3. **Data tools** — the long-running corrective and backfill jobs: the full airing-date refresh, the build-all-series run, and the single-anime metadata force-refresh.
 4. **Files** — the actions that produce or take a file, in this order: the list backup, the device-transfer export, and the device-transfer import. The group SHALL hold those three and nothing else. It SHALL NOT hold a sync action, a corrective or backfill job, or a preference.
 5. **Account** — the MyAnimeList connection state (connected, lost, or not connected) and the re-authorize action.
 
@@ -288,7 +288,7 @@ The two SHALL be distinguishable at a glance, without reading the explanations �
 - **THEN** each is a compact row with its toggle, name, and explanation, and changing it takes effect immediately with nothing to confirm
 
 #### Scenario: An action reads as an action
-- **WHEN** I look at the corrective re-sync, the airing-date refresh, and the build-all-series entries
+- **WHEN** I look at the airing-date refresh and the build-all-series entries
 - **THEN** each states what it does, that it runs in the background and can take a while, its last known run state, and offers a single button that starts it
 
 #### Scenario: The two kinds are tellable apart without reading
@@ -301,7 +301,6 @@ Every background job the page shows SHALL report its state in **one shared prese
 - sync now
 - run full reconciliation
 - accepting or declining every held change
-- the corrective re-sync from MAL
 - the full airing-date refresh
 - the build-all-series run
 - the import from a file
@@ -385,7 +384,6 @@ This covers every job with a button:
 - run full reconciliation
 - accept all
 - decline all
-- the corrective re-sync ("Correct imported data")
 - the full airing-date refresh ("Airing dates")
 - build all series
 - the import from a file
@@ -393,10 +391,6 @@ This covers every job with a button:
 While the start request is waiting for its answer, the button SHALL already be disabled.
 
 A press that arrives while the job is starting or running — from this page or another — SHALL start nothing (see `background-jobs`, "A job is started once").
-
-#### Scenario: Correct imported data shows its bar at once
-- **WHEN** I press "Run corrective re-sync" once
-- **THEN** its progress bar appears straight away, without a second press
 
 #### Scenario: Airing dates shows its bar at once
 - **WHEN** I press "Refresh all airing dates" once
@@ -479,7 +473,7 @@ Re-authorizing SHALL bring the group back to "Connected." without any other step
 
 ### Requirement: Every sync control states what it will do
 
-Each control on the Settings page that touches my list SHALL carry an explanation of what pressing it does, readable **before** it is pressed and without opening, hovering, or expanding anything. The controls this covers SHALL be: sync now, run full reconciliation, the accept and decline actions on a pending reconciliation diff, the accept and decline actions on a change held for review, and the corrective re-sync.
+Each control on the Settings page that touches my list SHALL carry an explanation of what pressing it does, readable **before** it is pressed and without opening, hovering, or expanding anything. The controls this covers SHALL be: sync now, run full reconciliation, the accept and decline actions on a pending reconciliation diff, and the accept and decline actions on a change held for review.
 
 Each explanation SHALL state, in plain terms, what the control fetches or compares, **whether it shows me the differences for review before applying anything or applies them immediately**, and what it writes when it does apply. Where a control creates list entries for anime not tracked locally, its explanation SHALL say so.
 
@@ -489,23 +483,12 @@ Specifically:
 - **Run full reconciliation** SHALL say that it fetches my current MyAnimeList list, compares it against what is stored locally, and presents the differences for me to accept or decline — changing nothing until I do.
 - **Accept** SHALL say that it applies exactly the differences shown and nothing else on my list is touched. **Decline** SHALL say that it discards them, applying nothing.
 - **Accepting a held change** SHALL say that it sends that anime's stored values to MyAnimeList now, overwriting what MyAnimeList holds for it. **Declining a held change** SHALL say that it discards the unsent change and takes MyAnimeList's current value for that anime instead; where MyAnimeList holds no entry for that anime, it SHALL say instead that declining removes the anime from my list locally.
-- **The corrective re-sync** SHALL say that it re-fetches my whole MyAnimeList list and full anime details, and **immediately overwrites** the local status, episodes watched, score, and dates for every anime, **with no review step**, creating entries for anime not tracked locally; and that entries with unsent local edits are left alone.
 
-Each explanation of a control that applies changes SHALL also say whether what it applies is recorded in my history. The explanations of accepting a reconciliation diff and of the corrective re-sync SHALL say that nothing they apply is recorded in Latest updates or the full edit history. The explanation of the held-change review SHALL say that what declining applies is recorded in the edit history, like any other change I make in the app. No explanation SHALL describe a change as marked as coming from MyAnimeList.
+Each explanation of a control that applies changes SHALL also say whether what it applies is recorded in my history. The explanation of accepting a reconciliation diff SHALL say that nothing it applies is recorded in Latest updates or the full edit history. The explanation of the held-change review SHALL say that what declining applies is recorded in the edit history, like any other change I make in the app. No explanation SHALL describe a change as marked as coming from MyAnimeList.
 
 An explanation SHALL describe what the control does today rather than what it is expected to do: a control that applies changes without review SHALL NOT be described in terms that suggest a review step exists.
 
 These explanations SHALL be presentational. No control SHALL gain a confirmation step, change what it does, move group, or be placed behind an extra click.
-
-#### Scenario: The reviewable and the immediate are tellable apart
-
-- **WHEN** I read the explanations of "Run full reconciliation" and the corrective re-sync
-- **THEN** the first states that it shows me differences to accept or decline before anything changes, and the second states that it overwrites my entries immediately with no review step
-
-#### Scenario: Silent entry creation is called out
-
-- **WHEN** I read the corrective re-sync's explanation
-- **THEN** it states that it creates entries for anime not yet tracked locally
 
 #### Scenario: The review actions say what they apply
 
@@ -524,7 +507,7 @@ These explanations SHALL be presentational. No control SHALL gain a confirmation
 
 #### Scenario: The sync paths say they leave no history
 
-- **WHEN** I read the explanation of accepting a reconciliation diff or of the corrective re-sync
+- **WHEN** I read the explanation of accepting a reconciliation diff
 - **THEN** it says that nothing it applies is recorded in Latest updates or the full edit history
 
 #### Scenario: Declining a held change says it is recorded

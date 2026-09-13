@@ -140,7 +140,7 @@ Choosing a picture SHALL NOT be pushed to MyAnimeList, and SHALL NOT alter the a
 - **THEN** no request is made to MyAnimeList as a result
 
 ### Requirement: A chosen picture survives every MAL sync
-No MyAnimeList sync of any kind SHALL overwrite or clear a chosen picture. This SHALL hold for a full-detail fetch, a lean listing refresh from the Season, Year, Top or Search paths, the weekly reconciliation, and the corrective re-sync alike.
+No MyAnimeList sync of any kind SHALL overwrite or clear a chosen picture. This SHALL hold for a full-detail fetch, a lean listing refresh from the Season, Year, Top or Search paths, and the weekly reconciliation alike.
 
 Each of those paths SHALL still record MAL's own main picture, so the choice can be cleared back to it at any time.
 

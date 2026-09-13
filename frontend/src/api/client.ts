@@ -528,13 +528,6 @@ export function declineAllHeldChanges(): Promise<HeldDecisionJobDto> {
   return fetchJson<HeldDecisionJobDto>('/api/sync/held/decline', { method: 'POST' })
 }
 
-// One-time corrective re-sync: kicks off a background run (~1 req/s per
-// anime), starting once (background-jobs "A job is started once"); the page
-// reads its progress from the combined api/app-status read.
-export function triggerResyncFromMal(): Promise<JobStatusDto> {
-  return fetchJson<JobStatusDto>('/api/sync/resync-from-mal', { method: 'POST' })
-}
-
 // Manual "refresh all airing data" (settings page): kicks off a background
 // run, paced through AniList's rate limit and skipping finished shows already
 // fetched before.

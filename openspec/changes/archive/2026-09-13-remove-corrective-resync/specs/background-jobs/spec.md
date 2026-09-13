@@ -1,9 +1,4 @@
-# background-jobs Specification
-
-## Purpose
-The background-jobs capability defines the one shared lifecycle every long-running background job in the app reports through — the MyAnimeList list import, sync now, run full reconciliation, deciding every held change, the full airing-date refresh, the build-all-series run, and the import from a file. It governs how a job's state is started, held, and read, so that every surface that shows job progress (the Settings page, and later the navbar) can read one consistent shape rather than each job inventing its own.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Every background job shares one lifecycle
 
@@ -65,26 +60,6 @@ A job that has ended, whether complete or failed, SHALL start again on the next 
 - **WHEN** build all series has completed and I start it again
 - **THEN** a new run starts
 
-### Requirement: A run always ends as complete or failed
-
-Every run SHALL end as **complete** or **failed**. A run whose work throws SHALL be reported as failed, with the progress it had reached, whether it throws before its total is known or partway through. No run SHALL stay reported as running once its work has stopped.
-
-A run that gets through its work but cannot do all of it SHALL end as failed rather than complete, saying how many items were left. This covers edits it could not send, held changes that stayed held, and anime it could not fetch.
-
-A run stopped because the application itself is stopping is exempt: its state is lost with the process.
-
-#### Scenario: A crash is reported
-- **WHEN** the full airing-date refresh throws partway through
-- **THEN** it is reported as failed with the progress it had reached, and not as running
-
-#### Scenario: A crash before the total is known
-- **WHEN** a job throws before it has found how much work it has
-- **THEN** it is reported as failed rather than left running
-
-#### Scenario: A partial run is not complete
-- **WHEN** sync now sends 3 of 5 edits and the other 2 fail
-- **THEN** it ends as failed, saying that 2 of 5 could not be sent
-
 ### Requirement: Job state is kept on the server, in memory
 
 A job's state SHALL be held by the server, not by the page that started it. Leaving the page and coming back, or opening it in another browser, SHALL show the same run and the same progress.
@@ -104,63 +79,6 @@ The weekly check's outcome is not a job's state, and is kept across restarts (se
 #### Scenario: A restart clears finished reports
 - **WHEN** a job has completed and the application restarts
 - **THEN** that job reports not started
-
-### Requirement: Automatic runs of shared work are told apart from runs I started
-
-Where an automatic process runs the same work as a job I can start, its runs SHALL NOT be reported as that job:
-
-- the weekly reconciliation SHALL NOT be reported as a run of "Run full reconciliation"
-- the two-minute push retry SHALL NOT be reported as a run of "Sync now"
-
-An automatic run SHALL NOT change that job's phase, progress, reason or times, and SHALL NOT make the job read as running.
-
-#### Scenario: The weekly check shows no progress
-- **WHEN** the weekly reconciliation runs while nobody has started a reconciliation
-- **THEN** "Run full reconciliation" still reports what it reported before, and never shows the weekly run's progress
-
-#### Scenario: The push retry is not a sync now
-- **WHEN** the two-minute retry pushes pending edits
-- **THEN** "Sync now" still reports what it reported before
-
-### Requirement: Job and connection state are read together
-
-The system SHALL provide **one read** that returns, together:
-
-- the state of every job listed in "Every background job shares one lifecycle", and for each one whether its **outcome has been reported as seen** (see "A job's outcome can be reported as seen")
-- the MyAnimeList connection state (see `mal-api-integration`, "The connection state is reported")
-- when the weekly check last ran, whether it failed, with its reason, and whether that outcome has been reported as seen
-- what is **waiting for me to decide**: how many changes are held for review, and whether a reconciliation diff is waiting
-- the **pending-push figures**: how many of my edits are waiting to be sent, and when the last push succeeded
-
-The read SHALL NOT call MyAnimeList or any other outside service. It SHALL be answerable from state the application already holds — its in-memory job state plus counts and single-row reads of its own database — and SHALL be cheap enough to repeat every second.
-
-The held count SHALL be counted from stored rows. It is therefore the count before any item that MyAnimeList already agrees with has been cleared, and MAY briefly exceed what the Settings page's review lists (see `settings-page`, "The sync readout separates what is retrying from what is waiting on me").
-
-Whether a diff is waiting SHALL be reported as a plain yes or no. The diff itself SHALL NOT be part of this read.
-
-It SHALL report the MyAnimeList list import as that import is shown, so a quiet run appears as not started (see `initial-import`, "Visible import progress indicator").
-
-This read exists so that the Settings page and the navbar see one consistent picture, from one request, rather than making one request per job or per fact.
-
-#### Scenario: One request answers everything
-- **WHEN** the application reads the job and connection state
-- **THEN** a single request returns every job's state, whether each job's outcome has been seen, the connection state, the weekly check's outcome, the held count, whether a diff is waiting, and the pending-push figures
-
-#### Scenario: No outside calls
-- **WHEN** that read is made while MyAnimeList is unreachable
-- **THEN** it answers from what the application already holds, without contacting MyAnimeList
-
-#### Scenario: A quiet list import reads as nothing
-- **WHEN** the list import is reading my MyAnimeList list and has not yet found any work
-- **THEN** the read reports the list import as not started
-
-#### Scenario: A waiting diff is a yes, not a payload
-- **WHEN** a reconciliation diff of 40 differences is waiting for review
-- **THEN** the read says a diff is waiting, and does not carry its differences
-
-#### Scenario: The held count comes from stored rows
-- **WHEN** three changes are held for review, one of which MyAnimeList already agrees with
-- **THEN** the read reports three, and contacts MyAnimeList about none of them
 
 ### Requirement: A job's outcome can be reported as seen
 

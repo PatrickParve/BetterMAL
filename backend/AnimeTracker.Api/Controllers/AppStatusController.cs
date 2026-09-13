@@ -28,7 +28,6 @@ public class AppStatusController(
     SyncNowProgress syncNowProgress,
     ReconcileProgress reconcileProgress,
     HeldDecisionProgress heldDecisionProgress,
-    ResyncProgress resyncProgress,
     AiringFullRefreshProgress airingRefreshProgress,
     SeriesBulkBuildProgress seriesBuildProgress,
     ITransferImportProgressTracker transferImportProgress) : ControllerBase
@@ -64,14 +63,13 @@ public class AppStatusController(
             jobs = new
             {
                 // The list import is reported as it's shown, so a quiet run
-                // reads as not started (design.md D15). These eight names are
+                // reads as not started (design.md D15). These seven names are
                 // exactly what MarkSeen's switch below maps, so a job added
                 // to one and not the other is visible in review.
                 listImport = JobDto.From(listImportProgress.Snapshot),
                 syncNow = JobDto.From(syncNowProgress.Snapshot),
                 reconcile = JobDto.From(reconcileProgress.Snapshot),
                 heldDecision = HeldDecisionJobDto.From(heldDecisionProgress),
-                resync = JobDto.From(resyncProgress.Snapshot),
                 airingRefresh = JobDto.From(airingRefreshProgress.Snapshot),
                 seriesBuild = JobDto.From(seriesBuildProgress.Snapshot),
                 fileImport = JobDto.From(transferImportProgress.ToJobSnapshot()),
@@ -90,14 +88,13 @@ public class AppStatusController(
         var toMark = new List<(Action<DateTimeOffset> MarkSeen, DateTimeOffset FinishedAt)>();
         foreach (var job in request?.Jobs ?? [])
         {
-            // The same eight names as the read's `jobs` object above.
+            // The same seven names as the read's `jobs` object above.
             Action<DateTimeOffset>? markSeen = job.Name switch
             {
                 "listImport" => listImportProgress.MarkOutcomeSeen,
                 "syncNow" => syncNowProgress.MarkOutcomeSeen,
                 "reconcile" => reconcileProgress.MarkOutcomeSeen,
                 "heldDecision" => heldDecisionProgress.MarkOutcomeSeen,
-                "resync" => resyncProgress.MarkOutcomeSeen,
                 "airingRefresh" => airingRefreshProgress.MarkOutcomeSeen,
                 "seriesBuild" => seriesBuildProgress.MarkOutcomeSeen,
                 "fileImport" => transferImportProgress.MarkOutcomeSeen,

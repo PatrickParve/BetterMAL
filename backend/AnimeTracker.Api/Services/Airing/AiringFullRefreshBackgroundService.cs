@@ -6,7 +6,7 @@ namespace AnimeTracker.Api.Services.Airing;
 /// when signaled — re-fetches AniList airing data for every my-list anime
 /// except finished shows already fetched at least once (see
 /// IEpisodeScheduleRefreshService.GetFullRefreshTargetsAsync). Manual-only,
-/// like ResyncBackgroundService: no auto-signal on startup, since the
+/// like SeriesBulkBuildBackgroundService: no auto-signal on startup, since the
 /// automatic hourly tick already keeps data fresh — this is for "something
 /// looks wrong, force a full re-fetch" and there's nothing to resume on a
 /// restart.</summary>

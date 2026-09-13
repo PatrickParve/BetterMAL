@@ -293,7 +293,7 @@ Wherever a recap reads the activity log — to decide whether an entry belongs t
 
 This SHALL hold because of what the activity log contains, not because of anything the recap filters out. The sync paths record nothing (see the `activity-recording` capability), so every progress record in the log was made in the app, and the recap SHALL read all of them. That includes progress applied by **declining a change held for review**, which is recorded as a change made in the app, at the moment I declined it.
 
-A sync's moment is the moment the sync ran, not the moment I watched. A weekly reconciliation, or a corrective re-sync after a long gap, would otherwise drop a stretch of viewing into whichever period the sync happened to fall in, and a single catch-up run could move months of episodes into one day. This is one reason the sync paths record nothing.
+A sync's moment is the moment the sync ran, not the moment I watched. A weekly reconciliation would otherwise drop a stretch of viewing into whichever period the sync happened to fall in, and a single catch-up run could move months of episodes into one day. This is one reason the sync paths record nothing.
 
 The consequence SHALL be stated plainly rather than worked around: episodes I watched and recorded only on MyAnimeList's own site SHALL NOT contribute to a recap, exactly as they do not today. An entry that qualifies for a period on its **completion date** SHALL still qualify however that completion date arrived.
 
@@ -301,7 +301,7 @@ This SHALL constrain only what the recap reads from the activity log. Every othe
 
 #### Scenario: Synced progress does not enter a recap
 
-- **WHEN** an accepted reconciliation diff or a corrective re-sync raises an anime's episodes watched inside a period
+- **WHEN** an accepted reconciliation diff raises an anime's episodes watched inside a period
 - **THEN** that increase contributes nothing to the period's episode count and does not by itself place the anime in the period's **What I watched** selection
 
 #### Scenario: Availability is judged on the same terms

@@ -627,7 +627,6 @@ export type AppStatusJobsDto = {
   syncNow: JobStatusDto
   reconcile: JobStatusDto
   heldDecision: HeldDecisionJobDto
-  resync: JobStatusDto
   airingRefresh: JobStatusDto
   seriesBuild: JobStatusDto
   fileImport: JobStatusDto

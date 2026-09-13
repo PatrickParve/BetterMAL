@@ -1,7 +1,7 @@
 # activity-recording Specification
 
 ## Purpose
-The activity-recording capability governs how a change made in this app becomes a record in the activity log, and which paths are excluded from it entirely. Changes made in the app — my own edits and removals, the automatic completion of a caught-up entry, the automatic reopening of a completed entry, and the declining of a change held for review — are recorded. The sync paths that adopt a value set somewhere else — the background import, an accepted reconciliation diff, and the corrective re-sync — record nothing, on any run, whatever they apply. It fixes the granularity a change is recorded at, so that every surface reading the log — the recaps, the profile page's activity feed and history, and any future reader — can rely on one consistent history built entirely from what was done in the app.
+The activity-recording capability governs how a change made in this app becomes a record in the activity log, and which paths are excluded from it entirely. Changes made in the app — my own edits and removals, the automatic completion of a caught-up entry, the automatic reopening of a completed entry, and the declining of a change held for review — are recorded. The sync paths that adopt a value set somewhere else — the background import and an accepted reconciliation diff — record nothing, on any run, whatever they apply. It fixes the granularity a change is recorded at, so that every surface reading the log — the recaps, the profile page's activity feed and history, and any future reader — can rely on one consistent history built entirely from what was done in the app.
 
 ## Requirements
 
@@ -117,7 +117,7 @@ Each record SHALL carry the same human-readable description of the change whiche
 
 ### Requirement: The sync paths record nothing
 
-The three sync paths — the background import of anime found on MyAnimeList but missing locally, the acceptance of a reconciliation diff, and the corrective re-sync — SHALL record nothing in the activity log, on any run, whatever they apply.
+The two sync paths — the background import of anime found on MyAnimeList but missing locally, and the acceptance of a reconciliation diff — SHALL record nothing in the activity log, on any run, whatever they apply.
 
 A change these paths apply was made somewhere else: in the app on another device, which records it in its own log, or on MyAnimeList's own site. Recording it here as well would put the same change in the log twice once two devices' logs are combined — at a later moment than it was made, and coarser, since a sync sees only the net change and not the steps that led to it. Such records SHALL NOT be written, rather than written and removed later.
 
@@ -141,11 +141,6 @@ Declining a change held for review is not a sync path in this sense. It is a cha
 
 - **WHEN** I accept a reconciliation diff that raises one anime's episodes watched, changes its score, and creates an entry for another anime not tracked locally
 - **THEN** both entries hold the diff's values, and no activity is recorded for either anime
-
-#### Scenario: The corrective re-sync records nothing
-
-- **WHEN** the corrective re-sync changes one entry's status and creates an entry for an anime not tracked locally
-- **THEN** both changes are applied, and no activity is recorded for either anime
 
 #### Scenario: A completion made on MyAnimeList's site stays out of my history
 
