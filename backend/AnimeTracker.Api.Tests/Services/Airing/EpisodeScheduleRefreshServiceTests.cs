@@ -260,16 +260,40 @@ public class EpisodeScheduleRefreshServiceTests
         Assert.Single(await db.AnimeUpdates.ToListAsync());
     }
 
+    // report-partial-runs-and-mal-side-removals tasks 1.1-1.2 (design D1):
+    // RefreshManyAsync splits "no data" from "threw" instead of lumping both
+    // into one zeroRows count.
+    [Fact]
+    public async Task RefreshManyCountsNoDataAndFailedSeparately()
+    {
+        using var db = CreateDb();
+        await SeedAnimeAsync(db, 1, "currently_airing");
+        await SeedAnimeAsync(db, 2, "currently_airing");
+
+        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
+        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([], "RELEASING", null, null) };
+        aniList.ThrowForAniListId[902] = new HttpRequestException("AniList is unreachable"); // anime 2's cached AniListId (900 + animeId)
+        var service = CreateService(db, aniList, episodeAiringRepository);
+
+        var processed = new List<int>();
+        var result = await service.RefreshManyAsync([1, 2], onProgress: processed.Add);
+
+        Assert.Equal(1, result.NoData);
+        Assert.Equal(1, result.Failed);
+        Assert.Equal([1, 2], processed);
+    }
+
     private sealed class FakeAniListClient : IAniListClient
     {
         public AniListMediaLookup? Lookup { get; set; }
         public AniListScheduleResult Schedule { get; set; } = new([], null, null, null);
+        public Dictionary<int, Exception> ThrowForAniListId { get; } = new();
 
         public Task<AniListMediaLookup?> LookupByMalIdAsync(int malId, CancellationToken ct = default) =>
             Lookup is not null ? Task.FromResult<AniListMediaLookup?>(Lookup) : throw new NotImplementedException();
 
         public Task<AniListScheduleResult> GetAiringScheduleAsync(int aniListId, CancellationToken ct = default) =>
-            Task.FromResult(Schedule);
+            ThrowForAniListId.TryGetValue(aniListId, out var ex) ? throw ex : Task.FromResult(Schedule);
 
         public Task<IReadOnlyDictionary<int, AniListRelationsLookup>> GetRelationsBatchAsync(IReadOnlyList<int> malIds, CancellationToken ct = default) =>
             throw new NotImplementedException();

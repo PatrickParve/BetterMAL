@@ -43,9 +43,10 @@ public class EpisodeScheduleRefreshService(
 
     public Task RefreshOneAsync(int animeId, CancellationToken ct = default) => RefreshOneCoreAsync(animeId, ct);
 
-    public async Task<int> RefreshManyAsync(IReadOnlyList<int> animeIds, CancellationToken ct = default, Action<int>? onProgress = null)
+    public async Task<RefreshManyResult> RefreshManyAsync(IReadOnlyList<int> animeIds, CancellationToken ct = default, Action<int>? onProgress = null)
     {
-        var zeroRows = 0;
+        var noData = 0;
+        var failed = 0;
         var processed = 0;
         foreach (var animeId in animeIds)
         {
@@ -53,19 +54,19 @@ public class EpisodeScheduleRefreshService(
             try
             {
                 if (await RefreshOneCoreAsync(animeId, ct) == 0)
-                    zeroRows++;
+                    noData++;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogWarning(ex, "AniList airing refresh failed for anime {AnimeId}.", animeId);
-                zeroRows++;
+                failed++;
             }
 
             processed++;
             onProgress?.Invoke(processed);
         }
 
-        return zeroRows;
+        return new RefreshManyResult(noData, failed);
     }
 
     public async Task<List<int>> GetFullRefreshTargetsAsync(CancellationToken ct = default)

@@ -108,6 +108,65 @@ public class InitialImportServiceWorkTests
     }
 
     [Fact]
+    public async Task AnUnrecognizedStatusAnimeWithNoCachedMetadataIsNotFetchedAndGetsNoEntry()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient([Edge(1, "rewatching_v2")]);
+        var (service, progress) = CreateService(db, malClient);
+
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.DoesNotContain(1, malClient.DetailsCalledFor);
+        Assert.Empty(await db.UserAnimeEntries.ToListAsync());
+        var snapshot = progress.Snapshot;
+        Assert.Equal(JobPhase.Failed, snapshot.Phase);
+        Assert.Equal(0, snapshot.Done);
+        Assert.Equal("Left out 1 of 1 anime whose MyAnimeList list status this app doesn't recognize — the backend log names each one.", snapshot.Error);
+        Assert.True(progress.Gate.WentThroughSinceStart);
+        Assert.NotNull(progress.Gate.LastReadFailure); // a skip-only failure still starts the retry sequence
+    }
+
+    [Fact]
+    public async Task AnUnrecognizedStatusAnimeWithCachedMetadataGetsNoEntry()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1" });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient([Edge(1, "rewatching_v2")]);
+        var (service, progress) = CreateService(db, malClient);
+
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Empty(await db.UserAnimeEntries.ToListAsync());
+        var snapshot = progress.Snapshot;
+        Assert.Equal(JobPhase.Failed, snapshot.Phase);
+        Assert.Equal("Left out 1 of 1 anime whose MyAnimeList list status this app doesn't recognize — the backend log names each one.", snapshot.Error);
+        Assert.True(progress.Gate.WentThroughSinceStart);
+    }
+
+    [Fact]
+    public async Task OneFetchFailurePlusOneSkippedStatusGivesBothSentences()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient([Edge(1), Edge(2, "rewatching_v2")]);
+        malClient.FailDetailsFor(1);
+        var (service, progress) = CreateService(db, malClient);
+
+        await service.RunAsync(CancellationToken.None);
+
+        var snapshot = progress.Snapshot;
+        Assert.Equal(JobPhase.Failed, snapshot.Phase);
+        Assert.Equal(
+            "1 of 2 anime couldn't be fetched. Left out 1 of 2 anime whose MyAnimeList list status this app doesn't recognize — the backend log names each one.",
+            snapshot.Error);
+    }
+
+    [Fact]
     public async Task OneFetchFailureEndsFailedWithGateWentThrough()
     {
         using var db = CreateDb();

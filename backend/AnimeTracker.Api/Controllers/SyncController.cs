@@ -42,7 +42,9 @@ public class SyncController(
         runner.TryStart(reconcileProgress, async (sp, sink, ct) =>
         {
             var service = sp.GetRequiredService<IReconciliationService>();
-            await service.RunAsync(sink, ct);
+            var result = await service.RunAsync(sink, ct);
+            if (result.SkippedUnrecognized > 0)
+                reconcileProgress.Fail(JobFailure.UnrecognizedStatuses(result.SkippedUnrecognized));
         });
 
         return Accepted(JobDto.From(reconcileProgress.Snapshot));

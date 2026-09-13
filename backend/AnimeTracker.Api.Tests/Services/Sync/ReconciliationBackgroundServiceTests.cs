@@ -136,10 +136,33 @@ public class ReconciliationBackgroundServiceTests
         return log;
     }
 
-    private sealed class StubReconciliationService(Exception? ex) : IReconciliationService
+    [Fact]
+    public async Task ARunThatSkippedUnrecognizedStatusesRecordsFailedWithTheirReason()
+    {
+        var options = CreateOptions();
+        var service = new ReconciliationBackgroundService(
+            new FakeServiceScopeFactory(options, new StubReconciliationService(ex: null, skippedUnrecognized: 2)),
+            NullLogger<ReconciliationBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            var log = await WaitForOutcomeAsync(options);
+
+            Assert.NotNull(log);
+            Assert.True(log!.LastRunFailed);
+            Assert.Equal(JobFailure.UnrecognizedStatuses(2), log.LastRunError);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private sealed class StubReconciliationService(Exception? ex, int skippedUnrecognized = 0) : IReconciliationService
     {
         public Task<ReconciliationResult> RunAsync(IJobProgressSink? progress = null, CancellationToken ct = default) =>
-            ex is null ? Task.FromResult(new ReconciliationResult(0, 0, 0, 0, 0)) : throw ex;
+            ex is null ? Task.FromResult(new ReconciliationResult(0, 0, 0, 0, 0, 0, skippedUnrecognized)) : throw ex;
 
         public Task<PendingReconciliationDiffDto?> GetPendingDiffAsync(CancellationToken ct = default) =>
             throw new NotImplementedException();

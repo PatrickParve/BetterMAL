@@ -16,7 +16,10 @@ namespace AnimeTracker.Api.Services.Import;
 ///
 /// Only anime this device's list actually lacks count as work (design.md D8):
 /// a run that finds nothing missing ends quietly, and an anime whose removal
-/// is still pending is left alone rather than re-added.</summary>
+/// is still pending is left alone rather than re-added. An anime whose
+/// MyAnimeList list status this app doesn't recognize is skipped entirely —
+/// nothing fetched, cached or added for it — and the run ends as failed,
+/// naming how many were left out (design.md D8).</summary>
 public class InitialImportService(
     IMalClient malClient,
     AnimeTrackerDbContext db,
@@ -72,11 +75,24 @@ public class InitialImportService(
 
         var done = 0;
         var failed = 0;
+        var skipped = 0;
 
         foreach (var edge in work)
         {
             ct.ThrowIfCancellationRequested();
             var animeId = edge.Node.Id;
+
+            // R2: an unrecognized MyAnimeList list status is never guessed at
+            // — the anime is left out entirely, before either branch below
+            // would fetch or write anything for it (design.md D8).
+            if (!edge.ListStatus.HasRecognizedStatus())
+            {
+                logger.LogWarning(
+                    "Skipping anime {AnimeId} ({Title}) during import: MyAnimeList list status '{Status}' is not recognized.",
+                    animeId, edge.Node.Title, edge.ListStatus?.Status);
+                skipped++;
+                continue;
+            }
 
             if (!existingAnimeIds.Contains(animeId))
             {
@@ -107,17 +123,23 @@ public class InitialImportService(
             progress.ReportProgress(done);
         }
 
-        if (failed == 0)
+        if (failed == 0 && skipped == 0)
         {
             progress.Complete();
             logger.LogInformation("MAL list import complete: {Done}/{Total} anime imported.", done, work.Count);
         }
         else
         {
-            progress.Fail($"{failed} of {work.Count} anime couldn't be fetched.");
+            var reasons = new List<string>();
+            if (failed > 0)
+                reasons.Add($"{failed} of {work.Count} anime couldn't be fetched.");
+            if (skipped > 0)
+                reasons.Add(JobFailure.UnrecognizedStatuses(skipped, work.Count));
+
+            progress.Fail(string.Join(" ", reasons));
             logger.LogInformation(
-                "MAL list import ended with failures: {Done}/{Total} anime imported, {Failed} couldn't be fetched.",
-                done, work.Count, failed);
+                "MAL list import ended with failures: {Done}/{Total} anime imported, {Failed} couldn't be fetched, {Skipped} skipped for an unrecognized status.",
+                done, work.Count, failed, skipped);
         }
     }
 

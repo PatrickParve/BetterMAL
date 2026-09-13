@@ -13,11 +13,13 @@ public interface IEpisodeScheduleRefreshService
 
     /// <summary>Refreshes each anime in turn, pacing requests through
     /// IAniListClient, logging and continuing past a per-anime failure.
-    /// Returns how many of them came back with no airing data. onProgress, if
-    /// given, is invoked after each anime with the running count processed so
-    /// far — lets a caller drive a progress indicator without duplicating the
-    /// per-anime failure handling here.</summary>
-    Task<int> RefreshManyAsync(IReadOnlyList<int> animeIds, CancellationToken ct = default, Action<int>? onProgress = null);
+    /// <see cref="RefreshManyResult.NoData"/> counts anime AniList has no
+    /// airing data for — not a failure. <see cref="RefreshManyResult.Failed"/>
+    /// counts anime whose refresh threw. onProgress, if given, is invoked
+    /// after each anime with the running count processed so far — lets a
+    /// caller drive a progress indicator without duplicating the per-anime
+    /// failure handling here.</summary>
+    Task<RefreshManyResult> RefreshManyAsync(IReadOnlyList<int> animeIds, CancellationToken ct = default, Action<int>? onProgress = null);
 
     /// <summary>One-time full-history pass over every tracked my-list anime.
     /// Resumable — skips anime already fetched this backfill — and stamps
@@ -37,3 +39,8 @@ public interface IEpisodeScheduleRefreshService
     /// "refresh all airing data" action.</summary>
     Task<List<int>> GetFullRefreshTargetsAsync(CancellationToken ct = default);
 }
+
+/// <summary>RefreshManyAsync's per-run counts. <paramref name="NoData"/> is
+/// anime AniList simply has no airing data for — not a failure.
+/// <paramref name="Failed"/> is anime whose refresh threw.</summary>
+public record RefreshManyResult(int NoData, int Failed);

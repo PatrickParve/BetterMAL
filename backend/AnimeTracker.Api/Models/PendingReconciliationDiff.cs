@@ -4,6 +4,7 @@ public enum ReconciliationDiffChangeType
 {
     Added,
     Updated,
+    RemovedOnMal,
 }
 
 /// <summary>Header row for the most recent full-reconciliation run's computed
@@ -21,7 +22,10 @@ public class PendingReconciliationDiff
 /// <summary>One anime's pending change within a PendingReconciliationDiff — the
 /// remote (MAL) values to apply to the local UserAnimeEntry if the diff is
 /// accepted. For an Added entry, applying it means creating the UserAnimeEntry;
-/// for Updated, it means overwriting the local entry's tracked fields.</summary>
+/// for Updated, it means overwriting the local entry's tracked fields. For
+/// RemovedOnMal, the values are the local entry's own (not MAL's — MAL has
+/// none), kept only so the review can show what would be removed; applying it
+/// deletes that local entry instead of writing these values anywhere.</summary>
 public class PendingReconciliationDiffEntry
 {
     public int Id { get; set; }

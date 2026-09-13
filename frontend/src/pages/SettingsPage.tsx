@@ -28,6 +28,7 @@ import type {
   HeldDecisionAction,
   JobPhase,
   PendingReconciliationDiffDto,
+  ReconciliationDiffChangeType,
   TransferImportFailureDto,
   TransferImportStatusDto,
   WeeklyCheckDto,
@@ -157,6 +158,14 @@ function progressWords(
     return base
   }
   return total !== null ? `Complete — ${done}/${total} ${noun}` : `Complete — ${done} ${noun}`
+}
+
+// Labels for a reconciliation diff row's change type (design.md D9,
+// report-partial-runs-and-mal-side-removals).
+const RECONCILIATION_CHANGE_TYPE_LABELS: Record<ReconciliationDiffChangeType, string> = {
+  Added: 'New entry',
+  Updated: 'Updated',
+  RemovedOnMal: 'Removed on MyAnimeList',
 }
 
 // How long a completed outcome has to stay visible on this page before the
@@ -921,7 +930,9 @@ export function SettingsPage() {
                     {entry.title}
                   </span>
                   <span className="settings-diff-row__detail">
-                    {entry.changeType === 'Added' ? 'New entry' : 'Updated'} — {STATUS_LABELS[entry.status]},{' '}
+                    {RECONCILIATION_CHANGE_TYPE_LABELS[entry.changeType]}
+                    {entry.changeType === 'RemovedOnMal' ? ' — here: ' : ' — '}
+                    {STATUS_LABELS[entry.status]},{' '}
                     {entry.episodesWatched} ep{entry.myScore !== null ? `, score ${entry.myScore}` : ''}
                   </span>
                 </li>

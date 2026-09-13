@@ -1637,7 +1637,7 @@ The action's control SHALL be disabled while a run is in flight, so one run cann
 
 A target already covered by an earlier build in the same run — because building one anime's franchise also stores its other members — SHALL be counted as processed without being built again, so progress reflects real remaining work and no franchise is built once per member.
 
-A failure on one target SHALL be logged and SHALL NOT abort the run; remaining targets SHALL still be processed. A failure that ends the whole run SHALL be reported as a failed run with the counts it reached, and SHALL leave the control usable again, so a run that dies before or during target resolution never leaves the page reporting a build that is not happening.
+A failure on one target SHALL be logged and SHALL NOT abort the run; remaining targets SHALL still be processed. A run in which any target failed SHALL end as **failed** rather than complete, saying how many targets could not be built out of the total (see `background-jobs`, "A run always ends as complete or failed"). A target whose story relations lead to no other anime has nothing to store and SHALL NOT count as failed. A failure that ends the whole run SHALL be reported as a failed run with the counts it reached, and SHALL leave the control usable again, so a run that dies before or during target resolution never leaves the page reporting a build that is not happening.
 
 Individual builds SHALL use the same traversal rules, fetch budget, partial/truncated marking, and single-flight collapsing as every other build, so a bulk run racing a user opening a series page results in one build, not two.
 
@@ -1670,7 +1670,7 @@ Individual builds SHALL use the same traversal rules, fetch budget, partial/trun
 - **THEN** the Settings page shows how many targets have been processed out of the total, updating as the run proceeds
 
 #### Scenario: Final counts stay after it finishes
-- **WHEN** a run completes
+- **WHEN** a run finishes with no target failing
 - **THEN** the Settings page reports the run as complete with its final counts
 
 #### Scenario: The action cannot be double-started
@@ -1678,8 +1678,12 @@ Individual builds SHALL use the same traversal rules, fetch budget, partial/trun
 - **THEN** the action's control is disabled
 
 #### Scenario: One failing target does not stop the run
-- **WHEN** building one target fails
-- **THEN** the failure is logged and the run continues with the remaining targets
+- **WHEN** building one target of 40 fails
+- **THEN** the failure is logged, the run continues with the remaining targets, and it ends as failed, saying that 1 of 40 could not be built
+
+#### Scenario: A lone anime is not a failure
+- **WHEN** a target's story relations lead to no other anime, and no other target fails
+- **THEN** the target is counted as processed and the run ends as complete
 
 #### Scenario: A run that fails outright is reported as failed
 - **WHEN** a run fails before or during target resolution

@@ -58,6 +58,7 @@ public class SeriesBulkBuildBackgroundService(
         progress.SetTotal(targets.Count);
 
         var processed = 0;
+        var failed = 0;
         foreach (var animeId in targets)
         {
             ct.ThrowIfCancellationRequested();
@@ -95,6 +96,7 @@ public class SeriesBulkBuildBackgroundService(
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     logger.LogWarning(ex, "Bulk series build failed for anime {AnimeId}.", animeId);
+                    failed++;
                 }
             }
 
@@ -102,7 +104,10 @@ public class SeriesBulkBuildBackgroundService(
             progress.ReportProgress(processed);
         }
 
-        progress.Complete();
+        if (failed > 0)
+            progress.Fail($"{failed} of {targets.Count} series couldn't be built.");
+        else
+            progress.Complete();
     }
 
     // My-list anime with no up-to-date *primary* membership — no

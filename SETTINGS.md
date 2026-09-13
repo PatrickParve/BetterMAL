@@ -69,9 +69,9 @@ to check your MAL connection (see **Re-authorize** below).
 your local data (status, episodes watched, score, rewatch count, start/finish
 dates). Instead of applying changes, it computes a **diff and holds it for your
 review** — a *Pending reconciliation diff* section appears listing every entry
-that would be added or updated, with **Accept** (apply everything) and
-**Cancel** (discard) buttons. This is the same job that runs automatically once
-a week; the button just triggers it on demand.
+that would be added, updated **or removed**, with **Accept** (apply everything)
+and **Cancel** (discard) buttons. This is the same job that runs automatically
+once a week; the button just triggers it on demand.
 
 **When to use it.**
 - You edited your list somewhere *other than this app* — MAL's website or
@@ -87,6 +87,12 @@ a week; the button just triggers it on demand.
 - New anime that exist on MAL but not locally are added; their *catalog*
   metadata is cached right away, but the *list entry* (your status/score) still
   goes through the review step.
+- An anime **deleted on MyAnimeList's site** is offered here for removal.
+  Accepting removes it locally only — nothing is sent to MyAnimeList, since
+  it's already in that state.
+- An anime whose MyAnimeList list status this app doesn't recognize is **left
+  out** of the diff entirely. The run (or the weekly check) reports it as
+  failed, naming how many were left out; the backend log names each one.
 
 ## Re-authorize with MAL
 

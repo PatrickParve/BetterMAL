@@ -35,8 +35,11 @@ public class AiringFullRefreshBackgroundService(
                 var refreshService = scope.ServiceProvider.GetRequiredService<IEpisodeScheduleRefreshService>();
                 var targets = await refreshService.GetFullRefreshTargetsAsync(stoppingToken);
                 progress.SetTotal(targets.Count);
-                await refreshService.RefreshManyAsync(targets, stoppingToken, synced => progress.ReportProgress(synced));
-                progress.Complete();
+                var result = await refreshService.RefreshManyAsync(targets, stoppingToken, synced => progress.ReportProgress(synced));
+                if (result.Failed > 0)
+                    progress.Fail($"{result.Failed} of {targets.Count} anime couldn't be refreshed from AniList.");
+                else
+                    progress.Complete();
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

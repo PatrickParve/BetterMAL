@@ -1,52 +1,4 @@
-# initial-import Specification
-
-## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
-## Requirements
-### Requirement: Background full-list import after authorization
-The system SHALL run a background job that fetches the full list via `GET /v2/users/@me/animelist`, paginated at roughly 100 entries per page. It SHALL run:
-
-- after the one-time authorization, and after every later re-authorization
-- each time the application starts while a MyAnimeList connection is stored
-
-It SHALL NOT run while the connection is recorded as lost (see `mal-api-integration`, "A refused sign-in is recorded as a lost connection"). Re-authorizing starts it.
-
-#### Scenario: Paginated list fetch
-- **WHEN** the initial import runs
-- **THEN** it pages through the entire `@me` animelist rather than assuming a single response
-
-#### Scenario: The import runs at every start
-- **WHEN** the application starts with a MyAnimeList connection stored
-- **THEN** the import runs
-
-#### Scenario: No run while the connection is lost
-- **WHEN** the application starts while the connection is recorded as lost
-- **THEN** the import does not run
-
-#### Scenario: Re-authorizing starts it
-- **WHEN** I re-authorize
-- **THEN** the import runs straight away
-
-### Requirement: Progressive per-entry insertion
-The system SHALL fetch full anime metadata for each list entry and insert it into Postgres as each fetch completes, not batched at the end, so the UI can render partial data while the sync runs.
-
-#### Scenario: Rendering during import
-- **WHEN** the import has completed some but not all entries
-- **THEN** the already-imported anime are present in Postgres and viewable while remaining ones continue loading
-
-### Requirement: Conservative request pacing
-The system SHALL pace import requests conservatively (roughly one request per second) so a library of a few hundred anime completes in low minutes.
-
-#### Scenario: Paced fetching
-- **WHEN** the import fetches metadata for many entries
-- **THEN** requests are spaced out rather than issued in an unthrottled burst
-
-### Requirement: Resumable import
-The system SHALL make the import resumable by skipping anime already present in AnimeMetadata and continuing, rather than restarting from zero, if the app or PC restarts mid-sync.
-
-#### Scenario: Restart mid-sync
-- **WHEN** the import is interrupted and restarts
-- **THEN** anime already stored are skipped and the import continues with the remaining entries
+## MODIFIED Requirements
 
 ### Requirement: Visible import progress indicator
 The system SHALL show the import's progress, on the Settings page, only while a run has work to do or has something to report about it.
@@ -104,22 +56,6 @@ It stays in the run's total and does not count as done. The rest of the run SHAL
 - **WHEN** this device's list is empty and the import cannot read the MyAnimeList list
 - **THEN** the import is shown as failed, with its reason
 
-### Requirement: The import leaves a pending removal alone
-
-The import SHALL NOT add a list entry, or fetch metadata, for an anime whose removal from my list is still pending. This SHALL hold whether the removal is waiting to be pushed or is held for review.
-
-MyAnimeList still listing that anime is the expected in-flight state, exactly as reconciliation treats it. Re-adding the entry would undo a removal I made.
-
-Once the removal has been pushed, MyAnimeList no longer lists the anime and there is nothing for the import to find. Where a held removal is declined, the entry is restored by the decline, not by the import.
-
-#### Scenario: A pending removal is not restored
-- **WHEN** I removed an anime, its removal has not reached MyAnimeList, and the application restarts
-- **THEN** the import does not add the anime back to my list, and does not count it as work
-
-#### Scenario: A held removal stays for my decision
-- **WHEN** a removal is held for review and the import runs
-- **THEN** the anime stays absent locally and the removal stays held
-
 ### Requirement: An import that could not finish tries again on its own
 
 A run that could not finish SHALL be followed by another run, started by the application on its own, after 1, 5, 15, 60 and 60 minutes in turn. A run could not finish when it failed before reading the list, or ended with anime it could not fetch or left out.
@@ -155,4 +91,3 @@ While another run is planned, the import's reported state SHALL carry when it wi
 #### Scenario: The next try is announced
 - **WHEN** a shown import has failed and a retry is planned
 - **THEN** its reported state carries the time of the retry
-

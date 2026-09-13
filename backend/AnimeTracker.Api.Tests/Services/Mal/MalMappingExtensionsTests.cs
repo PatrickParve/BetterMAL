@@ -16,6 +16,59 @@ public class MalMappingExtensionsTests
     }
 
     [Theory]
+    [InlineData("watching", WatchStatus.Watching)]
+    [InlineData("completed", WatchStatus.Completed)]
+    [InlineData("on_hold", WatchStatus.OnHold)]
+    [InlineData("dropped", WatchStatus.Dropped)]
+    [InlineData("plan_to_watch", WatchStatus.PlanToWatch)]
+    public void TryToWatchStatusMapsEveryKnownMalStatusString(string malStatus, WatchStatus expected)
+    {
+        Assert.True(malStatus.TryToWatchStatus(out var status));
+        Assert.Equal(expected, status);
+    }
+
+    [Fact]
+    public void TryToWatchStatusReturnsFalseForAnUnknownString()
+    {
+        Assert.False("rewatching_v2".TryToWatchStatus(out _));
+    }
+
+    [Fact]
+    public void ToWatchStatusStillThrowsOnAnUnknownString()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => "rewatching_v2".ToWatchStatus());
+    }
+
+    [Fact]
+    public void HasRecognizedStatusIsTrueForANullMalListStatus()
+    {
+        Assert.True(((MalListStatus?)null).HasRecognizedStatus());
+    }
+
+    [Fact]
+    public void HasRecognizedStatusIsTrueForANullStatusString()
+    {
+        Assert.True(new MalListStatus { Status = null }.HasRecognizedStatus());
+    }
+
+    [Theory]
+    [InlineData("watching")]
+    [InlineData("completed")]
+    [InlineData("on_hold")]
+    [InlineData("dropped")]
+    [InlineData("plan_to_watch")]
+    public void HasRecognizedStatusIsTrueForEachKnownString(string malStatus)
+    {
+        Assert.True(new MalListStatus { Status = malStatus }.HasRecognizedStatus());
+    }
+
+    [Fact]
+    public void HasRecognizedStatusIsFalseForAnUnknownString()
+    {
+        Assert.False(new MalListStatus { Status = "rewatching_v2" }.HasRecognizedStatus());
+    }
+
+    [Theory]
     [InlineData(WatchStatus.Watching, "watching")]
     [InlineData(WatchStatus.Completed, "completed")]
     [InlineData(WatchStatus.OnHold, "on_hold")]

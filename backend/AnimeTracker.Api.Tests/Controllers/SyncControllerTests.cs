@@ -88,6 +88,37 @@ public class SyncControllerTests
     }
 
     [Fact]
+    public async Task ReconcileEndsFailedWhenTheRunSkippedUnrecognizedStatuses()
+    {
+        var reconciliationService = new StubReconciliationService(skippedUnrecognized: 1);
+        var reconcileProgress = new ReconcileProgress();
+        var runner = new BackgroundJobRunner(new FakeServiceScopeFactory(new FakeServiceProvider(new UnusedEntryPushService(), reconciliationService, new UnusedHeldChangeService())));
+        await runner.StartAsync(CancellationToken.None);
+
+        var controller = CreateController(reconciliationService: reconciliationService, runner: runner, reconcileProgress: reconcileProgress);
+        controller.Reconcile();
+        await runner.StopAsync(CancellationToken.None);
+
+        Assert.Equal(JobPhase.Failed, reconcileProgress.Snapshot.Phase);
+        Assert.Equal(JobFailure.UnrecognizedStatuses(1), reconcileProgress.Snapshot.Error);
+    }
+
+    [Fact]
+    public async Task ReconcileEndsCompleteWhenNothingWasSkipped()
+    {
+        var reconciliationService = new StubReconciliationService(skippedUnrecognized: 0);
+        var reconcileProgress = new ReconcileProgress();
+        var runner = new BackgroundJobRunner(new FakeServiceScopeFactory(new FakeServiceProvider(new UnusedEntryPushService(), reconciliationService, new UnusedHeldChangeService())));
+        await runner.StartAsync(CancellationToken.None);
+
+        var controller = CreateController(reconciliationService: reconciliationService, runner: runner, reconcileProgress: reconcileProgress);
+        controller.Reconcile();
+        await runner.StopAsync(CancellationToken.None);
+
+        Assert.Equal(JobPhase.Complete, reconcileProgress.Snapshot.Phase);
+    }
+
+    [Fact]
     public async Task AcceptAllHeldReturns202RunningAndASecondCallStartsNoSecondRun()
     {
         var gate = new TaskCompletionSource();
@@ -180,7 +211,7 @@ public class SyncControllerTests
         {
             CallCount++;
             await gate;
-            return new ReconciliationResult(0, 0, 0, 0, 0);
+            return new ReconciliationResult(0, 0, 0, 0, 0, 0, 0);
         }
 
         public Task<PendingReconciliationDiffDto?> GetPendingDiffAsync(CancellationToken ct = default) => throw new NotImplementedException();
@@ -210,6 +241,16 @@ public class SyncControllerTests
             await gate;
             return new HeldChangeBulkResult(0, 0);
         }
+    }
+
+    private sealed class StubReconciliationService(int skippedUnrecognized) : IReconciliationService
+    {
+        public Task<ReconciliationResult> RunAsync(IJobProgressSink? progress = null, CancellationToken ct = default) =>
+            Task.FromResult(new ReconciliationResult(0, 0, 0, 0, 0, 0, skippedUnrecognized));
+
+        public Task<PendingReconciliationDiffDto?> GetPendingDiffAsync(CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<bool> AcceptPendingDiffAsync(CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<bool> CancelPendingDiffAsync(CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     private sealed class UnusedEntryPushService : IEntryPushService

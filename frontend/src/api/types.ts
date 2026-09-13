@@ -663,7 +663,7 @@ export type AppStatusSeenRequest = {
   weeklyCheckLastRunAt?: string
 }
 
-export type ReconciliationDiffChangeType = 'Added' | 'Updated'
+export type ReconciliationDiffChangeType = 'Added' | 'Updated' | 'RemovedOnMal'
 
 export type PendingReconciliationDiffEntryDto = {
   animeId: number

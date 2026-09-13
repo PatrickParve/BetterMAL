@@ -41,9 +41,13 @@ public class ReconciliationBackgroundService(
                 var reconciliation = scope.ServiceProvider.GetRequiredService<IReconciliationService>();
                 // No sink — the weekly run is never reported as "Run full
                 // reconciliation" (design.md D6).
-                await reconciliation.RunAsync(ct: stoppingToken);
+                var result = await reconciliation.RunAsync(ct: stoppingToken);
 
-                await RecordRunOutcomeAsync(failed: false, error: null, stoppingToken);
+                var failed = result.SkippedUnrecognized > 0;
+                await RecordRunOutcomeAsync(
+                    failed,
+                    failed ? JobFailure.UnrecognizedStatuses(result.SkippedUnrecognized) : null,
+                    stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

@@ -16,4 +16,10 @@ public static class JobFailure
         TaskCanceledException => $"{service} couldn't be reached.",
         _ => "Something went wrong — see the backend logs.",
     };
+
+    /// <summary>Shared wording for a run that left anime out because MyAnimeList
+    /// reported a list status this app doesn't recognize (design.md D3/D4).</summary>
+    public static string UnrecognizedStatuses(int leftOut, int? total = null) => total is null
+        ? $"Left out {leftOut} anime whose MyAnimeList list status this app doesn't recognize — the backend log names each one."
+        : $"Left out {leftOut} of {total} anime whose MyAnimeList list status this app doesn't recognize — the backend log names each one.";
 }

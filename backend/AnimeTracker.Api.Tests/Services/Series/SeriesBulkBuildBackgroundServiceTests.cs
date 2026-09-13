@@ -32,7 +32,7 @@ public class SeriesBulkBuildBackgroundServiceTests
     // moves it into Running.
     private static async Task RunOnceAsync(
         AnimeTrackerDbContext db, List<UserAnimeEntry> entries, ISeriesService seriesService,
-        SeriesBulkBuildTrigger trigger, SeriesBulkBuildProgress tracker)
+        SeriesBulkBuildTrigger trigger, SeriesBulkBuildProgress tracker, JobPhase expectedPhase = JobPhase.Complete)
     {
         var service = new SeriesBulkBuildBackgroundService(
             new FakeServiceScopeFactory(new FakeServiceProvider(db, new FakeUserAnimeEntryRepository(entries), seriesService)),
@@ -47,10 +47,10 @@ public class SeriesBulkBuildBackgroundServiceTests
             trigger.Signal();
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            while (tracker.Snapshot.Phase != JobPhase.Complete && !cts.IsCancellationRequested)
+            while (tracker.Snapshot.Phase == JobPhase.Running && !cts.IsCancellationRequested)
                 await Task.Delay(10, CancellationToken.None);
 
-            Assert.Equal(JobPhase.Complete, tracker.Snapshot.Phase); // fail loudly on a test timeout, not a hang
+            Assert.Equal(expectedPhase, tracker.Snapshot.Phase); // fail loudly on a test timeout, not a hang
         }
         finally
         {
@@ -118,12 +118,13 @@ public class SeriesBulkBuildBackgroundServiceTests
         var trigger = new SeriesBulkBuildTrigger();
         var tracker = new SeriesBulkBuildProgress();
 
-        await RunOnceAsync(db, [Entry(1), Entry(2), Entry(3)], seriesService, trigger, tracker);
+        await RunOnceAsync(db, [Entry(1), Entry(2), Entry(3)], seriesService, trigger, tracker, expectedPhase: JobPhase.Failed);
 
         Assert.Equal([1, 2, 3], seriesService.CalledFor.OrderBy(id => id));
         Assert.Equal(3, tracker.Snapshot.Total);
         Assert.Equal(3, tracker.Snapshot.Done); // the failure still counts as processed
-        Assert.Equal(JobPhase.Complete, tracker.Snapshot.Phase);
+        Assert.Equal(JobPhase.Failed, tracker.Snapshot.Phase);
+        Assert.Equal("1 of 3 series couldn't be built.", tracker.Snapshot.Error);
     }
 
     [Fact]

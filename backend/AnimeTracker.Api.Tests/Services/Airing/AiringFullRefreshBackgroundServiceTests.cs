@@ -42,14 +42,89 @@ public class AiringFullRefreshBackgroundServiceTests
         }
     }
 
+    [Fact]
+    public async Task APartiallyFailedRefreshLeavesTheTrackerFailedWithTheCountReason()
+    {
+        var trigger = new AiringFullRefreshTrigger();
+        var progress = new AiringFullRefreshProgress();
+        var targets = Enumerable.Range(1, 5).ToList();
+        var refreshService = new FakeEpisodeScheduleRefreshService(targets, new RefreshManyResult(NoData: 0, Failed: 2));
+        var service = new AiringFullRefreshBackgroundService(
+            new FakeServiceScopeFactory(new FakeServiceProvider(refreshService)),
+            trigger,
+            progress,
+            NullLogger<AiringFullRefreshBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            progress.TryBegin();
+            trigger.Signal();
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            while (progress.Snapshot.Phase == JobPhase.Running && !cts.IsCancellationRequested)
+                await Task.Delay(10, CancellationToken.None);
+
+            Assert.Equal(JobPhase.Failed, progress.Snapshot.Phase);
+            Assert.Equal("2 of 5 anime couldn't be refreshed from AniList.", progress.Snapshot.Error);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task ANoDataOnlyResultEndsAsComplete()
+    {
+        var trigger = new AiringFullRefreshTrigger();
+        var progress = new AiringFullRefreshProgress();
+        var targets = Enumerable.Range(1, 5).ToList();
+        var refreshService = new FakeEpisodeScheduleRefreshService(targets, new RefreshManyResult(NoData: 3, Failed: 0));
+        var service = new AiringFullRefreshBackgroundService(
+            new FakeServiceScopeFactory(new FakeServiceProvider(refreshService)),
+            trigger,
+            progress,
+            NullLogger<AiringFullRefreshBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            progress.TryBegin();
+            trigger.Signal();
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            while (progress.Snapshot.Phase == JobPhase.Running && !cts.IsCancellationRequested)
+                await Task.Delay(10, CancellationToken.None);
+
+            Assert.Equal(JobPhase.Complete, progress.Snapshot.Phase);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
     private sealed class ThrowingEpisodeScheduleRefreshService : IEpisodeScheduleRefreshService
     {
         public Task<List<int>> GetFullRefreshTargetsAsync(CancellationToken ct = default) =>
             throw new HttpRequestException("AniList is unreachable");
 
         public Task RefreshOneAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<int> RefreshManyAsync(IReadOnlyList<int> animeIds, CancellationToken ct = default, Action<int>? onProgress = null) =>
+        public Task<RefreshManyResult> RefreshManyAsync(IReadOnlyList<int> animeIds, CancellationToken ct = default, Action<int>? onProgress = null) =>
             throw new NotImplementedException();
+        public Task BackfillAsync(CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<List<int>> GetTrackedAnimeIdsAsync(CancellationToken ct = default) => throw new NotImplementedException();
+    }
+
+    private sealed class FakeEpisodeScheduleRefreshService(List<int> targets, RefreshManyResult result) : IEpisodeScheduleRefreshService
+    {
+        public Task<List<int>> GetFullRefreshTargetsAsync(CancellationToken ct = default) => Task.FromResult(targets);
+
+        public Task<RefreshManyResult> RefreshManyAsync(IReadOnlyList<int> animeIds, CancellationToken ct = default, Action<int>? onProgress = null) =>
+            Task.FromResult(result);
+
+        public Task RefreshOneAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task BackfillAsync(CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<int>> GetTrackedAnimeIdsAsync(CancellationToken ct = default) => throw new NotImplementedException();
     }

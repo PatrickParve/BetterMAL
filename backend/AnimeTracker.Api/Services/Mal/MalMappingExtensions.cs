@@ -10,15 +10,32 @@ namespace AnimeTracker.Api.Services.Mal;
 /// close to the raw wire format.</summary>
 public static class MalMappingExtensions
 {
-    public static WatchStatus ToWatchStatus(this string malStatus) => malStatus switch
+    /// <summary>The one switch over MAL's known list-status strings. A new MAL
+    /// status is added here alone — <see cref="ToWatchStatus"/> and <see
+    /// cref="HasRecognizedStatus"/> both go through this.</summary>
+    public static bool TryToWatchStatus(this string malStatus, out WatchStatus status)
     {
-        "watching" => WatchStatus.Watching,
-        "completed" => WatchStatus.Completed,
-        "on_hold" => WatchStatus.OnHold,
-        "dropped" => WatchStatus.Dropped,
-        "plan_to_watch" => WatchStatus.PlanToWatch,
-        _ => throw new ArgumentOutOfRangeException(nameof(malStatus), malStatus, "Unrecognized MAL list status."),
-    };
+        switch (malStatus)
+        {
+            case "watching": status = WatchStatus.Watching; return true;
+            case "completed": status = WatchStatus.Completed; return true;
+            case "on_hold": status = WatchStatus.OnHold; return true;
+            case "dropped": status = WatchStatus.Dropped; return true;
+            case "plan_to_watch": status = WatchStatus.PlanToWatch; return true;
+            default: status = default; return false;
+        }
+    }
+
+    public static WatchStatus ToWatchStatus(this string malStatus) =>
+        malStatus.TryToWatchStatus(out var status)
+            ? status
+            : throw new ArgumentOutOfRangeException(nameof(malStatus), malStatus, "Unrecognized MAL list status.");
+
+    /// <summary>True when a MAL list status is either absent (the existing
+    /// Plan-to-watch default) or one of the known strings <see
+    /// cref="TryToWatchStatus"/> maps.</summary>
+    public static bool HasRecognizedStatus(this MalListStatus? status) =>
+        status?.Status is null || status.Status.TryToWatchStatus(out _);
 
     public static string ToMalStatusString(this WatchStatus status) => status switch
     {

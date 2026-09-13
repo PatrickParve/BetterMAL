@@ -184,6 +184,19 @@ public class HeldChangeService(
         return new HeldChangeBulkResult(succeeded, stillHeld);
     }
 
+    // design.md D7: an unrecognized MyAnimeList list status is thrown here as
+    // an unreadable read, inside the same try blocks that already handle a
+    // genuine read failure — so R2's "never guess" rule and D8's "unreadable
+    // = best-effort" rule stay in exactly one place each.
+    private async Task<MalListStatus?> ReadRemoteStatusAsync(int animeId, CancellationToken ct)
+    {
+        var status = await malClient.GetMyListStatusAsync(animeId, ct);
+        if (status is not null && !status.HasRecognizedStatus())
+            throw new InvalidDataException($"MyAnimeList gave list status '{status.Status}' for anime {animeId}, which this app doesn't recognize.");
+
+        return status;
+    }
+
     // design.md D6: declining an entry MyAnimeList still lists overwrites the
     // six pushed fields with MyAnimeList's current value (via the shared
     // ApplyTo mapping, resolved through the same rewatch-preserving rule
@@ -196,7 +209,7 @@ public class HeldChangeService(
         MalListStatus? remoteStatus;
         try
         {
-            remoteStatus = await malClient.GetMyListStatusAsync(entry.AnimeId, ct);
+            remoteStatus = await ReadRemoteStatusAsync(entry.AnimeId, ct);
         }
         catch (Exception ex)
         {
@@ -240,7 +253,7 @@ public class HeldChangeService(
         MalListStatus? remoteStatus;
         try
         {
-            remoteStatus = await malClient.GetMyListStatusAsync(removal.AnimeId, ct);
+            remoteStatus = await ReadRemoteStatusAsync(removal.AnimeId, ct);
         }
         catch (Exception ex)
         {
@@ -279,12 +292,15 @@ public class HeldChangeService(
 
     // design.md D8: best-effort — an item whose read fails renders with its
     // local side and a note that MyAnimeList is unavailable, rather than
-    // failing the whole review.
+    // failing the whole review. An unrecognized MyAnimeList list status
+    // counts as unreadable here too (report-partial-runs-and-mal-side-removals
+    // design.md D7): ReadRemoteStatusAsync throws for it, so it's handled by
+    // the same catch as a genuine read failure.
     private async Task<(MalListStatus? RemoteStatus, bool Unavailable)> TryGetRemoteStatusAsync(int animeId, CancellationToken ct)
     {
         try
         {
-            return (await malClient.GetMyListStatusAsync(animeId, ct), false);
+            return (await ReadRemoteStatusAsync(animeId, ct), false);
         }
         catch (Exception ex)
         {
