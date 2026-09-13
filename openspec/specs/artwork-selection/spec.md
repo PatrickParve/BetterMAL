@@ -101,7 +101,7 @@ A backfill that fails SHALL leave the anime marked as never fetched, so the next
 A picture set SHALL NOT carry a staleness tier of its own. It is refreshed whenever its anime's full detail is refreshed, and no more often.
 
 #### Scenario: A tiered refresh carries the pictures
-- **WHEN** the nightly my-list refresh fetches full detail for an anime
+- **WHEN** the scheduled my-list refresh fetches full detail for an anime
 - **THEN** the request includes `pictures`, the returned set is stored, and no second request is made for it
 
 #### Scenario: A non-list anime's fetch omits the field

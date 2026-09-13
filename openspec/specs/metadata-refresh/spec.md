@@ -3,11 +3,11 @@
 ## Purpose
 TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
 ## Requirements
-### Requirement: No live API calls on page render
-The system SHALL never call the MAL API live during a page render; cached metadata refresh SHALL happen only via scheduled background work or explicit on-demand actions.
+### Requirement: No live API calls on page render beyond the named visit-triggered exceptions
+The system SHALL never call the MAL API live during a page render except for the visit-triggered fetches specified elsewhere in this capability — the anime detail page's staleness-tier refresh and manual refresh action, season and Top Anime listing refresh, and picture backfill — and the reporting of a failed visit-triggered fetch. Outside those named exceptions, cached metadata refresh SHALL happen only via scheduled background work or explicit on-demand actions.
 
-#### Scenario: Rendering does not trigger a refresh
-- **WHEN** a page renders cached anime data
+#### Scenario: Rendering does not trigger an unlisted refresh
+- **WHEN** a page renders cached anime data outside the visit-triggered exceptions named above
 - **THEN** no live MAL API call is made as part of that render
 
 ### Requirement: Scheduled tiered staleness refresh for my-list anime
@@ -137,16 +137,16 @@ A resolution call that fails SHALL NOT count its discovery as resolved, and SHAL
 - **WHEN** far more discoveries are pending than one pass's resolution allowance
 - **THEN** the remainder are resolved on later passes rather than in one burst
 
-### Requirement: Nightly batch cap ordered by staleness
-The system SHALL cap the nightly refresh job at a fixed number of API calls per run (e.g. 500) and SHALL process the most-stale eligible candidates first across all tiers, carrying any overflow to the next night automatically without extra bookkeeping.
+### Requirement: Per-day batch cap ordered by staleness, spread across 10-minute passes
+The system SHALL cap the scheduled refresh job at a fixed number of API calls per UTC day (e.g. 500), spent across passes that run every 10 minutes rather than in one nightly burst, and SHALL process the most-stale eligible candidates first across all tiers, carrying any overflow to the next day automatically without extra bookkeeping.
 
 #### Scenario: Most-stale candidates processed first
-- **WHEN** the nightly job selects candidates within the batch cap
+- **WHEN** a pass selects candidates within the remaining daily cap
 - **THEN** candidates are ordered by longest time since last refresh first
 
-#### Scenario: Overflow carries to the next night
-- **WHEN** more candidates are eligible than the nightly batch cap allows
-- **THEN** the remainder are simply refreshed on a subsequent night since they remain the most-stale candidates
+#### Scenario: Overflow carries to the next day
+- **WHEN** more candidates are eligible than the daily batch cap allows
+- **THEN** the remainder are simply refreshed on a subsequent day since they remain the most-stale candidates
 
 ### Requirement: Cheap, spread-out refresh requests
 The system SHALL pace and cap its scheduled refresh work by **request count**, not by field selection: MyAnimeList's rate limit is per request, so asking for one field and asking for the full detail record cost exactly the same against it, and requesting less buys nothing.
@@ -185,16 +185,16 @@ When the MyAnimeList call succeeds but the AniList fetch fails, the action SHALL
 - **THEN** the action reports success with updated metadata, the anime's stored airing rows are left unchanged, and the AniList failure is logged
 
 ### Requirement: Lean, visit-triggered refresh for browsed anime
-The system SHALL refresh Season-page and Top-Anime-page listings by re-fetching only when the user visits the current season, the upcoming season, or a Top Anime ranking list on a local calendar day after that listing's last fetch, requesting only lean listing fields (title, picture, episode count, type, MAL score, rank/popularity) rather than full anime details. A season, or a ranking list, never visited SHALL never be proactively fetched.
+The system SHALL refresh Season-page listings on visit per the `season-browser` capability's own age-based cadence, and SHALL refresh Top-Anime-page listings by re-fetching only when the user visits a Top Anime ranking list on a local calendar day after that listing's last fetch — both requesting only lean listing fields (title, picture, episode count, type, MAL score, rank/popularity) rather than full anime details. A season, or a ranking list, never visited SHALL never be proactively fetched.
 
 Each selectable Top Anime ranking list — All, TV, Movie, OVA, Special, Popularity, and Favourite — SHALL be treated as its own listing for this purpose, with its own cached rows and its own last-fetched time, in the same way each (year, season) pair is its own listing. Fetching one list SHALL NOT mark any other list as fetched, and SHALL NOT invalidate another list's cache.
 
 #### Scenario: First visit of a new local day
-- **WHEN** I open the current season, the upcoming season, or a Top Anime ranking list and it has not been fetched yet on the current local calendar day
+- **WHEN** I open a season due for refresh under its age-based cadence, or a Top Anime ranking list not yet fetched on the current local calendar day
 - **THEN** the system re-fetches that listing's lean fields live and updates the cache
 
 #### Scenario: Same-day revisit serves cache
-- **WHEN** I reopen a listing already fetched earlier the same local day
+- **WHEN** I reopen a listing already fetched within its refresh interval
 - **THEN** it is served from Postgres without a live re-fetch
 
 #### Scenario: Lean refresh preserves existing rich fields
@@ -237,7 +237,7 @@ A failed fetch SHALL release the turn without marking the subject as fetched, so
 - **THEN** that request attempts the fetch again rather than being treated as already refreshed
 
 ### Requirement: Full detail fetch reserved for import, tiered refresh, and detail view
-The system SHALL only fetch full anime-detail fields (genres, synopsis, background, studio, aired dates, broadcast schedule, related anime) via initial import, the scheduled tiered refresh, the one-time resolution of a newly-discovered relation edge, opening that specific anime's own detail page, or its manual refresh action — never as a side effect of a season or Top Anime listing refresh.
+The system SHALL only fetch full anime-detail fields (genres, synopsis, background, studio, aired dates, broadcast schedule, related anime) via initial import, corrective re-sync, device-transfer import, the scheduled tiered refresh, the one-time resolution of a newly-discovered relation edge, opening that specific anime's own detail page, or its manual refresh action — never as a side effect of a season or Top Anime listing refresh.
 
 Outside those paths the system SHALL NOT fetch on behalf of an anime the user has not opened. The two paths that reach an unopened anime are bounded: the scheduled tiered refresh reaches one only through the adjacent set, and resolution reaches one exactly once, because a franchise announced a new entry.
 

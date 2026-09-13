@@ -198,7 +198,7 @@ The entry SHALL return to the carousel as soon as there is something to watch ag
 
 An entry whose aired-so-far count is unknown SHALL NOT be omitted, since there is no figure to be caught up with. An entry that has watched its anime's full published run is not omitted by this rule either: it is completed by the `list-editing` capability, which removes it from this section by status rather than by omission. A **Rewatching** entry SHALL be treated exactly as a Watching one here — a rewatch that has reached everything aired likewise has nothing to watch right now — which in practice means one part-way through a finished run is shown, as it is today.
 
-The section's ordering, card rendering, and every other requirement of this capability SHALL be unaffected — an omitted entry is simply not among the entries they operate on. The "Current season" section, which shows the same shows with their aired progress, SHALL be unaffected too, so a caught-up airing show remains visible on the main page there.
+The section's ordering, card rendering, and every other requirement of this capability SHALL be unaffected — an omitted entry is simply not among the entries they operate on. The "Followed shows airing" section, which shows the same shows with their aired progress, SHALL be unaffected too, so a caught-up airing show remains visible on the main page there.
 
 #### Scenario: A caught-up show is not in the carousel
 
@@ -238,7 +238,7 @@ The section's ordering, card rendering, and every other requirement of this capa
 #### Scenario: The show is still on the main page
 
 - **WHEN** a caught-up airing show is omitted from Currently watching
-- **THEN** it still appears in the Current season section with its watched and aired progress
+- **THEN** it still appears in the Followed shows airing section with its watched and aired progress
 
 ### Requirement: Rewatches appear in the currently-watching carousel
 
@@ -391,8 +391,8 @@ The dashboard payload backing this section SHALL carry the episode number of the
 - **WHEN** no my-list anime have a stored episode airing today in local time
 - **THEN** the section shows a small message indicating nothing is airing today
 
-### Requirement: Current season section with filters and progress
-The system SHALL show a "Current season" section on the home page containing anime in my list that belong to the current viewing season, filterable by popularity, MAL score, alphabetical, and my score. When sorting by popularity, anime that are unranked — MAL popularity rank absent or zero — SHALL be ordered after all ranked anime rather than treated as most popular.
+### Requirement: Followed shows airing section with filters and progress
+The system SHALL show a "Followed shows airing" section on the home page containing anime in my list that belong to the current viewing season, filterable by popularity, MAL score, and alphabetical. When sorting by popularity, anime that are unranked — MAL popularity rank absent or zero — SHALL be ordered after all ranked anime rather than treated as most popular.
 
 An anime SHALL be included when it is in my list and either its MAL airing status is `currently_airing`, or it has already premiered and its start date falls in the current season quarter. "Has already premiered" SHALL mean its start date is on or before today in local terms. An anime with no recorded start date SHALL be included only while MAL reports it as currently airing. A current-season anime that has finished airing — a movie, a short, or a completed TV run — SHALL therefore remain in the section for the rest of that season. A current-season anime that has not premiered yet SHALL be excluded until its start date passes.
 
@@ -411,7 +411,7 @@ When an episode is incremented elsewhere on the home page for an anime that also
 This bar — the `aired/total`-labelled bar specified here, with no editable count — SHALL apply only to the home page's followed-shows-airing section. Broadcast progress itself is not exclusive to this section: the anime detail page draws its own aired fill behind my watched fill while an anime is currently airing, per the anime-detail capability; the currently-watching carousel does the same on its own editable watched/total bar, per the "Broadcast progress on currently-watching cards" requirement; and the series page does the same for its own progress figures. The watched/total progress bar SHALL remain unchanged everywhere else it is used, including My List.
 
 #### Scenario: Filtering current season
-- **WHEN** I choose a sort/filter (popularity, MAL score, alphabetical, or my score)
+- **WHEN** I choose a sort/filter (popularity, MAL score, or alphabetical)
 - **THEN** the current-season cards reorder accordingly
 
 #### Scenario: Unranked anime sort last by popularity

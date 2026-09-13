@@ -4,7 +4,7 @@
 TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
 ## Requirements
 ### Requirement: Single anime detail layout
-The system SHALL show a single anime page whose title sits in the page's own header block, per the `page-header-design` capability, above a body carrying a large picture on the left and, near the top-right, two separate side-by-side boxes: one showing rank and MAL score (MAL score respecting the hide/unhide toggle), and one showing my score and rewatch count. Below those it SHALL show an info box (type, status, source, duration, studio, aired-from/to, and genres) and, beneath it, a synopsis/background box whenever the anime has a synopsis or a background. Any info field for which no data is available SHALL display "No info" rather than being blank.
+The system SHALL show a single anime page whose title sits in the page's own header block, per the `page-header-design` capability, above a body carrying a large picture on the left and, near the top-right, a box showing rank and MAL score (MAL score respecting the hide/unhide toggle) and, only once the anime has a score of mine, a separate box beside it showing my score, the rewatch count when it is not zero, and my finish date while my status is Completed — per the "The two score boxes share one size" requirement. Below those it SHALL show an info box (type, status, source, duration, studio, aired-from/to, and genres) and, beneath it, a synopsis/background box whenever the anime has a synopsis or a background. Any info field for which no data is available SHALL display "No info" rather than being blank.
 
 The synopsis/background box SHALL carry a Synopsis section only when the anime has a synopsis, and a Background section only when it has a background. When the anime has neither, the box SHALL be omitted entirely: no empty box, no heading, and no placeholder text such as "No synopsis available." A synopsis or background that is empty or consists only of whitespace SHALL count as absent. The "No info" rule applies to the info box's fields only, not to the synopsis/background box.
 
@@ -21,8 +21,8 @@ The info box's Status field SHALL, when the anime is currently airing and an air
 The aired-episode count SHALL come from the anime's stored per-episode airing rows and SHALL NOT be estimated from its broadcast cadence or from elapsed time since its start date. An anime with no stored airing rows SHALL be treated as having no known aired count.
 
 #### Scenario: Rendering the detail layout
-- **WHEN** I open the detail page of an anime that has a synopsis
-- **THEN** it shows the title in the page's header block above a body with a large picture on the left, a "rank and MAL score" box and a separate "my score and rewatch count" box side by side, an info box (type, status, source, duration, studio, aired-from/to, genres), and a synopsis/background box
+- **WHEN** I open the detail page of an anime that has a synopsis and a score of mine
+- **THEN** it shows the title in the page's header block above a body with a large picture on the left, a "rank and MAL score" box and a separate "my score" box — showing my score, the rewatch count when it is not zero, and my finish date while my status is Completed — side by side, an info box (type, status, source, duration, studio, aired-from/to, genres), and a synopsis/background box
 
 #### Scenario: No synopsis and no background
 - **WHEN** I open the detail page of an anime that has neither a synopsis nor a background
@@ -499,13 +499,13 @@ The page SHALL re-read the anime only for the manual **Refresh data** action, wh
 - **THEN** the anime is refreshed against MAL and AniList and the page re-reads it, as it does today
 
 ### Requirement: Progress bar and overlay status editor
-The system SHALL show, below the picture, a progress bar (`watched/total`, or `watched/?` when the total is unknown) with the current status next to it. The `watched` count SHALL be directly editable in place, per the "Inline editable episode count" requirement, so a specific episode number can be set without opening the overlay. The edit button — the second of the three action buttons stacked beneath the progress bar, shown only once the anime is in my list — SHALL open an overlay on top of the page for updating episodes watched, rewatch count, and score, applying the list-editing business rules. The editor SHALL NOT include start/finish date fields, since those are set automatically by the app's date logic.
+The system SHALL show, below the picture, a progress bar (`watched/total`, or `watched/?` when the total is unknown) with the current status next to it. The `watched` count SHALL be directly editable in place, per the "Inline editable episode count" requirement, so a specific episode number can be set without opening the overlay. The edit button — the second of the three action buttons stacked beneath the progress bar, shown only once the anime is in my list — SHALL open an overlay on top of the page for updating episodes watched, rewatch count, and score, applying the list-editing business rules. The overlay SHALL also expose the start and finish date fields per the `list-editing` capability's "Start and finish dates are editable in the editor" requirement, behind the same collapsed "Dates" disclosure.
 
 While the anime has aired no episode, the progress bar SHALL NOT be shown at all — no track, no `watched/total` count, and no increment control — per the "The editable progress row appears only once an episode has aired" requirement. The status text that sits beside the bar SHALL still be shown in that case, since it is the page's only statement of the entry's status and is not an edit control, and the action buttons beneath SHALL still be shown. The bar SHALL appear as specified above once the anime has aired an episode.
 
 #### Scenario: Opening the editor
 - **WHEN** I click the edit button beneath the progress bar
-- **THEN** an overlay opens with fields for episodes watched, rewatch count, and score, and no start/finish date fields
+- **THEN** an overlay opens with fields for episodes watched, rewatch count, and score, plus a collapsed "Dates" disclosure for the start and finish date fields
 
 #### Scenario: Saving an edit
 - **WHEN** I change episodes watched, rewatch count, or score in the overlay

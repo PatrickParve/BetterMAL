@@ -185,7 +185,7 @@ The system SHALL present every my-list filter and sort control in one controls b
 
 The block SHALL be divided into two groups, each on its own row and each carrying a visible label:
 
-- a **Filter** group holding the controls that narrow which entries are shown — find in list, the type filter, the airing-status filter, the score filter, and the Started filter — in that order;
+- a **Filter** group holding the controls that narrow which entries are shown — find in list, the type filter, the airing-status filter, and the score filter — in that order;
 - a **Sort** group holding the controls that order and arrange them — the sort key, its direction, the tiebreaker, and the grouping choice — in that order.
 
 No control SHALL sit in the other group's row, and the two groups SHALL stay on separate rows at every viewport width, so narrowing and ordering never read as one strip. Each group SHALL be exposed to assistive technology as a group named by its label.
@@ -196,7 +196,7 @@ Using any control in the block SHALL NOT make another control in the block appea
 
 Every control in the block SHALL be rectangular and share the one control height the `page-header-design` capability defines for a filter cluster. The rounded pill shape SHALL be reserved for the status filter tabs, so a control that narrows or orders the list is never mistaken for a status tab.
 
-The page SHALL offer a **Reset filters & sort** action that restores the page's default view — no text query, no type restriction, no airing restriction, no score restriction, the Started filter off, alphabetical primary sort in its natural direction, no tiebreaker, grouped by status. The action SHALL be shown only while at least one of those is not at its default. It SHALL sit in the results line described by "My list reports what is being shown" rather than among the controls, and SHALL NOT change the selected status tabs or dismiss a recap scope, which are separate controls.
+The page SHALL offer a **Reset filters & sort** action that restores the page's default view — no text query, no type restriction, no airing restriction, no score restriction, alphabetical primary sort in its natural direction, no tiebreaker, grouped by status. The action SHALL be shown only while at least one of those is not at its default. It SHALL sit in the results line described by "My list reports what is being shown" rather than among the controls, and SHALL NOT change the selected status tabs or dismiss a recap scope, which are separate controls.
 
 #### Scenario: One block for the whole page
 - **WHEN** the my-list page renders with several status groups on screen
@@ -204,7 +204,7 @@ The page SHALL offer a **Reset filters & sort** action that restores the page's 
 
 #### Scenario: Narrowing and ordering are two labelled groups
 - **WHEN** the my-list page renders
-- **THEN** a row labelled Filter holds find in list, Type, Airing, Score and Started, and a separate row labelled Sort below it holds the sort key, the direction control, the tiebreaker and the grouping choice
+- **THEN** a row labelled Filter holds find in list, Type, Airing and Score, and a separate row labelled Sort below it holds the sort key, the direction control, the tiebreaker and the grouping choice
 
 #### Scenario: A group wraps within its own row
 - **WHEN** the viewport is too narrow to fit the Filter group's controls on one line
@@ -220,19 +220,15 @@ The page SHALL offer a **Reset filters & sort** action that restores the page's 
 
 #### Scenario: Only the status tabs are pills
 - **WHEN** I look at the page above the list
-- **THEN** the status tabs are the only rounded pills, and the Started filter, the direction control and the grouping choice are rectangular controls matching the selects beside them
+- **THEN** the status tabs are the only rounded pills, and the direction control and the grouping choice are rectangular controls matching the selects beside them
 
 #### Scenario: Resetting
 - **WHEN** I have narrowed or reordered the list and use **Reset filters & sort**
-- **THEN** the text query, type, airing-status, score and Started filters are cleared, the sort returns to alphabetical in its natural direction with no tiebreaker, grouping by status is on, and the selected status tabs are left as they were
+- **THEN** the text query, type, airing-status and score filters are cleared, the sort returns to alphabetical in its natural direction with no tiebreaker, grouping by status is on, and the selected status tabs are left as they were
 
 #### Scenario: Reset hidden at defaults
 - **WHEN** every filter and sort control is at its default value
 - **THEN** no **Reset filters & sort** action is shown
-
-#### Scenario: The Started filter counts as off-default
-- **WHEN** the Started filter is the only control I have changed
-- **THEN** the **Reset filters & sort** action is shown, and using it turns the filter off
 
 #### Scenario: Reset leaves a recap scope in place
 - **WHEN** a recap scope is active and I use **Reset filters & sort**
@@ -264,7 +260,7 @@ While the field holds text it SHALL offer a clear control inside the field that 
 - **THEN** it shows no clear control
 
 ### Requirement: My list marks the filters in force
-Each control in the my-list Filter group SHALL show, at rest and without being opened, whether it is currently narrowing the list: the find-in-list field while it holds text, the type and airing-status filters while on anything other than **All** (including **None**), the score filter while on anything other than Any, and the Started filter while on. A narrowing control SHALL be drawn with the app's active accent treatment; a control at its default SHALL be drawn neutral. The marking SHALL NOT change any control's size, and SHALL NOT be the only signal of the control's state — each control's own label, value, or tick continues to state it.
+Each control in the my-list Filter group SHALL show, at rest and without being opened, whether it is currently narrowing the list: the find-in-list field while it holds text, the type and airing-status filters while on anything other than **All** (including **None**), and the score filter while on anything other than Any. A narrowing control SHALL be drawn with the app's active accent treatment; a control at its default SHALL be drawn neutral. The marking SHALL NOT change any control's size, and SHALL NOT be the only signal of the control's state — each control's own label, value, or tick continues to state it.
 
 Controls in the Sort group SHALL NOT carry this marking, since ordering the list hides nothing.
 
@@ -279,10 +275,6 @@ Controls in the Sort group SHALL NOT carry this marking, since ordering the list
 #### Scenario: Returning to the default clears the mark
 - **WHEN** I empty the find-in-list field
 - **THEN** the field is drawn neutral again
-
-#### Scenario: Marking moves nothing
-- **WHEN** I turn the Started filter on and off
-- **THEN** no control in the Filter group changes size or position
 
 #### Scenario: Sorting is not marked
 - **WHEN** I change the sort key and direction
@@ -366,27 +358,6 @@ The score-value options SHALL be presented alongside Rated and Unrated in the sa
 #### Scenario: A score with no entries
 - **WHEN** I select a score I have given to nothing in the current view
 - **THEN** the list reports that nothing matches, rather than falling back to every rated entry
-
-### Requirement: My list started filter
-The system SHALL provide a **Started** filter in the my-list Filter group that narrows the list to entries I have watched at least one episode of, whatever their status. Off — its default — it SHALL impose no restriction. It SHALL combine with every other filter rather than replacing them.
-
-It SHALL be presented as a checkbox control labelled Started, showing its state as a tick and sharing the Filter group's control height, rather than as a rounded pill shaped like the status filter tabs.
-
-#### Scenario: Narrowing to what I have started
-- **WHEN** I turn the Started filter on
-- **THEN** only entries with at least one episode watched are shown, whichever status they hold
-
-#### Scenario: Off by default
-- **WHEN** the my-list page renders without the filter being set
-- **THEN** entries with no episodes watched are shown alongside the rest
-
-#### Scenario: Combining with the type filter
-- **WHEN** I turn the Started filter on and select Movie in the type filter
-- **THEN** only films I have watched are shown
-
-#### Scenario: Reads as a filter, not a status
-- **WHEN** I look at the Started filter
-- **THEN** it is a checkbox control in the Filter group rather than a rounded pill like the status tabs, and its tick shows whether it is on
 
 ### Requirement: My list two-level sorting
 The system SHALL order my list by a primary sort key with an optional tiebreaker key, both chosen in the Sort group, so orderings such as "my score, then MAL score" or "episodes watched, then MAL score" are expressible directly.
@@ -887,7 +858,7 @@ The scope SHALL be carried in the page URL so it survives a reload and back-navi
 
 While a recap scope is active the page's own status tabs, filters, and sorting SHALL continue to work, narrowing and ordering within the scoped set rather than escaping it. The results line's count SHALL report against the scoped set.
 
-The page SHALL additionally accept, alongside a scope, a narrowing that names one of the recap's stats or one of its score-distribution rows. Such a narrowing SHALL be applied by setting the page's **own** controls — the status tab, the type filter, the score filter, and the Started filter — to the values that express it, rather than as a second, hidden scope, so it is visible on arrival and can be adjusted or cleared with the page's ordinary controls. Controls the narrowing does not concern SHALL be left at their defaults, and the resulting set SHALL match the number that was followed.
+The page SHALL additionally accept, alongside a scope, a narrowing that names one of the recap's stats or one of its score-distribution rows. Such a narrowing SHALL be applied by setting the page's **own** controls — the status tab, the type filter, and the score filter — to the values that express it, rather than as a second, hidden scope, so it is visible on arrival and can be adjusted or cleared with the page's ordinary controls. Controls the narrowing does not concern SHALL be left at their defaults, and the resulting set SHALL match the number that was followed. A stat with no equivalent among the page's own controls — such as "Movies watched", which counts a movie regardless of watch status — SHALL narrow only by the controls that do have an equivalent (here, type), rather than misrepresenting the stat with a narrower filter than it means.
 
 A narrowing SHALL be applied once, on arrival. Changing any of those controls afterwards SHALL take effect and SHALL NOT be reverted, and dismissing the scope SHALL clear the narrowing along with it. Returning to the page with the browser's back or forward buttons SHALL restore the controls as they were left, not as they arrived.
 
@@ -921,7 +892,7 @@ A narrowing SHALL be applied once, on arrival. Changing any of those controls af
 
 #### Scenario: Arriving from a recap stat
 - **WHEN** I open my list by following a 2020 recap's **Movies watched** stat
-- **THEN** the page arrives scoped to 2020 with its type filter set to Movie and its Started filter on, and shows exactly the films of that period I have watched
+- **THEN** the page arrives scoped to 2020 with its type filter set to Movie, showing that period's films whatever their watch status, since no page control narrows by watched-at-all
 
 #### Scenario: Arriving from a distribution row
 - **WHEN** I open my list by following a recap distribution's score-8 row
