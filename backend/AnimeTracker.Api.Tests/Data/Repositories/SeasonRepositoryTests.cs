@@ -270,6 +270,51 @@ public class SeasonRepositoryTests
         Assert.Equal(fullAlphabeticalOrder.Where(id => id != 4), filtered.OrderBy(i => i.SortOrder.Alphabetical).Select(i => i.AnimeId));
     }
 
+    // design D4, tasks.md 2.1/2.2: an anime cached under two of the year's
+    // seasons at once (the window between MAL moving it and the old season
+    // being fetched again) is read once, and the four orderings' positions
+    // stay dense over the de-duplicated item count rather than leaving a gap
+    // where the duplicate row would have sorted.
+    [Fact]
+    public async Task ADuplicateRowIsReadOnce()
+    {
+        using var db = CreateDb();
+        Seed(db, 1, "Aardvark", popularityRank: 1, malScore: 5);
+        Seed(db, 2, "Bravo", popularityRank: 2, malScore: 6);
+        Seed(db, 3, "Charlie", popularityRank: 3, malScore: 7);
+        List(db, 1, 2020, "spring");
+        List(db, 1, 2020, "summer"); // duplicate row for anime 1
+        List(db, 2, 2020, "spring");
+        List(db, 3, 2020, "fall");
+        await db.SaveChangesAsync();
+        var repository = new SeasonRepository(db);
+
+        var items = await repository.GetListingAsync(Year2020, hideHentai: false);
+
+        Assert.Equal(3, items.Count);
+        Assert.Equal(3, items.Select(i => i.AnimeId).Distinct().Count());
+
+        var expectedPositions = new[] { 0, 1, 2 };
+        Assert.Equal(expectedPositions, items.Select(i => i.SortOrder.Popularity).OrderBy(p => p));
+        Assert.Equal(expectedPositions, items.Select(i => i.SortOrder.MalScore).OrderBy(p => p));
+        Assert.Equal(expectedPositions, items.Select(i => i.SortOrder.Alphabetical).OrderBy(p => p));
+        Assert.Equal(expectedPositions, items.Select(i => i.SortOrder.MyScore).OrderBy(p => p));
+
+        using var dbNoDuplicate = CreateDb();
+        Seed(dbNoDuplicate, 1, "Aardvark", popularityRank: 1, malScore: 5);
+        Seed(dbNoDuplicate, 2, "Bravo", popularityRank: 2, malScore: 6);
+        Seed(dbNoDuplicate, 3, "Charlie", popularityRank: 3, malScore: 7);
+        List(dbNoDuplicate, 1, 2020, "spring");
+        List(dbNoDuplicate, 2, 2020, "spring");
+        List(dbNoDuplicate, 3, 2020, "fall");
+        await dbNoDuplicate.SaveChangesAsync();
+        var itemsNoDuplicate = await new SeasonRepository(dbNoDuplicate).GetListingAsync(Year2020, hideHentai: false);
+
+        Assert.Equal(OrderBy(itemsNoDuplicate, s => s.Popularity), OrderBy(items, s => s.Popularity));
+        Assert.Equal(itemsNoDuplicate.OrderBy(i => i.SortOrder.Alphabetical).Select(i => i.AnimeId),
+            items.OrderBy(i => i.SortOrder.Alphabetical).Select(i => i.AnimeId));
+    }
+
     [Fact]
     public async Task HasListingAsyncIsTrueWhenAnyOfTheFourPointsHasARow()
     {

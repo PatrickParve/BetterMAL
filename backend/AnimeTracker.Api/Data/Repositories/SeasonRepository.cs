@@ -119,7 +119,13 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
             Status = l.Anime.UserEntry != null ? (WatchStatus?)l.Anime.UserEntry.Status : null,
         });
 
-        var items = await projected.ToListAsync(ct);
+        // A year read can see an anime under two of its seasons at once,
+        // between MAL moving it (fetching the new season adds it there) and
+        // the old season being fetched again (which would remove it) — design
+        // D4. The two rows project identically, since this projection has no
+        // season column, so de-duplicating in memory rather than with SQL
+        // Distinct() keeps the five queries below as they are.
+        var items = (await projected.ToListAsync(ct)).DistinctBy(a => a.Id).ToList();
 
         // The four orderings below are deliberately left in SQL and run as
         // id-only projections rather than reimplemented over `items` in C#
@@ -198,12 +204,15 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
 
     // Positions in a total order over the whole listing (design D3): index 0
     // is first under that ordering, and removing items from the listing
-    // client-side preserves the relative order of what's left.
+    // client-side preserves the relative order of what's left. TryAdd keeps
+    // only the first position seen for an id, so a duplicate row for an
+    // anime cached under two seasons at once (design D4) doesn't leave a gap
+    // in the positions — they stay dense over the de-duplicated item count.
     private static Dictionary<int, int> ToPositionMap(List<int> orderedIds)
     {
         var positions = new Dictionary<int, int>(orderedIds.Count);
-        for (var i = 0; i < orderedIds.Count; i++)
-            positions[orderedIds[i]] = i;
+        foreach (var id in orderedIds)
+            positions.TryAdd(id, positions.Count);
         return positions;
     }
 

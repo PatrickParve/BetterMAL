@@ -4,12 +4,18 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Library;
 using AnimeTracker.Api.Services.Mal;
+using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Season;
 
+/// <summary>Backs the Season and Year pages: cache-first reads plus a
+/// visit-triggered refresh against MAL. A successful fetch (one that returns
+/// at least one anime) both adds anime MAL now files under the season and not
+/// yet cached, and removes anime MAL no longer files there — so the cached
+/// listing settles to exactly what MAL currently lists (design D1, D2).</summary>
 public class SeasonBrowseService(
     AnimeTrackerDbContext db,
     IMalClient malClient,
@@ -222,33 +228,39 @@ public class SeasonBrowseService(
                 await changeDetector.RecordAsync(tracked, snapshot, now, ct);
         }
 
-        var existingListingIds = (await db.SeasonAnimeListings
+        var memberIds = animeIds.Where(id => IsFiledUnder(startSeasonById.GetValueOrDefault(id), year, season)).ToHashSet();
+
+        var existingListings = await db.SeasonAnimeListings
             .Where(l => l.Year == year && l.Season == season)
-            .Select(l => l.AnimeId)
-            .ToListAsync(ct)).ToHashSet();
+            .ToListAsync(ct); // tracked, so removals commit with the stamp
+        var existingIds = existingListings.Select(l => l.AnimeId).ToHashSet();
 
-        foreach (var animeId in animeIds)
-        {
-            if (existingListingIds.Contains(animeId))
-                continue;
-
-            // MAL's own start_season is authoritative — an anime belongs to the
-            // season MAL files it under, which can differ from the quarter its
-            // start_date falls in (e.g. an early-June premiere MAL lists as summer).
-            // Only exclude when MAL explicitly classifies it under a *different*
-            // season (e.g. a continuing long-runner from a past season); a missing
-            // start_season falls back to trusting the season endpoint that returned it.
-            var startSeason = startSeasonById.GetValueOrDefault(animeId);
-            if (startSeason is not null &&
-                (startSeason.Year != year || !string.Equals(startSeason.Season, season, StringComparison.OrdinalIgnoreCase)))
-                continue;
-
+        foreach (var animeId in memberIds.Where(id => !existingIds.Contains(id)))
             db.SeasonAnimeListings.Add(new SeasonAnimeListing { Year = year, Season = season, AnimeId = animeId });
-        }
+
+        // Only a response with anime prunes: an empty 200 means the same as
+        // "not listed" (SeasonBrowseDto.cs:6-12), and removing on it would
+        // wipe the whole season. NotListed and Failed never reach this far —
+        // GetFullSeasonAsync is all-or-nothing, so a failure partway through
+        // paging throws, never returns a shorter list (design D2).
+        if (edges.Count > 0)
+            db.SeasonAnimeListings.RemoveRange(existingListings.Where(l => !memberIds.Contains(l.AnimeId)));
 
         await StampFetchLogAsync(year, season, now, ct);
         return SeasonRefreshOutcome.Fetched;
     }
+
+    // MAL's own start_season is authoritative — an anime belongs to the
+    // season MAL files it under, which can differ from the quarter its
+    // start_date falls in (e.g. an early-June premiere MAL lists as summer).
+    // Only excluded when MAL explicitly classifies it under a *different*
+    // season (e.g. a continuing long-runner from a past season); a missing
+    // start_season falls back to trusting the season endpoint that returned
+    // it. Adding and pruning both use this check, so the two can never
+    // disagree about where an anime belongs (design D1).
+    private static bool IsFiledUnder(MalStartSeason? startSeason, int year, string season) =>
+        startSeason is null ||
+        (startSeason.Year == year && string.Equals(startSeason.Season, season, StringComparison.OrdinalIgnoreCase));
 
     private async Task StampFetchLogAsync(int year, string season, DateTimeOffset now, CancellationToken ct)
     {

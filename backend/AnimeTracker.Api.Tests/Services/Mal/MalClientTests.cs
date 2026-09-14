@@ -270,6 +270,29 @@ public class MalClientTests
         Assert.Equal(new[] { 0 }, offsets);
     }
 
+    // Season pruning depends on this: a partial list must never reach
+    // FetchAndCacheAsync, since it can't distinguish a genuinely short season
+    // from one MAL stopped paging through. A failure on any page after the
+    // first — a later page is never 404-tolerant, only page 0 is — must throw
+    // rather than return whatever pages succeeded before it.
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public async Task SeasonAFailurePartwayThroughPagingThrows(HttpStatusCode statusAtOffset100)
+    {
+        var script = new Dictionary<int, (HttpStatusCode, string)>
+        {
+            [0] = (HttpStatusCode.OK, AnimeListPage(1, 100, next: "https://api.myanimelist.net/v2/anime/season/2024/spring?offset=100&limit=100")),
+            [100] = (statusAtOffset100, ""),
+        };
+        var stub = new OffsetScriptedHandler(script);
+        var client = CreateClient(stub);
+
+        await Assert.ThrowsAnyAsync<HttpRequestException>(() => client.GetFullSeasonAsync(2024, "spring"));
+
+        Assert.Equal(new[] { 0, 100 }, RequestedOffsets(stub));
+    }
+
     // --- UpdateMyListStatusAsync ---
 
     [Fact]

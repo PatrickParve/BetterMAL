@@ -410,6 +410,190 @@ public class SeasonBrowseServiceTests
         Assert.Equal(new DateOnly(2026, 7, 12), stored.AiredFrom);
     }
 
+    // --- fix-season-pruning-and-bound-clamp: B3, a fetch that returns anime prunes what MAL no longer files here (design D1-D3) ---
+
+    private static async Task SeedListing(AnimeTrackerDbContext db, int animeId, int year, string season)
+    {
+        if (!await db.AnimeMetadata.AnyAsync(a => a.Id == animeId))
+            db.AnimeMetadata.Add(new AnimeMetadata { Id = animeId, Title = $"Anime {animeId}" });
+        db.SeasonAnimeListings.Add(new SeasonAnimeListing { Year = year, Season = season, AnimeId = animeId });
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<List<int>> ListedIds(AnimeTrackerDbContext db, int year, string season) =>
+        (await db.SeasonAnimeListings.AsNoTracking()
+            .Where(l => l.Year == year && l.Season == season)
+            .Select(l => l.AnimeId)
+            .ToListAsync())
+        .OrderBy(id => id)
+        .ToList();
+
+    // Overload of SeasonEdge above, for an edge MAL returns with no
+    // start_season at all — trusted to whichever season the response belongs
+    // to (design D1).
+    private static MalAnimeListEdge SeasonEdge(int id, int? numEpisodes = null, string? startDate = null) =>
+        new()
+        {
+            Node = new MalAnimeNode
+            {
+                Id = id,
+                Title = $"Anime {id}",
+                MediaType = "tv",
+                NumEpisodes = numEpisodes,
+                StartDate = startDate,
+            },
+        };
+
+    [Fact]
+    public async Task RefreshAsync_AMovedAnimeLeavesItsOldSeason()
+    {
+        using var db = CreateDb();
+        await SeedListing(db, 1, 2020, "spring");
+        await SeedListing(db, 2, 2020, "spring");
+
+        var malClient = new PerSeasonFakeMalClient(new()
+        {
+            ["spring"] = new MalSeasonResponse(Edges: [SeasonEdge(2, 2020, "spring"), SeasonEdge(3, 2020, "spring")]),
+            ["summer"] = new MalSeasonResponse(Edges: [SeasonEdge(1, 2020, "summer")]),
+        });
+        var service = CreateService(db, malClient);
+
+        var summerResult = await service.RefreshAsync(2020, "summer");
+        var springResult = await service.RefreshAsync(2020, "spring");
+
+        Assert.Equal(SeasonRefreshOutcome.Fetched, summerResult.Outcome);
+        Assert.Equal(SeasonRefreshOutcome.Fetched, springResult.Outcome);
+        Assert.Equal([2, 3], await ListedIds(db, 2020, "spring"));
+        Assert.Equal([1], await ListedIds(db, 2020, "summer"));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ReturnedButFiledElsewhereIsPruned()
+    {
+        using var db = CreateDb();
+        await SeedListing(db, 1, 2020, "spring");
+
+        var malClient = new PerSeasonFakeMalClient(new()
+        {
+            ["spring"] = new MalSeasonResponse(Edges: [SeasonEdge(1, 2019, "fall"), SeasonEdge(2, 2020, "spring")]),
+        });
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshAsync(2020, "spring");
+
+        Assert.Equal(SeasonRefreshOutcome.Fetched, result.Outcome);
+        Assert.Equal([2], await ListedIds(db, 2020, "spring"));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_NoStartSeasonIsKept()
+    {
+        using var db = CreateDb();
+        await SeedListing(db, 1, 2020, "spring");
+
+        var malClient = new PerSeasonFakeMalClient(new()
+        {
+            ["spring"] = new MalSeasonResponse(Edges: [SeasonEdge(1), SeasonEdge(2, 2020, "spring")]),
+        });
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshAsync(2020, "spring");
+
+        Assert.Equal(SeasonRefreshOutcome.Fetched, result.Outcome);
+        Assert.Equal([1, 2], await ListedIds(db, 2020, "spring"));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_NotListedResponseRemovesNothing()
+    {
+        using var db = CreateDb();
+        await SeedListing(db, 1, 2020, "spring");
+        await SeedListing(db, 2, 2020, "spring");
+
+        var malClient = new PerSeasonFakeMalClient(new() { ["spring"] = new MalSeasonResponse(Edges: null) });
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshAsync(2020, "spring");
+
+        Assert.Equal(SeasonRefreshOutcome.NotListed, result.Outcome);
+        Assert.Equal([1, 2], await ListedIds(db, 2020, "spring"));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_EmptyResponseRemovesNothing()
+    {
+        using var db = CreateDb();
+        await SeedListing(db, 1, 2020, "spring");
+        await SeedListing(db, 2, 2020, "spring");
+
+        var malClient = new PerSeasonFakeMalClient(new() { ["spring"] = new MalSeasonResponse(Edges: []) });
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshAsync(2020, "spring");
+
+        Assert.Equal(SeasonRefreshOutcome.Fetched, result.Outcome);
+        Assert.Equal([1, 2], await ListedIds(db, 2020, "spring"));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_FailedFetchRemovesNothing()
+    {
+        using var db = CreateDb();
+        await SeedListing(db, 1, 2020, "spring");
+        await SeedListing(db, 2, 2020, "spring");
+
+        var malClient = new PerSeasonFakeMalClient(new() { ["spring"] = new MalSeasonResponse(Edges: null, Throws: true) });
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshAsync(2020, "spring");
+
+        Assert.Equal(SeasonRefreshOutcome.Failed, result.Outcome);
+        Assert.Equal([1, 2], await ListedIds(db, 2020, "spring"));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_SkippedRefreshRemovesNothing()
+    {
+        using var db = CreateDb();
+        await SeedListing(db, 1, 2020, "spring");
+        await SeedListing(db, 2, 2020, "spring");
+        db.SeasonFetchLogs.Add(new SeasonFetchLog { Year = 2020, Season = "spring", LastFetchedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+
+        var malClient = new PerSeasonFakeMalClient(new());
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshAsync(2020, "spring");
+
+        Assert.Equal(SeasonRefreshOutcome.Skipped, result.Outcome);
+        Assert.Equal(0, malClient.FullSeasonCallCount);
+        Assert.Equal([1, 2], await ListedIds(db, 2020, "spring"));
+    }
+
+    [Fact]
+    public async Task RefreshYearAsync_TheYearShowsAMovedAnimeOnce()
+    {
+        using var db = CreateDb();
+        await SeedListing(db, 1, 2020, "spring");
+        await SeedListing(db, 2, 2020, "spring");
+
+        var malClient = new PerSeasonFakeMalClient(new()
+        {
+            ["winter"] = new MalSeasonResponse(Edges: null),
+            ["spring"] = new MalSeasonResponse(Edges: [SeasonEdge(2, 2020, "spring")]),
+            ["summer"] = new MalSeasonResponse(Edges: [SeasonEdge(1, 2020, "summer")]),
+            ["fall"] = new MalSeasonResponse(Edges: null),
+        });
+        var service = CreateService(db, malClient);
+
+        await service.RefreshYearAsync(2020);
+        var page = await service.GetYearPageAsync(2020, hideHentai: false);
+
+        Assert.Equal([1, 2], page.Items.Select(i => i.AnimeId).OrderBy(id => id));
+        Assert.Equal([2], await ListedIds(db, 2020, "spring"));
+        Assert.Equal([1], await ListedIds(db, 2020, "summer"));
+    }
+
     private sealed record MalSeasonResponse(List<MalAnimeListEdge>? Edges, bool Throws = false);
 
     // Per-season configurable fake — RefreshYearAsync's fold needs each of a

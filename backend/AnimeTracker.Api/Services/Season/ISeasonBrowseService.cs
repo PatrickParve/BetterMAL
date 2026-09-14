@@ -11,8 +11,12 @@ public interface ISeasonBrowseService
     Task<SeasonPageDto> GetPageAsync(int year, string season, bool hideHentai, CancellationToken ct = default);
 
     /// <summary>Fetches this season from MAL if it hasn't already been fetched
-    /// successfully today, subject to a per-season single-flight guard.
-    /// Failures are swallowed and logged; the cached listing is left as-is.</summary>
+    /// successfully today, subject to a per-season single-flight guard. A
+    /// fetch that returns at least one anime both adds anime newly filed
+    /// under the season and removes anime MAL no longer files there, using
+    /// the same membership rule for both. Failures, a 404, and an empty
+    /// response are swallowed and logged where relevant; the cached listing
+    /// is left as-is.</summary>
     Task<SeasonRefreshResultDto> RefreshAsync(int year, string season, CancellationToken ct = default);
 
     /// <summary>The furthest season navigable from the current one — see
