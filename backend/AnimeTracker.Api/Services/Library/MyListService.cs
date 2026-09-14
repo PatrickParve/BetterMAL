@@ -13,7 +13,7 @@ public class MyListService(
 {
     public async Task<List<MyListItemDto>> GetMyListAsync(CancellationToken ct = default)
     {
-        var entries = await entryRepository.GetAllAsync(ct);
+        var entries = await entryRepository.GetAllForListViewAsync(ct);
         var now = DateTimeOffset.UtcNow;
 
         // The ranking is derived from the same whole-list entries this page

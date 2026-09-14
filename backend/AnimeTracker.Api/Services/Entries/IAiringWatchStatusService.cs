@@ -19,12 +19,16 @@ public interface IAiringWatchStatusService
     /// <summary>Applies both directions to every entry among
     /// <paramref name="entries"/> whose condition matches; a no-op for every
     /// other entry, so passing the full read-path list is always safe.
+    /// However many entries qualify, this costs one tracked read and one
+    /// save, and nothing when none qualify. A conflicting concurrent change
+    /// to one entry drops only that entry; the rest still save.
     ///
-    /// Mutates each settled entry's Status (and, for a completion,
-    /// CompletedAt) in place — even though the entries a read path passes in
-    /// are typically untracked — so a caller that already resolved its own
-    /// DTOs from these same object references sees the flip without a second
-    /// read.</summary>
+    /// Mutates each settled entry's Status in place — even though the
+    /// entries a read path passes in are typically untracked — so a caller
+    /// that already resolved its own DTOs from these same object references
+    /// sees the flip without a second read. A completion's CompletedAt is
+    /// not written back onto the caller's object; only the stored entry
+    /// gets it (design.md Open Questions).</summary>
     Task SettleAsync(
         IReadOnlyCollection<UserAnimeEntry> entries,
         IReadOnlyDictionary<int, int> airedSoFarByAnimeId,

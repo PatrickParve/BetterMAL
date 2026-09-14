@@ -13,7 +13,7 @@ public class RecapService(
 {
     public async Task<RecapDto> GetRecapAsync(RecapPeriod period, string filter, CancellationToken ct = default)
     {
-        var wholeList = await entryRepository.GetAllAsync(ct);
+        var wholeList = await entryRepository.GetAllForListViewAsync(ct);
 
         // MyRank is the anime's overall rank in the whole app-wide ranking
         // (anime-ranking capability), not scoped to this recap's period, so

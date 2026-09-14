@@ -15,7 +15,7 @@ public class MainDashboardService(
 {
     public async Task<MainDashboardDto> GetDashboardAsync(CancellationToken ct = default)
     {
-        var entries = await entryRepository.GetAllAsync(ct);
+        var entries = await entryRepository.GetAllForListViewAsync(ct);
         var now = DateTimeOffset.UtcNow;
 
         // design.md D7: resolved once in bulk for the whole list, rather than

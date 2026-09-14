@@ -43,7 +43,7 @@ public class ProfileService(
 
     public async Task<ProfileDto> GetProfileAsync(CancellationToken ct = default)
     {
-        var entries = await entryRepository.GetAllAsync(ct);
+        var entries = await entryRepository.GetAllForListViewAsync(ct);
         var recentActivityWindow = await activityLogRepository.GetRecentAsync(RecentActivityFetchWindow, ct);
         var orderedAnimeIds = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
 
@@ -90,7 +90,7 @@ public class ProfileService(
 
     public async Task<TopAnimeSectionDto> GetTopAnimeSectionAsync(string mediaType, CancellationToken ct = default)
     {
-        var entries = await entryRepository.GetAllAsync(ct);
+        var entries = await entryRepository.GetAllForListViewAsync(ct);
         var orderedAnimeIds = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
         var rankingSnapshot = AnimeRankingSnapshot.Build(entries, orderedAnimeIds);
         return BuildTopAnimeSection(entries, rankingSnapshot, mediaType);
@@ -98,7 +98,7 @@ public class ProfileService(
 
     public async Task<RewatchedSectionDto> GetRewatchedSectionAsync(string mediaType, CancellationToken ct = default)
     {
-        var entries = await entryRepository.GetAllAsync(ct);
+        var entries = await entryRepository.GetAllForListViewAsync(ct);
         return BuildRewatchedSection(entries, mediaType);
     }
 
@@ -165,7 +165,7 @@ public class ProfileService(
     // re-queueing the same batch (task 4.3).
     private async Task ScheduleMissingSeriesBuildsAsync(SeriesRankingIndex rankingIndex, CancellationToken ct)
     {
-        var entries = await entryRepository.GetAllAsync(ct);
+        var entries = await entryRepository.GetAllForListViewAsync(ct);
         var missingIds = entries
             .Select(e => e.AnimeId)
             .Where(id => !rankingIndex.HasSeries(id))

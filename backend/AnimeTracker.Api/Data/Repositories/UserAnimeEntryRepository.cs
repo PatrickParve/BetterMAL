@@ -15,6 +15,38 @@ public class UserAnimeEntryRepository(AnimeTrackerDbContext db) : IUserAnimeEntr
             .Include(e => e.Anime)
             .ToListAsync(ct);
 
+    // GetAllAsync stays the full read for every other caller.
+    public Task<List<UserAnimeEntry>> GetAllForListViewAsync(CancellationToken ct = default) =>
+        db.UserAnimeEntries.AsNoTracking()
+            .Select(e => new UserAnimeEntry
+            {
+                AnimeId = e.AnimeId,
+                Status = e.Status,
+                EpisodesWatched = e.EpisodesWatched,
+                MyScore = e.MyScore,
+                StartedAt = e.StartedAt,
+                CompletedAt = e.CompletedAt,
+                RewatchCount = e.RewatchCount,
+                PendingSync = e.PendingSync,
+                LastSyncedAt = e.LastSyncedAt,
+                HeldForReviewAt = e.HeldForReviewAt,
+                Anime = new AnimeMetadata
+                {
+                    Id = e.Anime.Id,
+                    Title = e.Anime.Title,
+                    EnglishTitle = e.Anime.EnglishTitle,
+                    PictureUrl = e.Anime.PictureUrl,
+                    MediaType = e.Anime.MediaType,
+                    TotalEpisodes = e.Anime.TotalEpisodes,
+                    AiringStatus = e.Anime.AiringStatus,
+                    MalScore = e.Anime.MalScore,
+                    PopularityRank = e.Anime.PopularityRank,
+                    AiredFrom = e.Anime.AiredFrom,
+                    AverageEpisodeDurationSeconds = e.Anime.AverageEpisodeDurationSeconds,
+                },
+            })
+            .ToListAsync(ct);
+
     public async Task<(int PendingCount, int HeldCount, DateTimeOffset? LastSyncedAt)> GetSyncStatusAsync(CancellationToken ct = default)
     {
         var pendingCount = await db.UserAnimeEntries.AsNoTracking().CountAsync(e => e.PendingSync && e.HeldForReviewAt == null, ct);
