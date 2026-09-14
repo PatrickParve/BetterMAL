@@ -1,10 +1,12 @@
 namespace AnimeTracker.Api.Services.Mal.Auth;
 
 /// <summary>Periodically refreshes the MAL access token well ahead of its
-/// ~31-day expiry, so token refresh is a background concern rather than
-/// something a live request ever has to wait on.</summary>
+/// ~31-day expiry. This is the normal refresh path; it shares the token
+/// provider's lock with the request-path refresh, which is what stops it
+/// racing a request that refreshes the same token, such as after the app
+/// was off past the token's expiry.</summary>
 public class MalTokenRefreshBackgroundService(
-    IServiceScopeFactory scopeFactory,
+    IMalTokenProvider tokenProvider,
     ILogger<MalTokenRefreshBackgroundService> logger) : BackgroundService
 {
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(6);
@@ -36,27 +38,19 @@ public class MalTokenRefreshBackgroundService(
 
     private async Task RefreshIfNeededAsync(CancellationToken ct)
     {
-        using var scope = scopeFactory.CreateScope();
-        var tokenStore = scope.ServiceProvider.GetRequiredService<IMalTokenStore>();
-        var oauth = scope.ServiceProvider.GetRequiredService<IMalOAuthService>();
-
-        var token = await tokenStore.GetAsync(ct);
-        if (token is null)
-            return; // not authorized yet — nothing to refresh
-
-        if (token.ConnectionLostAt is not null)
-            return; // MyAnimeList has already refused this login — wait for re-authorization
-
-        if (token.ExpiresAt - RefreshBuffer > DateTimeOffset.UtcNow)
-            return; // still comfortably fresh
-
-        logger.LogInformation("MAL access token expires at {ExpiresAt}; refreshing ahead of expiry.", token.ExpiresAt);
-        var result = await oauth.RefreshAsync(token.RefreshToken, ct);
+        var result = await tokenProvider.RefreshIfExpiringWithinAsync(RefreshBuffer, ct);
 
         switch (result)
         {
-            case MalRefreshResult.Refreshed:
-                break; // already saved by RefreshAsync
+            case null:
+                // no login stored, the connection is lost, or still comfortably fresh
+                return;
+
+            case MalRefreshResult.Refreshed refreshed:
+                logger.LogInformation(
+                    "Refreshed the MAL access token ahead of expiry; it now expires at {ExpiresAt}.",
+                    refreshed.Token.ExpiresAt);
+                break;
 
             case MalRefreshResult.Refused refused:
                 logger.LogWarning(

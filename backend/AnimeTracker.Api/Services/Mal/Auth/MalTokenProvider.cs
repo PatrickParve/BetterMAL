@@ -9,9 +9,11 @@ public class MalTokenProvider(IServiceScopeFactory scopeFactory) : IMalTokenProv
 
     // MAL rotates refresh tokens on use, so two concurrent refreshes would have
     // the second exchange consume an already-spent refresh token and fail. This
-    // serializes the refresh path; the re-check after acquiring the lock lets
-    // every caller that queued behind an in-flight refresh reuse its result
-    // instead of refreshing again themselves.
+    // serializes GetValidAccessTokenAsync, RefreshAfterRejectionAsync and
+    // RefreshIfExpiringWithinAsync (the background refresh included), so at
+    // most one refresh is ever in flight; the re-check after acquiring the
+    // lock lets every caller that queued behind an in-flight refresh reuse
+    // its result instead of refreshing again themselves.
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
 
     public async Task<string?> GetValidAccessTokenAsync(CancellationToken ct = default)
@@ -64,6 +66,30 @@ public class MalTokenProvider(IServiceScopeFactory scopeFactory) : IMalTokenProv
             // A concurrent caller already refreshed while we waited for the lock.
             if (token.AccessToken != rejectedAccessToken)
                 return new MalRefreshResult.Refreshed(token);
+
+            return await oauth.RefreshAsync(token.RefreshToken, ct);
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
+    }
+
+    public async Task<MalRefreshResult?> RefreshIfExpiringWithinAsync(TimeSpan window, CancellationToken ct = default)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var tokenStore = scope.ServiceProvider.GetRequiredService<IMalTokenStore>();
+        var oauth = scope.ServiceProvider.GetRequiredService<IMalOAuthService>();
+
+        await _refreshLock.WaitAsync(ct);
+        try
+        {
+            var token = await tokenStore.GetAsync(ct);
+            if (token is null || token.ConnectionLostAt is not null)
+                return null;
+
+            if (token.ExpiresAt - window > DateTimeOffset.UtcNow)
+                return null;
 
             return await oauth.RefreshAsync(token.RefreshToken, ct);
         }

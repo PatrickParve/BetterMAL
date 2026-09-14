@@ -175,5 +175,8 @@ public class MalAuthPacingHandlerTests
                 AccessToken = refreshed.Token.AccessToken;
             return Task.FromResult(RefreshAfterRejectionResult);
         }
+
+        public Task<MalRefreshResult?> RefreshIfExpiringWithinAsync(TimeSpan window, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 }

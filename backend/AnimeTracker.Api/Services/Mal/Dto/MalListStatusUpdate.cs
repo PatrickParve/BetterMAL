@@ -12,7 +12,6 @@ public class MalListStatusUpdate
     public int? NumWatchedEpisodes { get; set; }
     public int? Score { get; set; }
     public int? NumTimesRewatched { get; set; }
-    public bool? IsRewatching { get; set; }
     public DateOnly? StartDate { get; set; }
     public DateOnly? FinishDate { get; set; }
 
@@ -22,7 +21,6 @@ public class MalListStatusUpdate
         if (NumWatchedEpisodes is not null) yield return new("num_watched_episodes", NumWatchedEpisodes.Value.ToString(CultureInfo.InvariantCulture));
         if (Score is not null) yield return new("score", Score.Value.ToString(CultureInfo.InvariantCulture));
         if (NumTimesRewatched is not null) yield return new("num_times_rewatched", NumTimesRewatched.Value.ToString(CultureInfo.InvariantCulture));
-        if (IsRewatching is not null) yield return new("is_rewatching", IsRewatching.Value ? "true" : "false");
 
         // Dates are always sent, even when null (as an empty string), so that a
         // locally cleared date actually clears it on MAL too — omitting the field

@@ -7,7 +7,6 @@ public class MalListStatus
     public string? Status { get; set; } // watching, completed, on_hold, dropped, plan_to_watch
     public int? Score { get; set; }
     public int? NumEpisodesWatched { get; set; }
-    public bool IsRewatching { get; set; }
     public string? StartDate { get; set; }
     public string? FinishDate { get; set; }
     public int? NumTimesRewatched { get; set; }

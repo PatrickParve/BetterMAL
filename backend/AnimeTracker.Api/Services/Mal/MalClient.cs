@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AnimeTracker.Api.Services.Mal.Dto;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace AnimeTracker.Api.Services.Mal;
 
@@ -44,7 +46,7 @@ public class MalClient(HttpClient http) : IMalClient
     // list_status sub-fields for the user animelist — without these, MAL omits
     // list_status entirely and every imported entry looks like "plan to watch".
     private const string UserAnimeListFields = DefaultAnimeFields +
-        ",list_status{status,score,num_episodes_watched,start_date,finish_date,num_times_rewatched,is_rewatching}";
+        ",list_status{status,score,num_episodes_watched,start_date,finish_date,num_times_rewatched}";
 
     public Task<MalPagedResponse<MalAnimeListEdge>> SearchAnimeAsync(string query, int limit = 5, CancellationToken ct = default) =>
         // nsfw=true — without it MAL silently omits R+/Rx-rated entries from
@@ -65,7 +67,8 @@ public class MalClient(HttpClient http) : IMalClient
     /// SeasonBrowseService record that as an answer rather than a failure. A
     /// 404 on a later page would mean the listing vanished mid-page-through —
     /// a real error — so every page after the first goes through the
-    /// ordinary (non-tolerant) GetSeasonAsync.</summary>
+    /// ordinary (non-tolerant) GetSeasonAsync. Later pages start at the offset
+    /// MAL's <c>next</c> link gives (see <see cref="NextPageOffset"/>).</summary>
     public async Task<List<MalAnimeListEdge>?> GetFullSeasonAsync(int year, string season, string? sort = null, CancellationToken ct = default)
     {
         var firstPage = await GetAsyncOrNotFound<MalPagedResponse<MalAnimeListEdge>>(
@@ -76,15 +79,15 @@ public class MalClient(HttpClient http) : IMalClient
         var all = new List<MalAnimeListEdge>(firstPage.Data);
         var next = firstPage.Paging?.Next;
         var lastPageCount = firstPage.Data.Count;
-        var offset = FullListPageSize;
+        var offset = 0;
 
         while (next is not null && lastPageCount > 0)
         {
+            offset = NextPageOffset(next, offset);
             var page = await GetSeasonAsync(year, season, FullListPageSize, offset, sort, ct);
             all.AddRange(page.Data);
             next = page.Paging?.Next;
             lastPageCount = page.Data.Count;
-            offset += FullListPageSize;
         }
 
         return all;
@@ -184,9 +187,37 @@ public class MalClient(HttpClient http) : IMalClient
 
     private const int FullListPageSize = 100;
 
-    /// <summary>Pages through a MAL cursor-paginated endpoint (season listing,
-    /// full my-list) until a page comes back empty or without a next link,
-    /// concatenating every page's data. <paramref name="onPageRead"/>, when
+    /// <summary>Works out where the next page of a full-list read should start.
+    /// MAL's own offset is used because a page can hold fewer entries than were
+    /// asked for and still cover the full range — stepping by
+    /// <see cref="FullListPageSize"/> instead would read some entries twice
+    /// whenever that happens. Falls back to one page past
+    /// <paramref name="currentOffset"/> when <paramref name="nextLink"/> is
+    /// missing, its offset isn't a whole number, or that offset isn't greater
+    /// than <paramref name="currentOffset"/>; the "greater than" rule keeps the
+    /// offset growing, so a link that repeats or rewinds it can't loop the read
+    /// forever.</summary>
+    private static int NextPageOffset(string? nextLink, int currentOffset)
+    {
+        var queryStart = nextLink?.IndexOf('?') ?? -1;
+        if (queryStart < 0)
+            return currentOffset + FullListPageSize;
+
+        var query = QueryHelpers.ParseQuery(nextLink![queryStart..]);
+        if (query.TryGetValue("offset", out var values) && values.Count == 1 &&
+            int.TryParse(values[0], NumberStyles.None, CultureInfo.InvariantCulture, out var next) &&
+            next > currentOffset)
+        {
+            return next;
+        }
+
+        return currentOffset + FullListPageSize;
+    }
+
+    /// <summary>Pages through the full my-list until a page comes back empty or
+    /// without a next link, concatenating every page's data. Each next page
+    /// starts at the offset MAL's <c>next</c> link gives (see
+    /// <see cref="NextPageOffset"/>). <paramref name="onPageRead"/>, when
     /// given, is called after each page with the running entry count.</summary>
     private static async Task<List<T>> GetAllPagesAsync<T>(Func<int, Task<MalPagedResponse<T>>> fetchPage, Action<int>? onPageRead = null)
     {
@@ -202,7 +233,7 @@ public class MalClient(HttpClient http) : IMalClient
             if (page.Paging?.Next is null || page.Data.Count == 0)
                 break;
 
-            offset += FullListPageSize;
+            offset = NextPageOffset(page.Paging.Next, offset);
         }
 
         return all;
