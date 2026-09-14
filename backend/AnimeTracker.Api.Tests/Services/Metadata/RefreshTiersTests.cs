@@ -117,4 +117,96 @@ public class RefreshTiersTests
         Assert.Contains(1, due);
         Assert.DoesNotContain(2, due);
     }
+
+    // --- LastRefreshFailedAt: a not-found attempt is measured like a refresh ---
+
+    [Fact]
+    public async Task IsDue_FinishedAnimeWaitsOutItsTierAfterAFailedAttempt()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        var anime = new AnimeMetadata
+        {
+            Id = 1,
+            Title = "A",
+            AiringStatus = "finished_airing",
+            AiredTo = Today.AddDays(-30), // within the last year: the 3-day RecentTtl tier
+            LastSyncedAt = now - TimeSpan.FromDays(60),
+            LastRefreshFailedAt = now - TimeSpan.FromDays(2),
+        };
+        db.AnimeMetadata.Add(anime);
+        await db.SaveChangesAsync();
+
+        var dueWithRecentFailure = await db.AnimeMetadata.Where(RefreshTiers.IsDue(now)).AnyAsync();
+        Assert.False(dueWithRecentFailure);
+
+        anime.LastRefreshFailedAt = now - TimeSpan.FromDays(3) - TimeSpan.FromHours(1);
+        await db.SaveChangesAsync();
+
+        var dueWithStaleFailure = await db.AnimeMetadata.Where(RefreshTiers.IsDue(now)).AnyAsync();
+        Assert.True(dueWithStaleFailure);
+    }
+
+    [Fact]
+    public async Task IsDue_NeverFetchedAnimeWaitsOutItsTierAfterAFailedAttempt()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        var anime = new AnimeMetadata
+        {
+            Id = 1,
+            Title = "A",
+            LastSyncedAt = default,
+            LastRefreshFailedAt = now - TimeSpan.FromHours(1),
+        };
+        db.AnimeMetadata.Add(anime);
+        await db.SaveChangesAsync();
+
+        var dueWithRecentFailure = await db.AnimeMetadata.Where(RefreshTiers.IsDue(now)).AnyAsync();
+        Assert.False(dueWithRecentFailure);
+
+        // No AiringStatus/AiredTo: falls to the 28-day StaleTtl branch.
+        anime.LastRefreshFailedAt = now - RefreshTiers.StaleTtl - TimeSpan.FromHours(1);
+        await db.SaveChangesAsync();
+
+        var dueWithStaleFailure = await db.AnimeMetadata.Where(RefreshTiers.IsDue(now)).AnyAsync();
+        Assert.True(dueWithStaleFailure);
+    }
+
+    [Fact]
+    public async Task IsDue_NeverFetchedAnimeWithNoFailureIsStillDue()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "A", LastSyncedAt = default });
+        await db.SaveChangesAsync();
+
+        var due = await db.AnimeMetadata.Where(RefreshTiers.IsDue(now)).AnyAsync();
+        Assert.True(due);
+    }
+
+    [Fact]
+    public async Task LastAttemptAt_OrdersARecentFailureAfterASyncBetweenTheTwo()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1,
+            Title = "Old sync, recent failure",
+            LastSyncedAt = now - TimeSpan.FromDays(10),
+            LastRefreshFailedAt = now - TimeSpan.FromHours(1),
+        });
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 2,
+            Title = "Sync between the two",
+            LastSyncedAt = now - TimeSpan.FromDays(1),
+        });
+        await db.SaveChangesAsync();
+
+        var orderedIds = await db.AnimeMetadata.OrderBy(RefreshTiers.LastAttemptAt).Select(a => a.Id).ToListAsync();
+
+        Assert.Equal([2, 1], orderedIds);
+    }
 }

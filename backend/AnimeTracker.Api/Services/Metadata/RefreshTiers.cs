@@ -8,7 +8,10 @@ namespace AnimeTracker.Api.Services.Metadata;
 /// fetch" timestamp (only <c>ApplyTo</c> writes it; a never-fetched row
 /// carries <c>default</c>). One tier ladder backs both the nightly batch's
 /// DB-side "due" query and the on-demand detail-page TTL check, so the two
-/// paths cannot drift apart.</summary>
+/// paths cannot drift apart. <see cref="IsDue"/> additionally measures from
+/// the later of that timestamp and <see cref="AnimeMetadata.LastRefreshFailedAt"/>,
+/// a not-found attempt the batch recorded; <see cref="TtlFor"/> (the detail
+/// page) does not honour that mark and reads <c>LastSyncedAt</c> alone.</summary>
 public static class RefreshTiers
 {
     public static readonly TimeSpan AiringTtl = TimeSpan.FromDays(1);
@@ -54,7 +57,12 @@ public static class RefreshTiers
     /// <summary>The same ladder expressed for EF Core translation, so
     /// <c>RefreshStaleBatchAsync</c>'s "due" query and <see cref="TtlFor"/>
     /// cannot disagree. Never-fetched anime (<c>LastSyncedAt == default</c>)
-    /// are always due.</summary>
+    /// with no recorded not-found attempt are always due. Every tier is
+    /// measured from the later of <c>LastSyncedAt</c> and
+    /// <c>LastRefreshFailedAt</c> — a row is at or before a cutoff on both
+    /// exactly when the later of the two is. <see cref="TtlFor"/> (the detail
+    /// page) reads <c>LastSyncedAt</c> alone and does not honour the
+    /// mark.</summary>
     public static Expression<Func<AnimeMetadata, bool>> IsDue(DateTimeOffset now)
     {
         var today = DateOnly.FromDateTime(now.UtcDateTime);
@@ -69,22 +77,38 @@ public static class RefreshTiers
         var staleCutoff = now - StaleTtl;
 
         return a =>
-            a.LastSyncedAt == default ||
-            (a.AiringStatus == "currently_airing" && a.LastSyncedAt <= airingCutoff) ||
+            (a.LastSyncedAt == default && a.LastRefreshFailedAt == null) ||
+            (a.AiringStatus == "currently_airing" && a.LastSyncedAt <= airingCutoff &&
+                (a.LastRefreshFailedAt == null || a.LastRefreshFailedAt <= airingCutoff)) ||
             (a.AiringStatus == "not_yet_aired" && a.AiredFrom != null &&
-                a.AiredFrom <= premiereSoonCutoff && a.LastSyncedAt <= airingCutoff) ||
+                a.AiredFrom <= premiereSoonCutoff && a.LastSyncedAt <= airingCutoff &&
+                (a.LastRefreshFailedAt == null || a.LastRefreshFailedAt <= airingCutoff)) ||
             (a.AiringStatus == "not_yet_aired" && a.AiredFrom != null &&
-                a.AiredFrom > premiereSoonCutoff && a.LastSyncedAt <= unairedFarCutoff) ||
+                a.AiredFrom > premiereSoonCutoff && a.LastSyncedAt <= unairedFarCutoff &&
+                (a.LastRefreshFailedAt == null || a.LastRefreshFailedAt <= unairedFarCutoff)) ||
             (a.AiringStatus == "not_yet_aired" && a.AiredFrom == null &&
-                a.LastSyncedAt <= unairedUnknownCutoff) ||
+                a.LastSyncedAt <= unairedUnknownCutoff &&
+                (a.LastRefreshFailedAt == null || a.LastRefreshFailedAt <= unairedUnknownCutoff)) ||
             (a.AiringStatus != "currently_airing" && a.AiringStatus != "not_yet_aired" &&
                 a.AiredTo != null && a.AiredTo >= oneYearAgo &&
-                a.LastSyncedAt <= recentCutoff) ||
+                a.LastSyncedAt <= recentCutoff &&
+                (a.LastRefreshFailedAt == null || a.LastRefreshFailedAt <= recentCutoff)) ||
             (a.AiringStatus != "currently_airing" && a.AiringStatus != "not_yet_aired" &&
                 a.AiredTo != null && a.AiredTo < oneYearAgo && a.AiredTo >= twoYearsAgo &&
-                a.LastSyncedAt <= agingCutoff) ||
+                a.LastSyncedAt <= agingCutoff &&
+                (a.LastRefreshFailedAt == null || a.LastRefreshFailedAt <= agingCutoff)) ||
             (a.AiringStatus != "currently_airing" && a.AiringStatus != "not_yet_aired" &&
                 (a.AiredTo == null || a.AiredTo < twoYearsAgo) &&
-                a.LastSyncedAt <= staleCutoff);
+                a.LastSyncedAt <= staleCutoff &&
+                (a.LastRefreshFailedAt == null || a.LastRefreshFailedAt <= staleCutoff));
     }
+
+    /// <summary>The candidates' ordering key: the later of the anime's last
+    /// full-detail fetch and its last recorded not-found attempt. A null mark
+    /// compares false against any DateTimeOffset comparison, so such a row
+    /// falls through to <c>LastSyncedAt</c> alone, same as before this
+    /// column existed. Npgsql translates the conditional to a SQL
+    /// <c>CASE</c>.</summary>
+    public static readonly Expression<Func<AnimeMetadata, DateTimeOffset>> LastAttemptAt =
+        a => a.LastRefreshFailedAt > a.LastSyncedAt ? a.LastRefreshFailedAt.Value : a.LastSyncedAt;
 }

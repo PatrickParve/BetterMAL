@@ -1,3 +1,5 @@
+using AnimeTracker.Api.Services.Metadata;
+
 namespace AnimeTracker.Api.Services.Updates;
 
 /// <summary>Resolves newly-discovered relation edges (<c>RelationDiscovery</c>)
@@ -10,12 +12,19 @@ public interface IAnnouncementResolutionService
 {
     /// <summary>Resolves up to <paramref name="maxAnime"/> distinct
     /// newly-related anime from the oldest unprocessed <c>RelationDiscovery</c>
-    /// rows: ensures each has a cached record (fetching it via
-    /// <see cref="Metadata.IMetadataRefreshService.RefreshOneAsync"/> when it
+    /// rows, skipping <paramref name="skipAnimeId"/> when set (the anime
+    /// whose call ended the previous pass, design D6): ensures each has a
+    /// cached record (fetching it via
+    /// <see cref="IMetadataRefreshService.RefreshOneAsync"/> when it
     /// doesn't), records an <c>Announced</c> update for it when it hasn't
     /// finished airing, and marks every discovery it considered as processed —
-    /// even when no announcement resulted. A discovery whose fetch failed is
-    /// left unprocessed so a later pass retries it. Returns the number of MAL
-    /// calls made, for the caller to bill against its own daily cap.</summary>
-    Task<int> ResolveAsync(int maxAnime, CancellationToken ct = default);
+    /// even when no announcement resulted. Records one attempt on
+    /// <paramref name="tally"/> immediately before each MAL call. When MAL
+    /// answers that it has no such anime, the discovery is resolved without
+    /// an announcement; any other failure leaves it unprocessed for a later
+    /// pass. Stops at the first outage-type failure (design D2) and records
+    /// it as <see cref="MalCallTally.UnavailableAnimeId"/>, leaving
+    /// that group's discoveries unprocessed. Discoveries naming
+    /// <paramref name="skipAnimeId"/> wait for a later pass.</summary>
+    Task ResolveAsync(int maxAnime, int? skipAnimeId, MalCallTally tally, CancellationToken ct = default);
 }

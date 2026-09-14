@@ -341,7 +341,7 @@ public class AnimeDetailServiceTests
     {
         public List<int> Calls { get; } = [];
 
-        public Task<int> RefreshStaleBatchAsync(int batchSize, CancellationToken ct = default) =>
+        public Task RefreshStaleBatchAsync(int batchSize, int? skipAnimeId, MalCallTally tally, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
         public async Task RefreshOneAsync(int animeId, CancellationToken ct = default)

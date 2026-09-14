@@ -127,7 +127,7 @@ public class TransferImportBackgroundServiceTests
 
     private sealed class UnusedMetadataRefreshService : IMetadataRefreshService
     {
-        public Task<int> RefreshStaleBatchAsync(int batchSize, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task RefreshStaleBatchAsync(int batchSize, int? skipAnimeId, MalCallTally tally, CancellationToken ct = default) => throw new NotImplementedException();
         public Task RefreshOneAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();
     }
 

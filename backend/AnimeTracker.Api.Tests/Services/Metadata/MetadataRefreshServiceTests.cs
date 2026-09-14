@@ -1,3 +1,4 @@
+using System.Net;
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Mal;
@@ -54,6 +55,18 @@ public class MetadataRefreshServiceTests
             .ToList(),
     };
 
+    // Five candidates on the same (StaleTtl) tier with ascending LastSyncedAt,
+    // so RefreshTiers.LastAttemptAt orders them 1, 2, 3, 4, 5 — a fixed order
+    // the outage/not-found tests below depend on.
+    private static void SeedFiveDueAnime(AnimeTrackerDbContext db, DateTimeOffset now)
+    {
+        for (var id = 1; id <= 5; id++)
+        {
+            db.AnimeMetadata.Add(new AnimeMetadata { Id = id, Title = $"Anime {id}", LastSyncedAt = now - TimeSpan.FromDays(65 - id) });
+            db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = id });
+        }
+    }
+
     // --- 8.5: refresh ---
 
     [Fact]
@@ -66,10 +79,11 @@ public class MetadataRefreshServiceTests
 
         var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1, (2, "sequel")) });
         var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
 
-        var refreshedCount = await service.RefreshStaleBatchAsync(10);
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
 
-        Assert.Equal(1, refreshedCount);
+        Assert.Equal(1, tally.Succeeded);
         var anime = await db.AnimeMetadata.Include(a => a.RelatedAnime).AsNoTracking().SingleAsync(a => a.Id == 1);
         Assert.NotEqual(default, anime.LastSyncedAt);
         var relation = Assert.Single(anime.RelatedAnime);
@@ -93,10 +107,11 @@ public class MetadataRefreshServiceTests
 
         var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode>());
         var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
 
-        var refreshedCount = await service.RefreshStaleBatchAsync(10);
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
 
-        Assert.Equal(0, refreshedCount);
+        Assert.Equal(0, tally.Succeeded);
         Assert.Empty(malClient.Calls);
     }
 
@@ -121,10 +136,11 @@ public class MetadataRefreshServiceTests
 
         var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1) });
         var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
 
-        var refreshedCount = await service.RefreshStaleBatchAsync(10);
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
 
-        Assert.Equal(1, refreshedCount);
+        Assert.Equal(1, tally.Succeeded);
         Assert.Contains(1, malClient.Calls);
     }
 
@@ -146,7 +162,7 @@ public class MetadataRefreshServiceTests
         var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1, (2, "sequel"), (3, "sequel")) });
         var service = CreateService(db, malClient);
 
-        await service.RefreshStaleBatchAsync(10);
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
 
         var discovery = Assert.Single(await db.RelationDiscoveries.AsNoTracking().ToListAsync());
         Assert.Equal(1, discovery.AnimeId);
@@ -169,7 +185,7 @@ public class MetadataRefreshServiceTests
         var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1, (2, "sequel")) });
         var service = CreateService(db, malClient);
 
-        await service.RefreshStaleBatchAsync(10);
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
 
         Assert.Empty(await db.RelationDiscoveries.ToListAsync());
     }
@@ -202,7 +218,7 @@ public class MetadataRefreshServiceTests
         var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1) });
         var service = CreateService(db, malClient);
 
-        await service.RefreshStaleBatchAsync(10);
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
 
         Assert.Empty(await db.RelationDiscoveries.ToListAsync());
         var stored = await db.AnimeMetadata.Include(a => a.RelatedAnime).AsNoTracking().SingleAsync(a => a.Id == 1);
@@ -278,7 +294,7 @@ public class MetadataRefreshServiceTests
         var responses = new Dictionary<int, MalAnimeNode> { [1] = FieldNode(1, "not_yet_aired", startDate: "2024-10-05") };
         var service = CreateService(db, new FakeMalClient(responses));
 
-        await service.RefreshStaleBatchAsync(10);
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
 
         var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
         Assert.Equal(AnimeUpdateKinds.StartDateReleased, update.Kinds);
@@ -594,10 +610,11 @@ public class MetadataRefreshServiceTests
 
         var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = FieldNode(1, "not_yet_aired") });
         var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
 
-        var refreshedCount = await service.RefreshStaleBatchAsync(10);
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
 
-        Assert.Equal(1, refreshedCount);
+        Assert.Equal(1, tally.Succeeded);
         Assert.Contains(1, malClient.Calls);
     }
 
@@ -613,10 +630,11 @@ public class MetadataRefreshServiceTests
 
         var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode>());
         var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
 
-        var refreshedCount = await service.RefreshStaleBatchAsync(10);
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
 
-        Assert.Equal(0, refreshedCount);
+        Assert.Equal(0, tally.Succeeded);
         Assert.Empty(malClient.Calls);
     }
 
@@ -632,10 +650,11 @@ public class MetadataRefreshServiceTests
 
         var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode>());
         var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
 
-        var refreshedCount = await service.RefreshStaleBatchAsync(10);
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
 
-        Assert.Equal(0, refreshedCount);
+        Assert.Equal(0, tally.Succeeded);
         Assert.Empty(malClient.Calls);
     }
 
@@ -651,10 +670,11 @@ public class MetadataRefreshServiceTests
 
         var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode>());
         var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
 
-        var refreshedCount = await service.RefreshStaleBatchAsync(10);
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
 
-        Assert.Equal(0, refreshedCount);
+        Assert.Equal(0, tally.Succeeded);
         Assert.Empty(malClient.Calls);
     }
 
@@ -670,20 +690,283 @@ public class MetadataRefreshServiceTests
 
         var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode>());
         var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
 
-        var refreshedCount = await service.RefreshStaleBatchAsync(10);
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
 
-        Assert.Equal(0, refreshedCount);
+        Assert.Equal(0, tally.Succeeded);
         Assert.Empty(malClient.Calls);
     }
 
-    private sealed class FakeMalClient(Dictionary<int, MalAnimeNode> responses) : IMalClient
+    // --- 3.5: an outage-type failure ends the pass (design D1-D3, D6) ---
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_OutageOnSecondStopsThePassAndSavesPartialWork()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        SeedFiveDueAnime(db, now);
+        await db.SaveChangesAsync();
+        var originalSyncedAt = await db.AnimeMetadata.AsNoTracking().ToDictionaryAsync(a => a.Id, a => a.LastSyncedAt);
+
+        var malClient = new FakeMalClient(
+            new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1) },
+            new Dictionary<int, Exception> { [2] = new HttpRequestException("failed", null, HttpStatusCode.ServiceUnavailable) });
+        var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
+
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
+
+        Assert.Equal([1, 2], malClient.Calls);
+        Assert.Equal(2, tally.Attempts);
+        Assert.Equal(1, tally.Succeeded);
+        Assert.Equal(2, tally.UnavailableAnimeId);
+
+        var stored = await db.AnimeMetadata.AsNoTracking().ToDictionaryAsync(a => a.Id, a => a.LastSyncedAt);
+        Assert.NotEqual(originalSyncedAt[1], stored[1]); // anime 1's partial work was saved
+        for (var id = 2; id <= 5; id++)
+            Assert.Equal(originalSyncedAt[id], stored[id]);
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_SkipAnimeIdExcludesThatAnimeFromTheBatch()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        SeedFiveDueAnime(db, now);
+        await db.SaveChangesAsync();
+
+        var responses = Enumerable.Range(1, 5).ToDictionary(id => id, id => DetailNode(id));
+        var malClient = new FakeMalClient(responses);
+        var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
+
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: 1, tally);
+
+        Assert.DoesNotContain(1, malClient.Calls);
+        Assert.Equal([2, 3, 4, 5], malClient.Calls);
+        Assert.Equal(4, tally.Succeeded);
+    }
+
+    public static IEnumerable<object[]> OutageFailures()
+    {
+        yield return [new HttpRequestException("no response")];
+        yield return [new HttpRequestException("failed", null, HttpStatusCode.InternalServerError)];
+        yield return [new HttpRequestException("failed", null, HttpStatusCode.TooManyRequests)];
+        yield return [new HttpRequestException("failed", null, HttpStatusCode.Forbidden)];
+        yield return [new TaskCanceledException("timed out", new TimeoutException())];
+    }
+
+    [Theory]
+    [MemberData(nameof(OutageFailures))]
+    public async Task RefreshStaleBatchAsync_OutageKindsStopThePassWithoutMarkingTheAnime(Exception failure)
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = now - TimeSpan.FromDays(60) });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
+        await db.SaveChangesAsync();
+        var originalSyncedAt = (await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1)).LastSyncedAt;
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode>(), new Dictionary<int, Exception> { [1] = failure });
+        var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
+
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
+
+        Assert.Equal([1], malClient.Calls); // the pass stops after the first (only) call
+        Assert.Equal(1, tally.Attempts);
+        Assert.Equal(0, tally.Succeeded);
+        Assert.Equal(1, tally.UnavailableAnimeId);
+
+        var stored = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
+        Assert.Null(stored.LastRefreshFailedAt);
+        Assert.Equal(originalSyncedAt, stored.LastSyncedAt);
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_CancelledTokenPropagatesAndMarksNothing()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        SeedFiveDueAnime(db, now);
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode>());
+        var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally, cts.Token));
+
+        Assert.Empty(malClient.Calls);
+        Assert.Equal(0, tally.Attempts);
+        Assert.All(await db.AnimeMetadata.AsNoTracking().ToListAsync(), a => Assert.Null(a.LastRefreshFailedAt));
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_OtherFailureSkipsOnlyThatAnimeAndContinues()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        SeedFiveDueAnime(db, now);
+        await db.SaveChangesAsync();
+
+        var responses = new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1), [3] = DetailNode(3), [4] = DetailNode(4), [5] = DetailNode(5) };
+        var malClient = new FakeMalClient(responses, new Dictionary<int, Exception> { [2] = new HttpRequestException("bad request", null, HttpStatusCode.BadRequest) });
+        var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
+
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
+
+        Assert.Equal([1, 2, 3, 4, 5], malClient.Calls);
+        Assert.Equal(5, tally.Attempts);
+        Assert.Equal(4, tally.Succeeded);
+        Assert.False(tally.MalUnavailable);
+        var anime2 = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 2);
+        Assert.Null(anime2.LastRefreshFailedAt);
+    }
+
+    // --- 3.6: a not-found answer waits out its tier (design D3, D4) ---
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_NotFoundOnThirdMarksItAndContinues()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        SeedFiveDueAnime(db, now);
+        await db.SaveChangesAsync();
+
+        var responses = new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1), [2] = DetailNode(2), [4] = DetailNode(4), [5] = DetailNode(5) };
+        var malClient = new FakeMalClient(responses, new Dictionary<int, Exception> { [3] = new HttpRequestException("not found", null, HttpStatusCode.NotFound) });
+        var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
+
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
+
+        Assert.Equal([1, 2, 3, 4, 5], malClient.Calls);
+        Assert.Equal(5, tally.Attempts);
+        Assert.Equal(4, tally.Succeeded);
+        Assert.False(tally.MalUnavailable);
+
+        var anime3 = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 3);
+        Assert.NotNull(anime3.LastRefreshFailedAt);
+
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
+        Assert.Single(malClient.Calls, id => id == 3);
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_NotFoundOnNeverFetchedAnimeLeavesLastSyncedAtDefault()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = default });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(
+            new Dictionary<int, MalAnimeNode>(),
+            new Dictionary<int, Exception> { [1] = new HttpRequestException("not found", null, HttpStatusCode.NotFound) });
+        var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
+
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
+
+        var anime = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
+        Assert.Equal(default, anime.LastSyncedAt);
+        Assert.NotNull(anime.LastRefreshFailedAt);
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_SuccessAfterAFailedAttemptClearsTheMark()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1,
+            Title = "Anime 1",
+            AiringStatus = "finished_airing",
+            AiredTo = DateOnly.FromDateTime((now - TimeSpan.FromDays(30)).UtcDateTime), // within the last year: the 3-day RecentTtl tier
+            LastSyncedAt = now - TimeSpan.FromDays(60),
+            LastRefreshFailedAt = now - TimeSpan.FromDays(4),
+        });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1) });
+        var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
+
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
+
+        Assert.Contains(1, malClient.Calls);
+        var anime = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
+        Assert.Null(anime.LastRefreshFailedAt);
+        Assert.NotEqual(now - TimeSpan.FromDays(60), anime.LastSyncedAt);
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_RecentFailureWaitsOutItsTier()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1,
+            Title = "Anime 1",
+            AiringStatus = "finished_airing",
+            AiredTo = DateOnly.FromDateTime((now - TimeSpan.FromDays(30)).UtcDateTime), // within the last year: the 3-day RecentTtl tier
+            LastSyncedAt = now - TimeSpan.FromDays(60),
+            LastRefreshFailedAt = now - TimeSpan.FromDays(2),
+        });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode>());
+        var service = CreateService(db, malClient);
+        var tally = new MalCallTally();
+
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
+
+        Assert.Empty(malClient.Calls);
+        Assert.Equal(0, tally.Attempts);
+    }
+
+    [Fact]
+    public async Task RefreshOneAsync_ClearsAPriorFailureMark()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1,
+            Title = "Anime 1",
+            LastSyncedAt = now - TimeSpan.FromDays(60),
+            LastRefreshFailedAt = now - TimeSpan.FromDays(2),
+        });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1) });
+        var service = CreateService(db, malClient);
+
+        await service.RefreshOneAsync(1);
+
+        var anime = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
+        Assert.Null(anime.LastRefreshFailedAt);
+    }
+
+    private sealed class FakeMalClient(Dictionary<int, MalAnimeNode> responses, Dictionary<int, Exception>? failures = null) : IMalClient
     {
         public List<int> Calls { get; } = [];
 
         public Task<MalAnimeNode> GetAnimeDetailsAsync(int animeId, IReadOnlyCollection<string>? fields = null, CancellationToken ct = default)
         {
             Calls.Add(animeId);
+            if (failures is not null && failures.TryGetValue(animeId, out var failure))
+                throw failure;
             return Task.FromResult(responses[animeId]);
         }
 

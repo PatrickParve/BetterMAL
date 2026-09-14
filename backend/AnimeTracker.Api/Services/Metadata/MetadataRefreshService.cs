@@ -15,7 +15,7 @@ public class MetadataRefreshService(
     IAnimeMetadataChangeDetector changeDetector,
     ILogger<MetadataRefreshService> logger) : IMetadataRefreshService
 {
-    public async Task<int> RefreshStaleBatchAsync(int batchSize, CancellationToken ct = default)
+    public async Task RefreshStaleBatchAsync(int batchSize, int? skipAnimeId, MalCallTally tally, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
 
@@ -28,11 +28,11 @@ public class MetadataRefreshService(
         // Included before ApplyTo replaces it below — same tracked-snapshot
         // requirement as RefreshOneAsync, or EF has nothing to diff against
         // and re-inserts rows that already exist instead of deleting stale
-        // ones. Ordering by LastSyncedAt ascending naturally puts
-        // never-fetched rows (default, i.e. the earliest possible value)
-        // first. isAdjacent's own parameter becomes the combined predicate's
-        // parameter, so the two clauses share one `a` with no substitution
-        // needed.
+        // ones. Ordering by RefreshTiers.LastAttemptAt ascending naturally
+        // puts never-fetched rows with no failed attempt (default, i.e. the
+        // earliest possible value) first. isAdjacent's own parameter becomes
+        // the combined predicate's parameter, so the two clauses share one
+        // `a` with no substitution needed.
         var isAdjacent = AdjacentAnimeSet.IsAdjacent(db);
         var candidateFilter = Expression.Lambda<Func<AnimeMetadata, bool>>(
             Expression.OrElse(
@@ -42,15 +42,22 @@ public class MetadataRefreshService(
                 isAdjacent.Body),
             isAdjacent.Parameters[0]);
 
-        var due = await db.AnimeMetadata
+        IQueryable<AnimeMetadata> candidates = db.AnimeMetadata
             .Include(a => a.RelatedAnime)
             .Where(candidateFilter)
-            .Where(RefreshTiers.IsDue(now))
-            .OrderBy(a => a.LastSyncedAt)
+            .Where(RefreshTiers.IsDue(now));
+
+        // The anime whose call ended the previous pass (design D6): skipped
+        // here, before Take, so the rest of this pass's allowance still goes
+        // to other work instead of being spent re-trying it immediately.
+        if (skipAnimeId is { } skip)
+            candidates = candidates.Where(a => a.Id != skip);
+
+        var due = await candidates
+            .OrderBy(RefreshTiers.LastAttemptAt)
             .Take(batchSize)
             .ToListAsync(ct);
 
-        var refreshed = 0;
         foreach (var anime in due)
         {
             ct.ThrowIfCancellationRequested();
@@ -66,22 +73,46 @@ public class MetadataRefreshService(
                 // D10), which have no list entry and so nothing that reads
                 // PictureUrls.
                 var fields = anime.UserEntry != null ? new[] { MalClient.FullDetailWithPicturesAnimeFields } : null;
+                tally.RecordAttempt();
                 var details = await malClient.GetAnimeDetailsAsync(anime.Id, fields: fields, ct: ct);
                 var before = changeDetector.Snapshot(anime);
                 details.ApplyTo(anime, now);
                 await changeDetector.RecordAsync(anime, before, now, ct);
-                refreshed++;
+                tally.RecordSuccess();
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to refresh anime {AnimeId}; will retry next pass.", anime.Id);
+                // An if chain, not a switch: a `break` inside a switch's arm
+                // would only leave the switch, not this foreach.
+                var kind = MalCallFailure.Classify(ex);
+                if (kind == MalCallFailureKind.NotFound)
+                {
+                    anime.LastRefreshFailedAt = now;
+                    logger.LogWarning(ex, "MAL has no anime {AnimeId}; it will wait out its tier before being tried again.", anime.Id);
+                }
+                else if (kind == MalCallFailureKind.Outage)
+                {
+                    logger.LogWarning(ex, "MAL appears unavailable while refreshing anime {AnimeId}; ending this pass.", anime.Id);
+                    tally.RecordUnavailable(anime.Id);
+                    break;
+                }
+                else
+                {
+                    logger.LogWarning(ex, "Failed to refresh anime {AnimeId}; will retry next pass.", anime.Id);
+                }
             }
         }
 
-        if (refreshed > 0)
+        // Saved whenever any candidate was loaded, not only when one
+        // succeeded — a 404 mark on an otherwise-all-failing pass has to be
+        // saved too, and EF makes no database round trip when nothing on any
+        // tracked entity actually changed.
+        if (due.Count > 0)
             await db.SaveChangesAsync(ct);
-
-        return refreshed;
     }
 
     public async Task RefreshOneAsync(int animeId, CancellationToken ct = default)

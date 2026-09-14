@@ -56,6 +56,13 @@ public class AnimeMetadata
     public int? Rank { get; set; }
     public DateTimeOffset LastSyncedAt { get; set; } // last full-detail fetch; drives RefreshTiers
 
+    // Set when the scheduled refresh job's last attempt got a 404 from MAL;
+    // ApplyTo clears it on the next successful full-detail fetch, by any
+    // path. Only RefreshTiers.IsDue and the job's ordering read it. Kept
+    // apart from LastSyncedAt, which means "has had a full fetch" — a 404
+    // is not a fetch.
+    public DateTimeOffset? LastRefreshFailedAt { get; set; }
+
     // Write-only marker of the last *lean listing* refresh (Season/Top-Anime
     // browsing) — nothing reads it since the tier ladder moved onto
     // LastSyncedAt. Deliberately not collapsed into LastSyncedAt: doing so

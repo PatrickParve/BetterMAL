@@ -11,27 +11,34 @@ public class AnnouncementResolutionService(
     IAnimeUpdateRecorder updateRecorder,
     ILogger<AnnouncementResolutionService> logger) : IAnnouncementResolutionService
 {
-    public async Task<int> ResolveAsync(int maxAnime, CancellationToken ct = default)
+    public async Task ResolveAsync(int maxAnime, int? skipAnimeId, MalCallTally tally, CancellationToken ct = default)
     {
         if (maxAnime <= 0)
-            return 0;
+            return;
 
         // Oldest first, one row per discovery: an anime discovered weeks ago
         // and still unresolved should not be starved by a fresh discovery
         // landing right behind it. Grouping by RelatedAnimeId below means two
         // discoveries naming the same anime cost one MAL call, and taking
         // maxAnime rows bounds this pass to at most maxAnime distinct anime.
-        var discoveries = await db.RelationDiscoveries
-            .Where(d => d.ProcessedAt == null)
+        IQueryable<RelationDiscovery> pending = db.RelationDiscoveries
+            .Where(d => d.ProcessedAt == null);
+
+        // The anime whose call ended the previous pass (design D6): skipped
+        // here, before Take, so the rest of this pass's allowance still goes
+        // to other discoveries instead of being spent re-trying it immediately.
+        if (skipAnimeId is { } skip)
+            pending = pending.Where(d => d.RelatedAnimeId != skip);
+
+        var discoveries = await pending
             .OrderBy(d => d.DiscoveredAt)
             .Take(maxAnime)
             .ToListAsync(ct);
 
         if (discoveries.Count == 0)
-            return 0;
+            return;
 
         var now = DateTimeOffset.UtcNow;
-        var malCalls = 0;
 
         foreach (var group in discoveries.GroupBy(d => d.RelatedAnimeId))
         {
@@ -65,13 +72,36 @@ public class AnnouncementResolutionService(
             // gate forever.
             try
             {
+                tally.RecordAttempt();
                 await metadataRefresh.RefreshOneAsync(animeId, ct);
-                malCalls++;
+                tally.RecordSuccess();
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to resolve newly-related anime {AnimeId}; will retry next pass.", animeId);
-                continue; // leave this group's discoveries unprocessed
+                // An if chain, not a switch: a `break` inside a switch's arm
+                // would only leave the switch, not this foreach.
+                var kind = MalCallFailure.Classify(ex);
+                if (kind == MalCallFailureKind.NotFound)
+                {
+                    foreach (var discovery in group)
+                        discovery.ProcessedAt = now;
+                    logger.LogWarning(ex, "MAL has no anime {AnimeId}; its discovery is resolved without an announcement.", animeId);
+                }
+                else if (kind == MalCallFailureKind.Outage)
+                {
+                    logger.LogWarning(ex, "MAL appears unavailable while resolving anime {AnimeId}; ending this pass.", animeId);
+                    tally.RecordUnavailable(animeId);
+                    break;
+                }
+                else
+                {
+                    logger.LogWarning(ex, "Failed to resolve newly-related anime {AnimeId}; will retry next pass.", animeId);
+                }
+                continue; // leave this group's discoveries unprocessed, unless the NotFound branch above just resolved them
             }
 
             anime = await db.AnimeMetadata.AsNoTracking().FirstOrDefaultAsync(a => a.Id == animeId, ct);
@@ -96,6 +126,5 @@ public class AnnouncementResolutionService(
         }
 
         await db.SaveChangesAsync(ct);
-        return malCalls;
     }
 }

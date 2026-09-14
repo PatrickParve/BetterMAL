@@ -8,8 +8,16 @@ namespace AnimeTracker.Api.Services.Metadata;
 public interface IMetadataRefreshService
 {
     /// <summary>Refreshes up to <paramref name="batchSize"/> of the stalest due
-    /// anime (full detail, one MAL call each). Returns how many were refreshed.</summary>
-    Task<int> RefreshStaleBatchAsync(int batchSize, CancellationToken ct = default);
+    /// anime (full detail, one MAL call each), skipping <paramref name="skipAnimeId"/>
+    /// when set (the anime whose call ended the previous pass, design D6).
+    /// Records one attempt on <paramref name="tally"/> immediately before
+    /// each MAL call, so a call counts even if this method throws
+    /// afterwards. Stops at the first outage-type failure (design D2) and
+    /// records it as <see cref="MalCallTally.UnavailableAnimeId"/>; a
+    /// not-found answer stamps <see cref="Models.AnimeMetadata.LastRefreshFailedAt"/>
+    /// on that anime and continues with the next candidate. Work completed
+    /// before a stop is still saved.</summary>
+    Task RefreshStaleBatchAsync(int batchSize, int? skipAnimeId, MalCallTally tally, CancellationToken ct = default);
 
     /// <summary>Full-detail refresh of one anime right now — one API call,
     /// updates the cached record and both sync timestamps.</summary>

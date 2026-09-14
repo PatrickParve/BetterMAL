@@ -154,6 +154,7 @@ public static class MalMappingExtensions
 
         target.LastSyncedAt = now;
         target.LastScoreSyncedAt = now;
+        target.LastRefreshFailedAt = null;
     }
 
     /// <summary>Writes the picture set only when <paramref name="node"/> asked
