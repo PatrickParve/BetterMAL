@@ -167,4 +167,4 @@ Paths without a prefix are under `backend/AnimeTracker.Api/`. Test paths are und
   - the outer ceiling, and why not `GetBoundsAsync`'s ceiling (the re-read after a same-day 404)
   - the accepted leftovers: a refused URL says "it'll be retried", and finding out that MAL has widened its window is no longer possible
 - [x] 9.7 Archive the change (`/opsx:archive`), which writes the `season-browser` and `year-browser` deltas into `openspec/specs/`. Check that the three modified requirements and the added one read correctly in the main specs.
-- [ ] 9.8 Commit PF4: groups 5–8, `CODE_GUIDE.md`, the archived change and the updated main specs. Use no Claude attribution lines.
+- [x] 9.8 Commit PF4: groups 5–8, `CODE_GUIDE.md`, the archived change and the updated main specs. Use no Claude attribution lines.
