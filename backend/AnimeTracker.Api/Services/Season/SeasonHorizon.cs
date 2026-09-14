@@ -14,10 +14,15 @@ public static class SeasonHorizon
     // never needs bumping when a new season opens.
     public const int FutureSeasonWindow = 2;
 
-    public static (int Year, string Season) Resolve(
+    /// <summary>The ceiling before today's 404 step-back — the forward window,
+    /// raised to the latest cached season if that's further out. This is the
+    /// upper end of the range the season and year endpoints accept
+    /// (<see cref="SeasonRequestRange"/>): the seasons between it and
+    /// <see cref="Resolve"/>'s result were all fetched today, so accepting
+    /// them costs no MAL request.</summary>
+    public static (int Year, string Season) ResolveOuter(
         (int Year, string Season) current,
-        (int Year, string Season)? latestCachedSeason,
-        Func<(int Year, string Season), bool> notListedToday)
+        (int Year, string Season)? latestCachedSeason)
     {
         var currentIndex = SeasonCalendar.GetSeasonPointIndex(current.Year, current.Season);
 
@@ -29,6 +34,19 @@ public static class SeasonHorizon
         // being walled off.
         if (latestCachedSeason is { } latest)
             candidateIndex = Math.Max(candidateIndex, SeasonCalendar.GetSeasonPointIndex(latest.Year, latest.Season));
+
+        return SeasonCalendar.FromSeasonPointIndex(candidateIndex);
+    }
+
+    public static (int Year, string Season) Resolve(
+        (int Year, string Season) current,
+        (int Year, string Season)? latestCachedSeason,
+        Func<(int Year, string Season), bool> notListedToday)
+    {
+        var currentIndex = SeasonCalendar.GetSeasonPointIndex(current.Year, current.Season);
+
+        var outer = ResolveOuter(current, latestCachedSeason);
+        var candidateIndex = SeasonCalendar.GetSeasonPointIndex(outer.Year, outer.Season);
 
         // Today's observed horizon: retreat past any trailing season MAL
         // answered 404 for on the current local date. The check is scoped to

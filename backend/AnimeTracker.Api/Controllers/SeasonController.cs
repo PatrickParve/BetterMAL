@@ -13,7 +13,8 @@ public class SeasonController(ISeasonBrowseService seasonBrowseService) : Contro
     /// at most, so one read serves the page for as long as it's open; sort
     /// and the page's other filters are applied client-side to what this
     /// returns. Pair with the refresh endpoint below to bring the cache up to
-    /// date.</summary>
+    /// date. A season outside what MyAnimeList could list is refused before
+    /// any cache read, MAL request or fetch-log write.</summary>
     [HttpGet("api/season/{year:int}/{season}")]
     public async Task<IActionResult> GetPage(
         int year,
@@ -23,6 +24,10 @@ public class SeasonController(ISeasonBrowseService seasonBrowseService) : Contro
     {
         if (!ValidSeasons.Contains(season))
             return BadRequest(new { error = $"Unknown season '{season}'." });
+
+        var range = await seasonBrowseService.GetRequestRangeAsync(ct);
+        if (!range.ContainsSeason(year, season))
+            return BadRequest(new { error = $"{season} {year} is outside the seasons MyAnimeList lists (winter {range.EarliestYear} to {range.LatestSeason} {range.LatestYear})." });
 
         var page = await seasonBrowseService.GetPageAsync(year, season, hideHentai, ct);
         return Ok(page);
@@ -34,12 +39,18 @@ public class SeasonController(ISeasonBrowseService seasonBrowseService) : Contro
     /// user-facing refresh control. Reports which of four outcomes the
     /// refresh had (fetched anime / MAL has no listing for the season / it
     /// was already fetched today / the fetch failed) so the client can tell
-    /// those apart rather than reading a single "did anything change" flag.</summary>
+    /// those apart rather than reading a single "did anything change" flag.
+    /// A season outside what MyAnimeList could list is refused before any
+    /// cache read, MAL request or fetch-log write.</summary>
     [HttpPost("api/season/{year:int}/{season}/refresh")]
     public async Task<IActionResult> Refresh(int year, string season, CancellationToken ct = default)
     {
         if (!ValidSeasons.Contains(season))
             return BadRequest(new { error = $"Unknown season '{season}'." });
+
+        var range = await seasonBrowseService.GetRequestRangeAsync(ct);
+        if (!range.ContainsSeason(year, season))
+            return BadRequest(new { error = $"{season} {year} is outside the seasons MyAnimeList lists (winter {range.EarliestYear} to {range.LatestSeason} {range.LatestYear})." });
 
         var result = await seasonBrowseService.RefreshAsync(year, season, ct);
         return Ok(result);

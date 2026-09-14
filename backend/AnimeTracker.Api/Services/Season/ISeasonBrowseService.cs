@@ -23,6 +23,14 @@ public interface ISeasonBrowseService
     /// SeasonHorizon.Resolve. Repository-only read, never calls MAL.</summary>
     Task<SeasonBoundsDto> GetBoundsAsync(CancellationToken ct = default);
 
+    /// <summary>The range of seasons and years the season and year endpoints
+    /// accept: winter SeasonCalendar.EarliestArchiveYear to
+    /// SeasonHorizon.ResolveOuter. Worked out again on every call and never
+    /// cached, so it moves forward with the calendar and the cache. A
+    /// repository-only read that never calls MAL — it's for input checks,
+    /// while GetBoundsAsync is for navigation.</summary>
+    Task<SeasonRequestRange> GetRequestRangeAsync(CancellationToken ct = default);
+
     /// <summary>Repository-only read of a year — the union of its four
     /// seasons' whole listings, as one. Never calls MAL.</summary>
     Task<YearPageDto> GetYearPageAsync(int year, bool hideHentai, CancellationToken ct = default);

@@ -12,13 +12,19 @@ public class YearController(ISeasonBrowseService seasonBrowseService) : Controll
     /// for as long as it's open; sort and the page's other filters are
     /// applied client-side to what this returns. Pair with the refresh
     /// endpoint below to bring the cache up to date. Parameter handling
-    /// mirrors SeasonController.GetPage exactly.</summary>
+    /// mirrors SeasonController.GetPage exactly, range check included: a
+    /// year outside what MyAnimeList could list is refused before any cache
+    /// read, MAL request or fetch-log write.</summary>
     [HttpGet("api/year/{year:int}")]
     public async Task<IActionResult> GetPage(
         int year,
         [FromQuery] bool hideHentai = false,
         CancellationToken ct = default)
     {
+        var range = await seasonBrowseService.GetRequestRangeAsync(ct);
+        if (!range.ContainsYear(year))
+            return BadRequest(new { error = $"{year} is outside the years MyAnimeList lists ({range.EarliestYear} to {range.LatestYear})." });
+
         var page = await seasonBrowseService.GetYearPageAsync(year, hideHentai, ct);
         return Ok(page);
     }
@@ -30,10 +36,17 @@ public class YearController(ISeasonBrowseService seasonBrowseService) : Controll
     /// or a user-facing refresh control. There is no year-level bounds
     /// endpoint (design D3): the year ceiling is GET /api/season/bounds's
     /// latestYear, since a year is navigable exactly when any season in it
-    /// is — do not add one.</summary>
+    /// is — do not add one. A year outside what MyAnimeList could list is
+    /// refused before any cache read, MAL request or fetch-log write; the
+    /// accepted range comes from GetRequestRangeAsync, not
+    /// GET /api/season/bounds.</summary>
     [HttpPost("api/year/{year:int}/refresh")]
     public async Task<IActionResult> Refresh(int year, CancellationToken ct = default)
     {
+        var range = await seasonBrowseService.GetRequestRangeAsync(ct);
+        if (!range.ContainsYear(year))
+            return BadRequest(new { error = $"{year} is outside the years MyAnimeList lists ({range.EarliestYear} to {range.LatestYear})." });
+
         var result = await seasonBrowseService.RefreshYearAsync(year, ct);
         return Ok(result);
     }

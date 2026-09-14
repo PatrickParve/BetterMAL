@@ -75,6 +75,30 @@ public class SeasonBrowseService(
 
     public async Task<SeasonBoundsDto> GetBoundsAsync(CancellationToken ct = default)
     {
+        var (current, todayLocalDate, inputs) = await LoadHorizonAsync(ct);
+
+        bool NotListedToday((int Year, string Season) point)
+        {
+            var match = inputs.Points.FirstOrDefault(p => p.Year == point.Year && p.Season == point.Season);
+            return match is not null
+                && match.LastFetchedAt is { } fetchedAt
+                && broadcastConverter.GetLocalDate(fetchedAt) == todayLocalDate
+                && !match.HasListings;
+        }
+
+        var ceiling = SeasonHorizon.Resolve(current, inputs.LatestCachedSeason, NotListedToday);
+        return new SeasonBoundsDto(ceiling.Year, ceiling.Season);
+    }
+
+    public async Task<SeasonRequestRange> GetRequestRangeAsync(CancellationToken ct = default)
+    {
+        var (current, _, inputs) = await LoadHorizonAsync(ct);
+        var outer = SeasonHorizon.ResolveOuter(current, inputs.LatestCachedSeason);
+        return new SeasonRequestRange(SeasonCalendar.EarliestArchiveYear, outer.Year, outer.Season);
+    }
+
+    private async Task<((int Year, string Season) Current, DateOnly TodayLocalDate, SeasonHorizonInputs Inputs)> LoadHorizonAsync(CancellationToken ct)
+    {
         var now = DateTimeOffset.UtcNow;
         var todayLocalDate = broadcastConverter.GetLocalDate(now);
         var current = SeasonCalendar.GetSeasonFor(todayLocalDate);
@@ -90,17 +114,7 @@ public class SeasonBrowseService(
 
         var inputs = await seasonRepository.GetHorizonInputsAsync(candidatePoints, ct);
 
-        bool NotListedToday((int Year, string Season) point)
-        {
-            var match = inputs.Points.FirstOrDefault(p => p.Year == point.Year && p.Season == point.Season);
-            return match is not null
-                && match.LastFetchedAt is { } fetchedAt
-                && broadcastConverter.GetLocalDate(fetchedAt) == todayLocalDate
-                && !match.HasListings;
-        }
-
-        var ceiling = SeasonHorizon.Resolve(current, inputs.LatestCachedSeason, NotListedToday);
-        return new SeasonBoundsDto(ceiling.Year, ceiling.Season);
+        return (current, todayLocalDate, inputs);
     }
 
     public async Task<YearPageDto> GetYearPageAsync(int year, bool hideHentai, CancellationToken ct = default)

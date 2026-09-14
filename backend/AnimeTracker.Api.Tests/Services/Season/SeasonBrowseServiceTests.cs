@@ -594,6 +594,60 @@ public class SeasonBrowseServiceTests
         Assert.Equal([1], await ListedIds(db, 2020, "summer"));
     }
 
+    // --- fix-season-pruning-and-bound-clamp: PF4, GetRequestRangeAsync (design D7) ---
+
+    [Fact]
+    public async Task GetRequestRangeAsync_NothingCachedEndsAtCurrentPlusTwo()
+    {
+        using var db = CreateDb();
+        var current = SeasonCalendar.GetSeasonFor(DateOnly.FromDateTime(DateTime.UtcNow));
+        var expected = SeasonCalendar.Shift(current.Year, current.Season, 2);
+        var service = CreateService(db, new FakeMalClient());
+
+        var range = await service.GetRequestRangeAsync();
+
+        Assert.Equal(1917, range.EarliestYear);
+        Assert.Equal(expected, (range.LatestYear, range.LatestSeason));
+    }
+
+    [Fact]
+    public async Task GetRequestRangeAsync_ASeededFarFutureListingRaisesTheCeiling()
+    {
+        using var db = CreateDb();
+        var current = SeasonCalendar.GetSeasonFor(DateOnly.FromDateTime(DateTime.UtcNow));
+        var (year, season) = SeasonCalendar.Shift(current.Year, current.Season, 5);
+        await SeedListing(db, 1, year, season);
+        var service = CreateService(db, new FakeMalClient());
+
+        var range = await service.GetRequestRangeAsync();
+
+        Assert.Equal((year, season), (range.LatestYear, range.LatestSeason));
+    }
+
+    [Fact]
+    public async Task GetRequestRangeAsync_TodaysNotListedCurrentPlusTwoStillEndsThereWhileBoundsRetreats()
+    {
+        using var db = CreateDb();
+        var current = SeasonCalendar.GetSeasonFor(DateOnly.FromDateTime(DateTime.UtcNow));
+        var (year, season) = SeasonCalendar.Shift(current.Year, current.Season, 2);
+        db.SeasonFetchLogs.Add(new SeasonFetchLog { Year = year, Season = season, LastFetchedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient();
+        var service = CreateService(db, malClient);
+
+        var range = await service.GetRequestRangeAsync();
+        var bounds = await service.GetBoundsAsync();
+        var expectedRetreat = SeasonCalendar.Shift(current.Year, current.Season, 1);
+
+        Assert.Equal((year, season), (range.LatestYear, range.LatestSeason));
+        Assert.Equal(expectedRetreat, (bounds.LatestYear, bounds.LatestSeason));
+
+        var refreshResult = await service.RefreshAsync(year, season);
+        Assert.Equal(SeasonRefreshOutcome.Skipped, refreshResult.Outcome);
+        Assert.Equal(0, malClient.FullSeasonCallCount);
+    }
+
     private sealed record MalSeasonResponse(List<MalAnimeListEdge>? Edges, bool Throws = false);
 
     // Per-season configurable fake — RefreshYearAsync's fold needs each of a

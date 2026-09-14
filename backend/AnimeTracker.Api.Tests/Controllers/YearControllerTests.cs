@@ -9,6 +9,9 @@ namespace AnimeTracker.Api.Tests.Controllers;
 // YearController (design D1, tasks.md 1.7): mirrors SeasonController's own
 // parameter handling exactly — hideHentai is the only query parameter left
 // once sort/includeMyList/type/offset/limit moved client-side (design D3).
+// tasks.md 8.4 (design D7) adds the range check: a year outside what the
+// fake's GetRequestRangeAsync reports is refused before GetYearPageAsync or
+// RefreshYearAsync is ever called.
 public class YearControllerTests
 {
     private static YearPageDto EmptyPage(int year) =>
@@ -66,6 +69,66 @@ public class YearControllerTests
     }
 
     [Theory]
+    [InlineData(2028)]
+    [InlineData(9999)]
+    [InlineData(1916)]
+    [InlineData(1800)]
+    public async Task GetPage_RefusesAYearOutsideTheRange(int year)
+    {
+        var service = new RecordingSeasonBrowseService();
+        var controller = new YearController(service);
+
+        var result = await controller.GetPage(year, ct: CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(service.PageRequests);
+    }
+
+    [Theory]
+    [InlineData(2028)]
+    [InlineData(9999)]
+    [InlineData(1916)]
+    [InlineData(1800)]
+    public async Task Refresh_RefusesAYearOutsideTheRange(int year)
+    {
+        var service = new RecordingSeasonBrowseService();
+        var controller = new YearController(service);
+
+        var result = await controller.Refresh(year, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(service.RefreshRequests);
+    }
+
+    [Theory]
+    [InlineData(2027)]
+    [InlineData(1917)]
+    public async Task GetPage_AcceptsAYearInsideTheRangeAndPassesItThrough(int year)
+    {
+        var service = new RecordingSeasonBrowseService();
+        var controller = new YearController(service);
+
+        var result = await controller.GetPage(year, ct: CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(year, Assert.Single(service.PageRequests).Year);
+    }
+
+    [Theory]
+    [InlineData(2027)]
+    [InlineData(1917)]
+    public async Task Refresh_AcceptsAYearInsideTheRangeAndPassesItThrough(int year)
+    {
+        var service = new RecordingSeasonBrowseService();
+        var controller = new YearController(service);
+
+        var result = await controller.Refresh(year, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(year, Assert.Single(service.RefreshRequests));
+    }
+
+    [Theory]
     [InlineData(SeasonRefreshOutcome.Fetched, "fetched")]
     [InlineData(SeasonRefreshOutcome.NotListed, "notListed")]
     [InlineData(SeasonRefreshOutcome.Skipped, "skipped")]
@@ -109,5 +172,8 @@ public class YearControllerTests
             throw new NotImplementedException();
         public Task<SeasonBoundsDto> GetBoundsAsync(CancellationToken ct = default) =>
             throw new NotImplementedException();
+
+        public Task<SeasonRequestRange> GetRequestRangeAsync(CancellationToken ct = default) =>
+            Task.FromResult(new SeasonRequestRange(1917, 2027, "winter"));
     }
 }

@@ -74,4 +74,62 @@ public class SeasonHorizonTests
 
         Assert.Equal(Current, ceiling);
     }
+
+    // SeasonHorizon.ResolveOuter (design D5, tasks.md 8.1): the ceiling
+    // before today's 404 step-back — Resolve's first two steps, split out so
+    // SeasonRequestRange can share them. The Resolve tests above are
+    // untouched and still pass, since Resolve now merely starts from
+    // ResolveOuter's result and keeps its own step-back loop.
+    [Fact]
+    public void ResolveOuter_DefaultIsCurrentPlusTwo()
+    {
+        var outer = SeasonHorizon.ResolveOuter(Current, latestCachedSeason: null);
+
+        Assert.Equal((2027, "winter"), outer);
+    }
+
+    [Fact]
+    public void ResolveOuter_RisesToALaterCachedSeason()
+    {
+        var latestCached = (2027, "fall"); // current + 5, well past the +2 default
+
+        var outer = SeasonHorizon.ResolveOuter(Current, latestCached);
+
+        Assert.Equal(latestCached, outer);
+    }
+
+    [Fact]
+    public void ResolveOuter_ACachedSeasonBelowTheWindowDoesNotLowerIt()
+    {
+        var latestCached = (2026, "spring"); // below current + 2
+
+        var outer = SeasonHorizon.ResolveOuter(Current, latestCached);
+
+        Assert.Equal((2027, "winter"), outer);
+    }
+
+    [Fact]
+    public void ResolveOuter_MovesForwardWithTheCalendar()
+    {
+        var current = (2026, "fall");
+
+        var outer = SeasonHorizon.ResolveOuter(current, latestCachedSeason: null);
+
+        Assert.Equal((2027, "spring"), outer);
+    }
+
+    [Fact]
+    public void ResolveOuter_IgnoresTodays404StepBackThatResolveActsOn()
+    {
+        // current+2 (2027 winter) was 404'd today. ResolveOuter doesn't take
+        // a notListedToday predicate at all, so it can't retreat past it —
+        // Resolve, given the exact same input, does.
+        bool NotListedToday((int Year, string Season) point) => point == (2027, "winter");
+
+        var outer = SeasonHorizon.ResolveOuter(Current, latestCachedSeason: null);
+        var ceiling = SeasonHorizon.Resolve(Current, latestCachedSeason: null, NotListedToday);
+
+        Assert.Equal((2027, "winter"), outer);
+        Assert.Equal((2026, "fall"), ceiling);
+    }
 }
