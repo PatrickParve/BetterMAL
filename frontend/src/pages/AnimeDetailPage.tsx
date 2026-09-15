@@ -327,11 +327,8 @@ export function AnimeDetailPage() {
         setDetail((prev) => (prev ? { ...prev, entry: saved } : prev)),
       // The completion-score prompt's own save (a separate updateEntry call
       // for myScore) isn't reflected by the increment's onSaved above, so
-      // patch it in here instead of re-reading the anime. null means the
-      // user skipped without scoring — onSaved above already has the latest.
-      onCompleted: (saved) => {
-        if (saved) setDetail((prev) => (prev ? { ...prev, entry: saved } : prev));
-      },
+      // patch it in here instead of re-reading the anime.
+      onCompleted: (saved) => setDetail((prev) => (prev ? { ...prev, entry: saved } : prev)),
     };
   }
 

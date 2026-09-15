@@ -35,7 +35,12 @@ public record CurrentlyWatchingItemDto(
     // CurrentlyAiring alone can't distinguish finished_airing from
     // not_yet_aired once EpisodesAired is unknown — the frontend gate needs
     // that distinction to decide whether to draw the progress row at all.
-    string? AiringStatus);
+    string? AiringStatus,
+    // main-dashboard: decides whether a finished rewatch opens the
+    // completion prompt.
+    int? MyScore,
+    // main-dashboard: what the Home undo restores.
+    DateOnly? CompletedAt);
 
 public record AiringTodayItemDto(
     int AnimeId,

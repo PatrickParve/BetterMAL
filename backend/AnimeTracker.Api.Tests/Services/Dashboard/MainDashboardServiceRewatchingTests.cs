@@ -58,6 +58,30 @@ public class MainDashboardServiceRewatchingTests
         Assert.Equal("currently_airing", Assert.Single(dashboard.CurrentlyWatching).AiringStatus);
     }
 
+    // main-dashboard "A completion left in Currently watching can be undone
+    // from its card" (tasks.md 1.3): the payload carries each item's score
+    // and finish date, since the undo and the rewatch prompt gate both need
+    // them.
+    [Fact]
+    public async Task CurrentlyWatchingItemsCarryScoreAndFinishDate()
+    {
+        List<UserAnimeEntry> entries =
+        [
+            new() { AnimeId = 1, Status = WatchStatus.Watching, EpisodesWatched = 3, MyScore = 7, CompletedAt = new DateOnly(2024, 1, 1), Anime = new AnimeMetadata { Id = 1, Title = "Scored" } },
+            new() { AnimeId = 2, Status = WatchStatus.Watching, EpisodesWatched = 5, MyScore = null, CompletedAt = null, Anime = new AnimeMetadata { Id = 2, Title = "Unscored" } },
+        ];
+
+        var dashboard = await CreateService(entries).GetDashboardAsync();
+
+        var scored = dashboard.CurrentlyWatching.Single(i => i.AnimeId == 1);
+        Assert.Equal(7, scored.MyScore);
+        Assert.Equal(new DateOnly(2024, 1, 1), scored.CompletedAt);
+
+        var unscored = dashboard.CurrentlyWatching.Single(i => i.AnimeId == 2);
+        Assert.Null(unscored.MyScore);
+        Assert.Null(unscored.CompletedAt);
+    }
+
     private sealed class NullAiringWatchStatusService : IAiringWatchStatusService
     {
         public Task SettleAsync(IReadOnlyCollection<UserAnimeEntry> entries, IReadOnlyDictionary<int, int> airedSoFarByAnimeId, CancellationToken ct = default) =>

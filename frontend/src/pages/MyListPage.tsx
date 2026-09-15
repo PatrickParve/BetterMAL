@@ -95,7 +95,6 @@ function patchItem(
 function buildIncrementTarget(
   item: MyListItemDto,
   setItems: Dispatch<SetStateAction<MyListItemDto[] | null>>,
-  reload: () => Promise<void>,
 ): IncrementTarget {
   return {
     animeId: item.animeId,
@@ -106,9 +105,11 @@ function buildIncrementTarget(
     currentScore: item.entry.myScore,
     mediaType: item.mediaType,
     onSaved: (saved) => patchItem(setItems, item.animeId, saved),
-    // Reloads rather than patching: completing an anime moves it between
-    // status groups, a server-computed regrouping no mutation response describes.
-    onCompleted: reload,
+    // Patches rather than reloading (design D11): grouping and sorting are
+    // client-side from the patched entry, so the completed row moves to
+    // Completed from the patch alone. myRank stays as loaded until the next
+    // read, the same as the row's score control and the entry editor.
+    onCompleted: (saved) => patchItem(setItems, item.animeId, saved),
   }
 }
 
@@ -136,7 +137,7 @@ type Derivation =
 // two-level sort (primary + tiebreaker) compose over the whole page instead
 // of per status group.
 export function MyListPage() {
-  const { data, loading, setData: setItems, reload } = usePageData<MyListItemDto[]>('my-list', getMyList)
+  const { data, loading, setData: setItems } = usePageData<MyListItemDto[]>('my-list', getMyList)
   const items = data ?? []
 
   // Recap scope and focus (design.md decision 1/2/9/10, tasks.md 5.1-5.2,
@@ -350,13 +351,13 @@ export function MyListPage() {
       pendingIncrementRef.current = item.animeId
       setPendingIncrementId(item.animeId)
       try {
-        await increment(buildIncrementTarget(item, setItems, reload))
+        await increment(buildIncrementTarget(item, setItems))
       } finally {
         pendingIncrementRef.current = null
         setPendingIncrementId(null)
       }
     },
-    [increment, setItems, reload],
+    [increment, setItems],
   )
 
   const setEpisodesWatchedForItem = useCallback(
@@ -365,13 +366,13 @@ export function MyListPage() {
       pendingIncrementRef.current = item.animeId
       setPendingIncrementId(item.animeId)
       try {
-        await setEpisodesWatched(buildIncrementTarget(item, setItems, reload), value)
+        await setEpisodesWatched(buildIncrementTarget(item, setItems), value)
       } finally {
         pendingIncrementRef.current = null
         setPendingIncrementId(null)
       }
     },
-    [setEpisodesWatched, setItems, reload],
+    [setEpisodesWatched, setItems],
   )
 
   const changeScore = useCallback(

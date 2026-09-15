@@ -17,9 +17,9 @@ type CompletionScoreOverlayProps = {
   // hand-orderable, whatever score it's given. null (an unplumbed caller)
   // behaves as "not short-form", same convention as EntryEditorTarget.
   mediaType: string | null
-  // Carries the saved entry when a score was actually saved, null on skip
-  // (button, Escape, or click-outside) so the caller can patch instead of
-  // re-reading.
+  // null means Cancel, Escape, or a click outside — the caller must not
+  // treat that as a commit. Otherwise carries the saved entry, so the caller
+  // can patch instead of re-reading.
   onClose: (saved: UserAnimeEntryDto | null) => void
 }
 
@@ -34,8 +34,7 @@ export function CompletionScoreOverlay({
   mediaType,
   onClose,
 }: CompletionScoreOverlayProps) {
-  const initialScore = currentScore ?? 0
-  const [score, setScore] = useState(initialScore)
+  const [score, setScore] = useState(currentScore ?? 0)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { openRanking } = useAnimeRank()
@@ -45,11 +44,10 @@ export function CompletionScoreOverlay({
   // — the only thing left to gate on is the chosen score and the media type.
   const canRank = isHandOrderable(score === 0 ? null : score, 'Completed', mediaType, true)
 
+  // Save always closes as a save (list-editing spec, "Saving or dismissing
+  // the completion score prompt"): even an unchanged score is sent, since the
+  // server treats that as a no-op and Save must not act like Cancel.
   async function handleSave() {
-    if (score === initialScore) {
-      onClose(null)
-      return
-    }
     setSaving(true)
     setError(null)
     try {
@@ -107,7 +105,7 @@ export function CompletionScoreOverlay({
 
           <div className="completion-score__buttons">
             <button type="button" onClick={() => onClose(null)} disabled={saving}>
-              Skip
+              Cancel
             </button>
             <button type="button" className="completion-score__save" onClick={handleSave} disabled={saving}>
               {saving ? 'Saving…' : 'Save'}

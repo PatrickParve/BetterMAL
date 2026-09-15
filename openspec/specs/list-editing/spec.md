@@ -227,19 +227,24 @@ The entry's start date, finish date, score, and rewatch count SHALL be left as t
 
 The system SHALL return a Rewatching entry to Completed when its episodes watched reaches the anime's total episode count — whether by the "+" control or by an in-place count edit — and SHALL increase the entry's rewatch count by one at the same moment, without asking. The target is always the total: a Rewatching entry is always on an anime that has finished airing, per "Rewatching requires a finished anime the user has finished once", so there is no aired-so-far case here.
 
-The completion-score prompt SHALL NOT open on this transition. The prompt exists for settling a score on a first viewing, and the entry already carries one; the score SHALL remain editable in the editor as usual.
+The completion-score prompt SHALL NOT open on this transition when the entry already carries a score. That score is from an earlier viewing, and asking again at the end of every rewatch would be noise. The score SHALL remain editable in the editor as usual. When the entry carries **no** score, the prompt SHALL open exactly as it does for a first completion, per "Completion prompt fires only on entering Completed". Whether or not the prompt opens, and however it is closed, the rewatch count SHALL already have increased.
 
 The entry's finish date SHALL NOT be overwritten with the rewatch's finish date, per the existing never-overwrite rule.
 
 #### Scenario: Rewatch watched to the end
 
 - **WHEN** a Rewatching entry for a 24-episode finished anime reaches 24 episodes watched
-- **THEN** its status becomes Completed and its rewatch count increases by one, with nothing asked
+- **THEN** its status becomes Completed and its rewatch count increases by one, with nothing asked about the rewatch count
 
-#### Scenario: No score prompt on re-completion
+#### Scenario: No score prompt when the rewatch already has a score
 
-- **WHEN** a rewatch reaches the last episode
-- **THEN** no completion-score prompt opens, and the entry's existing score is unchanged
+- **WHEN** a rewatch of an entry scored 8 reaches the last episode
+- **THEN** no completion-score prompt opens, and the entry's score is still 8
+
+#### Scenario: Score prompt when the rewatch has no score
+
+- **WHEN** a rewatch of an entry with no score reaches the last episode
+- **THEN** the completion-score prompt opens, exactly as it would for a first completion, and the rewatch count has already increased by one
 
 #### Scenario: The original finish date is kept
 
@@ -256,7 +261,7 @@ Answering that it counts SHALL increase the rewatch count by one. Answering that
 
 Choosing Completed SHALL still set episodes watched to the anime's total, as it does from any other status — the user has watched every episode, on the first viewing at least. Whether this pass counts as another one is the separate question being asked.
 
-Together with "Watching a rewatch to the end counts it automatically", these SHALL be the only two places the rewatch count changes without being typed; the field SHALL remain independently editable, as "Rewatch count is independently editable" requires.
+Together with "Watching a rewatch to the end counts it automatically", these SHALL be the only two places the rewatch count is increased without being typed. The one other untyped change to it is the `main-dashboard` capability's "A completion left in Currently watching can be undone from its card". That change only takes back an increase the first of these just made. The field SHALL remain independently editable, as "Rewatch count is independently editable" requires.
 
 #### Scenario: Abandoning a rewatch partway
 
@@ -295,6 +300,8 @@ This is distinct from an entry ceasing to be Completed because *more* became ava
 - Progress dropped on an entry that is Completed while its anime has not aired in full → **Watching**, since "Rewatching requires a finished anime the user has finished once" forbids Rewatching there. Because completion itself now requires the anime to have aired in full, this case is reachable only for an entry recorded under an earlier rule that the re-opening rule has not yet returned to Watching; it is kept so such an entry never lands in an impossible status.
 - The published total grew past the progress → **Watching** (more of the show exists; behind on a first viewing).
 
+The one exception is the `main-dashboard` capability's "A completion left in Currently watching can be undone from its card". On the main page, lowering the count of a card whose completion was never committed puts the entry back to its status before that completion rather than applying the rule above. For a completion reached from Watching, that is Watching even where Rewatching is permitted: the completion is being taken back, not followed by a rewatch.
+
 #### Scenario: Lowering the count starts a rewatch
 
 - **WHEN** I set a Completed entry for a 24-episode finished anime to 5 episodes watched
@@ -319,6 +326,11 @@ This is distinct from an entry ceasing to be Completed because *more* became ava
 
 - **WHEN** a Completed entry stops covering everything available
 - **THEN** it becomes Rewatching if its own progress dropped on an anime that has aired in full, and Watching if what is available grew instead
+
+#### Scenario: The main page's undo is the exception
+
+- **WHEN** on the main page I complete a Watching card, cancel the completion prompt, and then lower that card's count
+- **THEN** the entry becomes Watching rather than Rewatching, per the `main-dashboard` capability
 
 ### Requirement: A rewatch in progress behaves like watching
 
@@ -348,6 +360,8 @@ The system SHALL set `started_at` to today when episodes-watched is set on an an
 ### Requirement: Completed-date lifecycle
 The system SHALL set `completed_at` to today when an entry becomes Completed — whether by an explicit status change or by watching the final episode — and only when `completed_at` is currently empty. The system SHALL NOT clear or overwrite `completed_at` automatically when the status later changes away from Completed, mirroring MAL, which keeps the original finish date across rewatches; clearing a finish date SHALL be done through the editor's date fields.
 
+The one exception is the `main-dashboard` capability's "A completion left in Currently watching can be undone from its card". That undo puts `completed_at` back to the value it had before the completion being undone. A date that completion filled in is cleared, and a date that was already there is kept.
+
 #### Scenario: Marking completed
 - **WHEN** I change an entry's status to Completed and it has no finish date
 - **THEN** `completed_at` is set to today
@@ -359,6 +373,10 @@ The system SHALL set `completed_at` to today when an entry becomes Completed —
 #### Scenario: Un-completing keeps the finish date
 - **WHEN** I change a Completed entry to any other status
 - **THEN** `completed_at` is left as it was, and I can clear it myself in the editor's date fields
+
+#### Scenario: The main page's undo puts the finish date back
+- **WHEN** a completion from the main page fills in a finish date on an entry that had none, and I undo it there by lowering the card's count
+- **THEN** `completed_at` is empty again
 
 ### Requirement: Unknown total episodes cannot be completed
 
@@ -428,7 +446,7 @@ The system SHALL expose rewatch count as an editable field in the status editor,
 
 For an anime that has aired no episode, the accepted range SHALL instead be 0 alone, per "Nothing may be tracked against an anime that has aired no episode" — a rewatch count above 0 SHALL be rejected, and the editor's field SHALL not allow one to be entered.
 
-The system SHALL additionally increase the rewatch count by one when a rewatch is watched to the end — see "Watching a rewatch to the end counts it automatically" — and when a rewatch ended early in the editor is confirmed as counting, per "Ending a rewatch early asks whether it counts". Those SHALL be the only changes to this field the user does not type; a hand-entered value SHALL always be saved as entered.
+The system SHALL additionally increase the rewatch count by one when a rewatch is watched to the end — see "Watching a rewatch to the end counts it automatically" — and when a rewatch ended early in the editor is confirmed as counting, per "Ending a rewatch early asks whether it counts". The `main-dashboard` capability's "A completion left in Currently watching can be undone from its card" SHALL take back exactly the increase that the undone completion made. Those SHALL be the only changes to this field the user does not type; a hand-entered value SHALL always be saved as entered.
 
 #### Scenario: Editing rewatch count
 
@@ -452,6 +470,11 @@ The system SHALL additionally increase the rewatch count by one when a rewatch i
 
 - **WHEN** a Rewatching entry reaches everything available
 - **THEN** its rewatch count is one higher than before
+
+#### Scenario: The main page's undo takes the increase back
+
+- **WHEN** a rewatch completed from the main page raised the rewatch count from 1 to 2, and I undo that completion there by lowering the card's count
+- **THEN** the rewatch count is 1 again
 
 ### Requirement: Edits log activity and trigger sync
 The system SHALL, for every tracked field change (episode count, status, score, rewatch count), write an ActivityLog entry and trigger the debounced MAL sync.
@@ -879,9 +902,9 @@ The re-opened status SHALL always be Watching, never Rewatching: an anime this r
 - **THEN** the entry stays Completed and nothing is pushed back to MyAnimeList
 
 ### Requirement: Score prompt on completion via the increment button
-The system SHALL open a score prompt overlay whenever an episode-count change made from the progress row takes an entry into Completed status — whether from the "+" button or from editing the count in place — from every place that row appears (the main dashboard's currently-watching carousel, my list rows, the anime detail page, and any later addition). The overlay SHALL show the anime's picture on the left and a score dropdown offering "No score" and the values 1 through 10, pre-selected with the entry's current score.
+The system SHALL open a score prompt overlay whenever an episode-count change made from the progress row takes an entry into Completed status — whether from the "+" button or from editing the count in place — from every place that row appears (the main dashboard's currently-watching carousel, my list rows, the anime detail page, and any later addition), except where "Completion prompt fires only on entering Completed" rules it out. The overlay SHALL show the anime's picture on the left and a score dropdown offering "No score" and the values 1 through 10, pre-selected with the entry's current score.
 
-The overlay SHALL offer three actions: skip, save, and **save and rank**. Save and rank SHALL save the chosen score and then open the ranking editor focused on that anime, so an anime can be finished, scored, and placed in one pass. It SHALL be offered only while the chosen score would leave the entry hand-orderable — with "No score" selected, or for a dropped or short-form anime, saving alone is the only save action offered.
+The overlay SHALL offer three actions: **cancel**, save, and **save and rank**. Cancel skips scoring only. The entry is already Completed by the time the prompt opens, and Cancel SHALL NOT undo that. Save and rank SHALL save the chosen score and then open the ranking editor focused on that anime, so an anime can be finished, scored, and placed in one pass. It SHALL be offered only while the chosen score would leave the entry hand-orderable — with "No score" selected, or for a dropped or short-form anime, saving alone is the only save action offered.
 
 Every completion reachable from the progress row now concerns an anime that has aired in full and carries a finish date, so no finish-date condition is placed on the prompt. In particular the prompt SHALL open for the final episode of a run MyAnimeList still reports as currently airing, since that is a genuine finish. Reaching the aired-so-far count of an anime with episodes still to come completes nothing and SHALL NOT open this prompt.
 
@@ -903,11 +926,15 @@ Every completion reachable from the progress row now concerns an anime that has 
 
 #### Scenario: The prompt offers to rank
 - **WHEN** I pick a score of 1 through 10 in the completion prompt
-- **THEN** a save-and-rank action is offered alongside save and skip
+- **THEN** a save-and-rank action is offered alongside save and cancel
 
 #### Scenario: No rank action without a score
 - **WHEN** "No score" is selected in the completion prompt
 - **THEN** no save-and-rank action is offered
+
+#### Scenario: The dismiss action reads Cancel
+- **WHEN** the completion prompt opens
+- **THEN** its action for closing without saving is labelled "Cancel"
 
 #### Scenario: Non-final increments do not prompt
 - **WHEN** I press the "+" button and episodes-watched stays below the anime's total episode count
@@ -919,9 +946,15 @@ Every completion reachable from the progress row now concerns an anime that has 
 
 ### Requirement: Completion prompt fires only on entering Completed
 
-The system SHALL open the completion score prompt only on the transition into Completed status, and SHALL NOT open it for an entry that was already Completed before the episode-count change, for an anime whose total episode count is unknown, for an anime that has not aired in full (where no episode-count change completes anything), when a Rewatching entry finishes and returns to Completed, or when the system itself completes a caught-up entry because its full run became known.
+The system SHALL open the completion score prompt only on the transition into Completed status. It SHALL NOT open it:
 
-The rewatch exclusion is separate from the others: a rewatch's completion is a real transition into Completed, so it needs its own carve-out. A rewatch ends with a score the entry has carried since its first viewing, so re-asking for one at the end of every rewatch would be noise rather than a decision; the score stays editable in the editor.
+- for an entry that was already Completed before the episode-count change;
+- for an anime whose total episode count is unknown;
+- for an anime that has not aired in full (where no episode-count change completes anything);
+- when a Rewatching entry that **already carries a score** finishes and returns to Completed;
+- when the system itself completes a caught-up entry because its full run became known.
+
+The rewatch exclusion is separate from the others and narrower than them. A rewatch's completion is a real transition into Completed, so it needs its own carve-out, and the carve-out covers only a rewatch that already has a score. That score has been carried since an earlier viewing, so re-asking for one at the end of every rewatch would be noise rather than a decision; the score stays editable in the editor. A rewatch with no score has no such score to protect. It SHALL get the same prompt a first completion gets, with the same actions.
 
 #### Scenario: Rewatch increment on a completed entry
 - **WHEN** I press the "+" button on an entry that is already Completed
@@ -939,16 +972,22 @@ The rewatch exclusion is separate from the others: a rewatch's completion is a r
 - **WHEN** I press the "+" button and episodes-watched reaches the aired-so-far count of an anime with more episodes to come
 - **THEN** no score prompt opens, because the entry does not enter Completed
 
-#### Scenario: Rewatch finishing does not prompt
-- **WHEN** a Rewatching entry reaches everything available and returns to Completed
+#### Scenario: A scored rewatch finishing does not prompt
+- **WHEN** a Rewatching entry that has a score reaches everything available and returns to Completed
 - **THEN** no score prompt opens, and the entry's existing score is unchanged
+
+#### Scenario: An unscored rewatch finishing prompts
+- **WHEN** a Rewatching entry with no score reaches everything available and returns to Completed
+- **THEN** the score prompt opens with "No score" pre-selected, offering the same actions as for a first completion
 
 #### Scenario: A system completion does not prompt
 - **WHEN** a caught-up entry is completed because its total became known while the page was open
 - **THEN** no score prompt opens
 
 ### Requirement: Saving or dismissing the completion score prompt
-The system SHALL save a chosen score through the same entry-edit path as any other score change, so it is logged as activity, queued for MAL sync, and placed in the ranking. Dismissing the prompt — via a skip action, Esc, or a click outside the overlay — SHALL close it and leave the entry's score unchanged. Neither path SHALL undo the completion itself.
+The system SHALL save a chosen score through the same entry-edit path as any other score change, so it is logged as activity, queued for MAL sync, and placed in the ranking. Dismissing the prompt — via the Cancel action, Esc, or a click outside the overlay — SHALL close it and leave the entry's score unchanged. Neither path SHALL undo the completion itself.
+
+Save SHALL count as saving even when the score confirmed is the one the prompt pre-selected, "No score" included. The entry keeps that score. Where nothing changed, nothing is logged, queued for sync, or placed in the ranking. The prompt closes exactly as it does after any other save. In particular Save SHALL NOT be treated as a dismissal because the score was left as it was.
 
 Save and rank SHALL save by that identical path and then open the ranking editor focused on the anime, on the score just saved. If the save fails, the ranking editor SHALL NOT open and the prompt SHALL behave exactly as a failed save does.
 
@@ -956,12 +995,16 @@ Save and rank SHALL save by that identical path and then open the ranking editor
 - **WHEN** I pick a score in the completion prompt and confirm
 - **THEN** the score is saved on the entry, logged as activity, queued for MAL sync, and the prompt closes
 
+#### Scenario: Saving the pre-selected score
+- **WHEN** I press Save in the completion prompt without changing the pre-selected score
+- **THEN** the prompt closes as a save, the entry keeps that score, and no activity row is written for the score
+
 #### Scenario: Score given and ranked
 - **WHEN** I pick a score in the completion prompt and choose save and rank
 - **THEN** the score is saved exactly as a plain save would save it, and the ranking editor opens focused on that anime, on that score
 
 #### Scenario: Prompt dismissed without a score
-- **WHEN** I dismiss the completion prompt with skip, Esc, or a click outside
+- **WHEN** I dismiss the completion prompt with Cancel, Esc, or a click outside
 - **THEN** the prompt closes, the entry's score is unchanged, and the entry stays Completed
 
 #### Scenario: Score save fails
@@ -973,23 +1016,45 @@ Save and rank SHALL save by that identical path and then open the ranking editor
 - **THEN** the prompt reports the failure and stays open, and no ranking editor opens
 
 ### Requirement: Triggering view refreshes after the completion prompt closes
-The system SHALL refresh the data of the view that triggered the completion prompt once the prompt closes, by either path, so the newly completed anime is reflected without a manual page reload — it disappears from the main dashboard's currently-watching carousel and reads as Completed in my list and on the anime detail page. Save and rank SHALL count as the prompt closing: the refresh SHALL run when the prompt closes rather than waiting for the ranking editor opened on top of it.
+The system SHALL update the view that triggered the completion prompt once the prompt closes **with a score saved**, by save or by save and rank, so the newly completed anime is reflected without a manual page reload:
+
+- The main dashboard SHALL reload its data, so the anime disappears from the currently-watching carousel. Whether an entry belongs there is decided server-side, and the saved entry doesn't describe it.
+- My list and the anime detail page SHALL apply the saved entry the prompt hands back, without re-reading, so the entry reads as Completed with the score given. My list places the row by that entry, the same way its own score control and the entry editor do.
+
+Save and rank SHALL count as the prompt closing: the update SHALL happen when the prompt closes rather than waiting for the ranking editor opened on top of it.
+
+Closing the prompt without saving — Cancel, Esc, or a click outside — SHALL NOT refresh the view. A completion that opens no prompt, such as a rewatch that already has a score finishing, SHALL NOT refresh it either. In both cases the entry is already Completed, and each view shows what its own edit response tells it:
+
+- My list and the anime detail page show the entry as Completed.
+- The main dashboard keeps the card where it sits at its full count, per the `main-dashboard` capability's "A completion left in Currently watching can be undone from its card".
 
 #### Scenario: Completing from the dashboard carousel
-- **WHEN** I complete an anime with the "+" button in the currently-watching carousel and the prompt closes
+- **WHEN** I complete an anime with the "+" button in the currently-watching carousel and save a score in the prompt
 - **THEN** the dashboard reloads and that anime is no longer in the currently-watching carousel
 
 #### Scenario: Completing from my list
-- **WHEN** I complete an anime with the "+" button in my list and the prompt closes
-- **THEN** my list reloads and that entry shows as Completed, with any score I gave
+- **WHEN** I complete an anime with the "+" button in my list and save a score in the prompt
+- **THEN** that entry shows as Completed, with the score I gave, and my list is not re-read
 
 #### Scenario: Completing from the anime detail page
-- **WHEN** I complete an anime with the "+" button on its detail page and the prompt closes
-- **THEN** the detail page reloads and shows the entry as Completed, with any score I gave
+- **WHEN** I complete an anime with the "+" button on its detail page and save a score in the prompt
+- **THEN** the detail page shows the entry as Completed, with the score I gave
 
 #### Scenario: Refresh is not held up by the ranking editor
+- **WHEN** I choose save and rank from the currently-watching carousel
+- **THEN** the dashboard reloads behind the ranking editor rather than waiting for me to close it
+
+#### Scenario: My list is updated before the ranking editor closes
 - **WHEN** I choose save and rank from my list
-- **THEN** my list reloads behind the ranking editor rather than waiting for me to close it
+- **THEN** the row already shows the entry as Completed with the saved score behind the ranking editor, and my list is not re-read
+
+#### Scenario: Cancelling refreshes nothing
+- **WHEN** I complete an anime from the carousel, my list, or its detail page and close the prompt with Cancel, Esc, or a click outside
+- **THEN** the view that triggered the prompt is not re-read, and the entry is Completed
+
+#### Scenario: A silent rewatch completion refreshes nothing
+- **WHEN** a Rewatching entry that already has a score reaches its total from any progress row
+- **THEN** no prompt opens, the view is not re-read, and the row's count shows the total
 
 ### Requirement: Raising progress resumes an entry
 

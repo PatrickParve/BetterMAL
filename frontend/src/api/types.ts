@@ -112,10 +112,16 @@ export type IncrementTarget = {
   // add-anime-ranking tasks.md 6.5).
   mediaType: string | null
   onSaved: (entry: UserAnimeEntryDto) => void
-  // Carries the completion-score prompt's saved entry (null if the user
-  // skipped without scoring), so a caller showing only that one anime can
-  // patch its state instead of re-reading.
-  onCompleted?: (entry: UserAnimeEntryDto | null) => void
+  // Called only when the completion prompt closes with a saved score, so a
+  // caller showing only that one anime can patch its state instead of
+  // re-reading.
+  onCompleted?: (entry: UserAnimeEntryDto) => void
+  // Called at the two places a completion happens without onCompleted: a
+  // silent scored rewatch, or a cancelled prompt.
+  onPhantomCompleted?: (completion: PhantomCompletion) => void
+  // Extra fields sent in the same edit request, which can never override the
+  // count.
+  extraEdit?: Omit<UserAnimeEntryEditRequest, 'episodesWatched'>
 }
 
 export type NextEpisodeEtaDto = {
@@ -138,7 +144,19 @@ export type CurrentlyWatchingItemDto = {
   // alone can't distinguish finished_airing from not_yet_aired once
   // episodesAired is unknown, and the frontend gate needs that distinction.
   airingStatus: string | null
+  // main-dashboard: decides whether a finished rewatch opens the completion
+  // prompt.
+  myScore: number | null
+  // main-dashboard: what the Home undo restores.
+  completedAt: string | null
 }
+
+// A completion that happened without a score being saved: a scored rewatch
+// finishing with no prompt, or a prompt closed without saving. FirstCompletion
+// means any completion not reached from Rewatching (design D5).
+export type PhantomCompletion =
+  | { kind: 'FirstCompletion' }
+  | { kind: 'RewatchCompletion'; rewatchCountAfter: number }
 
 export type AiringTodayItemDto = {
   animeId: number

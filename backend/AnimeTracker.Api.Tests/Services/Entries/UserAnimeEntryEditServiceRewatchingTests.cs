@@ -227,6 +227,96 @@ public class UserAnimeEntryEditServiceRewatchingTests
         Assert.Equal(0, result.RewatchCount);
     }
 
+    // main-dashboard "A completion left in Currently watching can be undone
+    // from its card" (design.md D5, D10): pins the two corrective edit
+    // requests the Home undo sends, and the no-op score save it relies on.
+    // No production code changes in this group.
+
+    [Fact]
+    public async Task UndoingACompletionFromWatchingWithNoPriorFinishDateRestoresWatchingWithNoDate()
+    {
+        using var db = CreateDb();
+        var today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime);
+        await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Completed, episodesWatched: 12,
+            airingStatus: "finished_airing", completedAt: today, rewatchCount: 0, myScore: 6);
+
+        var result = await CreateService(db).UpdateEntryAsync(
+            1, new UserAnimeEntryEditRequest { EpisodesWatched = 11, Status = WatchStatus.Watching, CompletedAt = null });
+
+        Assert.Equal(WatchStatus.Watching, result.Status);
+        Assert.Equal(11, result.EpisodesWatched);
+        Assert.Null(result.CompletedAt);
+        Assert.Equal(0, result.RewatchCount);
+        Assert.Equal(6, result.MyScore);
+    }
+
+    [Fact]
+    public async Task UndoingACompletionFromWatchingWithAPriorFinishDateKeepsThatDate()
+    {
+        using var db = CreateDb();
+        var finishDate = new DateOnly(2024, 1, 1);
+        await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Completed, episodesWatched: 12,
+            airingStatus: "finished_airing", completedAt: finishDate, rewatchCount: 0, myScore: 6);
+
+        var result = await CreateService(db).UpdateEntryAsync(
+            1, new UserAnimeEntryEditRequest { EpisodesWatched = 11, Status = WatchStatus.Watching, CompletedAt = finishDate });
+
+        Assert.Equal(WatchStatus.Watching, result.Status);
+        Assert.Equal(11, result.EpisodesWatched);
+        Assert.Equal(finishDate, result.CompletedAt);
+    }
+
+    [Fact]
+    public async Task UndoingAFinishedRewatchRestoresRewatchingWithItsPriorRewatchCountAndFinishDate()
+    {
+        using var db = CreateDb();
+        var finishDate = new DateOnly(2024, 1, 1);
+        await SeedAsync(db, 1, totalEpisodes: 24, WatchStatus.Completed, episodesWatched: 24,
+            airingStatus: "finished_airing", completedAt: finishDate, rewatchCount: 2, myScore: 8);
+
+        var result = await CreateService(db).UpdateEntryAsync(
+            1, new UserAnimeEntryEditRequest { EpisodesWatched = 20, RewatchCount = 1, CompletedAt = finishDate });
+
+        Assert.Equal(WatchStatus.Rewatching, result.Status);
+        Assert.Equal(20, result.EpisodesWatched);
+        Assert.Equal(1, result.RewatchCount);
+        Assert.Equal(finishDate, result.CompletedAt);
+        Assert.Equal(8, result.MyScore);
+    }
+
+    [Fact]
+    public async Task UndoingAFinishedRewatchClearsAFinishDateTheCompletionFilledIn()
+    {
+        using var db = CreateDb();
+        var today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime);
+        await SeedAsync(db, 1, totalEpisodes: 24, WatchStatus.Completed, episodesWatched: 24,
+            airingStatus: "finished_airing", completedAt: today, rewatchCount: 1, myScore: 8);
+
+        var result = await CreateService(db).UpdateEntryAsync(
+            1, new UserAnimeEntryEditRequest { EpisodesWatched = 20, RewatchCount = 0, CompletedAt = null });
+
+        Assert.Equal(WatchStatus.Rewatching, result.Status);
+        Assert.Equal(0, result.RewatchCount);
+        Assert.Null(result.CompletedAt);
+    }
+
+    [Fact]
+    public async Task AnUnchangedScoreSaveChangesNothing()
+    {
+        using var db = CreateDb();
+        await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Completed, episodesWatched: 12,
+            airingStatus: "finished_airing", myScore: 7);
+
+        var result = await CreateService(db).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { MyScore = 7 });
+
+        Assert.Equal(WatchStatus.Completed, result.Status);
+        Assert.Equal(12, result.EpisodesWatched);
+        Assert.Equal(7, result.MyScore);
+        Assert.Empty(await db.ActivityLogs.Where(a => a.AnimeId == 1).ToListAsync());
+        var stored = await db.UserAnimeEntries.AsNoTracking().SingleAsync(e => e.AnimeId == 1);
+        Assert.False(stored.PendingSync);
+    }
+
     private sealed class FakeEntrySyncScheduler : IEntrySyncScheduler
     {
         public void ScheduleSync(int animeId) { }

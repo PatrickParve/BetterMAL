@@ -39,7 +39,7 @@ export function CompletionPromptProvider({ children }: { children: ReactNode }) 
   const setEpisodesWatched = useCallback(async (target: IncrementTarget, value: number) => {
     let saved: UserAnimeEntryDto
     try {
-      saved = await updateEntry(target.animeId, { episodesWatched: value })
+      saved = await updateEntry(target.animeId, { ...target.extraEdit, episodesWatched: value })
     } catch (err) {
       // Leave the count as-is; the notice is what accounts for it
       // (action-failure-notices: "The system SHALL NOT silently roll an
@@ -53,17 +53,24 @@ export function CompletionPromptProvider({ children }: { children: ReactNode }) 
     target.onSaved(saved)
 
     // list-editing: "Completion prompt fires only on entering Completed" — a
-    // rewatch reaching the total re-completes the entry but already carries a
-    // score from its first viewing, so it's excluded here alongside an entry
-    // that was already Completed. Every completion reachable from this
+    // scored rewatch already carries a score from its first viewing, so it's
+    // the only rewatch left out here (an unscored rewatch prompts exactly
+    // like a first completion). Every completion reachable from this
     // progress-row path now concerns an anime that has aired in full (the
     // backend refuses any other completion), so `completedAt` no longer
     // distinguishes a real finish from anything else — dropped.
-    const justCompleted =
-      target.previousStatus !== 'Completed' &&
-      target.previousStatus !== 'Rewatching' &&
-      saved.status === 'Completed'
-    if (!justCompleted) return
+    // "Triggering view refreshes after the completion prompt closes" — only a
+    // saved score refreshes the triggering view, so a completion that never
+    // opens the prompt, or whose prompt closes without saving, reports itself
+    // through onPhantomCompleted instead of onCompleted.
+    const becameCompleted = target.previousStatus !== 'Completed' && saved.status === 'Completed'
+    if (!becameCompleted) return
+
+    const isRewatch = target.previousStatus === 'Rewatching'
+    if (isRewatch && target.currentScore != null) {
+      target.onPhantomCompleted?.({ kind: 'RewatchCompletion', rewatchCountAfter: saved.rewatchCount })
+      return
+    }
 
     setPrompt({
       animeId: target.animeId,
@@ -71,7 +78,15 @@ export function CompletionPromptProvider({ children }: { children: ReactNode }) 
       pictureUrl: target.pictureUrl,
       currentScore: target.currentScore,
       mediaType: target.mediaType,
-      onClosed: (saved) => target.onCompleted?.(saved),
+      onClosed: (savedResult) => {
+        if (savedResult !== null) {
+          target.onCompleted?.(savedResult)
+        } else {
+          target.onPhantomCompleted?.(
+            isRewatch ? { kind: 'RewatchCompletion', rewatchCountAfter: saved.rewatchCount } : { kind: 'FirstCompletion' },
+          )
+        }
+      },
     })
   }, [reportFailure])
 

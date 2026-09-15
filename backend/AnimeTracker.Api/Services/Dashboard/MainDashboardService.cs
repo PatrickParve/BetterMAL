@@ -72,7 +72,9 @@ public class MainDashboardService(
                 e.Anime.AiringStatus == "currently_airing",
                 NextEpisodeEta.From(nextAiringInstantByAnimeId.TryGetValue(e.AnimeId, out var nextInstant) ? nextInstant : null, now),
                 e.Status,
-                e.Anime.AiringStatus));
+                e.Anime.AiringStatus,
+                e.MyScore,
+                e.CompletedAt));
         }
 
         // Resolved once in bulk for the whole list against today's local

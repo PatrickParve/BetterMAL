@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimeCard } from './AnimeCard.tsx'
 import { ProgressBar } from './ProgressBar.tsx'
-import type { CurrentlyWatchingItemDto, IncrementTarget } from '../api/types.ts'
+import type { CurrentlyWatchingItemDto, IncrementTarget, PhantomCompletion, UserAnimeEntryEditRequest } from '../api/types.ts'
 import { useEpisodeIncrement, useSetEpisodesWatched } from '../context/CompletionPromptContext.tsx'
 import { hasAiredEpisodes, pickDisplayTitle } from '../utils/anime.ts'
 import './CurrentlyWatchingCarousel.css'
@@ -10,6 +10,26 @@ type CurrentlyWatchingCarouselProps = {
   items: CurrentlyWatchingItemDto[]
   onEpisodesWatchedChange: (animeId: number, episodesWatched: number) => void
   onCompleted: () => void
+}
+
+// main-dashboard, "A completion left in Currently watching can be undone
+// from its card" (design D5): turns a phantom-completion record into the
+// corrective edit that undoes it, sent alongside the lowered count.
+function buildCorrectiveEdit(record: {
+  completion: PhantomCompletion
+  completedAtBefore: string | null
+}): Omit<UserAnimeEntryEditRequest, 'episodesWatched'> {
+  const { completion, completedAtBefore } = record
+  if (completion.kind === 'FirstCompletion') {
+    // An explicit status different from Completed skips the automatic
+    // transitions and takes ApplyStatus's last branch, landing back in
+    // Watching with the finish date restored.
+    return { status: 'Watching', completedAt: completedAtBefore }
+  }
+  // No status sent, so the automatic drop below the total lands in
+  // Rewatching on its own; the rewatch count is set back to what it was
+  // before this completion raised it by one.
+  return { rewatchCount: completion.rewatchCountAfter - 1, completedAt: completedAtBefore }
 }
 
 // "Currently watching" row on the main page: a horizontal carousel bounded
@@ -25,6 +45,12 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
   const trackRef = useRef<HTMLDivElement>(null)
   const [pendingId, setPendingId] = useState<number | null>(null)
   const [overflowing, setOverflowing] = useState(false)
+  // Completions left in the row without a saved score, keyed by anime id,
+  // each with the card's finish date as loaded (main-dashboard: "A
+  // completion left in Currently watching can be undone from its card").
+  const [phantoms, setPhantoms] = useState<ReadonlyMap<number, { completion: PhantomCompletion; completedAtBefore: string | null }>>(
+    () => new Map(),
+  )
   const incrementEpisode = useEpisodeIncrement()
   const setEpisodesWatched = useSetEpisodesWatched()
 
@@ -42,6 +68,23 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
     const observer = new ResizeObserver(updateOverflow)
     observer.observe(node)
     return () => observer.disconnect()
+  }, [items])
+
+  // Count patches keep an id in `items`, so only a server read prunes a
+  // record — that's when a card's completion is finally reflected as gone.
+  useEffect(() => {
+    setPhantoms((prev) => {
+      const ids = new Set(items.map((item) => item.animeId))
+      let changed = false
+      const next = new Map(prev)
+      for (const animeId of next.keys()) {
+        if (!ids.has(animeId)) {
+          next.delete(animeId)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
   }, [items])
 
   if (items.length === 0) return null
@@ -63,26 +106,40 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
   }
 
   function buildTarget(item: CurrentlyWatchingItemDto): IncrementTarget {
+    const phantom = phantoms.get(item.animeId)
     return {
       animeId: item.animeId,
       animeTitle: pickDisplayTitle(item.title, item.englishTitle),
       pictureUrl: item.pictureUrl,
       episodesWatched: item.episodesWatched,
-      // main-dashboard: this section now also holds Rewatching entries, so the
+      // main-dashboard: this section also holds Rewatching entries, so the
       // pre-increment status has to come from the item itself rather than
       // being assumed Watching — otherwise a rewatch reaching the total would
-      // incorrectly trip the completion-score prompt.
+      // incorrectly trip the completion-score prompt. Home never patches
+      // status itself, only the count (onSaved below), so this always
+      // reflects the entry's real status, which the undo below relies on
+      // (design D6).
       previousStatus: item.status,
-      // CurrentlyWatchingItemDto carries no score field; the carousel has
-      // nothing to pre-fill the completion prompt with.
-      currentScore: null,
-      // CurrentlyWatchingItemDto carries no media type either — the
-      // completion prompt's save-and-rank action stays hidden for a
-      // Music/CM/PV entry completed from here (same null-means-unavailable
-      // convention as currentScore above).
+      currentScore: item.myScore,
+      // CurrentlyWatchingItemDto carries no media type — the completion
+      // prompt's save-and-rank action stays hidden for a Music/CM/PV entry
+      // completed from here (null means unavailable, not "not short-form").
       mediaType: null,
-      onSaved: (saved) => onEpisodesWatchedChange(item.animeId, saved.episodesWatched),
+      onSaved: (saved) => {
+        onEpisodesWatchedChange(item.animeId, saved.episodesWatched)
+        // Only runs after a successful save, so a failed undo keeps its
+        // record and a retry sends the same corrective edit.
+        setPhantoms((prev) => {
+          if (!prev.has(item.animeId)) return prev
+          const next = new Map(prev)
+          next.delete(item.animeId)
+          return next
+        })
+      },
       onCompleted,
+      onPhantomCompleted: (completion) =>
+        setPhantoms((prev) => new Map(prev).set(item.animeId, { completion, completedAtBefore: item.completedAt })),
+      extraEdit: phantom ? buildCorrectiveEdit(phantom) : undefined,
     }
   }
 

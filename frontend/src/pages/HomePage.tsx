@@ -37,9 +37,12 @@ export function HomePage() {
       <CurrentlyWatchingCarousel
         items={dashboard.currentlyWatching}
         onEpisodesWatchedChange={handleEpisodesWatchedChange}
-        // Reloads rather than patching: completing an anime moves it out of
-        // "Currently watching" and possibly into the current-season section's
-        // finished state, a server-computed regrouping no mutation response describes.
+        // Runs only once a score is saved through the completion prompt —
+        // that's what actually moves the anime out of "Currently watching".
+        // A completion left uncommitted (a silent scored rewatch, or a
+        // cancelled prompt) stays in place and can be undone from the card
+        // (main-dashboard: "A completion left in Currently watching can be
+        // undone from its card").
         onCompleted={reload}
       />
       <div className="home-page__row">
