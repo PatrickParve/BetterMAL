@@ -1,12 +1,13 @@
 import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { getMyList, getRecap, updateEntry } from '../api/client.ts'
+import { ApiError, getMyList, getRecap, updateEntry } from '../api/client.ts'
 import { RECAP_SEASONS, type IncrementTarget, type MyListItemDto, type RecapDto, type RecapMode, type RecapSeasonName, type RecapTimeFilter, type UserAnimeEntryDto, type WatchStatus } from '../api/types.ts'
 import type { FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
 import { MyListControls, fromSortChoice, type ScoreFilter, type SortChoice } from '../components/MyListControls.tsx'
 import { MyListRow } from '../components/MyListRow.tsx'
 import { RecapPickerOverlay } from '../components/RecapPickerOverlay.tsx'
 import { RecapScopeChip } from '../components/RecapScopeChip.tsx'
+import { useActionFailure } from '../context/ActionFailureContext.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useEpisodeIncrement, useSetEpisodesWatched } from '../context/CompletionPromptContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
@@ -322,6 +323,7 @@ export function MyListPage() {
   const { openEditor } = useEntryEditor()
   const increment = useEpisodeIncrement()
   const setEpisodesWatched = useSetEpisodesWatched()
+  const reportFailure = useActionFailure()
 
   const debouncedQuery = useDebouncedValue(query, 200)
 
@@ -380,14 +382,19 @@ export function MyListPage() {
       try {
         const saved = await updateEntry(item.animeId, { myScore: score })
         patchItem(setItems, item.animeId, saved)
-      } catch {
-        // Leave the score as-is; the user can retry.
+      } catch (err) {
+        // The select snaps back to the saved score through its controlled
+        // value, and the notice accounts for it (action-failure-notices).
+        reportFailure({
+          title: `Couldn't update the score for ${pickDisplayTitle(item.title, item.englishTitle)}`,
+          reason: err instanceof ApiError ? err.reason : null,
+        })
       } finally {
         pendingScoreRef.current = null
         setPendingScoreId(null)
       }
     },
-    [setItems],
+    [setItems, reportFailure],
   )
 
   // A recap scope narrows the candidate rows *before* every other control

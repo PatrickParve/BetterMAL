@@ -14,6 +14,41 @@ function App() {
       .catch(() => setStatusError(true))
   }, [])
 
+  // Authorizing leaves this tab, or happens in another one, and the OAuth callback page
+  // doesn't redirect back, so re-read the connection state whenever the connect screen is
+  // showing and I return to it (mal-api-integration, "The connection state is reported").
+  // This is the focus/visibilitychange pattern from AppStatusContext.tsx, plus pageshow,
+  // because a Back navigation restored from the back/forward cache doesn't remount and
+  // isn't reliably followed by the other two events (design D8).
+  // Only listen while the connect screen is showing: a re-read inside the shell could
+  // unmount it, and a lost login is already reported inside the app (design D6).
+  // focus and visibilitychange firing together are the same GET, so fetchRaw joins them
+  // into one request (api/client.ts).
+  const showingConnectScreen = status?.state === 'NotConnected'
+
+  useEffect(() => {
+    if (!showingConnectScreen) return
+
+    function recheck() {
+      if (document.visibilityState !== 'visible') return
+      getMalAuthStatus()
+        .then(setStatus)
+        .catch(() => {
+          // Keep the connect screen rather than setting statusError: only the first read
+          // decides the backend-down screen, and the next return retries (design D7).
+        })
+    }
+
+    window.addEventListener('focus', recheck)
+    document.addEventListener('visibilitychange', recheck)
+    window.addEventListener('pageshow', recheck)
+    return () => {
+      window.removeEventListener('focus', recheck)
+      document.removeEventListener('visibilitychange', recheck)
+      window.removeEventListener('pageshow', recheck)
+    }
+  }, [showingConnectScreen])
+
   if (statusError) {
     return (
       <section id="center">

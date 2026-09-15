@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { getTopAnime, updateEntry } from '../api/client.ts'
+import { ApiError, getTopAnime, updateEntry } from '../api/client.ts'
 import { TOP_ANIME_RANKING_TYPES, type TopAnimeItemDto, type TopAnimeRankingType } from '../api/types.ts'
 import { Pagination } from '../components/Pagination.tsx'
 import { RowPicture } from '../components/RowPicture.tsx'
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
+import { useActionFailure } from '../context/ActionFailureContext.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { isScoreRevealableStatus, pickDisplayTitle } from '../utils/anime.ts'
 import './TopAnimePage.css'
@@ -78,6 +79,7 @@ export function TopAnimePage() {
   const [pendingId, setPendingId] = useState<number | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const { openEditor } = useEntryEditor()
+  const reportFailure = useActionFailure()
 
   const typeParam = searchParams.get('type')
   const selectedType: TopAnimeRankingType = isRankingType(typeParam) ? typeParam : 'all'
@@ -153,8 +155,12 @@ export function TopAnimePage() {
     try {
       const saved = await updateEntry(item.animeId, {})
       setEntry(item.animeId, saved)
-    } catch {
-      // Leave it as "Add" so the user can retry.
+    } catch (err) {
+      // The button stays "Add", and the notice says why.
+      reportFailure({
+        title: `Couldn't add ${pickDisplayTitle(item.title, item.englishTitle)} to list`,
+        reason: err instanceof ApiError ? err.reason : null,
+      })
     } finally {
       setPendingId(null)
     }

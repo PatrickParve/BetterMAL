@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
+  ApiError,
   getSeries,
   moveFavouriteAdjacent,
   rebuildSeries,
@@ -29,6 +30,7 @@ import { SeriesExtraTile } from '../components/SeriesExtraTile.tsx'
 import { SeriesStatusPill } from '../components/SeriesStatusPill.tsx'
 import { SeriesTimeline } from '../components/SeriesTimeline.tsx'
 import { SeriesTitlePickerOverlay } from '../components/SeriesTitlePickerOverlay.tsx'
+import { useActionFailure } from '../context/ActionFailureContext.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useLandscapePicture } from '../hooks/useLandscapePicture.ts'
 import { usePageData } from '../hooks/usePageData.ts'
@@ -428,6 +430,7 @@ export function SeriesPage() {
   const [rebuilding, setRebuilding] = useState(false)
   const [rebuildCount, setRebuildCount] = useState<number | null>(null)
   const { openEditor } = useEntryEditor()
+  const reportFailure = useActionFailure()
   const [pictureRef, isLandscapePicture] = useLandscapePicture(data?.found ? data.series.pictureUrl : null)
   const [showPicturePicker, setShowPicturePicker] = useState(false)
   const [showTitlePicker, setShowTitlePicker] = useState(false)
@@ -588,8 +591,8 @@ export function SeriesPage() {
   // demoted entry moves to sit immediately after the promoted one in their
   // shared score tier there too, so the favourite list — sorted by that same
   // ranking — and the ranking editor never disagree. A failed save reverts
-  // to the order that was actually stored.
-  async function handleReorderFavourite(currentOrder: number[], index: number, direction: -1 | 1) {
+  // to the order that was actually stored, and says so.
+  async function handleReorderFavourite(currentOrder: number[], index: number, direction: -1 | 1, movedTitle: string) {
     const targetIndex = index + direction
     if (targetIndex < 0 || targetIndex >= currentOrder.length) return
 
@@ -602,8 +605,12 @@ export function SeriesPage() {
     patchSeries((series) => ({ ...series, stats: { ...series.stats, myHighestScoreAnimeIds: reordered } }))
     try {
       await moveFavouriteAdjacent(promotedAnimeId, demotedAnimeId)
-    } catch {
+    } catch (err) {
       patchSeries((series) => ({ ...series, stats: { ...series.stats, myHighestScoreAnimeIds: currentOrder } }))
+      reportFailure({
+        title: `Couldn't move ${movedTitle} in your favourites`,
+        reason: err instanceof ApiError ? err.reason : null,
+      })
     }
   }
 
@@ -613,10 +620,15 @@ export function SeriesPage() {
   function handlePickSeriesPicture(url: string) {
     if (!data?.found) return
     const seriesId = data.series.seriesId
+    const seriesTitle = pickDisplayTitle(data.series.title, data.series.englishTitle)
     patchSeries((series) => ({ ...series, pictureUrl: url, selectedPictureUrl: url }))
-    setSeriesPicture(seriesId, url).catch(() => {
-      // The picker already closed; a later refresh/reload re-syncs if the
-      // save failed server-side.
+    setSeriesPicture(seriesId, url).catch((err) => {
+      // The optimistic change stays on screen until a reload, and the
+      // notice is what tells you it wasn't saved (design D2).
+      reportFailure({
+        title: `Couldn't save the picture for ${seriesTitle}`,
+        reason: err instanceof ApiError ? err.reason : null,
+      })
     })
   }
 
@@ -626,22 +638,32 @@ export function SeriesPage() {
   function handleClearSeriesPicture() {
     if (!data?.found) return
     const seriesId = data.series.seriesId
+    const seriesTitle = pickDisplayTitle(data.series.title, data.series.englishTitle)
     resetSeriesPicture(seriesId)
       .then(({ pictureUrl, selectedPictureUrl }) => {
         patchSeries((series) => ({ ...series, pictureUrl, selectedPictureUrl }))
       })
-      .catch(() => {
-        // A later refresh/reload re-syncs if the save failed server-side.
+      .catch((err) => {
+        // The page keeps its current picture, and the notice says why.
+        reportFailure({
+          title: `Couldn't reset the picture for ${seriesTitle}`,
+          reason: err instanceof ApiError ? err.reason : null,
+        })
       })
   }
 
   function handlePickSeriesTitle(title: string) {
     if (!data?.found) return
     const seriesId = data.series.seriesId
+    const seriesTitle = pickDisplayTitle(data.series.title, data.series.englishTitle)
     patchSeries((series) => ({ ...series, title, englishTitle: null, selectedTitle: title }))
-    setSeriesTitle(seriesId, title).catch(() => {
-      // The picker already closed; a later refresh/reload re-syncs if the
-      // save failed server-side.
+    setSeriesTitle(seriesId, title).catch((err) => {
+      // The optimistic change stays on screen until a reload, and the
+      // notice is what tells you it wasn't saved (design D2).
+      reportFailure({
+        title: `Couldn't rename ${seriesTitle} to ${title}`,
+        reason: err instanceof ApiError ? err.reason : null,
+      })
     })
   }
 
@@ -1183,7 +1205,12 @@ export function SeriesPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              handleReorderFavourite(series.stats.myHighestScoreAnimeIds, index, -1)
+                              handleReorderFavourite(
+                                series.stats.myHighestScoreAnimeIds,
+                                index,
+                                -1,
+                                pickDisplayTitle(entry.title, entry.englishTitle),
+                              )
                             }
                             disabled={index === 0}
                             aria-label={`Move ${pickDisplayTitle(entry.title, entry.englishTitle)} up`}
@@ -1193,7 +1220,12 @@ export function SeriesPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              handleReorderFavourite(series.stats.myHighestScoreAnimeIds, index, 1)
+                              handleReorderFavourite(
+                                series.stats.myHighestScoreAnimeIds,
+                                index,
+                                1,
+                                pickDisplayTitle(entry.title, entry.englishTitle),
+                              )
                             }
                             disabled={index === myHighestEntries.length - 1}
                             aria-label={`Move ${pickDisplayTitle(entry.title, entry.englishTitle)} down`}

@@ -194,13 +194,20 @@ export function AnimeDetailPage() {
   }, [detail, setDetail]);
 
   async function handleRefresh() {
-    if (refreshing) return;
+    if (!detail || refreshing) return;
     setRefreshing(true);
     try {
       await refreshAnime(animeId);
+      // reload() never rejects — usePageData's runLoad swallows its own
+      // failure — so only a failed refreshAnime reaches this catch (design D4).
       await reload();
-    } catch {
-      // Leave the page showing whatever was already cached.
+    } catch (err) {
+      // The page keeps what was already cached, and the notice says the
+      // refresh didn't happen.
+      reportFailure({
+        title: `Couldn't refresh ${pickDisplayTitle(detail.title, detail.englishTitle)}`,
+        reason: err instanceof ApiError ? err.reason : null,
+      });
     } finally {
       setRefreshing(false);
     }
@@ -271,9 +278,13 @@ export function AnimeDetailPage() {
           prev && prev.animeId === detail.animeId ? { ...prev, pictureUrl, selectedPictureUrl } : prev,
         );
       })
-      .catch(() => {
-        // The picker already closed; a later refresh/reload re-syncs if the
-        // save failed server-side.
+      .catch((err) => {
+        // The optimistic change stays on screen until a reload, and the
+        // notice is what tells you it wasn't saved (design D2).
+        reportFailure({
+          title: `Couldn't save the picture for ${pickDisplayTitle(detail.title, detail.englishTitle)}`,
+          reason: err instanceof ApiError ? err.reason : null,
+        });
       });
   }
 
@@ -291,8 +302,13 @@ export function AnimeDetailPage() {
           prev && prev.animeId === detail.animeId ? { ...prev, pictureUrl, selectedPictureUrl } : prev,
         );
       })
-      .catch(() => {
-        // A later refresh/reload re-syncs if the save failed server-side.
+      .catch((err) => {
+        // The optimistic change stays on screen until a reload, and the
+        // notice is what tells you it wasn't saved (design D2).
+        reportFailure({
+          title: `Couldn't reset the picture for ${pickDisplayTitle(detail.title, detail.englishTitle)}`,
+          reason: err instanceof ApiError ? err.reason : null,
+        });
       });
   }
 
