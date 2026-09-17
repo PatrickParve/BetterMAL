@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
+using AnimeTracker.Api.Services.Search;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Import;
@@ -24,6 +25,7 @@ public class InitialImportService(
     IMalClient malClient,
     AnimeTrackerDbContext db,
     ListImportProgress progress,
+    IAnimeSearchIndex searchIndex,
     ILogger<InitialImportService> logger) : IInitialImportService
 {
     public async Task RunAsync(CancellationToken ct)
@@ -157,5 +159,10 @@ public class InitialImportService(
         db.UserAnimeEntries.Add(entry);
 
         await db.SaveChangesAsync(ct);
+
+        // A new AnimeMetadata row just landed — make it searchable as soon
+        // as it's committed rather than leaving it out until some later,
+        // unrelated write.
+        searchIndex.Invalidate();
     }
 }

@@ -6,6 +6,7 @@ using AnimeTracker.Api.Services.Library;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,6 +24,7 @@ public class SeasonBrowseService(
     ISeasonRepository seasonRepository,
     IBroadcastLocalTimeConverter broadcastConverter,
     RefreshGate refreshGate,
+    IAnimeSearchIndex searchIndex,
     ILogger<SeasonBrowseService> logger) : ISeasonBrowseService
 {
     // Calendar order, not MAL/DB order — RefreshYearAsync walks the year's
@@ -285,6 +287,12 @@ public class SeasonBrowseService(
             fetchLog.LastFetchedAt = now;
 
         await db.SaveChangesAsync(ct);
+
+        // This save commits any AnimeMetadata rows added or lean-rewritten
+        // above (Title/EnglishTitle/PopularityRank/PictureUrl) alongside the
+        // listing itself, so the search index must not keep serving
+        // pre-browse rows now that they're committed.
+        searchIndex.Invalidate();
     }
 
     private static AnimeBrowseItemDto ToDto(SeasonAnimeItem i) => new(

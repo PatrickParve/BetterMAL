@@ -8,8 +8,10 @@ using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Updates;
+using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -26,7 +28,9 @@ public class TopAnimeServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    private static TopAnimeService CreateService(AnimeTrackerDbContext db, FakeMalClient malClient, Dictionary<int, int>? airedSoFar = null) =>
+    private static TopAnimeService CreateService(
+        AnimeTrackerDbContext db, FakeMalClient malClient, Dictionary<int, int>? airedSoFar = null,
+        IAnimeSearchIndex? searchIndex = null) =>
         new(
             db,
             malClient,
@@ -35,6 +39,7 @@ public class TopAnimeServiceTests
             new FakeEpisodeScheduleService(airedSoFar),
             new FakeBroadcastLocalTimeConverter(),
             new RefreshGate(),
+            searchIndex ?? new FakeAnimeSearchIndex(),
             NullLogger<TopAnimeService>.Instance);
 
     private static MalAnimeListEdge Edge(int id, int rank, int? numEpisodes = null) =>
@@ -215,6 +220,43 @@ public class TopAnimeServiceTests
 
         var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
         Assert.Equal(AnimeUpdateKinds.EpisodeCountReleased, update.Kinds);
+    }
+
+    // --- cache-type-ahead-search-index tasks.md 5.2: a refresh invalidates the search index ---
+
+    [Fact]
+    public async Task GetRankingAsync_CachingANotYetSeenAnimeInvalidatesTheSearchIndex()
+    {
+        using var db = CreateDb();
+        var malClient = new FakeMalClient(new Dictionary<string, List<MalAnimeListEdge>>
+        {
+            ["all"] = [Edge(1, 1)],
+        });
+        var searchIndex = new FakeAnimeSearchIndex();
+        var service = CreateService(db, malClient, searchIndex: searchIndex);
+
+        await service.GetRankingAsync(TopAnimeRankingType.All);
+
+        Assert.Equal(1, searchIndex.InvalidateCallCount);
+    }
+
+    [Fact]
+    public async Task GetRankingAsync_LeanlyRewritingAnExistingRowInvalidatesTheSearchIndex()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1" });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<string, List<MalAnimeListEdge>>
+        {
+            ["all"] = [Edge(1, 1)],
+        });
+        var searchIndex = new FakeAnimeSearchIndex();
+        var service = CreateService(db, malClient, searchIndex: searchIndex);
+
+        await service.GetRankingAsync(TopAnimeRankingType.All);
+
+        Assert.Equal(1, searchIndex.InvalidateCallCount);
     }
 
     private sealed class FakeEpisodeScheduleService(Dictionary<int, int>? airedSoFar = null) : IEpisodeScheduleService

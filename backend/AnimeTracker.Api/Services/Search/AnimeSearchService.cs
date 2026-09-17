@@ -10,6 +10,7 @@ namespace AnimeTracker.Api.Services.Search;
 
 public class AnimeSearchService(
     IAnimeMetadataRepository repository,
+    IAnimeSearchIndex searchIndex,
     IMalClient malClient,
     MalSearchCache malSearchCache,
     AnimeTrackerDbContext db,
@@ -48,7 +49,7 @@ public class AnimeSearchService(
         if (SearchTextMatch.Normalize(term).Length == 0)
             return [];
 
-        var index = await repository.GetSearchIndexAsync(ct);
+        var index = await searchIndex.GetAsync(ct);
         var localCandidates = index.Select(a => new SearchCandidate(a.Id, a.Title, a.EnglishTitle, a.PictureUrl, a.PopularityRank));
 
         var merged = localCandidates;

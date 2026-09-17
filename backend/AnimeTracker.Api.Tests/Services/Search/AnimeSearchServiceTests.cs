@@ -1,11 +1,17 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
+using AnimeTracker.Api.Services.Relations;
+using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Search;
+using AnimeTracker.Api.Services.Season;
 using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using SeriesModel = AnimeTracker.Api.Models.Series;
 
@@ -39,9 +45,11 @@ public class AnimeSearchServiceTests
         AnimeTrackerDbContext db, List<AnimeTitleProjection>? localIndex = null,
         List<MalAnimeListEdge>? malResults = null, ISeriesBuildTrigger? trigger = null,
         List<AnimeSearchFallbackProjection>? fallbackIndex = null, bool malFails = false,
-        FakeMalClient? malClient = null, MalSearchCache? malSearchCache = null) =>
+        FakeMalClient? malClient = null, MalSearchCache? malSearchCache = null,
+        IAnimeSearchIndex? searchIndex = null) =>
         new(
-            new FakeAnimeMetadataRepository(localIndex ?? [], fallbackIndex ?? []),
+            new FakeAnimeMetadataRepository(fallbackIndex ?? []),
+            searchIndex ?? new FakeAnimeSearchIndex(localIndex ?? []),
             malClient ?? new FakeMalClient(malResults ?? [], malFails),
             malSearchCache ?? new MalSearchCache(),
             db,
@@ -49,12 +57,14 @@ public class AnimeSearchServiceTests
             trigger ?? new FakeSeriesBuildTrigger(),
             NullLogger<AnimeSearchService>.Instance);
 
-    private sealed class FakeAnimeMetadataRepository(
-        List<AnimeTitleProjection> searchIndex, List<AnimeSearchFallbackProjection> fallbackIndex) : IAnimeMetadataRepository
+    // GetSearchIndexAsync throws so a regression that reintroduces the
+    // repository read for the type-ahead's local stage fails loudly instead
+    // of quietly passing with a stale fixture (tasks.md 6.1).
+    private sealed class FakeAnimeMetadataRepository(List<AnimeSearchFallbackProjection> fallbackIndex) : IAnimeMetadataRepository
     {
         public Task<AnimeMetadata?> GetByIdAsync(int id, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<AnimeMetadata>> GetAllAsync(CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<List<AnimeTitleProjection>> GetSearchIndexAsync(CancellationToken ct = default) => Task.FromResult(searchIndex);
+        public Task<List<AnimeTitleProjection>> GetSearchIndexAsync(CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<AnimeSearchFallbackProjection>> GetSearchFallbackIndexAsync(CancellationToken ct = default) =>
             Task.FromResult(fallbackIndex);
     }
@@ -676,5 +686,99 @@ public class AnimeSearchServiceTests
         var results = await service.SearchAsync("kaguya sama", limit: 5, includeLive: true);
 
         Assert.Equal([1, 2], results.Select(r => r.Id));
+    }
+
+    // --- cache-type-ahead-search-index tasks.md 6.3: a real writer, the real cache and the real search path together ---
+
+    [Fact]
+    public async Task SearchAsync_AnAnimeASeasonBrowseJustCachedIsMatchableOnTheNextSearch()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var searchIndex = new AnimeSearchIndexCache(new FakeScopeFactory(db));
+        var searchService = CreateService(db, searchIndex: searchIndex);
+
+        var beforeBrowse = await searchService.SearchAsync("gundam unicorn", limit: 5, includeLive: false);
+        Assert.Empty(beforeBrowse);
+
+        var seasonEdge = new MalAnimeListEdge
+        {
+            Node = new MalAnimeNode
+            {
+                Id = 1,
+                Title = "Gundam Unicorn",
+                MediaType = "tv",
+                StartSeason = new MalStartSeason { Year = 2027, Season = "winter" },
+            },
+        };
+        var seasonService = new SeasonBrowseService(
+            db,
+            new SeasonFakeMalClient([seasonEdge]),
+            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), new SeriesBuildTrigger()),
+            new SeasonRepository(db),
+            new FakeBroadcastLocalTimeConverter(),
+            new RefreshGate(),
+            searchIndex,
+            NullLogger<SeasonBrowseService>.Instance);
+        await seasonService.RefreshAsync(2027, "winter");
+
+        var afterBrowse = await searchService.SearchAsync("gundam unicorn", limit: 5, includeLive: false);
+        Assert.Single(afterBrowse);
+        Assert.Equal(1, afterBrowse[0].Id);
+    }
+
+    private sealed class SeasonFakeMalClient(List<MalAnimeListEdge> edges) : IMalClient
+    {
+        public Task<List<MalAnimeListEdge>?> GetFullSeasonAsync(int year, string season, string? sort = null, CancellationToken ct = default) =>
+            Task.FromResult<List<MalAnimeListEdge>?>(edges);
+
+        public Task<MalPagedResponse<MalAnimeListEdge>> SearchAnimeAsync(string query, int limit = 5, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<MalPagedResponse<MalAnimeListEdge>> GetSeasonAsync(int year, string season, int limit = 100, int offset = 0, string? sort = null, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<MalPagedResponse<MalAnimeListEdge>> GetRankingAsync(string rankingType = "all", int limit = 100, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<MalAnimeNode> GetAnimeDetailsAsync(int animeId, IReadOnlyCollection<string>? fields = null, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<MalPagedResponse<MalUserAnimeListEdge>> GetUserAnimeListAsync(string? status = null, int limit = 100, int offset = 0, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(Action<int>? onPageRead = null, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<MalListStatus> UpdateMyListStatusAsync(int animeId, MalListStatusUpdate update, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task DeleteMyListStatusAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<MalListStatus?> GetMyListStatusAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();
+    }
+
+    private sealed class FakeBroadcastLocalTimeConverter : IBroadcastLocalTimeConverter
+    {
+        public DateOnly GetStartOfWeek(DateOnly referenceDate) => referenceDate;
+        public DateOnly GetLocalDate(DateTimeOffset instantUtc) => DateOnly.FromDateTime(instantUtc.UtcDateTime);
+        public TimeOnly GetLocalTime(DateTimeOffset instantUtc) => TimeOnly.FromDateTime(instantUtc.UtcDateTime);
+        public DateTimeOffset LocalMidnightUtc(DateOnly localDate) => new(localDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        public (DayOfWeek LocalDayOfWeek, TimeOnly LocalTime) ConvertBroadcastSlot(DayOfWeek jstDayOfWeek, TimeOnly jstTime, DateTimeOffset referenceUtc) =>
+            (jstDayOfWeek, jstTime);
+    }
+
+    // Backs the real AnimeSearchIndexCache with the same in-memory context
+    // the writer and the search service both use, the same pattern
+    // AnimeSearchIndexCacheTests uses (design.md D1: a singleton resolves its
+    // scoped repository per rebuild rather than holding it).
+    private sealed class FakeScopeFactory(AnimeTrackerDbContext db) : IServiceScopeFactory
+    {
+        public IServiceScope CreateScope() => new FakeScope(db);
+    }
+
+    private sealed class FakeScope(AnimeTrackerDbContext db) : IServiceScope
+    {
+        public IServiceProvider ServiceProvider { get; } = new FakeServiceProvider(db);
+        public void Dispose() { }
+    }
+
+    private sealed class FakeServiceProvider(AnimeTrackerDbContext db) : IServiceProvider
+    {
+        public object? GetService(Type serviceType) =>
+            serviceType == typeof(IAnimeMetadataRepository) ? new AnimeMetadataRepository(db) : null;
     }
 }

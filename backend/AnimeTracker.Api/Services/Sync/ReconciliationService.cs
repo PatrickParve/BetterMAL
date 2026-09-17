@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
+using AnimeTracker.Api.Services.Search;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Sync;
@@ -10,6 +11,7 @@ public class ReconciliationService(
     IMalClient malClient,
     AnimeTrackerDbContext db,
     ReconciliationRunGate runGate,
+    IAnimeSearchIndex searchIndex,
     ILogger<ReconciliationService> logger) : IReconciliationService
 {
     public async Task<ReconciliationResult> RunAsync(IJobProgressSink? progress = null, CancellationToken ct = default)
@@ -160,6 +162,12 @@ public class ReconciliationService(
             db.PendingReconciliationDiffs.Add(new PendingReconciliationDiff { ComputedAt = now, Entries = diffEntries });
 
         await db.SaveChangesAsync(ct);
+
+        // This save may have added AnimeMetadata rows for anime MAL lists
+        // but this app hadn't cached — the search index must not keep
+        // serving pre-run rows now that they're committed.
+        searchIndex.Invalidate();
+
         logger.LogInformation(
             "Reconciliation complete: {Added} added, {Updated} updated, {Unchanged} unchanged, {Skipped} skipped (pending local edits), {SkippedRemovals} skipped (pending removal), {RemovedOnMal} removed on MAL, {SkippedUnrecognized} skipped (unrecognized status) — diff held for review.",
             added, updated, unchanged, skippedPending, skippedRemoval, removedOnMal, skippedUnrecognized);

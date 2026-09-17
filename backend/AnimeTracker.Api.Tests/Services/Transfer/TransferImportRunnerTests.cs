@@ -5,8 +5,10 @@ using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Profile;
+using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Transfer;
+using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,6 +40,7 @@ public class TransferImportRunnerTests
             .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
         services.AddScoped<IArtworkSelectionService, ArtworkSelectionService>();
         services.AddScoped<ITopAnimeSelectionRepository, TopAnimeSelectionRepository>();
+        services.AddSingleton<IAnimeSearchIndex>(new FakeAnimeSearchIndex());
         return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
     }
 
@@ -45,7 +48,7 @@ public class TransferImportRunnerTests
         AnimeTrackerDbContext db, string dbName,
         FakeMetadataRefreshService metadata, FakeSeriesService series, FakePictureRefreshService pictures) =>
         new(db, CreateScopeFactory(dbName), metadata, series,
-            new ArtworkSelectionService(db), pictures, new TopAnimeSelectionRepository(db), new RefreshGate());
+            new ArtworkSelectionService(db, new FakeAnimeSearchIndex()), pictures, new TopAnimeSelectionRepository(db), new RefreshGate());
 
     private static TransferImportProgressTracker NewProgress() => new();
 

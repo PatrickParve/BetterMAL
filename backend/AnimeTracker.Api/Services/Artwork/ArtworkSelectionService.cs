@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,7 +15,7 @@ namespace AnimeTracker.Api.Services.Artwork;
 // Adopt* methods are the one exception to "now": adopting another device's
 // choice (device-transfer) stores the file's own time, since adopting a
 // choice is not making one (design.md D6).
-public class ArtworkSelectionService(AnimeTrackerDbContext db) : IArtworkSelectionService
+public class ArtworkSelectionService(AnimeTrackerDbContext db, IAnimeSearchIndex searchIndex) : IArtworkSelectionService
 {
     public async Task<string?> SetAnimePictureAsync(int animeId, string pictureUrl, CancellationToken ct = default)
     {
@@ -24,6 +25,7 @@ public class ArtworkSelectionService(AnimeTrackerDbContext db) : IArtworkSelecti
         anime.SelectedPictureModifiedAt = DateTimeOffset.UtcNow;
         anime.ResolvePictureUrl();
         await db.SaveChangesAsync(ct);
+        searchIndex.Invalidate();
         return anime.PictureUrl;
     }
 
@@ -39,6 +41,7 @@ public class ArtworkSelectionService(AnimeTrackerDbContext db) : IArtworkSelecti
         anime.SelectedPictureModifiedAt = DateTimeOffset.UtcNow;
         anime.ResolvePictureUrl();
         await db.SaveChangesAsync(ct);
+        searchIndex.Invalidate();
         return anime.PictureUrl;
     }
 
@@ -52,6 +55,7 @@ public class ArtworkSelectionService(AnimeTrackerDbContext db) : IArtworkSelecti
         anime.SelectedPictureModifiedAt = modifiedAt;
         anime.ResolvePictureUrl();
         await db.SaveChangesAsync(ct);
+        searchIndex.Invalidate();
         return anime.PictureUrl;
     }
 

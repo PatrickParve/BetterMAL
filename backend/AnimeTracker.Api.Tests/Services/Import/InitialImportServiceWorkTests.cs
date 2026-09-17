@@ -4,6 +4,8 @@ using AnimeTracker.Api.Services.Import;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
+using AnimeTracker.Api.Services.Search;
+using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -32,10 +34,11 @@ public class InitialImportServiceWorkTests
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = animeId, Anime = anime, Status = WatchStatus.Watching });
     }
 
-    private static (InitialImportService Service, ListImportProgress Progress) CreateService(AnimeTrackerDbContext db, IMalClient malClient)
+    private static (InitialImportService Service, ListImportProgress Progress) CreateService(
+        AnimeTrackerDbContext db, IMalClient malClient, IAnimeSearchIndex? searchIndex = null)
     {
         var progress = new ListImportProgress();
-        return (new InitialImportService(malClient, db, progress, NullLogger<InitialImportService>.Instance), progress);
+        return (new InitialImportService(malClient, db, progress, searchIndex ?? new FakeAnimeSearchIndex(), NullLogger<InitialImportService>.Instance), progress);
     }
 
     [Fact]
@@ -105,6 +108,23 @@ public class InitialImportServiceWorkTests
         Assert.Empty(await db.UserAnimeEntries.ToListAsync()); // not re-added
         Assert.Equal(JobPhase.NotStarted, progress.Snapshot.Phase); // no work at all
         Assert.True(progress.Gate.WentThroughSinceStart);
+    }
+
+    // --- cache-type-ahead-search-index tasks.md 5.2: an imported anime invalidates the search index ---
+
+    [Fact]
+    public async Task AnImportedAnimeInvalidatesTheSearchIndex()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient([Edge(1, "completed", 12)]);
+        var searchIndex = new FakeAnimeSearchIndex();
+        var (service, _) = CreateService(db, malClient, searchIndex);
+
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Equal(1, searchIndex.InvalidateCallCount);
     }
 
     [Fact]

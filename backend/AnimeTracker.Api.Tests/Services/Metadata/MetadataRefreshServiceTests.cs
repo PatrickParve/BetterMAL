@@ -5,8 +5,10 @@ using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Relations;
+using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Updates;
+using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -26,9 +28,11 @@ public class MetadataRefreshServiceTests
             .Options);
 
     private static MetadataRefreshService CreateService(
-        AnimeTrackerDbContext db, IMalClient malClient, ISeriesBuildTrigger? seriesBuildTrigger = null) =>
+        AnimeTrackerDbContext db, IMalClient malClient, ISeriesBuildTrigger? seriesBuildTrigger = null,
+        IAnimeSearchIndex? searchIndex = null) =>
         new(db, malClient,
             new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), seriesBuildTrigger ?? new SeriesBuildTrigger()),
+            searchIndex ?? new FakeAnimeSearchIndex(),
             NullLogger<MetadataRefreshService>.Instance);
 
     // A row that stands for an anime already fully fetched once, long enough
@@ -200,6 +204,78 @@ public class MetadataRefreshServiceTests
         await service.RefreshOneAsync(1);
 
         Assert.Empty(await db.RelationDiscoveries.ToListAsync());
+    }
+
+    // --- cache-type-ahead-search-index tasks.md 5.4: invalidation ---
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_APassWithCandidatesInvalidatesTheSearchIndex()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = default });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1) });
+        var searchIndex = new FakeAnimeSearchIndex();
+        var service = CreateService(db, malClient, searchIndex: searchIndex);
+
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
+
+        Assert.Equal(1, searchIndex.InvalidateCallCount);
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_APassWithNoCandidatesDoesNotInvalidateTheSearchIndex()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1,
+            Title = "Anime 1",
+            AiringStatus = "currently_airing",
+            LastSyncedAt = now - TimeSpan.FromHours(1), // well inside the 1-day airing tier: nothing is due
+        });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode>());
+        var searchIndex = new FakeAnimeSearchIndex();
+        var service = CreateService(db, malClient, searchIndex: searchIndex);
+
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
+
+        Assert.Equal(0, searchIndex.InvalidateCallCount);
+    }
+
+    [Fact]
+    public async Task RefreshOneAsync_TheInsertBranchInvalidatesTheSearchIndex()
+    {
+        using var db = CreateDb();
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1) });
+        var searchIndex = new FakeAnimeSearchIndex();
+        var service = CreateService(db, malClient, searchIndex: searchIndex);
+
+        await service.RefreshOneAsync(1); // no cached row for anime 1 -> the insert branch
+
+        Assert.Equal(1, searchIndex.InvalidateCallCount);
+    }
+
+    [Fact]
+    public async Task RefreshOneAsync_TheUpdateBranchInvalidatesTheSearchIndex()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = FullyFetchedLongAgo });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1) });
+        var searchIndex = new FakeAnimeSearchIndex();
+        var service = CreateService(db, malClient, searchIndex: searchIndex);
+
+        await service.RefreshOneAsync(1); // anime 1 already cached -> the update branch
+
+        Assert.Equal(1, searchIndex.InvalidateCallCount);
     }
 
     [Fact]

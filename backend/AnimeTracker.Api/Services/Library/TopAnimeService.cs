@@ -6,6 +6,7 @@ using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,6 +20,7 @@ public class TopAnimeService(
     IEpisodeScheduleService scheduleService,
     IBroadcastLocalTimeConverter broadcastConverter,
     RefreshGate refreshGate,
+    IAnimeSearchIndex searchIndex,
     ILogger<TopAnimeService> logger) : ITopAnimeService
 {
     private const int RankingSize = 500;
@@ -154,5 +156,10 @@ public class TopAnimeService(
             fetchLog.LastFetchedAt = now;
 
         await db.SaveChangesAsync(ct);
+
+        // A refresh may have added or lean-rewritten AnimeMetadata rows above
+        // (Title/EnglishTitle/PopularityRank/PictureUrl) — the search index
+        // must not keep serving pre-refresh rows now that they're committed.
+        searchIndex.Invalidate();
     }
 }

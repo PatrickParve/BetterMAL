@@ -4,8 +4,10 @@ using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Relations;
+using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Updates;
+using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -29,7 +31,7 @@ public class AnimeMetadataChangeDetectorSeriesBuildTests
         new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db)));
 
     private static MetadataRefreshService CreateService(AnimeTrackerDbContext db, IMalClient malClient, ISeriesBuildTrigger trigger) =>
-        new(db, malClient, new AnimeMetadataChangeDetector(db, CreateRecorder(db), trigger), NullLogger<MetadataRefreshService>.Instance);
+        new(db, malClient, new AnimeMetadataChangeDetector(db, CreateRecorder(db), trigger), new FakeAnimeSearchIndex(), NullLogger<MetadataRefreshService>.Instance);
 
     private static MalAnimeNode DetailNode(int id, params (int RelatedId, string RelationType)[] relations) => new()
     {

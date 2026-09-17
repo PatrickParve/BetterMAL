@@ -3,6 +3,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Import;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
+using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -18,7 +19,7 @@ public class InitialImportServiceActivityTests
             .Options);
 
     private static InitialImportService CreateService(AnimeTrackerDbContext db, IMalClient malClient) =>
-        new(malClient, db, new ListImportProgress(), NullLogger<InitialImportService>.Instance);
+        new(malClient, db, new ListImportProgress(), new FakeAnimeSearchIndex(), NullLogger<InitialImportService>.Instance);
 
     private static MalUserAnimeListEdge Edge(int animeId, string status = "watching", int episodesWatched = 0) => new()
     {

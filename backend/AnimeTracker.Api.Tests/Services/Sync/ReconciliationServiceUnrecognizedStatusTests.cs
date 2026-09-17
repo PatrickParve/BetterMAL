@@ -3,6 +3,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Sync;
+using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -34,7 +35,7 @@ public class ReconciliationServiceUnrecognizedStatusTests
             RemoteEdge(2, "watching", episodesWatched: 3),
         ]);
 
-        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance).RunAsync();
+        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance).RunAsync();
 
         Assert.Equal(1, result.SkippedUnrecognized);
         Assert.Equal(1, result.Added);
@@ -49,7 +50,7 @@ public class ReconciliationServiceUnrecognizedStatusTests
         using var db = CreateDb();
         var malClient = new FakeMalClient([RemoteEdge(1, "rewatching_v2")]);
 
-        await new ReconciliationService(malClient, db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance).RunAsync();
+        await new ReconciliationService(malClient, db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance).RunAsync();
 
         Assert.Empty(await db.AnimeMetadata.ToListAsync());
     }
@@ -60,7 +61,7 @@ public class ReconciliationServiceUnrecognizedStatusTests
         using var db = CreateDb();
         var malClient = new FakeMalClient([RemoteEdge(1, "rewatching_v2")]);
 
-        await new ReconciliationService(malClient, db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance).RunAsync();
+        await new ReconciliationService(malClient, db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance).RunAsync();
 
         Assert.Empty(await db.PendingReconciliationDiffs.ToListAsync());
     }

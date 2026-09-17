@@ -3,6 +3,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Sync;
+using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -51,7 +52,7 @@ public class ReconciliationServiceRemovalTests
         await SeedLocalAsync(db, 1, WatchStatus.Watching, episodesWatched: 7);
         var malClient = new FakeMalClient([]); // MAL lists nothing
 
-        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance).RunAsync();
+        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance).RunAsync();
 
         Assert.Equal(1, result.RemovedOnMal);
         var diff = await db.PendingReconciliationDiffs.Include(d => d.Entries).SingleAsync();
@@ -69,7 +70,7 @@ public class ReconciliationServiceRemovalTests
         await SeedLocalAsync(db, 1, pendingSync: true);
         var malClient = new FakeMalClient([]);
 
-        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance).RunAsync();
+        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance).RunAsync();
 
         Assert.Equal(0, result.RemovedOnMal);
         Assert.Empty(await db.PendingReconciliationDiffs.ToListAsync());
@@ -84,7 +85,7 @@ public class ReconciliationServiceRemovalTests
         await db.SaveChangesAsync();
         var malClient = new FakeMalClient([]);
 
-        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance).RunAsync();
+        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance).RunAsync();
 
         Assert.Equal(0, result.RemovedOnMal);
         Assert.Empty(await db.PendingReconciliationDiffs.ToListAsync());
@@ -97,7 +98,7 @@ public class ReconciliationServiceRemovalTests
         await SeedLocalAsync(db, 1);
         var malClient = new FakeMalClient([RemoteEdge(1, status: "rewatching_v2")]);
 
-        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance).RunAsync();
+        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance).RunAsync();
 
         Assert.Equal(0, result.RemovedOnMal);
         Assert.Equal(1, result.SkippedUnrecognized);
@@ -113,7 +114,7 @@ public class ReconciliationServiceRemovalTests
         await SeedLocalAsync(db, 1, lastSyncedAt: DateTimeOffset.UtcNow.AddMinutes(10));
         var malClient = new FakeMalClient([]);
 
-        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance).RunAsync();
+        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance).RunAsync();
 
         Assert.Equal(0, result.RemovedOnMal);
         Assert.Empty(await db.PendingReconciliationDiffs.ToListAsync());
@@ -124,7 +125,7 @@ public class ReconciliationServiceRemovalTests
     {
         using var db = CreateDb();
         await SeedLocalAsync(db, 1);
-        var service = new ReconciliationService(new FakeMalClient([]), db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance);
+        var service = new ReconciliationService(new FakeMalClient([]), db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance);
         await service.RunAsync();
 
         var accepted = await service.AcceptPendingDiffAsync();
@@ -140,7 +141,7 @@ public class ReconciliationServiceRemovalTests
     {
         using var db = CreateDb();
         await SeedLocalAsync(db, 1);
-        var service = new ReconciliationService(new FakeMalClient([]), db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance);
+        var service = new ReconciliationService(new FakeMalClient([]), db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance);
         await service.RunAsync();
 
         var entry = await db.UserAnimeEntries.SingleAsync(e => e.AnimeId == 1);
@@ -158,7 +159,7 @@ public class ReconciliationServiceRemovalTests
     {
         using var db = CreateDb();
         await SeedLocalAsync(db, 1);
-        var service = new ReconciliationService(new FakeMalClient([]), db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance);
+        var service = new ReconciliationService(new FakeMalClient([]), db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance);
         await service.RunAsync();
 
         // As if a push landed and stamped LastSyncedAt after this diff was computed.
@@ -177,7 +178,7 @@ public class ReconciliationServiceRemovalTests
     {
         using var db = CreateDb();
         await SeedLocalAsync(db, 1);
-        var service = new ReconciliationService(new FakeMalClient([]), db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance);
+        var service = new ReconciliationService(new FakeMalClient([]), db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance);
         await service.RunAsync();
 
         db.UserAnimeEntries.Remove(await db.UserAnimeEntries.SingleAsync(e => e.AnimeId == 1));
@@ -196,7 +197,7 @@ public class ReconciliationServiceRemovalTests
         await SeedLocalAsync(db, 1); // removed on MAL
         await SeedLocalAsync(db, 2, WatchStatus.Watching, episodesWatched: 3); // updated
         var malClient = new FakeMalClient([RemoteEdge(2, episodesWatched: 9), RemoteEdge(3)]); // anime 3 added
-        var service = new ReconciliationService(malClient, db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance);
+        var service = new ReconciliationService(malClient, db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance);
         await service.RunAsync();
 
         var accepted = await service.AcceptPendingDiffAsync();
@@ -212,13 +213,27 @@ public class ReconciliationServiceRemovalTests
     {
         using var db = CreateDb();
         await SeedLocalAsync(db, 1);
-        var service = new ReconciliationService(new FakeMalClient([]), db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance);
+        var service = new ReconciliationService(new FakeMalClient([]), db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance);
         await service.RunAsync();
 
         var cancelled = await service.CancelPendingDiffAsync();
 
         Assert.True(cancelled);
         Assert.NotNull(await db.UserAnimeEntries.AsNoTracking().SingleOrDefaultAsync(e => e.AnimeId == 1));
+    }
+
+    // --- cache-type-ahead-search-index tasks.md 5.2: a run invalidates the search index ---
+
+    [Fact]
+    public async Task ARunThatDiscoversAnUncachedAnimeInvalidatesTheSearchIndex()
+    {
+        using var db = CreateDb();
+        var malClient = new FakeMalClient([RemoteEdge(1)]); // MAL lists an anime this app has never cached
+        var searchIndex = new FakeAnimeSearchIndex();
+
+        await new ReconciliationService(malClient, db, new ReconciliationRunGate(), searchIndex, NullLogger<ReconciliationService>.Instance).RunAsync();
+
+        Assert.Equal(1, searchIndex.InvalidateCallCount);
     }
 
     private sealed class FakeMalClient(List<MalUserAnimeListEdge> edges) : IMalClient

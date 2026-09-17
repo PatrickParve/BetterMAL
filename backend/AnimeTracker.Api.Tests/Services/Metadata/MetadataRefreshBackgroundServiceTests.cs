@@ -5,8 +5,10 @@ using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Relations;
+using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Updates;
+using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -280,6 +282,51 @@ public class MetadataRefreshBackgroundServiceTests
         Assert.Equal(20, service.CallsThisWindow);
     }
 
+    // --- cache-type-ahead-search-index tasks.md 5.4: invalidation through the background service ---
+
+    [Fact]
+    public async Task RunPassAsync_APassThatRefreshesDueAnimeInvalidatesTheSearchIndex()
+    {
+        var options = CreateOptions();
+        var now = DateTimeOffset.UtcNow;
+        using (var db = new AnimeTrackerDbContext(options))
+        {
+            SeedFiveDueAnime(db, now);
+            await db.SaveChangesAsync();
+        }
+
+        var malClient = new FakeMalClient();
+        foreach (var id in new[] { 1, 2, 3, 4, 5 })
+            malClient.Responses[id] = DetailNode(id);
+
+        var searchIndex = new FakeAnimeSearchIndex();
+        var service = new MetadataRefreshBackgroundService(
+            new FakeServiceScopeFactory(options, malClient, searchIndex), NullLogger<MetadataRefreshBackgroundService>.Instance);
+
+        await service.RunPassAsync(DateOnly.FromDateTime(now.UtcDateTime), CancellationToken.None);
+
+        Assert.True(searchIndex.InvalidateCallCount > 0);
+    }
+
+    [Fact]
+    public async Task RunPassAsync_APassWithNothingDueDoesNotInvalidateTheSearchIndex()
+    {
+        var options = CreateOptions();
+        using (var db = new AnimeTrackerDbContext(options))
+        {
+            await db.SaveChangesAsync(); // nothing seeded: no candidates, no discoveries
+        }
+
+        var malClient = new FakeMalClient();
+        var searchIndex = new FakeAnimeSearchIndex();
+        var service = new MetadataRefreshBackgroundService(
+            new FakeServiceScopeFactory(options, malClient, searchIndex), NullLogger<MetadataRefreshBackgroundService>.Instance);
+
+        await service.RunPassAsync(DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime), CancellationToken.None);
+
+        Assert.Equal(0, searchIndex.InvalidateCallCount);
+    }
+
     private sealed class FakeMalClient : IMalClient
     {
         public List<int> Calls { get; } = [];
@@ -320,9 +367,14 @@ public class MetadataRefreshBackgroundServiceTests
     // the one shared FakeMalClient — the same instances production DI would
     // hand the background service, so these tests exercise the actual
     // outage/not-found/skip control flow rather than re-mocking it.
-    private sealed class FakeServiceScopeFactory(DbContextOptions<AnimeTrackerDbContext> options, FakeMalClient malClient) : IServiceScopeFactory
+    private sealed class FakeServiceScopeFactory(
+        DbContextOptions<AnimeTrackerDbContext> options, FakeMalClient malClient, IAnimeSearchIndex? searchIndex = null) : IServiceScopeFactory
     {
-        public IServiceScope CreateScope() => new FakeServiceScope(options, malClient);
+        // One instance shared across every scope this factory creates, the
+        // same way the real singleton cache outlives each pass's own scope.
+        private readonly IAnimeSearchIndex _searchIndex = searchIndex ?? new FakeAnimeSearchIndex();
+
+        public IServiceScope CreateScope() => new FakeServiceScope(options, malClient, _searchIndex);
     }
 
     private sealed class FakeServiceScope : IServiceScope
@@ -330,12 +382,12 @@ public class MetadataRefreshBackgroundServiceTests
         private readonly AnimeTrackerDbContext _db;
         public IServiceProvider ServiceProvider { get; }
 
-        public FakeServiceScope(DbContextOptions<AnimeTrackerDbContext> options, FakeMalClient malClient)
+        public FakeServiceScope(DbContextOptions<AnimeTrackerDbContext> options, FakeMalClient malClient, IAnimeSearchIndex searchIndex)
         {
             _db = new AnimeTrackerDbContext(options);
             var changeDetector = new AnimeMetadataChangeDetector(
                 _db, new AnimeUpdateRecorder(_db, new AnimeUpdateRelevance(_db, new RelationResolver(_db))), new SeriesBuildTrigger());
-            var metadataRefresh = new MetadataRefreshService(_db, malClient, changeDetector, NullLogger<MetadataRefreshService>.Instance);
+            var metadataRefresh = new MetadataRefreshService(_db, malClient, changeDetector, searchIndex, NullLogger<MetadataRefreshService>.Instance);
             var resolution = new AnnouncementResolutionService(
                 _db, metadataRefresh, new AnimeUpdateRecorder(_db, new AnimeUpdateRelevance(_db, new RelationResolver(_db))), NullLogger<AnnouncementResolutionService>.Instance);
             ServiceProvider = new FakeServiceProvider(metadataRefresh, resolution);

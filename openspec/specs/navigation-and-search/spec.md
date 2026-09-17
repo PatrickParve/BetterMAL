@@ -406,6 +406,8 @@ The cache-only stage SHALL be debounced more eagerly than the merged stage, sinc
 
 The live search behind the merged stage SHALL request the same candidate set the full search results page requests for the same query, so that the two agree about which anime exist for a query and one live response can serve both (see `mal-api-integration`, "Live search responses are briefly cached and shared").
 
+The cache-only stage's view of the app's stored anime MAY be served from an index held in memory rather than read from storage for each query, provided that index stays consistent with what is stored. That index SHALL reflect every saved change to a stored anime's title, English title, picture or popularity — an anime newly stored, or one of those fields rewritten on an anime already stored — from the next query after the change is saved. It SHALL NOT be allowed to go stale on a clock: only a saved change SHALL be able to make it out of date, never the passage of time, and a query SHALL NOT be answered from a partially built index. Nothing about the two stages, their two debounce rates, their ranking, their 5-row budget or their series rows SHALL differ according to whether a query was answered from such an index or from storage directly.
+
 #### Scenario: Prefix matches ranked by popularity
 - **WHEN** I type a query that is the start of several anime titles
 - **THEN** the dropdown shows up to 5 matches, listing titles that start with the query first, ordered by popularity (e.g. typing "attack" surfaces the popular "Attack on Titan" entries, not a single incidental cached title)
@@ -413,6 +415,14 @@ The live search behind the merged stage SHALL request the same candidate set the
 #### Scenario: Contains-matches fill remaining slots
 - **WHEN** fewer than 5 anime titles start with the query
 - **THEN** anime whose title contains the query (but does not start with it) fill the remaining slots, also ordered by popularity
+
+#### Scenario: A newly stored anime is matchable on the next query
+- **WHEN** an anime the app had not stored before is stored by browsing a season, and I then type a query its title matches
+- **THEN** the cache-only stage lists it, rather than leaving it out until some later change or restart
+
+#### Scenario: A renamed or re-pictured anime is shown as stored
+- **WHEN** a stored anime's title, English title, picture or popularity is rewritten by a refresh, an import or my own picture choice, and I then type a query that matches it
+- **THEN** the cache-only stage shows the rewritten values and ranks it by the rewritten popularity, not by what it held before
 
 #### Scenario: Uncached titles found via live search
 - **WHEN** a matching anime is not in the local cache

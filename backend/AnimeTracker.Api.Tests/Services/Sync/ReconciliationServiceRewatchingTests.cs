@@ -3,6 +3,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Sync;
+using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -64,7 +65,7 @@ public class ReconciliationServiceRewatchingTests
         await SeedLocalAsync(db, WatchStatus.Rewatching, episodesWatched: 5, rewatchCount: 2);
         var malClient = new FakeMalClient([RemoteEdge("watching", episodesWatched: 5, rewatchCount: 2)]);
 
-        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance).RunAsync();
+        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance).RunAsync();
 
         Assert.Equal(1, result.Unchanged);
         Assert.Equal(0, result.Updated);
@@ -80,7 +81,7 @@ public class ReconciliationServiceRewatchingTests
         await SeedLocalAsync(db, WatchStatus.Rewatching, episodesWatched: 5, rewatchCount: 2);
         var malClient = new FakeMalClient([RemoteEdge("dropped", episodesWatched: 5, rewatchCount: 2)]);
 
-        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance).RunAsync();
+        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance).RunAsync();
 
         Assert.Equal(0, result.Unchanged);
         Assert.Equal(1, result.Updated);
@@ -99,7 +100,7 @@ public class ReconciliationServiceRewatchingTests
         // the status comparison only").
         var malClient = new FakeMalClient([RemoteEdge("watching", episodesWatched: 7, rewatchCount: 2)]);
 
-        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance).RunAsync();
+        var result = await new ReconciliationService(malClient, db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance).RunAsync();
 
         Assert.Equal(0, result.Unchanged);
         Assert.Equal(1, result.Updated);
@@ -119,7 +120,7 @@ public class ReconciliationServiceRewatchingTests
         using var db = CreateDb();
         await SeedLocalAsync(db, WatchStatus.Rewatching, episodesWatched: 5, rewatchCount: 2);
         var malClient = new FakeMalClient([RemoteEdge("watching", episodesWatched: 7, rewatchCount: 2)]);
-        var service = new ReconciliationService(malClient, db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance);
+        var service = new ReconciliationService(malClient, db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance);
         await service.RunAsync();
 
         var accepted = await service.AcceptPendingDiffAsync();
@@ -141,7 +142,7 @@ public class ReconciliationServiceRewatchingTests
         // remote that differs on episodes — a genuine diff at compute time.
         await SeedLocalAsync(db, WatchStatus.Watching, episodesWatched: 5);
         var malClient = new FakeMalClient([RemoteEdge("watching", episodesWatched: 9)]);
-        var service = new ReconciliationService(malClient, db, new ReconciliationRunGate(), NullLogger<ReconciliationService>.Instance);
+        var service = new ReconciliationService(malClient, db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance);
         await service.RunAsync();
 
         // The entry becomes a rewatch after the diff was computed, but before

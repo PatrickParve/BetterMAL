@@ -4,6 +4,7 @@ using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
+using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,6 +14,7 @@ public class MetadataRefreshService(
     AnimeTrackerDbContext db,
     IMalClient malClient,
     IAnimeMetadataChangeDetector changeDetector,
+    IAnimeSearchIndex searchIndex,
     ILogger<MetadataRefreshService> logger) : IMetadataRefreshService
 {
     public async Task RefreshStaleBatchAsync(int batchSize, int? skipAnimeId, MalCallTally tally, CancellationToken ct = default)
@@ -112,7 +114,16 @@ public class MetadataRefreshService(
         // saved too, and EF makes no database round trip when nothing on any
         // tracked entity actually changed.
         if (due.Count > 0)
+        {
             await db.SaveChangesAsync(ct);
+
+            // Some of `due` may have had ApplyTo rewrite Title/EnglishTitle/
+            // PopularityRank/PictureUrl above — invalidate now that it's
+            // committed. A pass whose fetches all failed invalidates for
+            // nothing, which costs one rebuild on a job that runs every ten
+            // minutes — not worth guarding against.
+            searchIndex.Invalidate();
+        }
     }
 
     public async Task RefreshOneAsync(int animeId, CancellationToken ct = default)
@@ -156,5 +167,9 @@ public class MetadataRefreshService(
         }
 
         await db.SaveChangesAsync(ct);
+
+        // Covers both branches above: an insert and an update both touch
+        // Title/EnglishTitle/PopularityRank/PictureUrl.
+        searchIndex.Invalidate();
     }
 }

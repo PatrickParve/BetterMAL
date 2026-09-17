@@ -6,8 +6,10 @@ using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Updates;
+using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using SeasonBrowseService = AnimeTracker.Api.Services.Season.SeasonBrowseService;
@@ -27,7 +29,7 @@ public class SeasonBrowseServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    private static SeasonBrowseService CreateService(AnimeTrackerDbContext db, IMalClient malClient) =>
+    private static SeasonBrowseService CreateService(AnimeTrackerDbContext db, IMalClient malClient, IAnimeSearchIndex? searchIndex = null) =>
         new(
             db,
             malClient,
@@ -35,6 +37,7 @@ public class SeasonBrowseServiceTests
             new SeasonRepository(db),
             new FakeBroadcastLocalTimeConverter(),
             new RefreshGate(),
+            searchIndex ?? new FakeAnimeSearchIndex(),
             NullLogger<SeasonBrowseService>.Instance);
 
     [Fact]
@@ -408,6 +411,35 @@ public class SeasonBrowseServiceTests
         var stored = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
         Assert.Equal(12, stored.TotalEpisodes);
         Assert.Equal(new DateOnly(2026, 7, 12), stored.AiredFrom);
+    }
+
+    // --- cache-type-ahead-search-index tasks.md 5.2: a browse invalidates the search index ---
+
+    [Fact]
+    public async Task RefreshAsync_CachingANotYetSeenAnimeInvalidatesTheSearchIndex()
+    {
+        using var db = CreateDb();
+        var malClient = new FakeMalClient([SeasonEdge(1, 2027, "winter", numEpisodes: 12, startDate: "2027-01-12")]);
+        var searchIndex = new FakeAnimeSearchIndex();
+
+        await CreateService(db, malClient, searchIndex).RefreshAsync(2027, "winter");
+
+        Assert.Equal(1, searchIndex.InvalidateCallCount);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_LeanlyRewritingAnExistingRowInvalidatesTheSearchIndex()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1" });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient([SeasonEdge(1, 2027, "winter", numEpisodes: 12, startDate: "2027-01-12")]);
+        var searchIndex = new FakeAnimeSearchIndex();
+
+        await CreateService(db, malClient, searchIndex).RefreshAsync(2027, "winter");
+
+        Assert.Equal(1, searchIndex.InvalidateCallCount);
     }
 
     // --- fix-season-pruning-and-bound-clamp: B3, a fetch that returns anime prunes what MAL no longer files here (design D1-D3) ---

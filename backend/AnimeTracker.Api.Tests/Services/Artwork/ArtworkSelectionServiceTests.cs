@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Tests.Services.Artwork;
@@ -22,7 +23,7 @@ public class ArtworkSelectionServiceTests
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "T", PictureUrl = "https://mal/main.jpg", MalPictureUrl = "https://mal/main.jpg" });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await Assert.ThrowsAsync<ArtworkSelectionRejectedException>(
             () => service.SetAnimePictureAsync(1, "https://mal/not-an-option.jpg"));
@@ -44,7 +45,7 @@ public class ArtworkSelectionServiceTests
             PictureUrls = ["https://mal/alt.jpg"],
         });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await Assert.ThrowsAsync<ArtworkSelectionRejectedException>(
             () => service.SetAnimePictureAsync(1, "https://mal/alt.jpg"));
@@ -54,7 +55,7 @@ public class ArtworkSelectionServiceTests
     public async Task SetAnimePictureAsync_UnknownAnimeThrowsNotFound()
     {
         using var db = CreateDb();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await Assert.ThrowsAsync<AnimeMetadataNotFoundException>(
             () => service.SetAnimePictureAsync(999, "https://mal/anything.jpg"));
@@ -74,7 +75,7 @@ public class ArtworkSelectionServiceTests
         });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await service.SetAnimePictureAsync(1, "https://mal/main.jpg");
 
@@ -98,7 +99,7 @@ public class ArtworkSelectionServiceTests
         });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         var before = DateTimeOffset.UtcNow;
         await service.SetAnimePictureAsync(1, "https://mal/alt.jpg");
@@ -123,7 +124,7 @@ public class ArtworkSelectionServiceTests
         });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await service.SetAnimePictureAsync(1, "https://mal/alt.jpg");
         var first = (await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1)).SelectedPictureModifiedAt!.Value;
@@ -149,7 +150,7 @@ public class ArtworkSelectionServiceTests
         });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await service.SetAnimePictureAsync(1, "https://mal/alt.jpg");
 
@@ -172,7 +173,7 @@ public class ArtworkSelectionServiceTests
         });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await service.ResetAnimePictureAsync(1);
 
@@ -195,7 +196,7 @@ public class ArtworkSelectionServiceTests
         });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await service.SetAnimePictureAsync(1, "https://mal/alt.jpg");
         var setStamp = (await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1)).SelectedPictureModifiedAt!.Value;
@@ -219,7 +220,7 @@ public class ArtworkSelectionServiceTests
         db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
         db.SeriesMembers.Add(new SeriesMember { SeriesId = 1, AnimeId = 1, IsMainLine = true, Order = 0 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         var before = DateTimeOffset.UtcNow;
         await service.SetSeriesTitleAsync(1, "Series Title");
@@ -237,7 +238,7 @@ public class ArtworkSelectionServiceTests
         db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
         db.SeriesMembers.Add(new SeriesMember { SeriesId = 1, AnimeId = 1, IsMainLine = true, Order = 0 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await service.SetSeriesTitleAsync(1, "Series Title");
         var setStamp = (await db.Series.AsNoTracking().SingleAsync(s => s.Id == 1)).SelectedTitleModifiedAt!.Value;
@@ -264,7 +265,7 @@ public class ArtworkSelectionServiceTests
         db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
         db.SeriesMembers.Add(new SeriesMember { SeriesId = 1, AnimeId = 1, IsMainLine = true, Order = 0 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         var before = DateTimeOffset.UtcNow;
         await service.SetSeriesPictureAsync(1, "https://mal/main.jpg");
@@ -288,7 +289,7 @@ public class ArtworkSelectionServiceTests
         db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
         db.SeriesMembers.Add(new SeriesMember { SeriesId = 1, AnimeId = 1, IsMainLine = true, Order = 0 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await service.SetSeriesPictureAsync(1, "https://mal/main.jpg");
         var setStamp = (await db.Series.AsNoTracking().SingleAsync(s => s.Id == 1)).SelectedPictureModifiedAt!.Value;
@@ -314,7 +315,7 @@ public class ArtworkSelectionServiceTests
         });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
         var fileTime = DateTimeOffset.UtcNow.AddDays(-30);
 
         await service.AdoptAnimePictureAsync(1, "https://mal/alt.jpg", fileTime);
@@ -334,7 +335,7 @@ public class ArtworkSelectionServiceTests
             PictureUrl = "https://mal/chosen.jpg", MalPictureUrl = "https://mal/main.jpg",
         });
         await db.SaveChangesAsync(); // no UserAnimeEntry
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
         var fileTime = DateTimeOffset.UtcNow.AddDays(-1);
 
         await service.AdoptAnimePictureAsync(1, null, fileTime);
@@ -351,7 +352,7 @@ public class ArtworkSelectionServiceTests
         using var db = CreateDb();
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "T", PictureUrl = "https://mal/main.jpg", MalPictureUrl = "https://mal/main.jpg", PictureUrls = ["https://mal/main.jpg", "https://mal/alt.jpg"] });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await Assert.ThrowsAsync<ArtworkSelectionRejectedException>(
             () => service.AdoptAnimePictureAsync(1, "https://mal/alt.jpg", DateTimeOffset.UtcNow));
@@ -367,7 +368,7 @@ public class ArtworkSelectionServiceTests
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "T", PictureUrl = "https://mal/main.jpg", MalPictureUrl = "https://mal/main.jpg" });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await Assert.ThrowsAsync<ArtworkSelectionRejectedException>(
             () => service.AdoptAnimePictureAsync(1, "https://mal/not-an-option.jpg", DateTimeOffset.UtcNow));
@@ -380,7 +381,7 @@ public class ArtworkSelectionServiceTests
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "T", PictureUrl = "https://mal/main.jpg", MalPictureUrl = "https://mal/main.jpg", PictureUrls = ["https://mal/main.jpg", "https://mal/alt.jpg"] });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await service.CheckAnimePictureAsync(1, "https://mal/alt.jpg");
 
@@ -396,7 +397,7 @@ public class ArtworkSelectionServiceTests
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "T", PictureUrl = "https://mal/main.jpg", MalPictureUrl = "https://mal/main.jpg" });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await Assert.ThrowsAsync<ArtworkSelectionRejectedException>(
             () => service.CheckAnimePictureAsync(1, "https://mal/not-an-option.jpg"));
@@ -410,7 +411,7 @@ public class ArtworkSelectionServiceTests
         db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
         db.SeriesMembers.Add(new SeriesMember { SeriesId = 1, AnimeId = 1, IsMainLine = true, Order = 0 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
         var fileTime = DateTimeOffset.UtcNow.AddDays(-10);
 
         await service.AdoptSeriesTitleAsync(1, "  Beyblade:  ", fileTime);
@@ -428,7 +429,7 @@ public class ArtworkSelectionServiceTests
         db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
         db.SeriesMembers.Add(new SeriesMember { SeriesId = 1, AnimeId = 1, IsMainLine = true, Order = 0 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await Assert.ThrowsAsync<ArtworkSelectionRejectedException>(
             () => service.AdoptSeriesTitleAsync(1, "Invented Title", DateTimeOffset.UtcNow));
@@ -445,7 +446,7 @@ public class ArtworkSelectionServiceTests
         db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, BuiltAt = DateTimeOffset.UtcNow, SelectedTitle = "Series Title" });
         db.SeriesMembers.Add(new SeriesMember { SeriesId = 1, AnimeId = 1, IsMainLine = true, Order = 0 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
         var fileTime = DateTimeOffset.UtcNow.AddDays(-1);
 
         await service.AdoptSeriesTitleAsync(1, null, fileTime);
@@ -463,7 +464,7 @@ public class ArtworkSelectionServiceTests
         db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
         db.SeriesMembers.Add(new SeriesMember { SeriesId = 1, AnimeId = 1, IsMainLine = true, Order = 0 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
         var fileTime = DateTimeOffset.UtcNow.AddDays(-5);
 
         await service.AdoptSeriesPictureAsync(1, "https://mal/main.jpg", fileTime);
@@ -481,7 +482,7 @@ public class ArtworkSelectionServiceTests
         db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
         db.SeriesMembers.Add(new SeriesMember { SeriesId = 1, AnimeId = 1, IsMainLine = true, Order = 0 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await service.CheckSeriesPictureAsync(1, "https://mal/main.jpg");
 
@@ -498,9 +499,100 @@ public class ArtworkSelectionServiceTests
         db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
         db.SeriesMembers.Add(new SeriesMember { SeriesId = 1, AnimeId = 1, IsMainLine = true, Order = 0 });
         await db.SaveChangesAsync();
-        var service = new ArtworkSelectionService(db);
+        var service = new ArtworkSelectionService(db, new FakeAnimeSearchIndex());
 
         await Assert.ThrowsAsync<ArtworkSelectionRejectedException>(
             () => service.CheckSeriesPictureAsync(1, "https://mal/not-an-option.jpg"));
+    }
+
+    // --- cache-type-ahead-search-index tasks.md 5.2: invalidation on the three anime methods, none on series ---
+
+    [Fact]
+    public async Task SetAnimePictureAsync_InvalidatesTheSearchIndex()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1, Title = "T", PictureUrl = "https://mal/main.jpg", MalPictureUrl = "https://mal/main.jpg",
+            PictureUrls = ["https://mal/main.jpg", "https://mal/alt.jpg"],
+        });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
+        await db.SaveChangesAsync();
+        var searchIndex = new FakeAnimeSearchIndex();
+        var service = new ArtworkSelectionService(db, searchIndex);
+
+        await service.SetAnimePictureAsync(1, "https://mal/alt.jpg");
+
+        Assert.Equal(1, searchIndex.InvalidateCallCount);
+    }
+
+    [Fact]
+    public async Task ResetAnimePictureAsync_InvalidatesTheSearchIndex()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1, Title = "T", SelectedPictureUrl = "https://mal/chosen.jpg",
+            PictureUrl = "https://mal/chosen.jpg", MalPictureUrl = "https://mal/main.jpg",
+        });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
+        await db.SaveChangesAsync();
+        var searchIndex = new FakeAnimeSearchIndex();
+        var service = new ArtworkSelectionService(db, searchIndex);
+
+        await service.ResetAnimePictureAsync(1);
+
+        Assert.Equal(1, searchIndex.InvalidateCallCount);
+    }
+
+    [Fact]
+    public async Task AdoptAnimePictureAsync_InvalidatesTheSearchIndex()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1, Title = "T", PictureUrl = "https://mal/main.jpg", MalPictureUrl = "https://mal/main.jpg",
+            PictureUrls = ["https://mal/main.jpg", "https://mal/alt.jpg"],
+        });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
+        await db.SaveChangesAsync();
+        var searchIndex = new FakeAnimeSearchIndex();
+        var service = new ArtworkSelectionService(db, searchIndex);
+
+        await service.AdoptAnimePictureAsync(1, "https://mal/alt.jpg", DateTimeOffset.UtcNow.AddDays(-1));
+
+        Assert.Equal(1, searchIndex.InvalidateCallCount);
+    }
+
+    [Fact]
+    public async Task SetSeriesTitleAsync_DoesNotInvalidateTheSearchIndex()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Series Title" });
+        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
+        db.SeriesMembers.Add(new SeriesMember { SeriesId = 1, AnimeId = 1, IsMainLine = true, Order = 0 });
+        await db.SaveChangesAsync();
+        var searchIndex = new FakeAnimeSearchIndex();
+        var service = new ArtworkSelectionService(db, searchIndex);
+
+        await service.SetSeriesTitleAsync(1, "Series Title");
+
+        Assert.Equal(0, searchIndex.InvalidateCallCount);
+    }
+
+    [Fact]
+    public async Task SetSeriesPictureAsync_DoesNotInvalidateTheSearchIndex()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "T", PictureUrl = "https://mal/main.jpg", MalPictureUrl = "https://mal/main.jpg" });
+        db.Series.Add(new AnimeTracker.Api.Models.Series { Id = 1, BuiltAt = DateTimeOffset.UtcNow });
+        db.SeriesMembers.Add(new SeriesMember { SeriesId = 1, AnimeId = 1, IsMainLine = true, Order = 0 });
+        await db.SaveChangesAsync();
+        var searchIndex = new FakeAnimeSearchIndex();
+        var service = new ArtworkSelectionService(db, searchIndex);
+
+        await service.SetSeriesPictureAsync(1, "https://mal/main.jpg");
+
+        Assert.Equal(0, searchIndex.InvalidateCallCount);
     }
 }

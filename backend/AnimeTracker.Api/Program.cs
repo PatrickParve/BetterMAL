@@ -57,6 +57,7 @@ builder.Services.Configure<MalOptions>(builder.Configuration.GetSection(MalOptio
 
 builder.Services.AddSingleton<MalRequestPacer>();
 builder.Services.AddSingleton<MalSearchCache>();
+builder.Services.AddSingleton<IAnimeSearchIndex, AnimeSearchIndexCache>();
 builder.Services.AddSingleton<MalOAuthStateStore>();
 builder.Services.AddSingleton<IMalTokenProvider, MalTokenProvider>();
 
