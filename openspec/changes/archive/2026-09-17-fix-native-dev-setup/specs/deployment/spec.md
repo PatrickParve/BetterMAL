@@ -1,28 +1,4 @@
-# deployment Specification
-
-## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
-## Requirements
-### Requirement: Docker Compose three-service stack
-The system SHALL be deployable via Docker Compose with separate Postgres, backend, and frontend services.
-
-#### Scenario: Bringing up the stack
-- **WHEN** `docker compose up` is run
-- **THEN** the Postgres, backend, and frontend services all start and the app is reachable locally
-
-### Requirement: Auto-restart with the machine
-The system SHALL configure each service with `restart: unless-stopped` so the app comes back up automatically when the PC boots and Docker starts, and shuts down cleanly with the PC.
-
-#### Scenario: Recovery after reboot
-- **WHEN** the PC reboots and Docker starts
-- **THEN** each service restarts automatically unless it was explicitly stopped
-
-### Requirement: Durable Postgres data volume
-The system SHALL use a named volume for the Postgres data directory so data survives container rebuilds.
-
-#### Scenario: Data survives a rebuild
-- **WHEN** the containers are rebuilt
-- **THEN** the Postgres data persists via the named volume
+## MODIFIED Requirements
 
 ### Requirement: Secrets via gitignored .env
 The system SHALL load secrets (the MAL client ID and secret, and the database connection) from a `.env` file at the repository root that is gitignored and never committed. MAL access and refresh tokens are not among them: they come from authorization and are stored in Postgres.
@@ -55,6 +31,8 @@ Outside the Development environment, the backend SHALL NOT read a `.env` file, e
 - **WHEN** the backend runs in any environment other than Development, including the Docker image's Production environment, and a `.env` file is present where a native run would look
 - **THEN** that file is not read, and the backend's configuration is unchanged by it
 
+## ADDED Requirements
+
 ### Requirement: One backend port, set by BACKEND_PORT
 The system SHALL take the backend's host port from `BACKEND_PORT` in `.env`, and SHALL use 5050 when it is unset or empty. That one port SHALL be where the backend is reached on `localhost`, whether it runs under Docker Compose or natively. It SHALL also be the port in the OAuth redirect URI `http://localhost:{port}/callback`, and the port the frontend dev server proxies `/api` calls to.
 
@@ -69,4 +47,3 @@ The system SHALL take the backend's host port from `BACKEND_PORT` in `.env`, and
 #### Scenario: A chosen port applies everywhere under Docker
 - **WHEN** `.env` sets `BACKEND_PORT` to a port other than 5050, and the stack runs under Docker Compose
 - **THEN** the backend is published on that port and the OAuth redirect URI uses it
-

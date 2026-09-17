@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ mode }) => {
   // .env lives at the repo root (alongside docker-compose.yml), not in frontend/.
   const env = loadEnv(mode, process.cwd() + '/..', '')
-  const backendPort = env.BACKEND_PORT || '5000'
+  const backendPort = env.BACKEND_PORT || '5050'
 
   return {
     plugins: [react()],

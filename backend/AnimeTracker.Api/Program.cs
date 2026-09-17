@@ -30,6 +30,10 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Run natively (Development), the backend reads the repo-root .env that
+// Docker Compose reads. Must come before anything reads configuration.
+DevDotEnvOverlay.Apply(builder.Configuration, builder.Environment);
+
 // Add services to the container.
 
 builder.Services.AddControllers()

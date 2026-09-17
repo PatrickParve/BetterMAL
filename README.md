@@ -42,8 +42,8 @@ app credentials:
 
 1. Log into MyAnimeList and go to https://myanimelist.net/apiconfig
 2. Create a new app (App Type: **other**).
-3. Set the **App Redirect URL** to `http://localhost:5000/callback` (the port
-   must match `BACKEND_PORT` in your `.env` — 5000 is the default).
+3. Set the **App Redirect URL** to `http://localhost:5050/callback` (the port
+   must match `BACKEND_PORT` in your `.env` — 5050 is the default).
 4. Save, then copy the generated **Client ID** and **Client Secret**.
 
 The app runs without these, but the MAL connect/import/sync flow will fail
@@ -63,13 +63,13 @@ MAL_CLIENT_ID=            # from myanimelist.net/apiconfig
 MAL_CLIENT_SECRET=
 
 # --- Ports exposed on localhost ---
-BACKEND_PORT=5000         # must match the redirect URI registered with MAL above
+BACKEND_PORT=5050         # must match the redirect URI registered with MAL above
 FRONTEND_PORT=5173
 
 # --- Postgres ---
 POSTGRES_DB=animetracker
 POSTGRES_USER=animetracker
-POSTGRES_PASSWORD=changeme   # pick your own password
+POSTGRES_PASSWORD=devlocalpassword   # only guards the local database; set before your first `docker compose up`
 POSTGRES_PORT=5434
 ```
 
@@ -91,7 +91,7 @@ This builds and starts three containers: `postgres`, `backend`, and
 so the database schema is created for you — no manual migration step needed.
 
 - Frontend: http://localhost:5173
-- Backend API: http://localhost:5000
+- Backend API: http://localhost:5050
 - Postgres: exposed on `localhost:5434` (for a local DB client, if wanted)
 
 All three services use `restart: unless-stopped`, so they come back up
@@ -157,9 +157,15 @@ Start just Postgres via Docker (simplest way to get a matching database):
 docker compose up -d postgres
 ```
 
-Then run the backend (applies migrations automatically on startup, listens
-on port 5000 using `appsettings.Development.json`, which already points at
-the `postgres` container's exposed port):
+Then run the backend. It applies migrations automatically on startup and
+listens on port 5050, or `BACKEND_PORT` from `.env`. Run this way, it reads
+the same repo-root `.env` Docker Compose reads, so the MAL credentials and
+the Postgres settings apply with no extra setup, connecting to the
+`postgres` container on `localhost:<POSTGRES_PORT>`. It looks for `.env` two
+levels up from where it's started, so run it from `backend/AnimeTracker.Api`
+as shown below — without one, it falls back to
+`appsettings.Development.json`, which matches `.env.example`'s defaults, but
+MAL won't connect:
 
 ```bash
 cd backend/AnimeTracker.Api
@@ -167,7 +173,8 @@ dotnet run
 ```
 
 In a separate terminal, run the frontend (Vite dev server on port 5173,
-proxying `/api` calls to `localhost:5000` per `vite.config.ts`):
+proxying `/api` calls to `localhost:5050`, or `BACKEND_PORT` from `.env`, per
+`vite.config.ts`):
 
 ```bash
 cd frontend
@@ -188,7 +195,7 @@ MAL and keeps it synced from then on.
 | ---------------------- | ------------------------------------------------------------------------- | -------------- |
 | `MAL_CLIENT_ID`        | MyAnimeList API app Client ID                                            | *(required)*   |
 | `MAL_CLIENT_SECRET`    | MyAnimeList API app Client Secret                                        | *(required)*   |
-| `BACKEND_PORT`         | Host port for the backend API; also the OAuth redirect port              | `5000`         |
+| `BACKEND_PORT`         | Host port for the backend API; also the OAuth redirect port              | `5050`         |
 | `FRONTEND_PORT`        | Host port for the frontend (Docker only)                                 | `5173`         |
 | `POSTGRES_DB`          | Postgres database name                                                   | `animetracker` |
 | `POSTGRES_USER`        | Postgres user                                                            | `animetracker` |
