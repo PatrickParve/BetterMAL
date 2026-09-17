@@ -1,7 +1,7 @@
 # list-editing Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The list-editing capability governs the rules a list entry's status, dates, progress and rewatch count follow when I edit it by hand, including the aired guards that gate what may be tracked, Rewatching as its own status with restart and automatic-completion rules, a completed entry reopening when a new episode airs, the completion score prompt, and adding, removing, and placing a newly scored anime in the ranking. Every edit opens through the single overlay editor and triggers MAL sync, but what gets logged is activity-recording's and how overlays behave as a mechanism is overlay-behaviour's.
 ## Requirements
 ### Requirement: Whether an anime has aired an episode is resolved one way
 

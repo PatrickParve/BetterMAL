@@ -1,7 +1,7 @@
 # artwork-selection Specification
 
 ## Purpose
-TBD - created by archiving change add-artwork-and-title-selection. Update Purpose after archive.
+The artwork-selection capability stores MAL's whole picture set for a my-list anime, not just its main picture, and lets me choose which picture represents an anime or a series' main line — a choice shown everywhere that anime or series appears, surviving every MAL sync, and timestamped when I make it. It covers only which picture is picked and stored; how a picked picture is drawn is artwork-presentation's, resolving a series' title alongside its picture is series-identity's, and carrying a choice to another device is device-transfer's.
 
 ## Requirements
 

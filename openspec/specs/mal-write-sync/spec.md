@@ -1,7 +1,7 @@
 # mal-write-sync Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The mal-write-sync capability governs how a local edit or removal reaches MyAnimeList — debounced per entry and retried on failure — and how drift on MyAnimeList's side is pulled back through a full reconciliation, reviewed rather than applied blind. Changes still pending when the app starts are held for review rather than pushed immediately, and a held change is accepted, declined, or cleared on its own once MyAnimeList already agrees with it; Rewatching is always pushed to MyAnimeList as watching, since MyAnimeList has no rewatch status of its own.
 ## Requirements
 ### Requirement: Debounced per-entry sync scheduling
 The system SHALL, when a list entry changes, mark it `pending_sync = true` and start or restart a short per-entry timer (8 seconds) scoped to that specific anime.

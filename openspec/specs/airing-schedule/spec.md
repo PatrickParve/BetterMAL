@@ -1,7 +1,7 @@
 # airing-schedule Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The airing-schedule capability governs the weekly schedule grid of my list's airing anime in local time: grouping by converted local day, the seven-day column layout, marking today, week navigation, grouping same-anime episodes landing on the same local day, and the empty-week message shown when a break leaves nothing airing. Episode timing itself — when an episode airs — is read from episode-airing-data rather than computed here.
 ## Requirements
 ### Requirement: Weekly airing view of my list in local time
 The system SHALL show a week view of time slots for anime in my list, built from stored per-episode airing rows: one slot per stored episode whose air instant falls within the displayed week, labeled by title and episode number, with the instant converted to local time — except that multiple episodes of the same anime airing on the same local day MAY be represented by a single merged slot, per the grouping rule defined separately. Anime that have finished airing SHALL NOT appear in weeks after their last stored episode, even if stale broadcast data exists.

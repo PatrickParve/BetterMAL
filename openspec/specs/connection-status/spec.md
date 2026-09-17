@@ -1,7 +1,7 @@
 # connection-status Specification
 
 ## Purpose
-TBD - created by change improve-airing-coverage-and-connection-feedback. Update Purpose after archive.
+The connection-status capability tracks one frontend-wide reachability state for the app's own backend, centralized across every API call rather than judged per request, and drives the connection-lost notice shown while it's down. The notice clears itself the moment the backend recovers, and a failure on the very first load shows its own full-page message instead of a partial page behind a banner. It covers only reachability to this app's backend; the connection to MyAnimeList is mal-api-integration's, and a single action failing on an otherwise-reachable backend is action-failure-notices'.
 
 ## Requirements
 

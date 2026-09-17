@@ -1,7 +1,7 @@
 # action-failure-notices Specification
 
 ## Purpose
-TBD - created by archiving change polish-detail-dates-and-error-messages. Update Purpose after archive.
+The action-failure-notices capability guarantees that any action taken on my behalf that doesn't take effect is reported, never left silent, through one app-wide notice mechanism shared by every surface that can fail. The notice carries the reason the server gave rather than a generic message. It covers a single action's failure; the backend being unreachable as a whole is connection-status's.
 
 ## Requirements
 

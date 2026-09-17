@@ -1,7 +1,7 @@
 # page-header-design Specification
 
 ## Purpose
-TBD - created by archiving change polish-headers-filters-and-top-series. Update Purpose after archive.
+The page-header-design capability governs each page's dedicated title header block and its page-appropriate treatment, the shared height every filter-and-sort control in one cluster holds to, and the shared multi-select filter component: its panel, trigger, label, width, and All/None shortcuts. It covers the header and filter chrome itself, not the colour a section is drawn in, which is section-colour-language's, or the series page's own hero-block title, which is series-page's.
 
 ## Requirements
 

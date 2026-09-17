@@ -1,7 +1,7 @@
 # navbar-settings-status Specification
 
 ## Purpose
-TBD - created by archiving change navbar-settings-status-indicator. Update Purpose after archive.
+The navbar-settings-status capability governs the Settings control's two indicators — the "needs me" badge and the background-job progress bar — and exactly what raises and clears each: an outcome I've already been shown or routine background work raises nothing, and only one bar shows at a time, oldest first. Both are derived from server state alone, at no cost outside this device, so every browser open on the same device agrees. It covers only the navbar's own signal; a job's lifecycle belongs to background-jobs, and showing jobs in full is settings-page's.
 
 ## Requirements
 

@@ -1,7 +1,7 @@
 # series-page Specification
 
 ## Purpose
-TBD - created by archiving change add-series-page. Update Purpose after archive.
+The series-page capability derives a series from the relation graph — its main line and extras, watch order, and root anime — persists that shape, and governs the bounded builds that (re)compute it and where they're triggered from. It also governs the series page itself: the header, score averages, stats, the More section's per-relation-type groups, the timeline ribbon, and the rebuild control. Series-versions refines how a version relation specifically shapes that composition; series-browser is the list of series rather than one series' own page; and relation-confidence is what a relation edge is trusted to mean before this capability builds anything from it.
 ## Requirements
 ### Requirement: Series composition from the relation graph
 The system SHALL derive a series as the connected component of the stored related-anime graph, traversing **story relations only** — `sequel`, `prequel`, `side_story`, `parent_story`, `summary`, `full_story`, `spin_off` — together with the narrow companion-media case of `other` defined below. The `series-versions` capability governs how that component becomes a series.

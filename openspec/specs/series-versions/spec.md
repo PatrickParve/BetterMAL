@@ -1,7 +1,7 @@
 # series-versions Specification
 
 ## Purpose
-TBD - created by archiving change split-series-by-version. Update Purpose after archive.
+The series-versions capability governs how a version relation — one anime retelling or re-presenting another — shapes a series' membership: which version neighbours fold into the main line as an extra rather than opening a series of their own, how alternative main-line versions share one watch-order slot behind a chosen default, that a build stores only the series its own seed belongs to, and that an anime can sit in more than one series while one of them is marked primary. It refines series-page's own derivation of a series specifically where version relations are involved, rather than defining series composition from scratch.
 
 ## Requirements
 

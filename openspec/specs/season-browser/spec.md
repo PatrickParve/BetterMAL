@@ -1,7 +1,7 @@
 # season-browser Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The season-browser capability governs browsing every anime MAL classifies to a season, not just my list, using MAL's own season and type classification and a cache-first read that refreshes in the background on each visit. It bounds requests to MAL's own forward season horizon and refuses anything beyond it, and it excludes hentai from the listing whenever the hide-NSFW setting is on. Year-browser derives its own listing entirely from this capability's cached seasons.
 ## Requirements
 ### Requirement: Full season listing with live-then-cached fetch
 The system SHALL show all anime whose MAL season classification (`start_season`) is the selected season (not just my list), fetching the season live from the API when it has never been fetched before and caching the results for subsequent visits. Season membership SHALL follow MAL's own `start_season` — the field MAL uses to build its per-season listings — which can differ from the calendar quarter the anime's start date falls in; the system SHALL NOT re-derive an anime's season from its start date. Each anime SHALL appear in exactly one season: the season MAL currently files it under. This SHALL hold for the cached listing as it stands after each successful fetch, not only when a row is first added. A long-running anime SHALL NOT appear in seasons after its premiere. The cached listing SHALL be the single source of truth read back to the page (no start-date re-filtering at read time).

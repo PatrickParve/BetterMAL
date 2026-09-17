@@ -1,7 +1,7 @@
 # navigation-and-search Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The navigation-and-search capability governs the navbar, both search surfaces — the type-ahead dropdown and the full results page — and the page-wide rules every page follows: no horizontal scroll or drift, one-axis scrolling within a region, no vertical bounce, hover and focus treatment, and preferring an anime's English title everywhere it's shown. Search results include matching series alongside anime, fall back to locally stored anime when the live search fails, and can schedule a series build for a franchise not yet known to the app.
 ## Requirements
 ### Requirement: Navbar layout
 The system SHALL provide a navbar with two groups of controls: a left group of page links and a right group holding the search field and the account/preference controls. There SHALL be no third, centred group — the search field belongs to the right group.

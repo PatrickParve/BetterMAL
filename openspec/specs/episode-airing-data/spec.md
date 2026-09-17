@@ -1,7 +1,7 @@
 # episode-airing-data Specification
 
 ## Purpose
-TBD - created by change fix-airing-episode-accuracy. Update Purpose after archive.
+The episode-airing-data capability treats AniList as the sole source of when an episode airs and of a total episode count MyAnimeList doesn't yet have, persisting per-episode rows that a refresh replaces wholesale and that are readable in bulk by local date, by aired count, and by next airing instant. It sets its own refresh cadence — elapsed-time rather than fixed-schedule, triggered by specific events, paced against AniList, and rechecked faster while an anime's airing data is still incomplete — separate from metadata-refresh's own MAL-metadata schedule. Airing-schedule, main-dashboard, and list-editing each read this data rather than deriving episode timing themselves.
 ## Requirements
 ### Requirement: AniList is the sole source of episode timing
 The system SHALL derive every per-episode air instant, every aired-so-far episode count, and every next-episode instant exclusively from AniList. No MyAnimeList value SHALL feed an episode-timing field. MyAnimeList SHALL remain the **primary** source for the anime's total episode count, its airing status, and all static metadata (title, synopsis, genres, cover art, studio, score, rank) — with the single exception of a total episode count MyAnimeList does not publish, which AniList may supply per "AniList supplies a total episode count MyAnimeList does not have".

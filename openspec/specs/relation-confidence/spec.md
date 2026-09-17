@@ -1,7 +1,7 @@
 # relation-confidence Specification
 
 ## Purpose
-TBD - created by archiving change rework-anime-relation-data. Update Purpose after archive.
+The relation-confidence capability reads an anime's related-anime edges in both directions and grades each edge's confidence by whether the two ends agree on it, lets AniList adjudicate an edge they contest, and resolves one canonical prequel and one canonical sequel by rank rather than leaving every relation equally weighted. Fetching and storing the edges themselves belong to mal-api-integration and data-persistence; series-page and anime-detail each consume the confidence this capability assigns.
 
 ## Requirements
 

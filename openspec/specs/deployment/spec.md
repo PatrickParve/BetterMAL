@@ -1,7 +1,7 @@
 # deployment Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The deployment capability governs the three-service Docker Compose stack — auto-restarting with the machine, its durable Postgres data volume, and secrets read from a single gitignored .env — and a native Development run that reads that same .env directly rather than through Compose. Both run the backend on the one port set by BACKEND_PORT.
 ## Requirements
 ### Requirement: Docker Compose three-service stack
 The system SHALL be deployable via Docker Compose with separate Postgres, backend, and frontend services.

@@ -1,7 +1,7 @@
 # library-views Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The library-views capability governs My List and Top Anime: how my list is grouped, filtered by status, type, airing state and score, and sorted two levels deep, with grouping as an explicit choice rather than a side effect of sorting; how Top Anime's several ranking lists are drawn and refreshed daily; and the inline row actions both views share. Ranked order within either view reads anime-ranking rather than computing its own, and my list can be scoped in place to a recap period without leaving it.
 ## Requirements
 ### Requirement: My list grouped and ordered by status
 The system SHALL present my list as one list grouped and ordered as Currently watching → Rewatching → On hold → Plan to watch → Completed → Dropped, where each entry shows picture, title, type (TV/movie), progress, my score, MAL score (respecting the hide/unhide toggle), and an edit button. Rewatching sits directly after Currently watching because both are runs in progress. For entries in the **Plan to watch** group, each row SHALL additionally show an airing-status indicator alongside the type — **Not aired**, **Airing**, or **Aired** (mapped from the anime's `not_yet_aired`, `currently_airing`, and `finished_airing` values) — so the user can tell at a glance whether a queued show is already out, still airing, or has not yet started; when the airing status is unknown, no indicator is shown.

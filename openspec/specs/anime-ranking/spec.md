@@ -1,7 +1,7 @@
 # anime-ranking Specification
 
 ## Purpose
-TBD - created by archiving change add-anime-ranking. Update Purpose after archive.
+The anime-ranking capability defines the one persisted total order over every anime I have scored, aired, and not set to plan-to-watch — ordered by score, then by my own hand-arranged order within a score band — together with the ranking editor that lets me rearrange it directly. Library-views, profile-stats, and list-recaps each read this one ranking for their own by-my-score orderings rather than computing one themselves, and list-editing places a newly scored anime into it, but rearranging the order itself belongs here.
 
 ## Requirements
 

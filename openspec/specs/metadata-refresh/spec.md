@@ -1,7 +1,7 @@
 # metadata-refresh Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The metadata-refresh capability governs how cached MAL metadata stays fresh: a tiered background refresh keyed to staleness for my-list anime and unaired list-adjacent anime, a per-day batch cap spread across passes that backs off when MAL is down or pushing back, and the on-demand full refresh and lean visit-triggered refresh used everywhere else. No live MAL call happens on render beyond those named, visit-triggered exceptions, one of which backfills a picture missed on an earlier fetch and another of which enqueues a series build when it discovers a new relation. Episode timing itself is episode-airing-data's, refreshed on its own schedule.
 ## Requirements
 ### Requirement: No live API calls on page render beyond the named visit-triggered exceptions
 The system SHALL never call the MAL API live during a page render except for the visit-triggered fetches specified elsewhere in this capability — the anime detail page's staleness-tier refresh and manual refresh action, season and Top Anime listing refresh, and picture backfill — and the reporting of a failed visit-triggered fetch. Outside those named exceptions, cached metadata refresh SHALL happen only via scheduled background work or explicit on-demand actions.

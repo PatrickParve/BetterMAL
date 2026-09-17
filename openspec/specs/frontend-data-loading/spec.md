@@ -1,7 +1,7 @@
 # frontend-data-loading Specification
 
 ## Purpose
-TBD - created by archiving change streamline-anime-data-fetching. Update Purpose after archive.
+The frontend-data-loading capability governs the web client's read discipline: concurrent identical reads collapse into one request, a page load issues each distinct read exactly once, a mutation's own response updates state without a refetch, and a read is keyed only to the URL parts it actually depends on rather than re-issued on every change. It covers a fresh page load; restoring a page from back/forward navigation is page-state-restoration's.
 
 ## Requirements
 

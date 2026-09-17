@@ -1,7 +1,7 @@
 # initial-import Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The initial-import capability governs the one-time background import of my full MyAnimeList list after I authorize the app: inserting entries progressively as they arrive, pacing requests conservatively, resuming an import that was interrupted, and showing visible progress while it runs. An import that could not finish retries on its own, and it never touches an entry I've already asked to remove while the import is still catching up to it.
 ## Requirements
 ### Requirement: Background full-list import after authorization
 The system SHALL run a background job that fetches the full list via `GET /v2/users/@me/animelist`, paginated at roughly 100 entries per page. It SHALL run:

@@ -1,7 +1,7 @@
 # artwork-presentation Specification
 
 ## Purpose
-TBD - created by archiving change uncrop-row-artwork-and-highlight-updates. Update Purpose after archive.
+The artwork-presentation capability governs how a chosen picture is drawn wherever it appears as a row or thumbnail: shown whole rather than cropped, at its own proportions, with orientation read from the loaded image itself rather than fetched metadata. Which picture is chosen is artwork-selection's; the detail and series pages' own larger artwork treatment is anime-detail's and series-page's.
 
 ## Requirements
 ### Requirement: An anime's picture is drawn whole in every row and thumbnail

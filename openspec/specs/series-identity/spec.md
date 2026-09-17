@@ -1,7 +1,7 @@
 # series-identity Specification
 
 ## Purpose
-TBD - created by archiving change add-artwork-and-title-selection. Update Purpose after archive.
+The series-identity capability resolves a series' displayed title and picture in one shared place: which titles may be chosen — a contiguous trim of a member's own title, replacing the English title too — a renamed series still found by its members' original titles, and that choice surviving a rebuild. None of it is ever sent to MyAnimeList. Which pictures are offered and the picker itself are artwork-selection's; the series page that displays the result is series-page's.
 
 ## Requirements
 

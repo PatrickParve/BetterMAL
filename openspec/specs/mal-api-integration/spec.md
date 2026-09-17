@@ -1,7 +1,7 @@
 # mal-api-integration Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The mal-api-integration capability governs the app's contract with MyAnimeList's API: the two auth modes and PKCE sign-in, the token lifecycle and its background refresh, request pacing and burst handling, which fields each request selects, paging through a full-list read, and briefly caching a shared live search. A full detail fetch persists every related-anime edge it returns. A refused or expired sign-in is tracked through its own lost-connection lifecycle — recorded the moment it happens, blocking any further sign-in while lost, and cleared only by re-authorizing — with the resulting state reported outward.
 ## Requirements
 ### Requirement: Public read endpoints use client-id auth only
 The system SHALL call MAL API v2 public/read endpoints (anime search, season lists, ranking/top anime, anime details) using only the `X-MAL-Client-ID` header, without an OAuth token.

@@ -1,7 +1,7 @@
 # series-browser Specification
 
 ## Purpose
-TBD - created by archiving change add-series-browser. Update Purpose after archive.
+The series-browser capability governs the Series page: listing every series with a member in my list, each card's own figures — progress badge, MAL average, Rewatching counted as fully watched — sorting, filtering, the list's read endpoint, and its empty states. A card's progress and score-reveal rules defer to series-page's own precedence for one series; this capability only arranges and filters the list of them.
 ## Requirements
 ### Requirement: The Series page lists every series with a member in my list
 The system SHALL provide a Series page at `/series` listing every stored series that has at least one member — main line or extra, of any watch status — in my list.

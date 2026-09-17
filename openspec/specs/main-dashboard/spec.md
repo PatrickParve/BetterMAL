@@ -1,7 +1,7 @@
 # main-dashboard Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The main-dashboard capability governs the home page's three sections — Currently watching, Airing today, and Followed shows airing — and each section's own interaction rules: what enters and leaves the Currently watching carousel, including a rewatch appearing there and a completion being undone from its own card, alongside the countdown and broadcast progress each card shows. Airing today and Followed shows airing each filter what's mine to what's airing, in local time, with their own sort and progress display.
 ## Requirements
 ### Requirement: Currently watching horizontal carousel
 The system SHALL show a "Currently watching" section on the main page as a horizontal row of cards navigable with left/right arrows. At most 5 cards SHALL be visible at once; the visible row SHALL be bounded to the width of 5 cards rather than growing with the number of entries. When there are more than 5 entries, the row SHALL scroll as a bounded list: it stops at the first card when scrolling left and at the last card when scrolling right, and SHALL NOT wrap around from the last card to the first or from the first card to the last. Each entry SHALL be rendered exactly once. The left/right arrows SHALL be shown only when the row has more entries than fit on screen (i.e. scrolling is actually possible); when all cards already fit, no arrows are shown. Clicking a card's picture or title SHALL open that anime's detail page. Each card SHALL have a plus control next to its episode count that increments episodes-watched, applying the started-date and debounced-sync logic; clicking the card's picture or title navigates and does not increment.

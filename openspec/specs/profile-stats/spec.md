@@ -1,7 +1,7 @@
 # profile-stats Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The profile-stats capability governs the profile page: stats computed entirely from local data, a filtered activity feed with its full edit-history overlay, My top anime and Most rewatched by series, all-list episode progress, favourite seasons and years, the Top series section and its several ranking bases, the all-anime score distribution and opinion-divergence lists, and the family-banded section titles that tie related sections together visually. My top anime's order reads anime-ranking rather than computing its own.
 ## Requirements
 ### Requirement: Anime stats computed from local data
 The system SHALL show anime stats computed entirely from the local database: Days, Watching, Completed, On-Hold, Dropped, Plan to Watch, Total Entries, Rewatched, Rewatched episodes, Episodes, and Movies. A Mean Score SHALL NOT be shown among these stats; my mean score is shown under the rating distribution instead (see "All-anime score distribution").

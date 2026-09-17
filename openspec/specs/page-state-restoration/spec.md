@@ -1,7 +1,7 @@
 # page-state-restoration Specification
 
 ## Purpose
-TBD - created by applying change improve-profile-page-ux. Update Purpose after archive.
+The page-state-restoration capability governs back/forward navigation as a restore rather than a rebuild, for every routed page: an immediate render from held data followed by a background refresh, view-control selections, page and horizontal-strip scroll offsets, and which overlay was open and its own scroll offset, all restored together. It covers only what's restored and when; how an overlay behaves as a mechanism while it's open is overlay-behaviour's, and a fresh page load's own read discipline is frontend-data-loading's.
 ## Requirements
 ### Requirement: Back/forward navigation restores a page rather than rebuilding it
 The web client SHALL treat a page reached by back/forward navigation (the browser's back and forward buttons, keyboard shortcuts, or a trackpad swipe gesture) as a *restore* rather than a fresh visit. On a restore, the page SHALL render immediately from the data it held when the user navigated away, without an intermediate loading or empty state.

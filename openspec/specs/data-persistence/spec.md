@@ -1,7 +1,7 @@
 # data-persistence Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The data-persistence capability defines what this app keeps durable in Postgres and why: the anime, entry, activity-log, OAuth-token, ranking, series, and episode-airing tables, and the related-anime and AniList relation-confidence data alongside them. It also sets what each migration must preserve when the schema changes — every displayed picture and choice, the ranking's own modification time, existing series and their presentation overrides — and that every database carries its own device identifier. Local Postgres is the single source of truth the rest of the app reads from.
 ## Requirements
 
 ### Requirement: The chosen-picture migration preserves every displayed picture and stamps every existing choice

@@ -1,7 +1,7 @@
 # anime-detail Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The anime-detail capability governs the single-anime page: its layout and data completeness, the prequel/sequel relation controls and the more-relations overlay, the link to the anime's series and to its external MyAnimeList page, on-page progress and status editing, and the picture choice offered for a my-list anime. A refresh that fails is shown as a failure rather than as an empty page, and the page reads itself once per visit.
 ## Requirements
 ### Requirement: Single anime detail layout
 The system SHALL show a single anime page whose title sits in the page's own header block, per the `page-header-design` capability, above a body carrying a large picture on the left and, near the top-right, a box showing rank and MAL score (MAL score respecting the hide/unhide toggle) and, only once the anime has a score of mine, a separate box beside it showing my score, the rewatch count when it is not zero, and my finish date while my status is Completed — per the "The two score boxes share one size" requirement. Below those it SHALL show an info box (type, status, source, duration, studio, aired-from/to, and genres) and, beneath it, a synopsis/background box whenever the anime has a synopsis or a background. Any info field for which no data is available SHALL display "No info" rather than being blank.

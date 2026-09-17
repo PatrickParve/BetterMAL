@@ -1,7 +1,7 @@
 # score-visibility Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-anime-tracker. Update Purpose after archive.
+The score-visibility capability governs the global toggle that hides MAL's community score everywhere, the in-place reveal of one hidden score that doesn't persist, and the setting that always shows a completed entry's score regardless of the toggle. A hidden score keeps the same slot a shown score would occupy, and a rewatch keeps a completed entry's visibility rather than reapplying the hide. Colour and form for either score are score-presentation's.
 ## Requirements
 ### Requirement: Global MAL-score hide toggle
 The system SHALL provide a global toggle that, when hidden, replaces every MAL score everywhere with a placeholder that does not leak the underlying value. The placeholder SHALL consist of the score's reveal control alone — no stand-in digits, dots, or other characters representing the value. The toggle's on/off state SHALL persist across page reloads and new tabs (client-side, e.g. `localStorage`), so a user who hides scores does not see them reappear on refresh.

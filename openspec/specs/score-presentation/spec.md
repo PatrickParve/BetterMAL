@@ -1,7 +1,7 @@
 # score-presentation Specification
 
 ## Purpose
-TBD - created by change add-top-series-and-unify-score-styling. Update Purpose after archive.
+The score-presentation capability defines the app-wide colour roles a score is drawn in — MAL's community score and my own score, always in the same two colours — and their two densities, with a paired MAL/mine chip always keeping both values on one line. Any control that sets or selects a score carries that score's role colour, and the styling never changes whether a score is shown. Whether a MAL score shows at all is score-visibility's; section-colour-language reuses these two roles but doesn't redefine them.
 
 ## Requirements
 
