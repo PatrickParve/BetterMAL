@@ -79,7 +79,20 @@ async function fetchRaw(input: string, init?: RequestInit): Promise<Response> {
 async function performFetch(input: string, init?: RequestInit): Promise<Response> {
   let res: Response
   try {
-    res = await fetch(input, init)
+    const isGet = !init?.method || init.method.toUpperCase() === 'GET'
+    if (isGet) {
+      res = await fetch(input, init)
+    } else {
+      // Added here, not at call sites: performFetch is the single line that
+      // actually calls fetch, so this is impossible to bypass by construction
+      // (add-csrf-header-middleware design.md D8). new Headers(...) merges
+      // rather than overwrites, so a caller's own Content-Type survives. The
+      // name must stay hyphenated — nginx drops request headers containing
+      // underscores unless `underscores_in_headers on` (design.md D9).
+      const headers = new Headers(init?.headers)
+      headers.set('X-Requested-With', 'BetterMAL')
+      res = await fetch(input, { ...init, headers })
+    }
   } catch (err) {
     reportUnreachable()
     throw err

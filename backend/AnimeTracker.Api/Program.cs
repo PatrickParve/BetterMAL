@@ -224,6 +224,12 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+// The automatic UseRouting selects an endpoint ahead of user middleware, but
+// endpoints only execute in the automatic UseEndpoints at the very end of the
+// pipeline, so this still refuses a request before any controller/service
+// runs (design.md D4).
+app.Use(CrossSiteRequestGuard.Invoke);
+
 app.UseAuthorization();
 
 app.MapControllers();
