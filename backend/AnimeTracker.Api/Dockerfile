@@ -10,4 +10,5 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libgssapi-krb5-2 tzdata \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app .
+USER $APP_UID
 ENTRYPOINT ["dotnet", "AnimeTracker.Api.dll"]
