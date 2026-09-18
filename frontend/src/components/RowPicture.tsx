@@ -16,7 +16,10 @@ type RowPictureProps = {
 // (MyListRow) are memoised specifically so a keystroke elsewhere doesn't
 // redraw every row, which a lifted useState would defeat. Pushing the state
 // down here also means a picture's load re-renders one <img>, not a row or
-// a whole page.
+// a whole page. `loading="lazy"` defers the request until the picture nears
+// the viewport; it is never `complete` at ref-attach time in that case, so
+// useLandscapePicture's `load`-listener branch handles it exactly as it
+// already handles a cold cache.
 export function RowPicture({ src, className, title, placeholderClassName }: RowPictureProps) {
   const [wideRef, isWide] = useWidePicture(src)
 
@@ -35,6 +38,7 @@ export function RowPicture({ src, className, title, placeholderClassName }: RowP
       src={src}
       alt=""
       title={title}
+      loading="lazy"
       className={'row-picture' + (isWide ? ' row-picture--wide' : '') + ' ' + className}
     />
   )

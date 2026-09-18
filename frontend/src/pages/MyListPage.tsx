@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ApiError, getMyList, getRecap, updateEntry } from '../api/client.ts'
 import { RECAP_SEASONS, type IncrementTarget, type MyListItemDto, type RecapDto, type RecapMode, type RecapSeasonName, type RecapTimeFilter, type UserAnimeEntryDto, type WatchStatus } from '../api/types.ts'
@@ -10,7 +10,6 @@ import { RecapScopeChip } from '../components/RecapScopeChip.tsx'
 import { useActionFailure } from '../context/ActionFailureContext.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useEpisodeIncrement, useSetEpisodesWatched } from '../context/CompletionPromptContext.tsx'
-import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import {
@@ -35,6 +34,11 @@ type StatusFilter = WatchStatus[]
 // Rewatching sits directly after Currently watching — both are runs in
 // progress (library-views spec, "My list grouped and ordered by status").
 const GROUP_ORDER: WatchStatus[] = ['Watching', 'Rewatching', 'OnHold', 'PlanToWatch', 'Completed', 'Dropped']
+
+// How many rows the page reveals at a time, matching SeriesBrowserPage,
+// SeasonPage and YearPage; SearchPage's 48 is for a card grid where one row
+// holds several items, and this is a row layout (design.md D1).
+const PAGE_SIZE = 24
 
 // The All tab is rendered separately (it isn't a WatchStatus) — see the
 // tabs bar below.
@@ -167,6 +171,41 @@ export function MyListPage() {
     'airingStatusFirst',
     'finished_airing',
   )
+
+  // One reveal budget for the whole page, not one per status group (design.md
+  // D1/D2), restorable like every other control here so a back-navigation
+  // brings back the same amount of list.
+  const [visibleCount, setVisibleCount] = useRestorableState('visibleCount', PAGE_SIZE)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  // Every input `derived` keys off except `scopedItems`: a change to *which*
+  // entries are shown or *what order* they're in starts the reveal over, while
+  // the list's contents changing under an unchanged view (an edit, a settle)
+  // must not — that would yank a scrolled-down user back to the top. A string
+  // rather than a reference comparison because three of the ten are arrays
+  // whose identity changes on every set even when the contents match.
+  //
+  // Adjusted during render, not in a useEffect — the idiom usePageData.ts and
+  // useRestorableState.ts already use. An effect would paint the old count's
+  // worth of rows against the new filter first and only then reset, which is
+  // the full-size render this exists to remove (design.md D3).
+  const viewIdentity = JSON.stringify([
+    query,
+    statusFilters,
+    typeFilter,
+    airingFilter,
+    scoreFilter,
+    sort,
+    sortDirection,
+    sortThen,
+    airingStatusFirst,
+    groupByStatus,
+  ])
+  const [renderedViewIdentity, setRenderedViewIdentity] = useState(viewIdentity)
+  if (viewIdentity !== renderedViewIdentity) {
+    setRenderedViewIdentity(viewIdentity)
+    setVisibleCount(PAGE_SIZE)
+  }
 
   const recapModeParam = searchParams.get('recapMode')
   const hasRecapScope = recapModeParam === 'multiYear' || recapModeParam === 'yearly' || recapModeParam === 'season'
@@ -326,8 +365,6 @@ export function MyListPage() {
   const setEpisodesWatched = useSetEpisodesWatched()
   const reportFailure = useActionFailure()
 
-  const debouncedQuery = useDebouncedValue(query, 200)
-
   const openEdit = useCallback(
     (item: MyListItemDto) => {
       openEditor({
@@ -446,12 +483,12 @@ export function MyListPage() {
 
   // One derivation: filter (status -> text -> type -> airing -> score), sort
   // with the composed comparator, then either group by status or leave flat
-  // (D3). Runs off the debounced query so a keystroke doesn't re-derive over
-  // the whole list.
+  // (D3). Runs off the raw query on every keystroke — what bounds the cost is
+  // the reveal cap (PAGE_SIZE) and its render-time reset, not a delay here.
   const derived = useMemo<Derivation>(() => {
     const statusScoped =
       statusFilters.length === 0 ? scopedItems : scopedItems.filter((item) => statusFilters.includes(item.entry.status))
-    const needle = debouncedQuery.trim().toLowerCase()
+    const needle = query.trim().toLowerCase()
 
     const matched = statusScoped.filter((item) => {
       if (needle) {
@@ -486,7 +523,7 @@ export function MyListPage() {
   }, [
     scopedItems,
     statusFilters,
-    debouncedQuery,
+    query,
     typeFilter,
     airingFilter,
     scoreFilter,
@@ -496,6 +533,38 @@ export function MyListPage() {
     airingStatusFirst,
     groupByStatus,
   ])
+
+  // Reveal the next page of an array that is already filtered, sorted and in
+  // memory once the sentinel comes into view — no network call and no control
+  // to press (SeriesBrowserPage.tsx's observer).
+  useEffect(() => {
+    const node = sentinelRef.current
+    if (!node) return
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) {
+        setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, derived.shown))
+      }
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [derived, setVisibleCount])
+
+  // The page's one budget, spent group by group (design.md D1/D2): each group
+  // draws what the remainder allows and passes the rest on, so the cap is on
+  // rows actually mounted rather than on rows per group. Every group stays in
+  // the output even when it draws none of its rows — its header still states
+  // its own real count. `shown` is clamped rather than left to `slice` so
+  // `remaining` can't go negative and make the next group's `Math.min` negative.
+  const visibleGroups = useMemo(() => {
+    if (derived.mode !== 'grouped') return []
+    let remaining = visibleCount
+    return derived.groups.map((group) => {
+      const shown = Math.min(group.items.length, remaining)
+      remaining -= shown
+      return { ...group, visibleItems: group.items.slice(0, shown) }
+    })
+  }, [derived, visibleCount])
 
   const isOffDefault =
     query !== '' ||
@@ -605,7 +674,7 @@ export function MyListPage() {
     if (derived.mode === 'grouped') {
       return (
         <>
-          {derived.groups.map((group) => (
+          {visibleGroups.map((group) => (
             <section key={group.status} className="my-list-page__group">
               {/* role="status" (not on the h2 itself, which would drop its
                   heading semantics): announces each status's count changing
@@ -620,24 +689,32 @@ export function MyListPage() {
                   <span className="my-list-page__group-count">(ALL: {derived.shown})</span>
                 </h2>
               </div>
-              <ul className="my-list-page__list">{group.items.map((item) => renderRow(item))}</ul>
+              <ul className="my-list-page__list">{group.visibleItems.map((item) => renderRow(item))}</ul>
             </section>
           ))}
+          {/* One sentinel for the page, after the last row of the last group
+              rather than inside any one of them — the budget above is shared,
+              so there is only ever one place more rows come from. */}
+          <div ref={sentinelRef} className="my-list-page__sentinel" />
         </>
       )
     }
 
     return (
-      <section className="my-list-page__group">
-        <div className="my-list-page__group-header" role="status">
-          <h2>
-            {statusFiltersLabel(statusFilters)} <span className="my-list-page__group-count">({derived.shown})</span>
-          </h2>
-        </div>
-        <ul className="my-list-page__list">
-          {derived.items.map((item, index) => renderRow(item, showRanks ? index + 1 : undefined))}
-        </ul>
-      </section>
+      <>
+        <section className="my-list-page__group">
+          <div className="my-list-page__group-header" role="status">
+            <h2>
+              {statusFiltersLabel(statusFilters)} <span className="my-list-page__group-count">({derived.shown})</span>
+            </h2>
+          </div>
+          {/* Sliced from 0, so showRanks' index + 1 still numbers from 1. */}
+          <ul className="my-list-page__list">
+            {derived.items.slice(0, visibleCount).map((item, index) => renderRow(item, showRanks ? index + 1 : undefined))}
+          </ul>
+        </section>
+        <div ref={sentinelRef} className="my-list-page__sentinel" />
+      </>
     )
   }
 

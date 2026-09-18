@@ -190,6 +190,10 @@
   gap: 8px;
 }
 
+.my-list-page__sentinel {
+  height: 1px;
+}
+
 .my-list-row {
   display: flex;
   align-items: center;
