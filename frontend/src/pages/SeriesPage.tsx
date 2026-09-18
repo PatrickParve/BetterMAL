@@ -23,6 +23,7 @@ import type {
 import { AiringProgressBar } from '../components/AiringProgressBar.tsx'
 import { PicturePickerOverlay } from '../components/PicturePickerOverlay.tsx'
 import { ProgressBar } from '../components/ProgressBar.tsx'
+import { RevealControl } from '../components/RevealControl.tsx'
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { SeriesCompletionBadge } from '../components/SeriesCompletionBadge.tsx'
@@ -32,9 +33,11 @@ import { SeriesTimeline } from '../components/SeriesTimeline.tsx'
 import { SeriesTitlePickerOverlay } from '../components/SeriesTitlePickerOverlay.tsx'
 import { useActionFailure } from '../context/ActionFailureContext.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
+import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { useLandscapePicture } from '../hooks/useLandscapePicture.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
+import { useScoreReveal } from '../hooks/useScoreReveal.ts'
 import {
   formatEpisodeTotal,
   formatRuntime,
@@ -434,6 +437,12 @@ export function SeriesPage() {
   const [pictureRef, isLandscapePicture] = useLandscapePicture(data?.found ? data.series.pictureUrl : null)
   const [showPicturePicker, setShowPicturePicker] = useState(false)
   const [showTitlePicker, setShowTitlePicker] = useState(false)
+  // Called unconditionally here, ahead of the loading/not-found guards below,
+  // since both are hooks (react/rules-of-hooks) — unlike highestMalSettled
+  // (derived from `series`, computed after the guards near highestMalEntries
+  // below), neither depends on data having loaded.
+  const { hidden } = useScoreVisibility()
+  const [highestMalRevealed, revealHighestMal] = useScoreReveal()
 
   // Bounded pool backfill (design D6) — mirrors the anime detail page's
   // picture backfill: fire once per series while members remain unfetched,
@@ -781,6 +790,14 @@ export function SeriesPage() {
   const highestMalEntries = series.stats.highestMalScoreAnimeIds
     .map((id) => findEntry(series, id))
     .filter((e): e is SeriesEntryDto => e !== undefined)
+  // Whole-box gate for the Highest MAL score stat (design D5): the identical
+  // settledness call the main-series MAL average chip makes below, over the
+  // same whole unfiltered main line — recomputed every render, never stored,
+  // so a newly currently_airing entry re-hides an auto-shown box on the next
+  // render with no separate code path. `!hidden` (composed at the gate
+  // itself) makes the whole thing conditional on the score toggle, replacing
+  // a placeholder that was unconditional on it — deliberate, and a loosening.
+  const highestMalSettled = malGroupRevealed(series.mainLine, series)
   const myHighestEntries = series.stats.myHighestScoreAnimeIds
     .map((id) => findEntry(series, id))
     .filter((e): e is SeriesEntryDto => e !== undefined)
@@ -1146,33 +1163,31 @@ export function SeriesPage() {
             <div>
               <dt>Highest MAL score</dt>
               <dd>
-                <ul className="series-page__tie-list">
-                  {highestMalEntries.map((entry) => {
-                    // Settled status is enough — Completed or Dropped — since
-                    // a dropped entry frequently carries no score of my own
-                    // and requiring one would hide the stat indefinitely.
-                    // Both statuses close the door on being spoiled about
-                    // which entry is the series' best, which is what this
-                    // box withholds the entry's title and link to guard
-                    // against (design.md decision 7).
-                    const revealed = isScoreRevealableStatus(entry.entry?.status)
-                    return (
+                {/* Whole-box gate (design D5), not a per-entry one: naming the
+                    tied-highest entry of an unfinished franchise is a
+                    comparative claim about entries not yet reached, which can
+                    bias anticipation or change once an airing season finishes
+                    — true even of an entry already completed, so nothing
+                    inside this box is shown piecemeal while it's ungated.
+                    `!hidden` is what makes the whole gate conditional on the
+                    score toggle in the first place (score-visibility). */}
+                {!hidden || highestMalSettled || highestMalRevealed ? (
+                  <ul className="series-page__tie-list">
+                    {highestMalEntries.map((entry) => (
                       <li key={entry.animeId}>
-                        {revealed ? (
-                          <>
-                            <Link to={`/anime/${entry.animeId}`}>{pickDisplayTitle(entry.title, entry.englishTitle)}</Link>{' '}
-                            ·{' '}
-                            <span className="score--mal">
-                              <ScoreValue value={entry.malScore} completed={revealed} />
-                            </span>
-                          </>
-                        ) : (
-                          <span className="series-page__tie-list-placeholder">Not yet watched</span>
-                        )}
+                        <Link to={`/anime/${entry.animeId}`}>{pickDisplayTitle(entry.title, entry.englishTitle)}</Link>{' '}
+                        ·{' '}
+                        <span className="score--mal">
+                          <ScoreValue value={entry.malScore} completed={isScoreRevealableStatus(entry.entry?.status)} />
+                        </span>
                       </li>
-                    )
-                  })}
-                </ul>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="series-page__tie-list-reveal">
+                    <RevealControl onReveal={revealHighestMal} label="Reveal the series' highest MAL score" />
+                  </span>
+                )}
               </dd>
             </div>
           )}

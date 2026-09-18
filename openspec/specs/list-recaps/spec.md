@@ -935,6 +935,10 @@ Divergence SHALL be measured on a common scale rather than by subtracting a 1–
 
 When fewer than five included entries qualify, the recap SHALL show those that do; when none qualify — including when my list holds too few scored pairs for the normalisation to be computed at all — it SHALL say so rather than present near-agreements as hot takes.
 
+While the global hide-scores toggle is on, the recap SHALL render only those of its hot takes whose entry is **Completed, Dropped, or Rewatching**, and SHALL omit the rest **entirely** rather than rendering them with a placeholder or a reveal control. A hot take states which way the disagreement runs as row text, and qualifying at all bounds the MAL score on one side, so the row leaks a bound on the score it is hiding whatever its own score cell renders. This is the rule the profile page's opinion-divergence lists apply to the same anime for the same reason, and the two SHALL agree.
+
+Because the five are selected by divergence before this rule is applied, omission SHALL leave **fewer than five hot takes, possibly none**, rather than promoting the next-most-divergent settled entry in a dropped one's place — selection is decided by divergence alone and SHALL NOT depend on the viewer's hide state. When it leaves none, the recap SHALL show the same "no hot takes" message it shows when nothing qualified. While the hide toggle is off, every selected hot take SHALL render, whatever its status.
+
 #### Scenario: Five hot takes
 - **WHEN** a recap's included set holds more than five entries that satisfy either rule
 - **THEN** the five with the largest divergence are shown, largest first, each naming both scores
@@ -962,6 +966,22 @@ When fewer than five included entries qualify, the recap SHALL show those that d
 #### Scenario: Fewer than five qualify
 - **WHEN** only two included entries satisfy either rule
 - **THEN** two hot takes are shown
+
+#### Scenario: An unsettled hot take is omitted while scores are hidden
+- **WHEN** the hide toggle is on and one of a recap's hot takes is an entry I am Watching, have On-hold, or Plan to watch
+- **THEN** it is not rendered at all — no row, no direction label, no reveal control — while the settled hot takes beside it are rendered as before
+
+#### Scenario: Omission does not promote a replacement
+- **WHEN** the hide toggle is on and two of a recap's five hot takes are unsettled
+- **THEN** three hot takes are shown, and the sixth-most-divergent entry is not brought in to replace either omitted one
+
+#### Scenario: Every hot take omitted
+- **WHEN** the hide toggle is on and every hot take the recap selected is an entry I have not settled
+- **THEN** the recap shows the same "no hot takes for this period" message it shows when nothing qualified
+
+#### Scenario: Hiding omits nothing once scores are shown
+- **WHEN** the hide toggle is off
+- **THEN** every hot take the recap selected is rendered, whatever its status
 
 #### Scenario: Nothing qualifies
 - **WHEN** no included entry satisfies either rule

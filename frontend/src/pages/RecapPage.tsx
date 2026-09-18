@@ -26,6 +26,7 @@ import { ScoreBoardOverlay, type ScoreBoardGroup } from '../components/ScoreBoar
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreDistribution } from '../components/ScoreDistribution.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
+import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import {
@@ -186,6 +187,7 @@ export function RecapPage() {
   // board open again, as a new overlay over it, rather than the board
   // surviving the navigation.
   const [boardOpen, setBoardOpen] = useRestorableState<boolean>('scoreBoard', false)
+  const { hidden } = useScoreVisibility()
 
   const modeParam = searchParams.get('mode')
   const mode: RecapMode = isRecapMode(modeParam) ? modeParam : 'yearly'
@@ -660,13 +662,21 @@ export function RecapPage() {
   }
 
   function renderHotTakes(hotTakes: RecapHotTakeDto[]) {
+    // Same rule as the profile page's opinion-divergence lists, for the same
+    // reason, made worse here by the direction ("MAL liked it more" / "I
+    // liked it more") being printed as row text. The server's
+    // `Take(HotTakeCount)` is applied before this by divergence magnitude and
+    // stays as it is, so filtering here can leave fewer than five, down to
+    // zero, rather than backfilling — deliberate, since the server cannot
+    // know the client's hide state.
+    const shown = hidden ? hotTakes.filter((take) => take.malRevealed) : hotTakes
     return (
       <section className="recap-page__section family--hot">
         <h2 className="section-band">Biggest Hot takes</h2>
-        {hotTakes.length === 0 ? (
+        {shown.length === 0 ? (
           <p className="recap-page__empty-note">No hot takes for this period.</p>
         ) : (
-          <ul className="recap-hot-take-list">{hotTakes.map(renderHotTake)}</ul>
+          <ul className="recap-hot-take-list">{shown.map(renderHotTake)}</ul>
         )}
       </section>
     )

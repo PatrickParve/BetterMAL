@@ -229,6 +229,14 @@
   padding: 12px 16px;
 }
 
+/* The hidden branch's only child is a <button> with no text baseline, same
+   fix as .score-value (ScoreValue.css). */
+.anime-detail-page__rank-slot {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
 .detail-box {
   display: flex;
   flex-direction: column;

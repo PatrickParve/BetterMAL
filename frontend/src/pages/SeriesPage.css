@@ -350,13 +350,12 @@
   gap: 4px;
 }
 
-/* Stands in for the title/link/score of a Highest MAL score entry I haven't
-   completed and scored yet — withheld regardless of the hide-scores toggle,
-   since this is a spoiler concern rather than a score-privacy one. */
-.series-page__tie-list-placeholder {
-  color: var(--text);
-  opacity: 0.6;
-  font-style: italic;
+/* Alignment only, for the reveal control standing in for the whole Highest
+   MAL score box while its series is unsettled and the hide-scores toggle is
+   on (design D5) — RevealControl brings its own button styling. */
+.series-page__tie-list-reveal {
+  display: inline-flex;
+  align-items: center;
 }
 
 .series-page__reorder-buttons {

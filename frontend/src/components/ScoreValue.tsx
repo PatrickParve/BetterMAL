@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { useLocation } from 'react-router-dom'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
+import { useScoreReveal } from '../hooks/useScoreReveal.ts'
+import { RevealControl } from './RevealControl.tsx'
 import './ScoreValue.css'
 
 type ScoreValueProps = {
@@ -18,26 +18,7 @@ type ScoreValueProps = {
 // hide state.
 export function ScoreValue({ value, placeholder = '—', completed = false }: ScoreValueProps) {
   const { hidden, alwaysShowCompletedScores } = useScoreVisibility()
-  const { pathname } = useLocation()
-
-  // `revealed` must re-hide whenever the page the reveal was granted on goes
-  // away — but a route like `/anime/:id` keeps one component mounted across
-  // params, so unmounting can't be relied on. Pathname (not `location.key`)
-  // is the identity: it changes exactly when the user leaves a page, not on
-  // every history entry a same-page filter writes to the URL. `hidden` rides
-  // along so that switching the global toggle off and back on also drops the
-  // reveal, keeping "while hidden, every score is replaced" true at the
-  // moment it is switched back on. Compared during render, the same pattern
-  // `useRestorableState`/`usePageData` use, so a hidden score never paints
-  // revealed for one frame on the new identity.
-  const identity = `${pathname}|${hidden}`
-  const [renderedIdentity, setRenderedIdentity] = useState(identity)
-  const [revealed, setRevealed] = useState(false)
-
-  if (identity !== renderedIdentity) {
-    setRenderedIdentity(identity)
-    setRevealed(false)
-  }
+  const [revealed, reveal] = useScoreReveal()
 
   if (value == null) return <span className="score-value">{placeholder}</span>
 
@@ -47,29 +28,7 @@ export function ScoreValue({ value, placeholder = '—', completed = false }: Sc
 
   return (
     <span className="score-value">
-      <button
-        type="button"
-        className="score-value__reveal"
-        onClick={(event) => {
-          // ScoreValue often sits inside a clickable AnimeCard link — stop
-          // the click from bubbling into a navigation/card action.
-          event.preventDefault()
-          event.stopPropagation()
-          setRevealed(true)
-        }}
-        aria-label="Reveal score"
-      >
-        <EyeIcon />
-      </button>
+      <RevealControl onReveal={reveal} label="Reveal score" />
     </span>
-  )
-}
-
-function EyeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-      <path d="M1,12 C1,12 5,5 12,5 C19,5 23,12 23,12 C23,12 19,19 12,19 C5,19 1,12 1,12 Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
   )
 }

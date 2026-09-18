@@ -967,7 +967,11 @@ For each anime in that population, its divergence SHALL be how many standard dev
 
 The 5 and 8 boundaries are MAL's own score labels: 5 is "Average" and below it lies everything worse, 8 is "Very Good" and above it everything better. The scores between them — 6 ("Fine") and 7 ("Good") — are a neutral band, and an anime I scored in that band SHALL fall in neither list however far MAL's average sits from it. The 7.5 boundary splits MAL's community scale between its "Good" and "Very Good" labels.
 
-Each list SHALL be ordered by divergence, strongest first, with ties broken by title case-insensitively. Neither list SHALL be capped: every anime that qualifies SHALL be present, reachable by scrolling its box.
+Each list SHALL be ordered by divergence, strongest first, with ties broken by title case-insensitively. Neither list SHALL be capped by rank or count: subject only to the hidden-state rule below, every anime that qualifies SHALL be present, reachable by scrolling its box.
+
+While the global hide-scores toggle is on, each list SHALL render only those of its qualifying anime whose entry is **Completed, Dropped, or Rewatching** — the statuses the "Always show MAL scores for completed and dropped shows" setting covers — and SHALL omit the rest of its rows **entirely**, rather than rendering them with a placeholder or a reveal control. Membership of either list is itself a claim about the anime's MAL score: appearing in "They liked it, I didn't" says the score is at least 7.5, and appearing in "I liked it, they didn't" says it is at most 7.5. A row therefore leaks a bound on the score it is hiding whatever its own score cell renders, and for an entry the user has not settled — Watching, On-hold, Plan to watch, or not in the list at all — that is a viewing still ahead of them, which is exactly what the hide toggle exists to protect. A placeholder row would not do: the leak is the row's presence, not its score cell.
+
+Omission SHALL be confined to that state. While the hide toggle is off, both lists SHALL render every qualifying anime regardless of its status, since nothing needs withholding once scores are shown. Omission SHALL NOT change which anime qualify, the order they are ranked in, or the population the standardization is computed over — all three are decided before it and are unaffected by it. A list left with no rows to render SHALL show the same empty state it shows when nothing qualified.
 
 Divergence needs a population to normalize against. When fewer than 10 anime carry both my score and a MAL average, or when either scale's standard deviation across that population is zero, both lists SHALL be empty rather than ranking on a spread that does not exist.
 
@@ -998,6 +1002,22 @@ Divergence needs a population to normalize against. When fewer than 10 anime car
 #### Scenario: Too little to normalize against
 - **WHEN** fewer than 10 of my rated anime carry a MAL average
 - **THEN** both lists are empty and each box shows its empty state
+
+#### Scenario: An unsettled qualifying anime is omitted while scores are hidden
+- **WHEN** the hide toggle is on and an anime that qualifies for a divergence list is one I am Watching, have On-hold, Plan to watch, or do not have in my list at all
+- **THEN** no row for it appears in that list at all — not a placeholder row, not a row carrying a reveal control
+
+#### Scenario: A settled qualifying anime still appears while scores are hidden
+- **WHEN** the hide toggle is on and an anime that qualifies for a divergence list is one I have Completed, Dropped, or am Rewatching
+- **THEN** its row appears as it does today, its MAL score following the "always show completed" setting exactly as before
+
+#### Scenario: Hiding omits nothing once scores are shown
+- **WHEN** the hide toggle is off
+- **THEN** both lists show every qualifying anime, whatever its status, in the same order as before
+
+#### Scenario: A list emptied by hiding shows its ordinary empty state
+- **WHEN** the hide toggle is on and every anime qualifying for one of the lists is one I have not settled
+- **THEN** that list shows the same empty state it shows when nothing qualified, rather than a message about withheld rows
 
 ### Requirement: Top series section
 The profile page SHALL show a **Top series** section that ranks my franchises, presented like My top anime and Most rewatched: a horizontally-scrolling, drag-scrollable strip of fixed-size poster tiles, uncapped, using the same tile size and hover behaviour as the other two strips.

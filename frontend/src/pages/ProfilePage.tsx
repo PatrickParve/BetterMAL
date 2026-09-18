@@ -35,6 +35,7 @@ import { ScoreDistribution } from '../components/ScoreDistribution.tsx'
 import { TruncatedTitle } from '../components/TruncatedTitle.tsx'
 import { UnresolvedEpisodesOverlay } from '../components/UnresolvedEpisodesOverlay.tsx'
 import { useAnimeRank } from '../context/AnimeRankContext.tsx'
+import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableScroll } from '../hooks/useRestorableScroll.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
@@ -263,12 +264,21 @@ function useStripScroll(restoreKey: string) {
 }
 
 function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
-  if (items.length === 0) {
+  const { hidden } = useScoreVisibility()
+  // Membership of a divergence list is itself a bound on the MAL score (≥
+  // 7.5 in one list, ≤ 7.5 in the other), so while hiding is on an unsettled
+  // entry's row is dropped outright rather than shown with a reveal control
+  // — a placeholder row would leak the same thing. `isCompleted` is the
+  // server's `Status.IsScoreRevealable()`, i.e. Completed/Dropped/Rewatching,
+  // despite the name.
+  const shown = hidden ? items.filter((item) => item.isCompleted) : items
+
+  if (shown.length === 0) {
     return <p className="profile-page__section-empty">Nothing here yet.</p>
   }
   return (
     <ul className="divergence-list scroll-hidden">
-      {items.map((item) => (
+      {shown.map((item) => (
         <li key={item.animeId} className="profile-list-row">
           <Link to={`/anime/${item.animeId}`} className="profile-list-row__link">
             <RowPicture src={item.pictureUrl} className="profile-list-row__picture" />

@@ -17,6 +17,7 @@ import type {
 import { PicturePickerOverlay } from "../components/PicturePickerOverlay.tsx";
 import { ProgressBar } from "../components/ProgressBar.tsx";
 import { RelatedAnimeOverlay } from "../components/RelatedAnimeOverlay.tsx";
+import { RevealControl } from "../components/RevealControl.tsx";
 import { ScoreValue } from "../components/ScoreValue.tsx";
 import { SpaceWrappedTitle } from "../components/SpaceWrappedTitle.tsx";
 import { useEntryEditor } from "../context/EntryEditorContext.tsx";
@@ -25,8 +26,10 @@ import {
   useSetEpisodesWatched,
 } from "../context/CompletionPromptContext.tsx";
 import { useActionFailure } from "../context/ActionFailureContext.tsx";
+import { useScoreVisibility } from "../context/ScoreVisibilityContext.tsx";
 import { useLandscapePicture } from "../hooks/useLandscapePicture.ts";
 import { usePageData } from "../hooks/usePageData.ts";
+import { useScoreReveal } from "../hooks/useScoreReveal.ts";
 import {
   dedupePictureOptions,
   formatRuntime,
@@ -139,6 +142,24 @@ function formatTotalTime(seconds: number | null, totalEpisodes: number | null): 
 // (design D9) even before pictureUrls itself has ever loaded.
 function animePictureOptions(detail: AnimeDetailDto): string[] {
   return dedupePictureOptions(detail.pictureUrls ?? [], [detail.malPictureUrl, detail.selectedPictureUrl]);
+}
+
+// MAL's rank is the community score sorted descending, so it follows the
+// score's hide/reveal rule. Its reveal is independent of the score's own —
+// each useScoreReveal() call holds its own state, so no guard is needed to
+// keep the two from cascading into one another.
+function RankValue({ rank, completed }: { rank: number | null; completed: boolean }) {
+  const { hidden, alwaysShowCompletedScores } = useScoreVisibility();
+  const [revealed, reveal] = useScoreReveal();
+
+  if (rank == null) return <>—</>;
+  if (!hidden || revealed || (completed && alwaysShowCompletedScores)) return <>#{rank}</>;
+
+  return (
+    <span className="anime-detail-page__rank-slot" style={{ minWidth: `${String(rank).length + 1}ch` }}>
+      <RevealControl onReveal={reveal} label="Reveal rank" />
+    </span>
+  );
 }
 
 // Single anime detail page: large picture + progress/edit on the left, a
@@ -616,7 +637,9 @@ export function AnimeDetailPage() {
                   <ScoreValue value={detail.malScore} completed={isScoreRevealableStatus(detail.entry?.status)} />
                 </span>
               </p>
-              <p>Rank: {detail.rank ? `#${detail.rank}` : "—"}</p>
+              <p>
+                Rank: <RankValue rank={detail.rank} completed={isScoreRevealableStatus(detail.entry?.status)} />
+              </p>
               <p>
                 Popularity:{" "}
                 {detail.popularityRank ? `#${detail.popularityRank}` : "—"}

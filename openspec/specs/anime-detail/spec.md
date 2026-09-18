@@ -4,7 +4,7 @@
 The anime-detail capability governs the single-anime page: its layout and data completeness, the prequel/sequel relation controls and the more-relations overlay, the link to the anime's series and to its external MyAnimeList page, on-page progress and status editing, and the picture choice offered for a my-list anime. A refresh that fails is shown as a failure rather than as an empty page, and the page reads itself once per visit.
 ## Requirements
 ### Requirement: Single anime detail layout
-The system SHALL show a single anime page whose title sits in the page's own header block, per the `page-header-design` capability, above a body carrying a large picture on the left and, near the top-right, a box showing rank and MAL score (MAL score respecting the hide/unhide toggle) and, only once the anime has a score of mine, a separate box beside it showing my score, the rewatch count when it is not zero, and my finish date while my status is Completed — per the "The two score boxes share one size" requirement. Below those it SHALL show an info box (type, status, source, duration, studio, aired-from/to, and genres) and, beneath it, a synopsis/background box whenever the anime has a synopsis or a background. Any info field for which no data is available SHALL display "No info" rather than being blank.
+The system SHALL show a single anime page whose title sits in the page's own header block, per the `page-header-design` capability, above a body carrying a large picture on the left and, near the top-right, a box showing rank and MAL score (both respecting the hide/unhide toggle, per the "Rank is hidden like the MAL score" requirement) and, only once the anime has a score of mine, a separate box beside it showing my score, the rewatch count when it is not zero, and my finish date while my status is Completed — per the "The two score boxes share one size" requirement. Below those it SHALL show an info box (type, status, source, duration, studio, aired-from/to, and genres) and, beneath it, a synopsis/background box whenever the anime has a synopsis or a background. Any info field for which no data is available SHALL display "No info" rather than being blank.
 
 The synopsis/background box SHALL carry a Synopsis section only when the anime has a synopsis, and a Background section only when it has a background. When the anime has neither, the box SHALL be omitted entirely: no empty box, no heading, and no placeholder text such as "No synopsis available." A synopsis or background that is empty or consists only of whitespace SHALL count as absent. The "No info" rule applies to the info box's fields only, not to the synopsis/background box.
 
@@ -53,7 +53,7 @@ The aired-episode count SHALL come from the anime's stored per-episode airing ro
 - **THEN** the MAL score appears as a blue number and my score as a purple number, each on its own labelled line, with no tinted or bordered block around either
 
 #### Scenario: A score line reads like the lines beside it
-- **WHEN** I look at the rank/MAL-score box
+- **WHEN** I look at the rank/MAL-score box with both its rank and its MAL score shown
 - **THEN** the MAL score's line has the same form and spacing as the rank and popularity lines above it, differing only in the colour of its number
 
 #### Scenario: A hidden MAL score without a chip
@@ -91,6 +91,57 @@ The aired-episode count SHALL come from the anime's stored per-episode airing ro
 #### Scenario: Other airing statuses unaffected
 - **WHEN** I open the detail page of an anime that has finished airing or has not yet aired
 - **THEN** the Status field reads "Finished airing" or "Not yet aired" respectively, with no episode counts appended
+
+### Requirement: Rank is hidden like the MAL score
+The detail page's **Rank** line SHALL follow the same visibility rule as the MAL score in the box with it: while the global hide-scores toggle is on, the rank SHALL be replaced by its own reveal control alone, with no digits, no `#`, and no stand-in characters placed in the rendered output; and where the "Always show MAL scores for completed and dropped shows" setting applies — an entry I have marked Completed, Dropped, or Rewatching — the rank SHALL be shown in full with no reveal control, exactly as the MAL score is. While the toggle is off, the rank SHALL be shown in full as it is today. An anime with no rank SHALL keep showing its no-value placeholder, with no reveal control offered for a value that does not exist.
+
+MAL's rank is that community score sorted descending, so a visible rank narrows the hidden score it sits beside more tightly than any other figure the app renders. It follows the score's rule rather than a rule of its own.
+
+Rank and the MAL score SHALL each have **their own** reveal, independent in both directions: revealing one SHALL NOT reveal the other. The rank's reveal SHALL follow the `score-visibility` capability's non-persistence rule in full — dropped when the page being viewed changes, including a move between two anime's detail pages; dropped when the global toggle is turned back on; and never restored by a back or forward navigation or by a reload.
+
+The rank's reveal control SHALL occupy the space the rank's own value would occupy, so revealing it moves nothing else on the page and neither widens nor narrows the score boxes.
+
+**Popularity** SHALL NOT be hidden, gated, or given a reveal control. It ranks by member count rather than by community score, so it carries no information about the score being hidden, and it SHALL be displayed in full in every state described above.
+
+#### Scenario: Rank hidden for an unsettled entry
+- **WHEN** the hide toggle is on and I open the detail page of an anime I am Watching, have On-hold, Plan to watch, or do not have in my list
+- **THEN** the Rank line shows its reveal control alone, with no digits or stand-in characters in the rendered output
+
+#### Scenario: Rank shown in full for a settled entry
+- **WHEN** the hide toggle is on, "Always show MAL scores for completed and dropped shows" is on, and I open the detail page of an anime I have Completed, Dropped, or am Rewatching
+- **THEN** the Rank line shows the rank in full with no reveal control, exactly as the MAL score line beside it does
+
+#### Scenario: Revealing the rank does not reveal the score
+- **WHEN** the hide toggle is on and I use the Rank line's reveal control
+- **THEN** the rank is shown and the MAL score below it still shows its own reveal control
+
+#### Scenario: Revealing the score does not reveal the rank
+- **WHEN** the hide toggle is on and I use the MAL score's reveal control
+- **THEN** the score is shown and the Rank line above it still shows its own reveal control
+
+#### Scenario: A revealed rank does not follow me to another anime
+- **WHEN** the hide toggle is on, I reveal one anime's rank, and I then open a second anime's detail page
+- **THEN** the second anime's Rank line shows its reveal control rather than a value
+
+#### Scenario: A revealed rank does not survive a reload
+- **WHEN** I reveal a rank and then reload the page
+- **THEN** the Rank line shows its reveal control again
+
+#### Scenario: Turning hiding back on re-hides a revealed rank
+- **WHEN** the hide toggle is on, I reveal a rank, switch the toggle off, and then switch it on again without leaving the page
+- **THEN** the Rank line shows its reveal control again
+
+#### Scenario: Revealing the rank shifts nothing
+- **WHEN** the hide toggle is on and I use the Rank line's reveal control
+- **THEN** the value appears in the space the control occupied, and neither score box changes width
+
+#### Scenario: An anime with no rank offers no reveal
+- **WHEN** the hide toggle is on and I open the detail page of an anime MyAnimeList publishes no rank for
+- **THEN** the Rank line shows its no-value placeholder, with no reveal control
+
+#### Scenario: Popularity is never hidden
+- **WHEN** the hide toggle is on and I open any anime's detail page, whatever my status for it
+- **THEN** the Popularity line shows its value in full, with no reveal control and no placeholder
 
 ### Requirement: The detail page title wraps at spaces only
 

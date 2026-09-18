@@ -711,7 +711,19 @@ The page SHALL additionally show which entry or entries are tied for the most re
 
 Where several entries tie for the highest MAL score, for my highest score, or for the most rewatches, the page SHALL list every tied entry rather than picking one. Tied highest-MAL entries and tied most-rewatched entries SHALL be listed in watch order. Tied favourites SHALL be listed in my saved favourite order, with entries I have not ordered following in watch order.
 
-The highest MAL score SHALL be shown in full rather than blurred when the entry holding it is one I have marked **Completed** or **Dropped** in my list. Both statuses settle my relationship with that entry — dropping a show is as much a decision about it as finishing one — so neither leaves a viewing ahead of me that naming the series' best entry could spoil. My having scored that entry SHALL NOT be required: a dropped entry frequently carries no score of mine, and withholding the stat until one exists would hide it indefinitely. Until the entry reaches one of those two statuses, the page SHALL withhold that entry's title and link entirely — not only its score — so an entry I have not settled is never named by this stat; this withholding applies regardless of the hide-scores toggle's own state, since it protects against spoiling which entry is best rather than against exposing a score value.
+The Highest MAL score stat SHALL be gated **as a whole** rather than entry by entry, and SHALL be gated only while the global hide-scores toggle is on. While that toggle is off the stat SHALL always render, whatever the state of the series — the toggle is the one switch governing it, and a user who wants the stat withheld turns scores off.
+
+While the toggle is on, the stat SHALL render only once the series is settled. The series counts as settled on exactly the condition the main-series MAL average chip already uses — the same predicate over the same population, since both are computed across the whole unfiltered main line — so the two can never disagree about whether this series' MAL figures may be shown.
+
+Where the stat renders, it SHALL do so as it does today: the title, link and MAL score of every tied entry, each entry's score still following the ordinary hide-scores rules for its own status.
+
+While the toggle is on and the series is **not** settled, the stat SHALL show a reveal control in place of that list, naming no entry and showing no score until the control is used. That control SHALL be the same control a hidden MAL score renders, carrying no text label of its own — the stat's own heading already names what is withheld — so a withheld stat reads as every other withheld value in the app does. Naming the tied-highest entry of an unfinished franchise is a comparative claim about entries the user has not reached — it can bias anticipation for a season not yet out or not yet watched, and it can change on its own once an airing season finishes and gathers votes. That is true even of an entry the user has already completed, so while the toggle is on the gate SHALL NOT be relaxed per entry: a completed entry SHALL be withheld along with the rest until the series is settled. What this withholds is a spoiler rather than a score value, but it is nonetheless governed by the hide-scores toggle rather than applying unconditionally, so that one switch answers for every way this capability withholds a MAL figure.
+
+Using that control SHALL reveal the list for the current page view only, rendered exactly as in the settled case. The reveal SHALL NOT persist: it SHALL be dropped on navigating away from the series page and back, on navigating to a different series, and on a reload — the same non-persistence every other score reveal in the app follows.
+
+Within one page view the reveal SHALL hold. It SHALL survive every control the series page offers without leaving it — picking a different route through the series, filtering the More section, and editing an entry in place — and SHALL survive the series data being refreshed beneath it, including a refresh that leaves the series unsettled. Leaving the page, moving to another series, and reloading SHALL be the only things that end it. The reveal answers a request the user made on this page view, and withdrawing it while they are still reading would be indistinguishable from a fault.
+
+Whether the series is settled SHALL be evaluated afresh from the current data each time the stat renders, and SHALL NOT be recorded when the stat is first shown or when its control is used. A series that stops being settled — a metadata refresh surfacing a newly airing entry, say — SHALL therefore withhold the stat again on the next render, without a navigation and without any separate step to invalidate it.
 
 #### Scenario: Runtime of the main series
 - **WHEN** I open a series whose main line totals 62 episodes averaging 24 minutes
@@ -806,16 +818,56 @@ The highest MAL score SHALL be shown in full rather than blurred when the entry 
 - **THEN** both are listed under the highest MAL score, in watch order
 
 #### Scenario: Highest MAL score of a completed entry is not blurred
-- **WHEN** the hide-scores toggle is on and the highest-MAL-scored entry is one I have completed
+- **WHEN** the series is settled, the hide-scores toggle is on, and the highest-MAL-scored entry is one I have completed
 - **THEN** its title, link, and MAL score are shown in full
 
 #### Scenario: Highest MAL score of a dropped entry is shown
-- **WHEN** the highest-MAL-scored entry of a series is one I have marked Dropped, and I never gave it a score of my own
+- **WHEN** the series is settled, the highest-MAL-scored entry of that series is one I have marked Dropped, and I never gave it a score of my own
 - **THEN** the stat names that entry, links to it, and shows its MAL score, exactly as it would for a completed entry
 
-#### Scenario: An unsettled entry's title is withheld from Highest MAL score
-- **WHEN** the entry holding the series' highest MAL score is one I am Watching, have On-hold, Plan to watch, or do not have in my list at all
-- **THEN** the page shows no title or link for that entry in the Highest MAL score stat, regardless of whether the hide-scores toggle is on or off
+#### Scenario: Showing scores shows the stat whatever the series
+- **WHEN** the hide-scores toggle is off and I open a series with a member currently airing, or one whose main line I have not finished
+- **THEN** the Highest MAL score stat renders its tied entries directly, with no reveal control to use first
+
+#### Scenario: A settled series shows the stat with no control
+- **WHEN** the hide-scores toggle is on, every finished-airing entry of a series' main line is one I have Completed, Dropped, or am Rewatching, and nothing in the series is currently airing
+- **THEN** the Highest MAL score stat renders its tied entries directly, with no reveal control to use first
+
+#### Scenario: An airing series withholds the stat behind a control
+- **WHEN** the hide-scores toggle is on and a member of the series is currently airing
+- **THEN** the Highest MAL score stat shows a reveal control naming no entry, even for entries I have already completed
+
+#### Scenario: The control is the one a hidden score uses
+- **WHEN** the Highest MAL score stat is withheld
+- **THEN** its reveal control is the same control a hidden MAL score renders, with no text label of its own
+
+#### Scenario: A main line I have not finished withholds the stat
+- **WHEN** the hide-scores toggle is on and a finished-airing entry of the series' main line is one I am Watching, have On-hold, Plan to watch, or do not have in my list at all
+- **THEN** the Highest MAL score stat shows its reveal control rather than naming any entry
+
+#### Scenario: Using the control reveals the stat for this page view
+- **WHEN** the stat is withheld and I use its reveal control
+- **THEN** it renders its tied entries exactly as it would for a settled series, each entry's own score following the ordinary hide-scores rules
+
+#### Scenario: Turning hiding back on withholds a revealed stat again
+- **WHEN** I reveal the stat on an unsettled series, turn the hide-scores toggle off, and then turn it on again without leaving the page
+- **THEN** the stat shows its reveal control again, the same way turning the toggle on drops an individually revealed score
+
+#### Scenario: A revealed stat is withheld again on returning
+- **WHEN** the hide-scores toggle is on, I reveal the stat on an unsettled series, then navigate to another series or away and back, or reload the page
+- **THEN** the stat shows its reveal control again rather than the entries I had revealed
+
+#### Scenario: Losing settledness withholds the stat again without a navigation
+- **WHEN** the hide-scores toggle is on, the stat is showing because its series was settled, and the series data then changes so that a member is currently airing
+- **THEN** the stat is withheld behind its reveal control again on the next render, with no navigation and no reload
+
+#### Scenario: A reveal I asked for is not withdrawn by a refresh
+- **WHEN** the hide-scores toggle is on, I use the reveal control on an unsettled series, and the series data is then refreshed beneath me while I stay on the page and the series stays unsettled
+- **THEN** the stat stays revealed, rather than closing again under me
+
+#### Scenario: A reveal survives the page's own controls
+- **WHEN** I use the reveal control and then pick a different route through the series, filter the More section, or edit an entry in place without leaving the page
+- **THEN** the stat stays revealed through all of them
 
 #### Scenario: Tied favourites list every entry
 - **WHEN** I have given the same highest score to three entries of a series
