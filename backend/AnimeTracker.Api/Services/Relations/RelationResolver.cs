@@ -87,9 +87,11 @@ public class RelationResolver(AnimeTrackerDbContext db) : IRelationResolver
 
             // Prefer a cached far-end row's own (possibly chosen) picture over
             // the relation row's denormalized snapshot (design D12); fall back
-            // to the snapshot when the far end has no metadata row at all.
+            // to the snapshot when the far end has no metadata row at all. An
+            // uncached far end likewise keeps its denormalised title and gets
+            // no English title (design D4).
             edges.Add(new ResolvedRelationEdge(
-                edge.RelatedAnimeId, edge.RelationType, edge.Title, farAnime?.PictureUrl ?? edge.PictureUrl, edge.MediaType,
+                edge.RelatedAnimeId, edge.RelationType, edge.Title, farAnime?.EnglishTitle, farAnime?.PictureUrl ?? edge.PictureUrl, edge.MediaType,
                 farAnime?.AiredFrom, IsReverseDerived: false, HasConfidentInverse: invertedType is not null, confidence));
         }
 
@@ -107,7 +109,7 @@ public class RelationResolver(AnimeTrackerDbContext db) : IRelationResolver
                 aniListEdges, viewedSync, syncByAnimeId.GetValueOrDefault(row.AnimeId));
 
             edges.Add(new ResolvedRelationEdge(
-                row.AnimeId, displayType, info.Title, info.PictureUrl, info.MediaType, info.AiredFrom,
+                row.AnimeId, displayType, info.Title, info.EnglishTitle, info.PictureUrl, info.MediaType, info.AiredFrom,
                 IsReverseDerived: true, HasConfidentInverse: invertedForV is not null, confidence));
         }
 
@@ -279,7 +281,7 @@ public class RelationResolver(AnimeTrackerDbContext db) : IRelationResolver
             return null;
 
         return new ResolvedRelationEdge(
-            neighbour.AnimeId, relationType, neighbour.Anime.Title, neighbour.Anime.PictureUrl, neighbour.Anime.MediaType,
+            neighbour.AnimeId, relationType, neighbour.Anime.Title, neighbour.Anime.EnglishTitle, neighbour.Anime.PictureUrl, neighbour.Anime.MediaType,
             neighbour.Anime.AiredFrom, IsReverseDerived: true, HasConfidentInverse: true, RelationConfidence.Unknown);
     }
 }

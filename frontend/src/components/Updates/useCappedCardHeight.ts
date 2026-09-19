@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
 
 // Must match the caller's own list gap — UpdatesMenu.css's
-// `.updates-menu__list` and UpdatesHistoryOverlay.css's
-// `.updates-history__list` both use this hook and are both kept at 8px.
+// `.updates-menu__list`, the sole caller now that the history overlay has
+// its own panel-filling layout (polish-updates-panel design.md D3).
 const LIST_GAP_PX = 8
 const VIEWPORT_MARGIN_PX = 16
-// How many of the newest cards set the opening height, in the dropdown and
-// (design.md D5) the history overlay alike.
+// How many of the newest cards set the navbar dropdown's opening height —
+// its compact three-card panel hanging under a navbar control, the one
+// surface this cap still applies to (polish-updates-panel design.md D3;
+// the history overlay dropped it for a panel that fills to its own
+// height instead).
 export const VISIBLE_CARD_CAP = 3
 
 // The dropdown's opening height is measured from the newest cards as
 // actually rendered rather than multiplied from an assumed row height —
 // with heights that follow their content (design.md D4) there's no constant
-// to multiply, which is exactly what forced the history overlay's rows to a
-// fixed height in the first place (`calc(5 * (row-h + 2px) + 4 * 6px)`,
-// design.md D5). A ResizeObserver, not one measurement on open, because the
+// to multiply. A ResizeObserver, not one measurement on open, because the
 // cards' remote pictures have no known size until they load, so a
 // first-frame measurement is wrong for every card whose image hasn't
 // arrived yet.

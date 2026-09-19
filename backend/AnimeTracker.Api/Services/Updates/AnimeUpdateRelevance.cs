@@ -95,9 +95,13 @@ public class AnimeUpdateRelevance(AnimeTrackerDbContext db, IRelationResolver re
         if (qualifying.Count == 0)
             return null;
 
+        // The named affiliate follows the title shown (design D4): where two
+        // candidates share the most specific relation, the tie-break must
+        // match AnimeUpdateService's own English-preferred choice, or the
+        // affiliate picked here could differ from the one the reason names.
         return qualifying
             .OrderBy(e => RelationPrecedenceOf(e.RelationType))
-            .ThenBy(e => e.Title, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(e => e.EnglishTitle ?? e.Title, StringComparer.OrdinalIgnoreCase)
             .First();
     }
 

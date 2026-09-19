@@ -4,9 +4,9 @@ import type { AnimeUpdateDto } from '../../api/types.ts'
 // A card counts as looked at once it has been on screen, whole, for about a
 // second (store-seen-updates-on-server design.md D7).
 const DWELL_MS = 1000
-// Absorbs subpixel rounding: useCappedCardHeight sets max-height to a
-// fractional sum, so the third card's bottom lands on the list's bottom
-// only to within rounding.
+// Absorbs subpixel rounding in the geometry comparisons below (card and
+// clipping-area edges landing within a pixel of each other rather than
+// exactly on it).
 const TOLERANCE_PX = 1
 
 type Rect = { top: number; bottom: number; left: number; right: number }
@@ -25,7 +25,10 @@ function intersectRects(a: Rect, b: Rect): Rect {
 // (already the visible viewport of a scrolling list) and walks upward, so
 // only clipping *above* the list narrows it — for the dropdown that's just
 // the window, since nothing between the list and the window clips; for
-// History it also picks up `.modal`, which scrolls at 85vh.
+// History it also picks up `.modal`, which now clips at 85vh (overflow:
+// hidden, polish-updates-panel design.md D3) rather than scrolling — the
+// geometry it contributes is unchanged in kind, only in how the box itself
+// behaves.
 function computeVisibleArea(listNode: HTMLElement): Rect {
   const listRect = listNode.getBoundingClientRect()
   let area: Rect = { top: listRect.top, bottom: listRect.bottom, left: listRect.left, right: listRect.right }

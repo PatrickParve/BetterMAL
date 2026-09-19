@@ -119,4 +119,30 @@ public class AnimeUpdateRelevanceTests
 
         Assert.False(await CreateRelevance(db).IsRelevantAsync(1));
     }
+
+    [Fact]
+    public async Task TheTieBreakBetweenTwoEquallySpecificAffiliatesFollowsTheDisplayedTitle()
+    {
+        using var db = CreateDb();
+        // Both candidates are "sequel" edges — the same most-specific
+        // relation — so the tie-break decides which is named. By MAL title
+        // alone, anime 3 ("Original Alpha") would sort first; by the title
+        // each is actually displayed with, anime 2 ("Original Beta") does,
+        // because anime 3's English title ("Zephyr Season Two") sorts after
+        // it (design D4). The pick must follow the displayed title, matching
+        // the reason AnimeUpdateService composes for the same edge.
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Multi-Affiliate Update" });
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 2, Title = "Original Beta" });
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 3, Title = "Original Alpha", EnglishTitle = "Zephyr Season Two" });
+        db.AnimeRelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel" });
+        db.AnimeRelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 3, RelationType = "sequel" });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 2, Status = WatchStatus.Watching });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 3, Status = WatchStatus.Watching });
+        await db.SaveChangesAsync();
+
+        var anime = await db.AnimeMetadata.Include(a => a.RelatedAnime).SingleAsync(a => a.Id == 1);
+        var affiliate = await CreateRelevance(db).FindAffiliateAsync(anime);
+
+        Assert.Equal(2, affiliate?.AnimeId);
+    }
 }

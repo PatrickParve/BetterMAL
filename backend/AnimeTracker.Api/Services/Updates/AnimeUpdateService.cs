@@ -125,8 +125,13 @@ public class AnimeUpdateService(
             return null;
 
         var relationFromViewedSide = RelationInverse.Invert(best.RelationType) ?? best.RelationType;
-        return $"{HumanizeRelation(relationFromViewedSide)} {best.Title}";
+        return $"{HumanizeRelation(relationFromViewedSide)} {DisplayTitle(best)}";
     }
+
+    // The affiliate is named by the title the app displays for it, not
+    // necessarily its MyAnimeList one (navigation-and-search spec, "English
+    // title preferred for display"; design D4).
+    private static string? DisplayTitle(ResolvedRelationEdge edge) => edge.EnglishTitle ?? edge.Title;
 
     private static string HumanizeRelation(string relationType) => relationType switch
     {

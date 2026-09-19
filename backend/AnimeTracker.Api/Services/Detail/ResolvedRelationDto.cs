@@ -8,10 +8,10 @@ namespace AnimeTracker.Api.Services.Detail;
 /// first-by-array-order logic. The full <c>relatedAnime</c> list on
 /// <see cref="AnimeDetailDto"/> is unaffected; this is additive.</summary>
 public record ResolvedRelationDto(
-    int AnimeId, string Title, string? PictureUrl, string? MediaType, RelationConfidence Confidence, bool IsReverseDerived)
+    int AnimeId, string Title, string? EnglishTitle, string? PictureUrl, string? MediaType, RelationConfidence Confidence, bool IsReverseDerived)
 {
     public static ResolvedRelationDto? FromResolved(ResolvedRelationEdge? edge) =>
         edge is null
             ? null
-            : new ResolvedRelationDto(edge.AnimeId, edge.Title ?? "", edge.PictureUrl, edge.MediaType, edge.Confidence, edge.IsReverseDerived);
+            : new ResolvedRelationDto(edge.AnimeId, edge.Title ?? "", edge.EnglishTitle, edge.PictureUrl, edge.MediaType, edge.Confidence, edge.IsReverseDerived);
 }

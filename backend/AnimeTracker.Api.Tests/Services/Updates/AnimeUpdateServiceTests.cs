@@ -116,9 +116,29 @@ public class AnimeUpdateServiceTests
     {
         using var db = CreateDb();
         // Anime 1's own edge says anime 2 is its "prequel" — so anime 1 IS
-        // the sequel of anime 2, and the reason should read "Sequel to <2>".
+        // the sequel of anime 2, and the reason should read "Sequel to <2>",
+        // naming anime 2 by its English title rather than its MAL one
+        // (design D4) — distinct on purpose, so a test passing by accident
+        // (reading the wrong field) would fail.
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "New Season" });
-        db.AnimeMetadata.Add(new AnimeMetadata { Id = 2, Title = "Original Show" });
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 2, Title = "Tensei shitara Ken deshita", EnglishTitle = "Original Show" });
+        db.AnimeRelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "prequel", Title = "Tensei shitara Ken deshita" });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 2, Status = WatchStatus.Watching });
+        db.AnimeUpdates.Add(new AnimeUpdate { AnimeId = 1, DetectedAt = DateTimeOffset.UtcNow, Kinds = AnimeUpdateKinds.Announced });
+        await db.SaveChangesAsync();
+
+        var result = await CreateService(db).GetHistoryAsync();
+
+        var dto = Assert.Single(result);
+        Assert.Equal("Sequel to Original Show", dto.Reason);
+    }
+
+    [Fact]
+    public async Task AnAffiliateWithNoEnglishTitleFallsBackToItsMalTitle()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "New Season" });
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 2, Title = "Original Show" }); // no EnglishTitle
         db.AnimeRelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "prequel", Title = "Original Show" });
         db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 2, Status = WatchStatus.Watching });
         db.AnimeUpdates.Add(new AnimeUpdate { AnimeId = 1, DetectedAt = DateTimeOffset.UtcNow, Kinds = AnimeUpdateKinds.Announced });

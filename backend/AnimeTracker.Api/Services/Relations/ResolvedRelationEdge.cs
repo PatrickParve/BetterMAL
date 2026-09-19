@@ -8,6 +8,12 @@ public record ResolvedRelationEdge(
     int AnimeId,
     string RelationType,
     string? Title,
+    // The far end's cached English title where one is known — null when the
+    // far end has no metadata row (an uncached outgoing edge) or no English
+    // title of its own. Consumers displaying this edge's title should prefer
+    // this over Title, the same English-preferred rule every other surface
+    // applies.
+    string? EnglishTitle,
     string? PictureUrl,
     string? MediaType,
     DateOnly? AiredFrom,

@@ -1,7 +1,14 @@
+/* Fills `.modal--column`'s box as its own flex column (design.md D3).
+   min-height: 0 lets this shrink below its content height, which is what
+   lets its own child (the list frame) be the thing that scrolls instead of
+   the box overflowing. gap is kept tight so the title, the filter row and
+   the list sit close together rather than spread out — the freed space
+   goes to the list instead. */
 .updates-history {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
+  min-height: 0;
 }
 
 .updates-history__header {
@@ -40,6 +47,10 @@
   outline-offset: -2px;
 }
 
+/* Holds to one row at the panel's usual (modal--wide) width, so the filters
+   never take height from the list by wrapping there; flex-wrap only takes
+   effect on a window too narrow for the row's natural content to fit
+   (design.md D3, anime-updates "The filter row fits on one line"). */
 .updates-history__filters {
   display: flex;
   flex-wrap: wrap;
@@ -47,6 +58,8 @@
   gap: 8px;
 }
 
+/* The one flexible item in the row — grows to take whatever width the date
+   range and Clear (both flex: 0 0 auto, their own natural size) leave it. */
 .updates-history__search {
   font: inherit;
   font-size: 14px;
@@ -55,7 +68,7 @@
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
-  flex: 1 1 160px;
+  flex: 1 1 auto;
   min-width: 140px;
 }
 
@@ -98,39 +111,45 @@
   border-color: var(--accent-border);
 }
 
+/* The flexible child that takes whatever height `.updates-history` has left
+   beneath the header and filter rows, up to the panel's own 85vh ceiling
+   (design.md D3). min-height: 0 is what lets it shrink below the list's
+   content height instead of the box overflowing; display: flex passes that
+   same permission down to the list itself. */
 .updates-history__list-frame {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
 }
 
-/* Each row is now a shared UpdateCard (design.md D6) — no per-row markup,
-   no fixed row height, and rows size to their own content (no
-   overflow: hidden, no single-line ellipsis). max-height is applied inline
-   by useCappedCardHeight, measured from the first three rendered cards the
-   same way the navbar dropdown sizes itself (design.md D5), replacing the
-   old `calc(5 * (row-h + 2px) + 4 * 6px)` and, later, a flat 60vh guess —
-   neither followed the cards' own rendered height, so the row at the cap
-   boundary could end up cut off partway rather than ending clean.
+/* Each row is a shared UpdateCard (design.md D6) — no per-row markup, no
+   fixed row height, and rows size to their own content (no
+   overflow: hidden, no single-line ellipsis). The list fills its frame
+   (flex: 1 1 auto; min-height: 0) rather than being capped to a fixed
+   number of rows — a short history shrink-wraps to a short panel, a long
+   one fills the panel's height and scrolls within it, its last row cut
+   partly off as the only affordance that there's more (design.md D3).
 
    overflow-x: hidden is a defensive guard against a card ever rendering
    wider than this list again (it did, before `.update-card` had
    box-sizing: border-box — see UpdateCard.css).
 
-   overflow-y is scrollable with the scrollbar hidden, same as the navbar
-   dropdown's list — opted out of the shared `.scroll-y` utility rather
-   than fighting its specificity. */
+   The scrollbar is hidden, same as the navbar dropdown's list, because the
+   panel-filling list's own cut-off bottom row is the scroll affordance —
+   opted out of the shared `.scroll-y` utility rather than fighting its
+   specificity. */
 .updates-history__list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  /* Matches useCappedCardHeight's own LIST_GAP_PX — the hook measures this
-     gap into its height calculation, so a mismatch here would leave the
-     third card's bottom edge a few pixels short of (or past) the list's
-     computed max-height. */
   gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;

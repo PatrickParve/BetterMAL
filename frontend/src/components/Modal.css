@@ -45,3 +45,37 @@
   flex-direction: column;
   overflow: hidden;
 }
+
+/* The same "only the content scrolls" treatment `.modal--rank` carries,
+   expressed as a modifier any overlay can compose with a width class rather
+   than baked into one (polish-updates-panel design.md D3). `.modal--rank`
+   itself is left as it is — composing the two into one overlay's markup
+   buys nothing a user can see and risks a working layout.
+
+   Pulled to within 12px of the viewport's top and bottom edges, on
+   purpose, so this box uses as much vertical room as the shape can hold
+   without changing that shape — a hard 12px gap on both edges rather than
+   a vh-based fraction. align-self: flex-start overrides
+   .modal-backdrop's vertical centering for this box alone; its own 24px
+   padding still holds the box 24px from the top, so margin-top pulls it
+   the rest of the way to 12px. box-sizing: border-box then lets
+   max-height's calc() reason about the box's full rendered height
+   (border and .modal's own padding included) directly against the
+   viewport height, rather than against the content alone the way the
+   base .modal's content-box sizing would — 100vh minus the 12px each
+   edge keeps is what makes the bottom gap land at 12px too, at any
+   window height. The padding this box uses is also its own, tightened
+   from the base .modal's 24px so the title/close row and the filter row
+   sit closer to the box's own top edge, leaving more of the shorter box
+   to the list. */
+.modal--column {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  align-self: flex-start;
+  box-sizing: border-box;
+  margin-top: -12px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  max-height: calc(100vh - 24px);
+}

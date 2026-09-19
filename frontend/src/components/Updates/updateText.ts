@@ -30,8 +30,20 @@ function buildNewsLine(kind: AnimeUpdateKind, item: AnimeUpdateDto): string | nu
       return item.airedFrom !== null ? `Premiere: ${formatUpdateDate(item.airedFrom)}` : null
     case 'StartDateChanged': {
       if (!item.airedFrom || !item.previousStartDate) return null
-      const delayed = new Date(item.airedFrom) > new Date(item.previousStartDate)
-      const verb = delayed ? 'Delayed' : 'Moved up'
+      const to = new Date(item.airedFrom)
+      const was = new Date(item.previousStartDate)
+      // "Moved up"/"Moved down" rest on an up/down metaphor that reads both
+      // ways depending on whether the reader pictures a calendar running up
+      // or down (design.md D1) — "Moved earlier"/"Delayed" name the thing
+      // that moved instead, so neither can be read in reverse. Where the two
+      // dates coincide (the "to" value is live, the "was" value is
+      // recorded, so a move that later reverses can land back on itself)
+      // neither verb applies — the guard below reports the move without a
+      // direction rather than claiming one between a date and itself.
+      if (to.getTime() === was.getTime()) {
+        return `Premiere moved to ${formatUpdateDate(item.airedFrom)}`
+      }
+      const verb = to > was ? 'Delayed' : 'Moved earlier'
       return `${verb} to ${formatUpdateDate(item.airedFrom)} · was ${formatUpdateDate(item.previousStartDate)}`
     }
     case 'BroadcastSlotChanged': {

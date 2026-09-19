@@ -456,7 +456,7 @@ export function AnimeDetailPage() {
               <Link
                 to={`/anime/${parentStory.animeId}`}
                 className="anime-detail-page__related-link"
-                title={parentStory.title}
+                title={pickDisplayTitle(parentStory.title, parentStory.englishTitle)}
               >
                 Main series
               </Link>
@@ -474,7 +474,7 @@ export function AnimeDetailPage() {
               <Link
                 to={`/anime/${prequel.animeId}`}
                 className="anime-detail-page__related-link"
-                title={prequel.title}
+                title={pickDisplayTitle(prequel.title, prequel.englishTitle)}
               >
                 ← Prequel
               </Link>
@@ -491,7 +491,7 @@ export function AnimeDetailPage() {
               <Link
                 to={`/anime/${sequel.animeId}`}
                 className="anime-detail-page__related-link"
-                title={sequel.title}
+                title={pickDisplayTitle(sequel.title, sequel.englishTitle)}
               >
                 Sequel →
               </Link>

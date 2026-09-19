@@ -476,3 +476,22 @@ code {
 input[type='search']::-webkit-search-cancel-button {
   cursor: pointer;
 }
+
+/* A clickable control shows the pointer cursor (navigation-and-search),
+   expressed once here rather than per-component, so a control added later
+   carries it without anything being remembered about it. Anchors already
+   take the pointer natively and need no rule of their own. Specificity is
+   checked, not assumed (design.md D2): button:not(:disabled) is (0,1,1),
+   which outranks every existing `cursor: default`/`not-allowed` override in
+   the app — all of them sit on a `:disabled` selector, at (0,2,0) or more,
+   and are excluded by :not(:disabled) in any case. */
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']) {
+  cursor: pointer;
+}
+
+/* A date field is picked from, not typed into, so the whole field — not
+   just the calendar-picker indicator — takes the pointer. */
+input[type='date'] {
+  cursor: pointer;
+}

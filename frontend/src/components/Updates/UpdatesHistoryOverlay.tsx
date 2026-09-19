@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Modal } from '../Modal.tsx'
 import { UpdateCard } from './UpdateCard.tsx'
-import { useCappedCardHeight } from './useCappedCardHeight.ts'
 import { useUpdateLook } from './useUpdateLook.ts'
 import { useSeenTracking } from './useSeenTracking.ts'
 import { useUpdatesSeen, flushSeenReports } from './updatesSeenStore.ts'
@@ -69,12 +68,15 @@ export function UpdatesHistoryOverlay({ onClose }: UpdatesHistoryOverlayProps) {
     setToDate('')
   }
 
-  // Same exact-fit sizing the navbar dropdown uses (design.md D5): a static
-  // vh-based cap left the third card cut off partway however many cards
-  // happened to fit at that height, since it wasn't measured from the
-  // cards themselves. Capping to the same three-card count keeps the two
-  // surfaces' opening heights consistent.
-  const { listRef, maxHeight: listMaxHeight, listNode } = useCappedCardHeight(filteredHistory.length)
+  // The list's own node, tracked as state via a callback ref rather than a
+  // plain useRef read in an effect (the same reason useCappedCardHeight
+  // uses one, and the reason this overlay keeps its own copy rather than
+  // reusing that hook now that it no longer caps the list's height): the
+  // <ul> mounts after the items load, so a ref read in an effect keyed on
+  // the item count would see nothing. useSeenTracking needs this node to
+  // observe the list.
+  const [listNode, setListNode] = useState<HTMLUListElement | null>(null)
+  const listRef = useCallback((node: HTMLUListElement | null) => setListNode(node), [])
 
   // Looking at History's cards counts on the same terms as the dropdown's,
   // through the same shared store (store-seen-updates-on-server design.md
@@ -89,7 +91,7 @@ export function UpdatesHistoryOverlay({ onClose }: UpdatesHistoryOverlayProps) {
   }, [])
 
   return (
-    <Modal onClose={onClose} labelledBy="updates-history-title" className="modal--wide">
+    <Modal onClose={onClose} labelledBy="updates-history-title" className="modal--wide modal--column">
       <div className="updates-history">
         <div className="updates-history__header">
           <h2 id="updates-history-title" className="updates-history__title">
@@ -143,11 +145,7 @@ export function UpdatesHistoryOverlay({ onClose }: UpdatesHistoryOverlayProps) {
           <p className="updates-history__empty">No updates match these filters.</p>
         ) : (
           <div className="updates-history__list-frame">
-            <ul
-              className="updates-history__list"
-              ref={listRef}
-              style={listMaxHeight !== undefined ? { maxHeight: listMaxHeight } : undefined}
-            >
+            <ul className="updates-history__list" ref={listRef}>
               {filteredHistory.map((item) => (
                 <li key={item.id} data-update-id={item.id}>
                   <UpdateCard item={item} variant="history" onNavigate={onClose} isNew={newIds.has(item.id)} />

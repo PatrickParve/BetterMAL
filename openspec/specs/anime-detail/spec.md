@@ -389,6 +389,8 @@ A control whose relation exists SHALL be a link to that related anime's detail p
 
 The dimmed treatment SHALL be distinguishable at a glance from the enabled one, and a disabled control SHALL NOT take the hover treatment its enabled form takes.
 
+An enabled control SHALL name its target on hover, and SHALL name it by the title the app displays for that anime — its English title where one is known, its MyAnimeList title otherwise — the same title choice every other surface makes, so hovering a control does not name the anime it leads to differently from the page it leads to.
+
 The relations these controls are drawn from SHALL be the anime's full two-directional relation set — the edges it stores itself plus the inverted edges other anime store pointing at it — so a prequel or sequel that MyAnimeList recorded only on the other side still gets an enabled control here. An anime that is the target of another anime's `sequel` relation SHALL therefore show an enabled prequel control for it, whether or not it stores a `prequel` relation of its own.
 
 When more than one candidate exists for a control, the target SHALL be the one the ranked resolution rules select, **not** the first that MyAnimeList reports; the remainder SHALL be reachable through the More overlay. An edge an external source contradicts SHALL NOT be given an enabled control, and its control SHALL be shown dimmed as though the relation were absent.
@@ -408,6 +410,14 @@ When more than one candidate exists for a control, the target SHALL be the one t
 #### Scenario: A dimmed control does nothing
 - **WHEN** I click, tab to, or hover a dimmed prequel control
 - **THEN** nothing is navigated to, no hover treatment is applied, and assistive technology reports the control as disabled
+
+#### Scenario: An enabled control names its target in English
+- **WHEN** I hover the sequel control of an anime whose sequel is cached with the English title "Reincarnated as a Sword Season 2"
+- **THEN** it names that anime in English rather than in romaji
+
+#### Scenario: A target with no English title
+- **WHEN** the anime a control leads to has no English title in our cache
+- **THEN** the control names it by its stored MyAnimeList title
 
 #### Scenario: A prequel MAL only recorded on the other side
 - **WHEN** I open the detail page of an anime that stores no prequel relation, but which another anime names as its sequel

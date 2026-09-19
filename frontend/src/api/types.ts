@@ -720,6 +720,7 @@ export type RelationConfidence = 'Confirmed' | 'Corroborated' | 'Unconfirmed' | 
 export type ResolvedRelationDto = {
   animeId: number
   title: string
+  englishTitle: string | null
   pictureUrl: string | null
   mediaType: string | null
   confidence: RelationConfidence
