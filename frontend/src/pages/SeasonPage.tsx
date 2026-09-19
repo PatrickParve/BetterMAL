@@ -1,14 +1,25 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { getSeasonBounds, getSeasonPage, refreshSeason } from '../api/client.ts'
+import { Navigate, useSearchParams } from 'react-router-dom'
+import { getSeasonPage, refreshSeason } from '../api/client.ts'
 import type { AnimeBrowseItemDto } from '../api/types.ts'
+import { RECAP_SEASONS, type RecapSeasonName } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
 import { FilterMultiSelect, type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
+import { useOnDemandProbe, useSeasonBounds } from '../hooks/useSeasonBounds.ts'
 import { MEDIA_TYPE_ORDER, mediaTypeLabel, seasonPointIndex, shiftSeason } from '../utils/anime.ts'
+import {
+  EARLIEST_YEAR,
+  currentSeasonTarget,
+  isAddressableSeason,
+  isSeasonName,
+  probeTarget,
+  yearsInRange,
+  type SeasonTarget,
+} from '../utils/browseRange.ts'
 import './SeasonPage.css'
 
 interface SeasonReadState {
@@ -18,8 +29,6 @@ interface SeasonReadState {
   hasListing: boolean
 }
 
-const SEASON_ORDER = ['winter', 'spring', 'summer', 'fall'] as const
-type SeasonName = (typeof SEASON_ORDER)[number]
 type SortKey = 'popularity' | 'malScore' | 'alphabetical' | 'myScore'
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
@@ -36,46 +45,104 @@ const PAGE_SIZE = 24
 // the season actually landed on.
 const REFRESH_DEBOUNCE_MS = 400
 
-// Earliest year selectable in the quick-jump dropdown — anime predate this,
-// but a bounded range keeps the <select> from growing unbounded. The
-// previous-season arrow is floored at the same point (winter of this year)
-// so it can never step past what the dropdown itself offers. Exported so the
-// Year page floors its own previous-year arrow and dropdown at the same
-// point (tasks.md 5.7) rather than risking a second value drifting from
-// this one.
-export const EARLIEST_YEAR = 1989
-
-// The client-computed default ceiling, used until GET /api/season/bounds
-// resolves (task 7.1) — mirrors the backend's SeasonHorizon.FutureSeasonWindow,
-// MAL's published forward window as probed 2026-08-18 (design.md Context):
-// current season +2 returned 200, +3 returned 404. Exported so the Year page
-// seeds its own default ceiling from the same window (add-year-browser
-// design D3) rather than a second value that could drift from this one.
-export const FUTURE_SEASON_WINDOW = 2
-
-function currentSeasonTarget(): { year: number; season: SeasonName } {
-  const now = new Date()
-  return { year: now.getFullYear(), season: SEASON_ORDER[Math.floor(now.getMonth() / 3)] }
-}
-
-function seasonLabel(season: SeasonName): string {
+function seasonLabel(season: RecapSeasonName): string {
   return season.charAt(0).toUpperCase() + season.slice(1)
-}
-
-function isSeasonName(value: string | null): value is SeasonName {
-  return value !== null && (SEASON_ORDER as readonly string[]).includes(value)
 }
 
 function isSortKey(value: string | null): value is SortKey {
   return value !== null && SORT_OPTIONS.some((option) => option.value === value)
 }
 
-// Season page: all anime airing in the selected season (not just my list),
-// with a sort/filter control and a client-side reveal via an
-// IntersectionObserver sentinel below the grid. Year/season/sort/inMyList
-// live in the URL (not component state) so the selection survives
-// back-navigation from an anime detail page, and default to the current
-// season when absent.
+// Carries every other search parameter over, setting only year/season — used
+// by every replacement below so a rejected link that also names a sort or a
+// type filter lands on the current season with those still applied (design
+// D5).
+function replacementUrl(searchParams: URLSearchParams, target: SeasonTarget): string {
+  const params = new URLSearchParams(searchParams)
+  params.set('year', String(target.year))
+  params.set('season', target.season)
+  return `/season?${params.toString()}`
+}
+
+// The route guard (design D2): decides, before anything mounts, whether the
+// URL's year/season addresses a season a client may reach at all — winter
+// 1917 through the navigable ceiling, and nothing further (design D3). A
+// season between the archive's floor and the current season is admitted
+// immediately, since the ceiling can never fall below it; a later season
+// waits on GET /api/season/bounds (rendering nothing meanwhile) and is then
+// admitted or replaced with the current season via <Navigate replace> — never
+// pushed, so Back returns to wherever the reader came from rather than
+// bouncing off the rejected URL again. The one exception is the horizon
+// probe's own target: addressed directly and still past the ceiling, it earns
+// a single on-demand MAL round trip (design D10a) instead of an outright
+// refusal. Only once a target is settled does SeasonPageView — the page body,
+// unchanged from before this split — ever mount, so no read, refresh or
+// bounds-driven fetch can run for a season this guard rejects.
+export function SeasonPage() {
+  const [searchParams] = useSearchParams()
+  const current = useMemo(currentSeasonTarget, [])
+  const { ceiling, isPending } = useSeasonBounds()
+
+  const yearParam = searchParams.get('year')
+  const seasonParam = searchParams.get('season')
+  const parsedYear = yearParam === null ? NaN : Number(yearParam)
+  const hasValidParams = Number.isInteger(parsedYear) && isSeasonName(seasonParam)
+  const requested: SeasonTarget = hasValidParams
+    ? { year: parsedYear, season: seasonParam as RecapSeasonName }
+    : current
+
+  const currentIndex = seasonPointIndex(current.year, current.season)
+  const requestedIndex = seasonPointIndex(requested.year, requested.season)
+  const floorIndex = seasonPointIndex(EARLIEST_YEAR, 'winter')
+  const target = probeTarget(current)
+  const isProbeTarget = requestedIndex === seasonPointIndex(target.year, target.season)
+  const needsOnDemandProbe =
+    hasValidParams &&
+    requestedIndex > currentIndex &&
+    isProbeTarget &&
+    !isPending &&
+    requestedIndex > seasonPointIndex(ceiling.year, ceiling.season)
+
+  // Hooks must run unconditionally on every render, so this is always called
+  // — it only actually fires a MAL round trip while needsOnDemandProbe is
+  // true (task 4.7).
+  const onDemandCeiling = useOnDemandProbe(needsOnDemandProbe)
+
+  if (!hasValidParams || requestedIndex < floorIndex) {
+    return <Navigate to={replacementUrl(searchParams, current)} replace />
+  }
+
+  // Winter 1917 through the current season: the ceiling can never fall below
+  // it, so this is admitted with no wait — the common case, and the navbar's
+  // default landing.
+  if (requestedIndex <= currentIndex) {
+    return <SeasonPageView year={requested.year} season={requested.season} />
+  }
+
+  // A future target: wait for the ceiling before deciding anything about it.
+  if (isPending) return null
+
+  if (isAddressableSeason(requested, ceiling)) {
+    return <SeasonPageView year={requested.year} season={requested.season} />
+  }
+
+  // The one season past the ceiling a URL may still ask about (design D10a).
+  if (isProbeTarget) {
+    if (onDemandCeiling === null) return null
+    if (seasonPointIndex(onDemandCeiling.year, onDemandCeiling.season) >= requestedIndex) {
+      return <SeasonPageView year={requested.year} season={requested.season} />
+    }
+  }
+
+  return <Navigate to={replacementUrl(searchParams, current)} replace />
+}
+
+// Season page body: all anime airing in the selected season (not just my
+// list), with a sort/filter control and a client-side reveal via an
+// IntersectionObserver sentinel below the grid. `year`/`season` arrive
+// already validated by the SeasonPage guard above (design D2); sort/type/
+// inMyList still live in the URL directly, read here since they carry no
+// addressability rule of their own.
 //
 // Reads and refreshes are two separate effects: reading from cache is
 // instant and runs once per season/hideHentai combination (usePageData's own
@@ -84,19 +151,15 @@ function isSortKey(value: string | null): value is SortKey {
 // type filter, and the in-my-list filter never trigger a read at all — they
 // act on the already-loaded listing in place, and the ordering itself is a
 // per-item key the server computed rather than a rule reimplemented here
-// (design D2, D3).
-export function SeasonPage() {
+// (design D2, D3 of add-season-browser).
+function SeasonPageView({ year, season }: { year: number; season: RecapSeasonName }) {
   const [searchParams, setSearchParams] = useSearchParams()
-  const fallback = useMemo(currentSeasonTarget, [])
+  const { ceiling } = useSeasonBounds()
 
-  const yearParam = Number(searchParams.get('year'))
-  const seasonParam = searchParams.get('season')
   const sortParam = searchParams.get('sort')
   const inMyListParam = searchParams.get('inMyList')
   const typeParam = searchParams.get('type')
 
-  const year = Number.isInteger(yearParam) && yearParam > 0 ? yearParam : fallback.year
-  const season = isSeasonName(seasonParam) ? seasonParam : fallback.season
   const sort = isSortKey(sortParam) ? sortParam : 'popularity'
   const inMyList = inMyListParam !== '0'
   // URLSearchParams.get already distinguishes absent (null) from
@@ -130,29 +193,6 @@ export function SeasonPage() {
   // refresh attempt for this season has settled.
   const [refreshOutcome, setRefreshOutcome] = useState<'fetched' | 'notListed' | 'skipped' | 'failed' | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
-
-  // The navigable ceiling — the furthest season selectable. Seeded with the
-  // same current+2 default the server falls back to (task 7.1), so nothing
-  // is disabled while GET /api/season/bounds is in flight and the common
-  // case (server agrees with the default) shows no transition; replaced once
-  // that request resolves, ignored on failure.
-  const [ceiling, setCeiling] = useState(() => shiftSeason(fallback.year, fallback.season, FUTURE_SEASON_WINDOW))
-
-  useEffect(() => {
-    let cancelled = false
-    getSeasonBounds()
-      .then((bounds) => {
-        if (cancelled || !isSeasonName(bounds.latestSeason)) return
-        setCeiling({ year: bounds.latestYear, season: bounds.latestSeason })
-      })
-      .catch(() => {
-        // Keep the client-computed default ceiling — an honest fallback
-        // rather than blocking navigation on this request.
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   // Read by the debounced refresh effect so it re-reads with whatever
   // hideHentai is current when it actually runs, not whatever was current
@@ -202,26 +242,19 @@ export function SeasonPage() {
             ? 'loading'
             : 'loadFailed'
 
-  // At or past the ceiling, keeping the viewed year in the list so a
-  // URL-addressed season past the horizon still shows its own year rather
-  // than a <select> with a value it doesn't offer (task 7.3). Floored the
-  // same way below EARLIEST_YEAR (polish-recap-page tasks.md 4.2) — a recap
-  // can link to a season page for a year the season browser wouldn't
-  // otherwise offer.
-  const yearOptions = useMemo(() => {
-    const earliest = Math.min(EARLIEST_YEAR, year)
-    const latest = Math.max(ceiling.year, year)
-    return Array.from({ length: latest - earliest + 1 }, (_, i) => latest - i)
-  }, [year, ceiling.year])
+  // Built from the addressable range's own two ends alone (design D1) — the
+  // guard above has already confirmed `year`/`season` sit inside it, so no
+  // widening against the viewed year is needed here anymore.
+  const yearOptions = useMemo(() => yearsInRange(EARLIEST_YEAR, ceiling.year), [ceiling.year])
 
   // Within the ceiling's own year, cut the season list to the ceiling's
   // season — but always keep the currently-selected season so a
   // URL-addressed season past the horizon still has a valid <select> value
-  // (task 7.3).
+  // (task 7.3 of an earlier change).
   const seasonOptions = useMemo(() => {
-    if (year !== ceiling.year) return SEASON_ORDER
-    const ceilingIndex = SEASON_ORDER.indexOf(ceiling.season)
-    return SEASON_ORDER.filter((option) => SEASON_ORDER.indexOf(option) <= ceilingIndex || option === season)
+    if (year !== ceiling.year) return RECAP_SEASONS
+    const ceilingIndex = RECAP_SEASONS.indexOf(ceiling.season)
+    return RECAP_SEASONS.filter((option) => RECAP_SEASONS.indexOf(option) <= ceilingIndex || option === season)
   }, [year, season, ceiling.year, ceiling.season])
 
   // Every media type present in the whole loaded listing — filtering is
@@ -241,7 +274,7 @@ export function SeasonPage() {
     return options
   }, [items])
 
-  function setTarget(next: { year: number; season: SeasonName }) {
+  function setTarget(next: { year: number; season: RecapSeasonName }) {
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev)
       params.set('year', String(next.year))
@@ -293,7 +326,7 @@ export function SeasonPage() {
   useEffect(() => {
     const [yearPart, seasonPart] = debouncedSeasonKey.split('/')
     const targetYear = Number(yearPart)
-    const targetSeason = seasonPart as SeasonName
+    const targetSeason = seasonPart as RecapSeasonName
 
     let cancelled = false
     setRefreshing(true)
@@ -393,7 +426,7 @@ export function SeasonPage() {
             <select
               className="season-page__sort"
               value={season}
-              onChange={(event) => setTarget({ year, season: event.target.value as SeasonName })}
+              onChange={(event) => setTarget({ year, season: event.target.value as RecapSeasonName })}
               aria-label="Jump to season"
             >
               {seasonOptions.map((option) => (
@@ -410,9 +443,9 @@ export function SeasonPage() {
                 // Selecting the ceiling year while a later season is
                 // selected clamps the season back to the ceiling's, since
                 // this dropdown only changes the year half of the target
-                // (design.md decision 4 / task 7.4).
+                // (design.md decision 4 / task 7.4 of an earlier change).
                 const nextSeason =
-                  nextYear === ceiling.year && SEASON_ORDER.indexOf(season) > SEASON_ORDER.indexOf(ceiling.season)
+                  nextYear === ceiling.year && RECAP_SEASONS.indexOf(season) > RECAP_SEASONS.indexOf(ceiling.season)
                     ? ceiling.season
                     : season
                 setTarget({ year: nextYear, season: nextSeason })

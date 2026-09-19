@@ -244,6 +244,15 @@ export function getSeasonBounds(): Promise<SeasonBoundsDto> {
   return fetchJson<SeasonBoundsDto>('/api/season/bounds')
 }
 
+// Triggers the horizon probe (current season + 3) and returns the resulting
+// bounds either way — never a 400, since it names no season itself.
+// `onDemand` is for a URL addressing the probe's own target directly: it
+// keeps the once-per-day gate but skips the last-month window (design D10a).
+export function probeSeasonHorizon(onDemand: boolean): Promise<SeasonBoundsDto> {
+  const query = onDemand ? '?onDemand=true' : ''
+  return fetchJson<SeasonBoundsDto>(`/api/season/horizon/probe${query}`, { method: 'POST' })
+}
+
 export function getYearPage(
   year: number,
   params: { hideHentai: boolean },

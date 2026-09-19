@@ -130,5 +130,7 @@ public class SeasonControllerTests
             throw new NotImplementedException();
         public Task<YearRefreshResultDto> RefreshYearAsync(int year, CancellationToken ct = default) =>
             throw new NotImplementedException();
+        public Task<SeasonBoundsDto> ProbeHorizonAsync(bool onDemand = false, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 }

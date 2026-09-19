@@ -8,10 +8,8 @@ public static class SeasonCalendar
 
     /// <summary>The first year in MyAnimeList's season archive
     /// (myanimelist.net/anime/season/archive, checked 2026-09-14) — the lower
-    /// end of the range the API accepts. Deliberately not the frontend's
-    /// EARLIEST_YEAR (1989), which only sets how far back the season and year
-    /// pages' arrows and dropdowns go, while detail-page and Recap links
-    /// reach older seasons.</summary>
+    /// end of the range the API accepts, and the same floor the frontend's
+    /// season and year pages' arrows and dropdowns use.</summary>
     public const int EarliestArchiveYear = 1917;
 
     public static (int Year, string Season) GetSeasonFor(DateOnly localDate) =>

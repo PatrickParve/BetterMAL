@@ -31,6 +31,19 @@ public interface ISeasonBrowseService
     /// while GetBoundsAsync is for navigation.</summary>
     Task<SeasonRequestRange> GetRequestRangeAsync(CancellationToken ct = default);
 
+    /// <summary>Probes the one season MAL's default forward window doesn't
+    /// reach — current + 3 — so the navigable ceiling can climb on its own as
+    /// MAL opens a further season (see HorizonProbe). Normally gated to the
+    /// final month of the current season and once per local day (design D10);
+    /// <paramref name="onDemand"/> keeps the once-per-day gate but skips the
+    /// last-month window, for a URL addressing that exact season (design
+    /// D10a). Delegates to the existing RefreshAsync, so the fetch inherits
+    /// the single-flight lock, 404-as-fact and the caching rules. Never
+    /// throws — a probe failure is swallowed and logged like any other
+    /// refresh failure — and always returns the freshly recomputed navigable
+    /// ceiling.</summary>
+    Task<SeasonBoundsDto> ProbeHorizonAsync(bool onDemand = false, CancellationToken ct = default);
+
     /// <summary>Repository-only read of a year — the union of its four
     /// seasons' whole listings, as one. Never calls MAL.</summary>
     Task<YearPageDto> GetYearPageAsync(int year, bool hideHentai, CancellationToken ct = default);

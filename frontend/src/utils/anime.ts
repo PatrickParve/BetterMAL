@@ -272,23 +272,6 @@ export const AIRING_STATUS_LABELS: Record<AiringStatus, string> = {
   not_yet_aired: 'Not yet aired',
 }
 
-// Base cycle the "show first" picker rotates through, e.g. choosing
-// "currently_airing" first yields Currently airing -> Not yet aired ->
-// Finished airing, keeping the other two statuses' relative order.
-const AIRING_STATUS_CYCLE: AiringStatus[] = ['finished_airing', 'currently_airing', 'not_yet_aired']
-
-export function compareByAiringStatus<T extends { airingStatus: string | null }>(
-  first: AiringStatus,
-): (a: T, b: T) => number {
-  const startIndex = AIRING_STATUS_CYCLE.indexOf(first)
-  const order = [...AIRING_STATUS_CYCLE.slice(startIndex), ...AIRING_STATUS_CYCLE.slice(0, startIndex)]
-  return (a, b) => {
-    const rankA = a.airingStatus ? order.indexOf(a.airingStatus as AiringStatus) : -1
-    const rankB = b.airingStatus ? order.indexOf(b.airingStatus as AiringStatus) : -1
-    return (rankA === -1 ? order.length : rankA) - (rankB === -1 ? order.length : rankB)
-  }
-}
-
 // My list's two-level sort (D5): a primary key with an optional tiebreaker,
 // each direction-aware and built so a missing value never leads the list.
 export type SortKey =
@@ -299,20 +282,18 @@ export type SortKey =
   | 'episodesWatched'
   | 'progress'
   | 'totalEpisodes'
-  | 'airingStatus'
   | 'type'
   | 'startDate'
   | 'finishDate'
 
 // 'natural' is each key's own natural order (descending for scores/counts/
-// dates, ascending for alphabetical/type, most popular first for Popularity,
-// the airing-status cycle for airing status); 'reversed' flips every key
-// except Airing status, whose order is fixed by its chosen first status. The
-// tiebreaker always applies in 'natural'.
+// dates, ascending for alphabetical/type, most popular first for Popularity);
+// 'reversed' flips every key. The tiebreaker always applies in 'natural'.
 export type SortDirection = 'natural' | 'reversed'
 
 export type SortableListItem = {
   title: string
+  englishTitle: string | null
   mediaType: string | null
   malScore: number | null
   airingStatus: string | null
@@ -356,17 +337,12 @@ function dateValue(iso: string | null): number | null {
   return iso ? new Date(iso).getTime() : null
 }
 
-// Airing status isn't here — direction doesn't apply to it (sortComparator
-// returns compareByAiringStatus unchanged regardless of direction), and its
-// order additionally depends on the "show first" control, so it's resolved
-// separately in sortComparator below, reusing compareByAiringStatus rather
-// than duplicating its cycle logic.
-const SORT_KEY_FACTORIES: Record<
-  Exclude<SortKey, 'airingStatus'>,
-  (direction: SortDirection) => Comparator<SortableListItem>
-> = {
+const SORT_KEY_FACTORIES: Record<SortKey, (direction: SortDirection) => Comparator<SortableListItem>> = {
+  // Keyed on the displayed title, not the romaji one, so the order matches
+  // what the row shows — composeComparator's final tie-break below is this
+  // same factory, so every sort's last fallback inherits it too.
   alphabetical: nullsLast<SortableListItem, string>(
-    (item) => item.title,
+    (item) => pickDisplayTitle(item.title, item.englishTitle),
     (a, b) => a.localeCompare(b),
   ),
   myScore: nullsLast<SortableListItem, number>(
@@ -411,17 +387,7 @@ const SORT_KEY_FACTORIES: Record<
   ),
 }
 
-export function sortComparator(
-  key: SortKey,
-  direction: SortDirection,
-  airingStatusFirst: AiringStatus,
-): Comparator<SortableListItem> {
-  if (key === 'airingStatus') {
-    // The chosen first status *is* the order, whatever `direction` is.
-    // Negating the cycle comparator for 'reversed' used to put unknown-airing
-    // entries first, contrary to "missing values sort last".
-    return compareByAiringStatus<SortableListItem>(airingStatusFirst)
-  }
+export function sortComparator(key: SortKey, direction: SortDirection): Comparator<SortableListItem> {
   return SORT_KEY_FACTORIES[key](direction)
 }
 
@@ -441,10 +407,9 @@ export function composeComparator(
   primaryKey: SortKey,
   direction: SortDirection,
   tiebreakKey: SortKey | null,
-  airingStatusFirst: AiringStatus,
 ): Comparator<SortableListItem> {
-  const primary = sortComparator(primaryKey, direction, airingStatusFirst)
-  const tiebreak = tiebreakKey ? sortComparator(tiebreakKey, 'natural', airingStatusFirst) : null
+  const primary = sortComparator(primaryKey, direction)
+  const tiebreak = tiebreakKey ? sortComparator(tiebreakKey, 'natural') : null
   const rankBreaksTie = primaryKey === 'myScore' || tiebreakKey === 'myScore'
   const byTitle = SORT_KEY_FACTORIES.alphabetical('natural')
   return (a, b) => {

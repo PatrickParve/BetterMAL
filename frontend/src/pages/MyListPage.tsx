@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { ApiError, getMyList, getRecap, updateEntry } from '../api/client.ts'
 import { RECAP_SEASONS, type IncrementTarget, type MyListItemDto, type RecapDto, type RecapMode, type RecapSeasonName, type RecapTimeFilter, type UserAnimeEntryDto, type WatchStatus } from '../api/types.ts'
 import type { FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
-import { MyListControls, fromSortChoice, type ScoreFilter, type SortChoice } from '../components/MyListControls.tsx'
+import { MyListControls, type ScoreFilter } from '../components/MyListControls.tsx'
 import { MyListRow } from '../components/MyListRow.tsx'
 import { RecapPickerOverlay } from '../components/RecapPickerOverlay.tsx'
 import { RecapScopeChip } from '../components/RecapScopeChip.tsx'
@@ -167,10 +167,6 @@ export function MyListPage() {
   const [sortDirection, setSortDirection] = useRestorableState<SortDirection>('sortDirection', 'natural')
   const [sortThen, setSortThen] = useRestorableState<SortKey | null>('sortThen', null)
   const [groupByStatus, setGroupByStatus] = useRestorableState('groupByStatus', true)
-  const [airingStatusFirst, setAiringStatusFirst] = useRestorableState<AiringStatus>(
-    'airingStatusFirst',
-    'finished_airing',
-  )
 
   // One reveal budget for the whole page, not one per status group (design.md
   // D1/D2), restorable like every other control here so a back-navigation
@@ -198,7 +194,6 @@ export function MyListPage() {
     sort,
     sortDirection,
     sortThen,
-    airingStatusFirst,
     groupByStatus,
   ])
   const [renderedViewIdentity, setRenderedViewIdentity] = useState(viewIdentity)
@@ -505,7 +500,7 @@ export function MyListPage() {
       return true
     })
 
-    const comparator = composeComparator(sort, sortDirection, sortThen, airingStatusFirst)
+    const comparator = composeComparator(sort, sortDirection, sortThen)
 
     if (groupByStatus) {
       // The app's standard group order, not the order statuses were clicked
@@ -530,7 +525,6 @@ export function MyListPage() {
     sort,
     sortDirection,
     sortThen,
-    airingStatusFirst,
     groupByStatus,
   ])
 
@@ -593,39 +587,26 @@ export function MyListPage() {
     setSortDirection('natural')
     setSortThen(null)
     setGroupByStatus(true)
-    setAiringStatusFirst('finished_airing')
   }
 
-  // One stored `airingStatusFirst` serves both the primary and the
-  // tiebreaker select, because the two can never both be Airing status at
-  // once (design D4) — whichever select just chose an airing choice is the
-  // one that gets to set it.
-  function handleSortChange(choice: SortChoice) {
-    const { key, first } = fromSortChoice(choice)
+  function handleSortChange(key: SortKey) {
     setSort(key)
-    if (first !== null) setAiringStatusFirst(first)
     // A key can't tiebreak itself — drop it rather than leave a stale
     // selection the "then by" control no longer offers.
     setSortThen((prev) => (prev === key ? null : prev))
   }
 
-  function handleThenChange(choice: SortChoice | null) {
-    if (choice === null) {
-      setSortThen(null)
-      return
-    }
-    const { key, first } = fromSortChoice(choice)
+  function handleThenChange(key: SortKey | null) {
     setSortThen(key)
-    if (first !== null) setAiringStatusFirst(first)
   }
 
   // Rank numbers follow the grouping toggle, not the sort key: shown only
   // when the list is flat and not alphabetical (D9).
   const showRanks = !groupByStatus && sort !== 'alphabetical'
   // The airing badge shows on every row while the airing filter is doing
-  // something or airing status is the primary sort — Plan-to-watch rows
-  // always show it regardless (D11), handled per-row below.
-  const airingBadgeActive = airingFilter !== null || sort === 'airingStatus'
+  // something — Plan-to-watch rows always show it regardless (D11), handled
+  // per-row below.
+  const airingBadgeActive = airingFilter !== null
 
   function renderRow(item: MyListItemDto, rank?: number) {
     return (
@@ -664,7 +645,7 @@ export function MyListPage() {
         <div className="my-list-page__empty-block">
           <p className="my-list-page__empty-primary">Nothing matches these filters</p>
           <p className="my-list-page__empty-secondary">Try removing a filter, or reset them all.</p>
-          <button type="button" className="my-list-page__clear-filters" onClick={clearFilters}>
+          <button type="button" className="my-list-page__clear-filters my-list-page__clear-filters--reset" onClick={clearFilters}>
             Reset filters &amp; sort
           </button>
         </div>
@@ -764,7 +745,7 @@ export function MyListPage() {
             Recap a period
           </button>
           {isOffDefault && (
-            <button type="button" className="my-list-page__clear-filters" onClick={clearFilters}>
+            <button type="button" className="my-list-page__clear-filters my-list-page__clear-filters--reset" onClick={clearFilters}>
               Reset filters &amp; sort
             </button>
           )}
@@ -787,7 +768,6 @@ export function MyListPage() {
           sortDirection,
           sortThen,
           groupByStatus,
-          airingStatusFirst,
           onSortChange: handleSortChange,
           onThenChange: handleThenChange,
           onDirectionToggle: () => setSortDirection((prev) => (prev === 'natural' ? 'reversed' : 'natural')),

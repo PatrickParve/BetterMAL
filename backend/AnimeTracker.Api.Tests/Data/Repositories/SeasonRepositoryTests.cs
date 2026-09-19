@@ -30,12 +30,14 @@ public class SeasonRepositoryTests
         int? popularityRank = null,
         double? malScore = null,
         string? mediaType = null,
-        string? rating = null)
+        string? rating = null,
+        string? englishTitle = null)
     {
         var anime = new AnimeMetadata
         {
             Id = id,
             Title = title,
+            EnglishTitle = englishTitle,
             PopularityRank = popularityRank,
             MalScore = malScore,
             MediaType = mediaType,
@@ -148,6 +150,64 @@ public class SeasonRepositoryTests
         var items = await repository.GetListingAsync(Year2020, hideHentai: false);
 
         Assert.Equal(["Alpha", "Mike", "Zeta"], items.OrderBy(i => i.SortOrder.Alphabetical).Select(i => i.Title));
+    }
+
+    // tasks.md 1.1/1.2: alphabetical order (and every other sort's title
+    // tie-break) follows the displayed title — the English title when MAL
+    // has one — not the romaji Title, matching pickDisplayTitle in
+    // frontend/src/utils/anime.ts.
+    [Fact]
+    public async Task AlphabeticalSortOrdersByEnglishTitleWhenTitlesDisagree()
+    {
+        using var db = CreateDb();
+        // Romaji titles would sort Zeta, Mike, Alpha; English titles reverse it.
+        Seed(db, 1, "Zeta", englishTitle: "Alpha English");
+        Seed(db, 2, "Mike", englishTitle: "Mike English");
+        Seed(db, 3, "Alpha", englishTitle: "Zeta English");
+        List(db, 1, 2020, "winter");
+        List(db, 2, 2020, "summer");
+        List(db, 3, 2020, "fall");
+        await db.SaveChangesAsync();
+        var repository = new SeasonRepository(db);
+
+        var items = await repository.GetListingAsync(Year2020, hideHentai: false);
+
+        Assert.Equal([1, 2, 3], OrderBy(items, s => s.Alphabetical));
+    }
+
+    [Fact]
+    public async Task AlphabeticalSortFallsBackToTheOriginalTitleWhenEnglishTitleIsNullOrBlank()
+    {
+        using var db = CreateDb();
+        Seed(db, 1, "Alpha", englishTitle: null);
+        Seed(db, 2, "Bravo", englishTitle: ""); // blank — treated as having none
+        Seed(db, 3, "Charlie", englishTitle: "");
+        List(db, 1, 2020, "winter");
+        List(db, 2, 2020, "spring");
+        List(db, 3, 2020, "summer");
+        await db.SaveChangesAsync();
+        var repository = new SeasonRepository(db);
+
+        var items = await repository.GetListingAsync(Year2020, hideHentai: false);
+
+        Assert.Equal([1, 2, 3], OrderBy(items, s => s.Alphabetical));
+    }
+
+    [Fact]
+    public async Task MalScoreTieBreaksByDisplayedTitle()
+    {
+        using var db = CreateDb();
+        // Same MalScore; romaji titles would sort Zeta, Alpha, English titles reverse it.
+        Seed(db, 1, "Zeta", malScore: 8.0, englishTitle: "Alpha English");
+        Seed(db, 2, "Alpha", malScore: 8.0, englishTitle: "Zeta English");
+        List(db, 1, 2020, "winter");
+        List(db, 2, 2020, "spring");
+        await db.SaveChangesAsync();
+        var repository = new SeasonRepository(db);
+
+        var items = await repository.GetListingAsync(Year2020, hideHentai: false);
+
+        Assert.Equal([1, 2], OrderBy(items, s => s.MalScore));
     }
 
     [Fact]

@@ -6,7 +6,7 @@ The library-views capability governs My List and Top Anime: how my list is group
 ### Requirement: My list grouped and ordered by status
 The system SHALL present my list as one list grouped and ordered as Currently watching → Rewatching → On hold → Plan to watch → Completed → Dropped, where each entry shows picture, title, type (TV/movie), progress, my score, MAL score (respecting the hide/unhide toggle), and an edit button. Rewatching sits directly after Currently watching because both are runs in progress. For entries in the **Plan to watch** group, each row SHALL additionally show an airing-status indicator alongside the type — **Not aired**, **Airing**, or **Aired** (mapped from the anime's `not_yet_aired`, `currently_airing`, and `finished_airing` values) — so the user can tell at a glance whether a queued show is already out, still airing, or has not yet started; when the airing status is unknown, no indicator is shown.
 
-Rows outside Plan to watch SHALL also show the airing-status indicator while the user is working with airing status — that is, while the airing-status filter has a selection or Airing status is the primary sort key — since the indicator is the value being filtered or ordered on. Outside those cases, rows in other status groups SHALL NOT show the indicator.
+Rows outside Plan to watch SHALL also show the airing-status indicator while the user is working with airing status — that is, while the airing-status filter has a selection — since the indicator is the value being filtered on. Outside that case, rows in other status groups SHALL NOT show the indicator.
 
 #### Scenario: Rendering the grouped list
 - **WHEN** the my-list page loads
@@ -20,12 +20,12 @@ Rows outside Plan to watch SHALL also show the airing-status indicator while the
 - **WHEN** the Plan to watch group renders an entry whose anime has a known airing status
 - **THEN** that row shows an airing-status indicator (Not aired, Airing, or Aired) next to the type
 
-#### Scenario: Airing status shown while filtering or sorting by it
-- **WHEN** the airing-status filter has a selection, or Airing status is the primary sort key
+#### Scenario: Airing status shown while filtering by it
+- **WHEN** the airing-status filter has a selection
 - **THEN** every row with a known airing status shows the indicator, whatever its watch status
 
 #### Scenario: Airing status otherwise only on Plan to watch
-- **WHEN** no airing-status filter is selected and the sort is not by airing status
+- **WHEN** no airing-status filter is selected
 - **THEN** rows outside Plan to watch show the type without an airing-status indicator
 
 #### Scenario: Unknown airing status shows no indicator
@@ -100,10 +100,6 @@ The rank SHALL occupy a fixed-width column sized for the longest rank the list c
 #### Scenario: Numbers count the filtered list
 - **WHEN** grouping is off, I sort by my score, and a status filter hides everything above my 8s
 - **THEN** the first row shown is numbered `#1`, whatever overall rank that anime holds
-
-#### Scenario: Sorting by airing status
-- **WHEN** grouping is off and I sort by airing status
-- **THEN** each entry shows a rank number on the left, ordered by the chosen show-first status ahead of the other two
 
 #### Scenario: No ranks when grouped
 - **WHEN** grouping by status is on
@@ -196,7 +192,9 @@ Using any control in the block SHALL NOT make another control in the block appea
 
 Every control in the block SHALL be rectangular and share the one control height the `page-header-design` capability defines for a filter cluster. The rounded pill shape SHALL be reserved for the status filter tabs, so a control that narrows or orders the list is never mistaken for a status tab.
 
-The page SHALL offer a **Reset filters & sort** action that restores the page's default view — no text query, no type restriction, no airing restriction, no score restriction, alphabetical primary sort in its natural direction, no tiebreaker, grouped by status. The action SHALL be shown only while at least one of those is not at its default. It SHALL sit in the results line described by "My list reports what is being shown" rather than among the controls, and SHALL NOT change the selected status tabs or dismiss a recap scope, which are separate controls.
+The page SHALL offer a **Reset filters & sort** action that restores the page's default view — no text query, no type restriction, no airing restriction, no score restriction, alphabetical primary sort in its natural direction, no tiebreaker, grouped by status. The action SHALL be shown only while at least one of those is not at its default. It SHALL NOT change the selected status tabs or dismiss a recap scope, which are separate controls.
+
+Wherever it is shown, the action SHALL be drawn in the app's accent colour as a filled call to action, so it is immediately tellable from the neutral buttons beside it rather than reading as one more of them. It SHALL keep the height, shape and position it would otherwise have, so its appearing or disappearing moves nothing around it, and it SHALL remain legible in both the light and the dark theme.
 
 #### Scenario: One block for the whole page
 - **WHEN** the my-list page renders with several status groups on screen
@@ -215,7 +213,7 @@ The page SHALL offer a **Reset filters & sort** action that restores the page's 
 - **THEN** each group's label sits above that group's controls, and the two groups remain separate
 
 #### Scenario: Choosing a sort key moves nothing
-- **WHEN** I change the sort key from Alphabetical to Currently airing first, and back
+- **WHEN** I change the sort key from Alphabetical to Total episodes, and back
 - **THEN** no control appears or disappears, and the direction control and the tiebreaker stay exactly where they were
 
 #### Scenario: Only the status tabs are pills
@@ -233,6 +231,14 @@ The page SHALL offer a **Reset filters & sort** action that restores the page's 
 #### Scenario: Reset leaves a recap scope in place
 - **WHEN** a recap scope is active and I use **Reset filters & sort**
 - **THEN** the filters and sort return to their defaults and the list stays scoped to the same recap period
+
+#### Scenario: Reset stands out from the button beside it
+- **WHEN** the reset action is shown next to another page-level button
+- **THEN** it is filled in the accent colour while the other stays neutral, so the two are tellable apart at a glance
+
+#### Scenario: Reset appearing moves nothing
+- **WHEN** I change a filter so the reset action appears
+- **THEN** the buttons already on that row stay where they were and the row keeps its height
 
 ### Requirement: Find in list
 The system SHALL provide a text field, first in the my-list Filter group, that narrows the list to entries whose title contains the typed text, matched case-insensitively against both the English title and the original title, so an entry is found under either name. The match SHALL be a substring match, not a prefix-only match. An empty field SHALL impose no restriction. The typed text SHALL combine with every other filter rather than replacing them.
@@ -312,11 +318,11 @@ Media types SHALL be shown by display label (for example "TV special"), not by t
 - **THEN** each reads as a display label such as "TV special" rather than `tv_special`
 
 ### Requirement: My list airing-status filter
-The system SHALL provide a multi-select airing-status filter in the my-list filter bar offering Finished airing, Currently airing, Not yet aired, and — when the list contains one — entries whose airing status is unknown. The filter SHALL be available under every status tab, including All, not only under Plan to watch.
+The system SHALL provide a multi-select airing-status filter in the my-list filter bar offering Finished airing, Currently airing, Not yet aired, and — when the list contains one — entries whose airing status is unknown. The filter SHALL be available under every status tab, including All, not only under Plan to watch. It SHALL be the only airing-status control on the page: airing status narrows the list but does not order it.
 
 The filter SHALL distinguish **All** from **None** as the `page-header-design` capability defines: on **All** — its state on a fresh visit — no airing restriction applies; with one or more statuses selected, only entries of those statuses are shown; on **None**, no entry passes the airing filter and the list reports that nothing matches the current filters.
 
-The rows' airing-status indicator SHALL be shown whenever this filter is narrowing the list — that is, whenever it is on anything other than **All** — as it is when Airing status is the primary sort key.
+The rows' airing-status indicator SHALL be shown whenever this filter is narrowing the list — that is, whenever it is on anything other than **All**.
 
 #### Scenario: Filtering to still-airing shows
 - **WHEN** I select Currently airing while the Watching status tab is active
@@ -362,19 +368,31 @@ The score-value options SHALL be presented alongside Rated and Unrated in the sa
 ### Requirement: My list two-level sorting
 The system SHALL order my list by a primary sort key with an optional tiebreaker key, both chosen in the Sort group, so orderings such as "my score, then MAL score" or "episodes watched, then MAL score" are expressible directly.
 
-Both selectors SHALL offer: Alphabetical, My score, MAL score, Popularity, Episodes watched, Progress, Total episodes, Airing status, Type, Start date, and Finish date. The tiebreaker selector SHALL additionally offer "none", which is its default, and SHALL NOT offer the key already chosen as primary.
+Both selectors SHALL offer: Alphabetical, My score, MAL score, Popularity, Episodes watched, Progress, Total episodes, Type, Start date, and Finish date. The tiebreaker selector SHALL additionally offer "none", which is its default, and SHALL NOT offer the key already chosen as primary. Airing status SHALL NOT be offered as a sort key in either selector; airing status remains a filter (see "My list airing-status filter").
 
-**Airing status** SHALL be offered in each selector as three choices, one per status that can come first — **Finished airing first**, **Currently airing first**, and **Not yet aired first** — presented together under an Airing status heading, each worded so it reads unambiguously as the selector's shown value once chosen. Choosing one SHALL select Airing status as that selector's key and set which status comes first; the remaining two statuses SHALL follow it in their established cycle (Finished airing → Currently airing → Not yet aired, wrapping around). This choice SHALL be the only way the first status is chosen: choosing Airing status SHALL NOT make any further control appear. When Airing status is the tiebreaker, the status chosen to come first in the tiebreaker SHALL be the one applied. While Airing status is the primary key, the tiebreaker SHALL offer none of the three Airing status choices.
+**Alphabetical** SHALL order entries by the title the row displays — the anime's English title when MyAnimeList has one, and its original title otherwise — so an alphabetical list reads in the order of the names on screen rather than in the order of names that are not displayed. The same displayed title SHALL be used wherever alphabetical order applies as a fallback.
 
 **Popularity** SHALL order entries by their anime's MAL popularity rank — the popularity figure the app shows for an anime, where rank 1 is the anime with the most MAL members.
 
-Each key SHALL have a natural direction — descending for My score, MAL score, Episodes watched, Progress, Total episodes, Start date and Finish date; most popular first (popularity rank 1 first, ascending by rank) for Popularity; ascending for Alphabetical and Type; and, for Airing status, the order its chosen first status gives.
+Each key SHALL have a natural direction — descending for My score, MAL score, Episodes watched, Progress, Total episodes, Start date and Finish date; most popular first (popularity rank 1 first, ascending by rank) for Popularity; and ascending for Alphabetical and Type.
 
-A direction control beside the primary key SHALL flip the primary key between its natural direction and the reverse. It SHALL name, in words, the order it is currently producing for the current key — **Highest first** / **Lowest first** for My score, MAL score and Progress; **Most first** / **Fewest first** for Episodes watched and Total episodes; **Most popular first** / **Least popular first** for Popularity; **A–Z** / **Z–A** for Alphabetical and Type; **Newest first** / **Oldest first** for Start date and Finish date — rather than acting as a bare "Reverse" toggle, and SHALL hold one width whichever of these it shows. While Airing status is the primary key, the direction control SHALL be shown as unavailable and SHALL convey that the order is set by which status comes first; the list SHALL then follow the chosen status order whatever direction was last set, and choosing another key SHALL resume that direction. The tiebreaker SHALL always apply in its own natural direction.
+A direction control beside the primary key SHALL flip the primary key between its natural direction and the reverse. It SHALL name, in words, the order it is currently producing for the current key — **Highest first** / **Lowest first** for My score, MAL score and Progress; **Most first** / **Fewest first** for Episodes watched and Total episodes; **Most popular first** / **Least popular first** for Popularity; **A–Z** / **Z–A** for Alphabetical and Type; **Newest first** / **Oldest first** for Start date and Finish date — rather than acting as a bare "Reverse" toggle, and SHALL hold one width whichever of these it shows. Every offered key SHALL have such a direction, so the control is never shown as unavailable. The tiebreaker SHALL always apply in its own natural direction.
 
-Entries missing the value being sorted on — no score, no start or finish date, an unknown total, an unknown popularity rank or unknown airing status — SHALL sort last regardless of the direction chosen, rather than leading the list when the direction is flipped. When the primary and tiebreaker keys both tie, entries SHALL fall back to alphabetical order, so the same list always renders in the same order.
+Entries missing the value being sorted on — no score, no start or finish date, an unknown total or an unknown popularity rank — SHALL sort last regardless of the direction chosen, rather than leading the list when the direction is flipped. When the primary and tiebreaker keys both tie, entries SHALL fall back to alphabetical order by displayed title, so the same list always renders in the same order.
 
 Where **My score** is the primary or the tiebreaker key, entries left tied on it SHALL be separated by my ranking — best-ranked first — before that alphabetical fallback, per the `anime-ranking` capability. Rank SHALL apply as a tiebreaker does: always in its own natural direction, so flipping the primary direction to lowest-score-first still orders each score's entries best-ranked first. A tied entry with no rank SHALL sort after every ranked entry of the same score.
+
+#### Scenario: Airing status is not a sort key
+- **WHEN** I open either the primary sort selector or the tiebreaker selector
+- **THEN** neither offers Airing status, in any form, while the airing-status filter is still offered in the Filter group
+
+#### Scenario: Alphabetical follows the displayed title
+- **WHEN** I sort alphabetically and my list holds an entry whose English title is "Frieren: Beyond Journey's End" and whose original title is "Sousou no Frieren"
+- **THEN** its row sits among the F's, where the title on the row puts it, not among the S's
+
+#### Scenario: Alphabetical falls back to the original title
+- **WHEN** I sort alphabetically and one entry's anime has no English title on MyAnimeList
+- **THEN** it is placed by its original title, which is also the title its row shows
 
 #### Scenario: Sorting by my score then MAL score
 - **WHEN** I choose My score as the primary sort and MAL score as the tiebreaker
@@ -412,6 +430,10 @@ Where **My score** is the primary or the tiebreaker key, entries left tied on it
 - **WHEN** I sort by My score
 - **THEN** the direction control reads Highest first, and flipping it makes it read Lowest first and orders the list lowest score first
 
+#### Scenario: The direction control is always available
+- **WHEN** I switch the primary sort key to each key in turn
+- **THEN** the direction control names an order for every one of them and is never shown as unavailable
+
 #### Scenario: The direction control keeps its width
 - **WHEN** I switch the sort key between Alphabetical, Popularity and Start date
 - **THEN** the direction control reads A–Z, Most popular first and Newest first in turn, and the tiebreaker beside it does not move
@@ -438,35 +460,7 @@ Where **My score** is the primary or the tiebreaker key, entries left tied on it
 
 #### Scenario: Fully tied entries keep a stable order
 - **WHEN** two entries tie on both the primary and tiebreaker keys, and neither carries a rank
-- **THEN** they appear in alphabetical order, and that order is the same every time the list renders
-
-#### Scenario: Choosing which airing status comes first
-- **WHEN** I choose Currently airing first as the sort key
-- **THEN** currently airing entries come first, then not-yet-aired entries, then finished-airing entries, entries with an unknown airing status come last, and no additional control appears
-
-#### Scenario: The airing choice reads as its own value
-- **WHEN** I have chosen Not yet aired first and the sort selector is closed
-- **THEN** the selector reads "Not yet aired first"
-
-#### Scenario: Direction does not apply to airing status
-- **WHEN** any Airing status choice is the primary sort key
-- **THEN** the direction control is shown as unavailable and conveys that the order is set by which status comes first
-
-#### Scenario: A reversed direction survives a detour through airing status
-- **WHEN** I sort by My score, flip it to Lowest first, switch to Finished airing first, and then switch back to My score
-- **THEN** the list is ordered lowest score first again and the direction control reads Lowest first
-
-#### Scenario: Unknown airing status stays last
-- **WHEN** I sort by any Airing status choice after having flipped the direction on another key
-- **THEN** entries with an unknown airing status appear at the end of the list
-
-#### Scenario: Airing status as the tiebreaker names its own order
-- **WHEN** I choose My score as the primary sort and Not yet aired first as the tiebreaker
-- **THEN** entries sharing a score of mine are ordered not-yet-aired first, then finished-airing, then currently airing
-
-#### Scenario: Airing status cannot tiebreak itself
-- **WHEN** any Airing status choice is the primary sort key
-- **THEN** the tiebreaker offers none of the three Airing status choices
+- **THEN** they appear in alphabetical order by their displayed titles, and that order is the same every time the list renders
 
 ### Requirement: My list grouping is an explicit choice
 The system SHALL provide a grouping choice in the my-list Sort group that decides whether entries are grouped, rather than inferring it from the sort key. It SHALL be presented as two options side by side — **By status** and **Single list** — with exactly one of them selected, each reporting its own pressed state to assistive technology. **By status** SHALL be selected by default.

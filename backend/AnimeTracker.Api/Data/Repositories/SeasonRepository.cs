@@ -108,6 +108,12 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
             l.Anime.Id,
             l.Anime.Title,
             l.Anime.EnglishTitle,
+            // The title every card and row actually displays (mirrors
+            // pickDisplayTitle in frontend/src/utils/anime.ts) — written as a
+            // plain null/empty conditional rather than a C# helper call so EF
+            // translates it to SQL instead of falling back to client
+            // evaluation.
+            DisplayTitle = l.Anime.EnglishTitle == null || l.Anime.EnglishTitle == "" ? l.Anime.Title : l.Anime.EnglishTitle,
             l.Anime.PictureUrl,
             l.Anime.TotalEpisodes,
             l.Anime.MediaType,
@@ -130,26 +136,29 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
         // The four orderings below are deliberately left in SQL and run as
         // id-only projections rather than reimplemented over `items` in C#
         // (design D3): they carry the anime-ranking capability's banding and
-        // Postgres's own title collation, and shipping each as a per-item
-        // position is what lets the client re-sort its already-loaded
-        // listing without a second copy of either rule.
+        // Postgres's own title collation over DisplayTitle — the title each
+        // card and row actually shows — rather than the romaji Title. The
+        // tie-breaks moved to DisplayTitle along with the alphabetical sort
+        // itself so an alphabetical list and a popularity/score list that
+        // falls back to title never disagree about how two same-ranked
+        // anime are ordered.
         var popularityIds = await projected
             // PopularityRank 0/null means "unranked" on MAL — sort those last, then
             // by ascending rank (1 = most popular), then title.
             .OrderBy(a => a.PopularityRank == null || a.PopularityRank == 0 ? 1 : 0)
             .ThenBy(a => a.PopularityRank)
-            .ThenBy(a => a.Title)
+            .ThenBy(a => a.DisplayTitle)
             .Select(a => a.Id)
             .ToListAsync(ct);
 
         var malScoreIds = await projected
             .OrderByDescending(a => a.MalScore ?? -1)
-            .ThenBy(a => a.Title)
+            .ThenBy(a => a.DisplayTitle)
             .Select(a => a.Id)
             .ToListAsync(ct);
 
         var alphabeticalIds = await projected
-            .OrderBy(a => a.Title)
+            .OrderBy(a => a.DisplayTitle)
             .Select(a => a.Id)
             .ToListAsync(ct);
 
@@ -186,7 +195,7 @@ public class SeasonRepository(AnimeTrackerDbContext db) : ISeasonRepository
             .ThenBy(x => x.Band == 0 ? (x.Position ?? int.MaxValue) : int.MaxValue)
             .ThenBy(x => x.Band == 3 ? (x.a.PopularityRank == null || x.a.PopularityRank == 0 ? 1 : 0) : 0)
             .ThenBy(x => x.Band == 3 ? x.a.PopularityRank : null)
-            .ThenBy(x => x.a.Title)
+            .ThenBy(x => x.a.DisplayTitle)
             .Select(x => x.a.Id)
             .ToListAsync(ct);
 

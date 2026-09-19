@@ -1,29 +1,30 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { getSeasonBounds, getYearPage, refreshYear } from '../api/client.ts'
+import { Navigate, useSearchParams } from 'react-router-dom'
+import { getYearPage, refreshYear } from '../api/client.ts'
 import type { AnimeBrowseItemDto } from '../api/types.ts'
-import { RECAP_SEASONS, type RecapSeasonName } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
 import { FilterMultiSelect, type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
-import { MEDIA_TYPE_ORDER, mediaTypeLabel, shiftSeason } from '../utils/anime.ts'
-import { EARLIEST_YEAR, FUTURE_SEASON_WINDOW } from './SeasonPage.tsx'
+import { useOnDemandProbe, useSeasonBounds } from '../hooks/useSeasonBounds.ts'
+import { MEDIA_TYPE_ORDER, mediaTypeLabel } from '../utils/anime.ts'
+import { EARLIEST_YEAR, currentSeasonTarget, isAddressableYear, probeTarget, yearsInRange } from '../utils/browseRange.ts'
 import './YearPage.css'
 
 // Year page: every anime MAL classifies under any of the selected year's four
 // seasons, combined into one grid (add-year-browser design D1 — the union is
 // resolved server-side, not merged here). Its effect structure deliberately
 // mirrors SeasonPage's: the two-effect split (cache-first whole-listing read
-// vs. debounced MAL refresh) and the four-way terminal state were each a bug
-// at some point on the season page and are reproduced here rather than
-// reinvented, sharing EARLIEST_YEAR/FUTURE_SEASON_WINDOW with it so the two
-// pages' horizons can never drift apart. Sort, the type filter, and the
-// in-my-list filter never trigger a read — they act on the already-loaded
-// listing in place, sorting by the server-computed sortOrder key rather than
-// reimplementing any ordering rule (design D2, D3).
+// vs. debounced MAL refresh), the four-way terminal state, and the guard/view
+// split (design D2 of bound-browse-range-and-sorting) were each worked out on
+// the season page and reproduced here rather than reinvented, sharing
+// utils/browseRange.ts and hooks/useSeasonBounds.ts with it so the two pages'
+// horizons can never drift apart. Sort, the type filter, and the in-my-list
+// filter never trigger a read — they act on the already-loaded listing in
+// place, sorting by the server-computed sortOrder key rather than
+// reimplementing any ordering rule (design D2, D3 of add-year-browser).
 
 interface YearReadState {
   items: AnimeBrowseItemDto[]
@@ -43,29 +44,93 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 
 const PAGE_SIZE = 24
 
-// Mirrors SeasonPage's own debounce (tasks.md 5.3) — worth four times as
-// much here, since each skipped year is four season refreshes not started.
+// Mirrors SeasonPage's own debounce — worth four times as much here, since
+// each skipped year is four season refreshes not started.
 const REFRESH_DEBOUNCE_MS = 400
-
-function currentYearAndSeason(): { year: number; season: RecapSeasonName } {
-  const now = new Date()
-  return { year: now.getFullYear(), season: RECAP_SEASONS[Math.floor(now.getMonth() / 3)] }
-}
 
 function isSortKey(value: string | null): value is SortKey {
   return value !== null && SORT_OPTIONS.some((option) => option.value === value)
 }
 
-export function YearPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const fallback = useMemo(currentYearAndSeason, [])
+// Carries every other search parameter over, setting only year — used by
+// every replacement below so a rejected link that also names a sort or a
+// type filter lands on the current year with those still applied (design D5).
+function replacementUrl(searchParams: URLSearchParams, year: number): string {
+  const params = new URLSearchParams(searchParams)
+  params.set('year', String(year))
+  return `/year?${params.toString()}`
+}
 
-  const yearParam = Number(searchParams.get('year'))
+// The route guard (design D2): decides, before anything mounts, whether the
+// URL's year addresses a year a client may reach at all — the archive's
+// earliest year through the navigable ceiling's year, at most one year ahead
+// of the current one, and nothing further (design D3). A year at or before
+// the current one is admitted immediately, since the ceiling can never fall
+// below it; a later year waits on GET /api/season/bounds (rendering nothing
+// meanwhile) and is then admitted or replaced with the current year via
+// <Navigate replace>. The one exception is the year holding the horizon
+// probe's own target: addressed directly and still past the ceiling, it earns
+// a single on-demand MAL round trip (design D10a) rather than an outright
+// refusal; any year later than that one is always replaced outright, with no
+// request of any kind. Only once a target is settled does YearPageView — the
+// page body, unchanged from before this split — ever mount.
+export function YearPage() {
+  const [searchParams] = useSearchParams()
+  const current = useMemo(currentSeasonTarget, [])
+  const { ceiling, isPending } = useSeasonBounds()
+
+  const yearParam = searchParams.get('year')
+  const parsedYear = yearParam === null ? NaN : Number(yearParam)
+  const hasValidParam = Number.isInteger(parsedYear)
+  const requestedYear = hasValidParam ? parsedYear : current.year
+
+  const probeSeason = probeTarget(current)
+  const isProbeYear = requestedYear === probeSeason.year
+  const needsOnDemandProbe =
+    hasValidParam && requestedYear > current.year && isProbeYear && !isPending && requestedYear > ceiling.year
+
+  // Hooks must run unconditionally on every render, so this is always called
+  // — it only actually fires a MAL round trip while needsOnDemandProbe is
+  // true (task 4.7).
+  const onDemandCeiling = useOnDemandProbe(needsOnDemandProbe)
+
+  if (!hasValidParam || requestedYear < EARLIEST_YEAR) {
+    return <Navigate to={replacementUrl(searchParams, current.year)} replace />
+  }
+
+  // The archive's earliest year through the current year: the ceiling can
+  // never fall below it, so this is admitted with no wait.
+  if (requestedYear <= current.year) {
+    return <YearPageView year={requestedYear} />
+  }
+
+  // A future year: wait for the ceiling before deciding anything about it.
+  if (isPending) return null
+
+  if (isAddressableYear(requestedYear, ceiling.year)) {
+    return <YearPageView year={requestedYear} />
+  }
+
+  // The one year past the ceiling a URL may still ask about — the year
+  // holding the horizon probe's own target (design D10a).
+  if (isProbeYear) {
+    if (onDemandCeiling === null) return null
+    if (onDemandCeiling.year >= requestedYear) {
+      return <YearPageView year={requestedYear} />
+    }
+  }
+
+  return <Navigate to={replacementUrl(searchParams, current.year)} replace />
+}
+
+function YearPageView({ year }: { year: number }) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { ceiling } = useSeasonBounds()
+
   const sortParam = searchParams.get('sort')
   const inMyListParam = searchParams.get('inMyList')
   const typeParam = searchParams.get('type')
 
-  const year = Number.isInteger(yearParam) && yearParam > 0 ? yearParam : fallback.year
   const sort = isSortKey(sortParam) ? sortParam : 'popularity'
   const inMyList = inMyListParam !== '0'
   // URLSearchParams.get already distinguishes absent (null) from
@@ -100,29 +165,6 @@ export function YearPage() {
   const [refreshOutcome, setRefreshOutcome] = useState<'fetched' | 'notListed' | 'skipped' | 'failed' | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
-  // The navigable ceiling — the furthest year selectable. Seeded with the
-  // year of the same current+2 default the season page seeds (design D3),
-  // not a flat currentYear + 1 — winter + 2 is summer of the *same* year, so
-  // a flat +1 would be wrong for half the calendar. Replaced once
-  // GET /api/season/bounds resolves, ignored on failure.
-  const [ceiling, setCeiling] = useState(() => shiftSeason(fallback.year, fallback.season, FUTURE_SEASON_WINDOW).year)
-
-  useEffect(() => {
-    let cancelled = false
-    getSeasonBounds()
-      .then((bounds) => {
-        if (cancelled) return
-        setCeiling(bounds.latestYear)
-      })
-      .catch(() => {
-        // Keep the client-computed default ceiling — an honest fallback
-        // rather than blocking navigation on this request.
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
   // Read by the debounced refresh effect so it re-reads with whatever
   // hideHentai is current when it actually runs, not whatever was current
   // when it was scheduled.
@@ -149,17 +191,17 @@ export function YearPage() {
   // useState: it resets to PAGE_SIZE on a fresh visit, and a sort or filter
   // change already is one — each goes through setSearchParams, which mints a
   // new history entry, so this reseeds under its new location key with no
-  // code resetting it explicitly (task 2.8).
+  // code resetting it explicitly (task 2.8 of an earlier change).
   const [visibleCount, setVisibleCount] = useRestorableState('visibleCount', PAGE_SIZE)
   const visibleItems = displayed.slice(0, visibleCount)
 
   const firstUnwatchedIndex = sort === 'myScore' ? displayed.findIndex((item) => item.myScore === null) : -1
 
-  // The page's terminal states, in the season page's own order (tasks.md
-  // 5.5): the grid takes priority whenever there's anything to show;
-  // otherwise a cached-but-empty year reports why (no listing vs. filtered
-  // out); otherwise the year has never been cached, so it's either still
-  // loading or its first fetch has settled and produced nothing.
+  // The page's terminal states, in the season page's own order: the grid
+  // takes priority whenever there's anything to show; otherwise a
+  // cached-but-empty year reports why (no listing vs. filtered out);
+  // otherwise the year has never been cached, so it's either still loading
+  // or its first fetch has settled and produced nothing.
   const terminalState: 'grid' | 'filtersEmpty' | 'notListed' | 'loading' | 'loadFailed' =
     displayed.length > 0
       ? 'grid'
@@ -171,14 +213,11 @@ export function YearPage() {
             ? 'loading'
             : 'loadFailed'
 
-  // At or past the ceiling, keeping the viewed year in the list so a
-  // URL-addressed year past the horizon still shows its own year rather than
-  // a <select> with a value it doesn't offer.
-  const yearOptions = useMemo(() => {
-    const earliest = Math.min(EARLIEST_YEAR, year)
-    const latest = Math.max(ceiling, year)
-    return Array.from({ length: latest - earliest + 1 }, (_, i) => latest - i)
-  }, [year, ceiling])
+  // Built from the addressable range's own two ends alone (design D1) — the
+  // guard above has already confirmed `year` sits inside it, so no widening
+  // against the viewed year is needed here anymore. This is the allocation
+  // that used to be sized by the URL's own year value.
+  const yearOptions = useMemo(() => yearsInRange(EARLIEST_YEAR, ceiling.year), [ceiling.year])
 
   // Every media type present in the whole loaded listing — filtering is
   // client-side now, so selecting one type can no longer hide the others
@@ -331,7 +370,12 @@ export function YearPage() {
               <span className="year-page__label">{year}</span>
               {refreshing && <span className="year-page__updating">Updating…</span>}
             </span>
-            <button type="button" onClick={() => setYear(year + 1)} aria-label="Next year" disabled={year >= ceiling}>
+            <button
+              type="button"
+              onClick={() => setYear(year + 1)}
+              aria-label="Next year"
+              disabled={year >= ceiling.year}
+            >
               &rsaquo;
             </button>
           </div>

@@ -680,6 +680,142 @@ public class SeasonBrowseServiceTests
         Assert.Equal(0, malClient.FullSeasonCallCount);
     }
 
+    // --- bound-browse-range-and-sorting: ProbeHorizonAsync (design D10/D10a, tasks.md 2.8) ---
+    //
+    // Background probing (onDemand: false) additionally requires today to
+    // fall in the final month of the current season — that rule is exercised
+    // directly against fabricated dates in HorizonProbeTests. ProbeHorizonAsync
+    // reads the real clock (like RefreshAsync) and can't be handed a fake one,
+    // so onDemand: true — which ignores that one gate — is used below to keep
+    // these tests deterministic on any day they run.
+
+    private static (int Year, string Season) CurrentSeason() =>
+        SeasonCalendar.GetSeasonFor(DateOnly.FromDateTime(DateTime.UtcNow));
+
+    private static (int Year, string Season) ProbeTarget() =>
+        SeasonCalendar.Shift(CurrentSeason().Year, CurrentSeason().Season, 3);
+
+    [Fact]
+    public async Task ProbeHorizonAsync_OnDemandSuccessCachesTheSeasonAndRaisesTheCeiling()
+    {
+        using var db = CreateDb();
+        var target = ProbeTarget();
+        var malClient = new FakeMalClient([SeasonEdge(1, target.Year, target.Season)]);
+        var service = CreateService(db, malClient);
+
+        var bounds = await service.ProbeHorizonAsync(onDemand: true);
+
+        Assert.Equal((target.Year, target.Season), (bounds.LatestYear, bounds.LatestSeason));
+        Assert.Equal(1, malClient.FullSeasonCallCount);
+        Assert.Equal([1], await ListedIds(db, target.Year, target.Season));
+    }
+
+    [Fact]
+    public async Task ProbeHorizonAsync_OnDemand404LeavesBothCeilingsUnchangedAndOnlyStampsTheFetchLog()
+    {
+        using var db = CreateDb();
+        var target = ProbeTarget();
+        var expectedDefaultCeiling = SeasonCalendar.Shift(CurrentSeason().Year, CurrentSeason().Season, 2);
+        var malClient = new FakeMalClient(edges: null);
+        var service = CreateService(db, malClient);
+
+        var bounds = await service.ProbeHorizonAsync(onDemand: true);
+        var range = await service.GetRequestRangeAsync();
+
+        Assert.Equal(expectedDefaultCeiling, (bounds.LatestYear, bounds.LatestSeason));
+        Assert.Equal(expectedDefaultCeiling, (range.LatestYear, range.LatestSeason));
+        Assert.Equal(1, malClient.FullSeasonCallCount);
+        Assert.True(await db.SeasonFetchLogs.AnyAsync(f => f.Year == target.Year && f.Season == target.Season));
+    }
+
+    [Fact]
+    public async Task ProbeHorizonAsync_OnDemandSecondProbeTheSameLocalDayMakesNoMalRequest()
+    {
+        using var db = CreateDb();
+        var malClient = new FakeMalClient(edges: []);
+        var service = CreateService(db, malClient);
+
+        await service.ProbeHorizonAsync(onDemand: true);
+        await service.ProbeHorizonAsync(onDemand: true);
+
+        Assert.Equal(1, malClient.FullSeasonCallCount);
+    }
+
+    [Fact]
+    public async Task ProbeHorizonAsync_BackgroundModeOnlyFetchesInTheFinalMonthOfTheCurrentSeason()
+    {
+        using var db = CreateDb();
+        var malClient = new FakeMalClient(edges: []);
+        var service = CreateService(db, malClient);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var current = SeasonCalendar.GetSeasonFor(today);
+        var isInFinalMonth = today.Month == 3 * (SeasonCalendar.GetSeasonIndex(current.Season) + 1);
+
+        await service.ProbeHorizonAsync();
+
+        Assert.Equal(isInFinalMonth ? 1 : 0, malClient.FullSeasonCallCount);
+    }
+
+    // --- bound-browse-range-and-sorting: RefreshYearAsync trims to the outer ceiling (design D11, tasks.md 3.3) ---
+
+    [Fact]
+    public async Task RefreshYearAsync_APastYearStillRefreshesAllFourSeasons()
+    {
+        using var db = CreateDb();
+        var malClient = new PerSeasonFakeMalClient(SeasonsInYearOrder.ToDictionary(s => s, _ => new MalSeasonResponse(Edges: [])));
+        var service = CreateService(db, malClient);
+
+        await service.RefreshYearAsync(2020);
+
+        Assert.Equal(SeasonsInYearOrder, malClient.CalledSeasons);
+        Assert.Equal(4, malClient.FullSeasonCallCount);
+    }
+
+    [Fact]
+    public async Task RefreshYearAsync_TheCeilingsYearRefreshesOnlyTheSeasonsAtOrBeforeItWithNoRequestForTheRest()
+    {
+        using var db = CreateDb();
+        var current = CurrentSeason();
+        var farYear = current.Year + 5; // comfortably beyond any real "today"'s default ceiling
+        await SeedListing(db, 1, farYear, "summer"); // pins the outer ceiling to (farYear, summer)
+
+        var malClient = new PerSeasonFakeMalClient(new()
+        {
+            ["winter"] = new MalSeasonResponse(Edges: []),
+            ["spring"] = new MalSeasonResponse(Edges: []),
+            ["summer"] = new MalSeasonResponse(Edges: []),
+        });
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshYearAsync(farYear);
+
+        Assert.Equal(SeasonRefreshOutcome.Fetched, result.Outcome);
+        Assert.Equal(["winter", "spring", "summer"], malClient.CalledSeasons);
+        Assert.Equal(3, malClient.FullSeasonCallCount);
+    }
+
+    [Fact]
+    public async Task RefreshYearAsync_AYearWhoseOnlyInRangeSeasonFetchesSuccessfullyReportsFetched()
+    {
+        using var db = CreateDb();
+        var current = CurrentSeason();
+        var farYear = current.Year + 6;
+        await SeedListing(db, 1, farYear, "winter"); // pins the outer ceiling to (farYear, winter) — only that one season is in range
+
+        var malClient = new PerSeasonFakeMalClient(new()
+        {
+            ["winter"] = new MalSeasonResponse(Edges: []),
+        });
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshYearAsync(farYear);
+
+        Assert.Equal(SeasonRefreshOutcome.Fetched, result.Outcome);
+        Assert.Equal(["winter"], malClient.CalledSeasons);
+        Assert.Equal(1, malClient.FullSeasonCallCount);
+    }
+
     private sealed record MalSeasonResponse(List<MalAnimeListEdge>? Edges, bool Throws = false);
 
     // Per-season configurable fake — RefreshYearAsync's fold needs each of a

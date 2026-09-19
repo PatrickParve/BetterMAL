@@ -39,6 +39,27 @@
   border-color: var(--accent-border);
 }
 
+/* Reset filters & sort is the way out of a narrowed list, so it is drawn as
+   the app's filled accent call-to-action (matches
+   EntryEditorOverlay.css's .entry-editor__save) rather than sharing the
+   plain look "Recap a period" keeps — same height, padding, radius and
+   position as the plain button so nothing reflows when it appears. Specificity
+   bumped to beat .my-list-page__clear-filters above, which would otherwise win
+   on source order and mask this colour entirely. */
+.my-list-page__clear-filters.my-list-page__clear-filters--reset {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* A filled control doesn't change colour on hover, the same rule the
+   editor's Save button follows. */
+.my-list-page__clear-filters.my-list-page__clear-filters--reset:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 /* The results line (library-views "My list reports what is being shown"):
    just the recap scope chip now that the ALL count lives on every group
    header instead — only rendered while scoped (MyListPage's

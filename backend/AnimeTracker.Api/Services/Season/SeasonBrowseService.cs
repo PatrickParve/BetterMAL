@@ -99,6 +99,32 @@ public class SeasonBrowseService(
         return new SeasonRequestRange(SeasonCalendar.EarliestArchiveYear, outer.Year, outer.Season);
     }
 
+    // The probe's own gate is checked before RefreshAsync's age-based one and
+    // is strictly stricter (it additionally requires the target to be past
+    // the outer ceiling and, outside onDemand, inside the last month of the
+    // season), so the two can never disagree about whether to fetch.
+    // Reaching past the accepted range is safe here specifically because the
+    // target is current + 3 while LoadHorizonAsync only loads candidate
+    // points for current..current + 2: NotListedToday (in GetBoundsAsync)
+    // never sees the probed season, so a 404 probe cannot lower either
+    // ceiling — it only ever raises one, or changes nothing (design D10).
+    public async Task<SeasonBoundsDto> ProbeHorizonAsync(bool onDemand = false, CancellationToken ct = default)
+    {
+        var (current, todayLocalDate, inputs) = await LoadHorizonAsync(ct);
+        var outerCeiling = SeasonHorizon.ResolveOuter(current, inputs.LatestCachedSeason);
+        var target = HorizonProbe.Target(current);
+
+        var targetLastFetchedAt = await seasonRepository.GetLastFetchedAsync(target.Year, target.Season, ct);
+        var targetLastFetchedLocalDate = targetLastFetchedAt is { } fetchedAt
+            ? broadcastConverter.GetLocalDate(fetchedAt)
+            : (DateOnly?)null;
+
+        if (HorizonProbe.ShouldProbe(current, todayLocalDate, outerCeiling, targetLastFetchedLocalDate, onDemand))
+            await RefreshAsync(target.Year, target.Season, ct); // swallows and logs its own failures; a probe must never fail a page visit
+
+        return await GetBoundsAsync(ct); // recomputed fresh — the probe above may just have changed what it would return
+    }
+
     private async Task<((int Year, string Season) Current, DateOnly TodayLocalDate, SeasonHorizonInputs Inputs)> LoadHorizonAsync(CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
@@ -133,17 +159,31 @@ public class SeasonBrowseService(
     }
 
     // A year's own DbContext is scoped per request and not thread-safe, so
-    // the four season refreshes below must run one after another rather than
+    // the season refreshes below must run one after another rather than
     // concurrently (design D2) — that also means most visits do nothing more
-    // than four cheap freshness checks, since RefreshAsync's own cadence gate
-    // short-circuits before touching MAL. Looping RefreshAsync over the four
+    // than a few cheap freshness checks, since RefreshAsync's own cadence gate
+    // short-circuits before touching MAL. Looping RefreshAsync over the
     // seasons is also what gives a year its per-season intervals with no new
     // code: each season answers the freshness question on its own age, so a
     // year straddling an age boundary may fetch some seasons and skip others.
+    // The loop is filtered to the seasons within the outer ceiling — the
+    // accepted range, not the navigable one, so a season MAL 404'd today is
+    // still re-read — rather than all four unconditionally: with the horizon
+    // probe (HorizonProbe) now the deliberate discovery path, asking about a
+    // season that cannot exist would spend a guaranteed-404 MAL request for
+    // nothing (design D11, sequenced after D10 — tasks.md 3.4).
     public async Task<YearRefreshResultDto> RefreshYearAsync(int year, CancellationToken ct = default)
     {
+        var (current, _, inputs) = await LoadHorizonAsync(ct);
+        var outer = SeasonHorizon.ResolveOuter(current, inputs.LatestCachedSeason);
+        var outerIndex = SeasonCalendar.GetSeasonPointIndex(outer.Year, outer.Season);
+
+        var seasonsInRange = SeasonsInYearOrder
+            .Where(season => SeasonCalendar.GetSeasonPointIndex(year, season) <= outerIndex)
+            .ToList();
+
         var outcomes = new List<SeasonRefreshOutcome>();
-        foreach (var season in SeasonsInYearOrder)
+        foreach (var season in seasonsInRange)
         {
             var result = await RefreshAsync(year, season, ct);
             outcomes.Add(result.Outcome);
@@ -159,12 +199,16 @@ public class SeasonBrowseService(
     // already current today is current, not unlisted or broken; NotListed
     // outranks Failed so a genuinely unopened year reports the honest
     // "not listed" rather than a retry message; only a year where every
-    // season failed is reported as failed.
+    // season failed is reported as failed. An empty outcome list — every
+    // season of the year lies beyond the outer ceiling — also reports
+    // NotListed rather than Failed (design D11): an addressable year always
+    // has at least one season inside the range, but this is the honest
+    // fallback if that ever weren't so.
     private static SeasonRefreshOutcome FoldOutcomes(IReadOnlyCollection<SeasonRefreshOutcome> outcomes)
     {
         if (outcomes.Contains(SeasonRefreshOutcome.Fetched)) return SeasonRefreshOutcome.Fetched;
         if (outcomes.Contains(SeasonRefreshOutcome.Skipped)) return SeasonRefreshOutcome.Skipped;
-        if (outcomes.Contains(SeasonRefreshOutcome.NotListed)) return SeasonRefreshOutcome.NotListed;
+        if (outcomes.Contains(SeasonRefreshOutcome.NotListed) || outcomes.Count == 0) return SeasonRefreshOutcome.NotListed;
         return SeasonRefreshOutcome.Failed;
     }
 

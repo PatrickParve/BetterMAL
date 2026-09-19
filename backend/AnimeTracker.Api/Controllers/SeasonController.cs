@@ -66,4 +66,21 @@ public class SeasonController(ISeasonBrowseService seasonBrowseService) : Contro
         var bounds = await seasonBrowseService.GetBoundsAsync(ct);
         return Ok(bounds);
     }
+
+    /// <summary>Probes the one season past the navigable ceiling that a page
+    /// visit is allowed to reach for (see HorizonProbe), returning the bounds
+    /// either way. Takes no year or season: the target is derived from the
+    /// ceiling server-side, so reaching past the accepted range stays one
+    /// fixed rule rather than something a caller can ask for — the season
+    /// endpoints above still refuse that same season by name with a
+    /// <c>400</c>. <paramref name="onDemand"/> is for a URL addressing the
+    /// probe's own target directly: it keeps the once-per-day gate but skips
+    /// the last-month window, so an explicit question is answered rather than
+    /// refused.</summary>
+    [HttpPost("api/season/horizon/probe")]
+    public async Task<IActionResult> ProbeHorizon([FromQuery] bool onDemand = false, CancellationToken ct = default)
+    {
+        var bounds = await seasonBrowseService.ProbeHorizonAsync(onDemand, ct);
+        return Ok(bounds);
+    }
 }

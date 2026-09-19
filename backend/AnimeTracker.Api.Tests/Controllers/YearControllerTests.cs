@@ -175,5 +175,8 @@ public class YearControllerTests
 
         public Task<SeasonRequestRange> GetRequestRangeAsync(CancellationToken ct = default) =>
             Task.FromResult(new SeasonRequestRange(1917, 2027, "winter"));
+
+        public Task<SeasonBoundsDto> ProbeHorizonAsync(bool onDemand = false, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 }
