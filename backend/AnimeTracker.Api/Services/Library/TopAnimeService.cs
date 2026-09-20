@@ -25,10 +25,10 @@ public class TopAnimeService(
 {
     private const int RankingSize = 500;
 
+    // Cache-only: never calls MAL. RefreshAsync below is the visit path that
+    // keeps the cache current; this just reads whatever it last wrote.
     public async Task<List<TopAnimeItemDto>> GetRankingAsync(string rankingType, CancellationToken ct = default)
     {
-        await EnsureFreshAsync(rankingType, ct);
-
         var rows = await topAnimeRepository.GetRankingAsync(rankingType, ct);
 
         // Resolved for the whole ranking in one bulk query rather than one
@@ -57,26 +57,28 @@ public class TopAnimeService(
     // waiter re-checks IsFreshAsync inside the lock, so it sees the first
     // refresh's stamp and skips a second MAL fetch instead of racing it. The
     // gate key is per ranking type, so different lists refresh in parallel.
-    private async Task EnsureFreshAsync(string rankingType, CancellationToken ct)
+    public async Task<TopAnimeRefreshResultDto> RefreshAsync(string rankingType, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
         var todayLocalDate = broadcastConverter.GetLocalDate(now);
 
         if (await IsFreshAsync(rankingType, todayLocalDate, ct))
-            return;
+            return new TopAnimeRefreshResultDto(TopAnimeRefreshOutcome.Skipped);
 
         using (await refreshGate.LockAsync($"top-anime:{rankingType}", ct))
         {
             if (await IsFreshAsync(rankingType, todayLocalDate, ct))
-                return;
+                return new TopAnimeRefreshResultDto(TopAnimeRefreshOutcome.Skipped);
 
             try
             {
                 await FetchAndCacheAsync(rankingType, now, ct);
+                return new TopAnimeRefreshResultDto(TopAnimeRefreshOutcome.Fetched);
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to live-fetch the {RankingType} Top Anime ranking; serving whatever is already cached.", rankingType);
+                return new TopAnimeRefreshResultDto(TopAnimeRefreshOutcome.Failed);
             }
         }
     }

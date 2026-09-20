@@ -167,9 +167,10 @@
   text-align: right;
 }
 
-/* Right-aligned column, so a hidden score's reveal control ends where the
-   value would end rather than sitting centred in the column (design.md D7,
-   score-visibility spec). */
+/* Right-aligned column — no longer the row's last score, but still aligned
+   to its own end rather than to the row's, so a hidden score's reveal
+   control ends where the value would end and the column stays aligned with
+   itself down the page (design.md D5, score-visibility spec). */
 .top-anime-row__mal-score .score-value {
   justify-content: flex-end;
 }
@@ -601,9 +602,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* MAL sits at the card's trailing edge, opposite my score at its leading
-   edge, so a hidden score's reveal control ends where the value would end
-   (design.md D7). */
+/* MAL sits at the card's leading edge, opposite my score at its trailing
+   edge, so a hidden score's reveal control starts where the value would
+   start (design.md D5, score-visibility spec). */
 .top-anime-card__scores .score-value {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }

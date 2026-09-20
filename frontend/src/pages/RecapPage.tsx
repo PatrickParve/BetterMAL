@@ -643,10 +643,10 @@ export function RecapPage() {
           </span>
         </Link>
         <span className="recap-hot-take__scores">
-          <span className="score--mine">{take.myScore}</span>
           <span className="score--mal">
             <ScoreValue value={take.malScore} completed={take.malRevealed} />
           </span>
+          <span className="score--mine">{take.myScore}</span>
         </span>
         <span
           className={

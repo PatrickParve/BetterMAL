@@ -359,6 +359,10 @@ export type TopAnimeItemDto = {
   episodesAired: number | null
 }
 
+export type TopAnimeRefreshResultDto = {
+  outcome: 'fetched' | 'skipped' | 'failed'
+}
+
 // The Top anime page's ranking-list selector. Mirrors the backend's
 // TopAnimeRankingType allow-list — ona and music are absent because MAL API
 // v2 rejects those ranking_type values with 400 (design.md D1).

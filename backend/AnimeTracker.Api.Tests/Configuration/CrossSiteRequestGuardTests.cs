@@ -158,7 +158,7 @@ public class CrossSiteRequestGuardTests
         "api/series/list",
         "api/sync/held",                     // writes: clears held changes MAL already agrees with (HeldChangeService.GetHeldAsync, design D8a)
         "api/sync/reconcile/pending",
-        "api/top-anime",                     // writes: refreshes the ranking from MAL at most once per local day (TopAnimeService.EnsureFreshAsync)
+        "api/top-anime",                      // cache-only read; the refresh that used to run inline is now the separate POST api/top-anime/refresh
         "api/transfer/export",
         "api/transfer/import/status",
         "api/updates/history",

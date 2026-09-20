@@ -32,6 +32,7 @@ import type {
   TopAnimeItemDto,
   TopAnimeMediaType,
   TopAnimeRankingType,
+  TopAnimeRefreshResultDto,
   TopAnimeSectionDto,
   TopSeriesSectionDto,
   TransferImportStatusDto,
@@ -295,6 +296,11 @@ export function getRecapAvailability(): Promise<RecapAvailabilityDto> {
 export function getTopAnime(type: TopAnimeRankingType): Promise<TopAnimeItemDto[]> {
   const query = type === 'all' ? '' : `?type=${encodeURIComponent(type)}`
   return fetchJson<TopAnimeItemDto[]>(`/api/top-anime${query}`)
+}
+
+export function refreshTopAnime(type: TopAnimeRankingType): Promise<TopAnimeRefreshResultDto> {
+  const query = type === 'all' ? '' : `?type=${encodeURIComponent(type)}`
+  return fetchJson<TopAnimeRefreshResultDto>(`/api/top-anime/refresh${query}`, { method: 'POST' })
 }
 
 export function getProfile(): Promise<ProfileDto> {

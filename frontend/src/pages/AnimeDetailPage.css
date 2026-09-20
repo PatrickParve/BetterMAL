@@ -230,11 +230,13 @@
 }
 
 /* The hidden branch's only child is a <button> with no text baseline, same
-   fix as .score-value (ScoreValue.css). */
+   fix as .score-value (ScoreValue.css) — and the same reveal-control-has-no-
+   text-line reason for the height floor below. */
 .anime-detail-page__rank-slot {
   display: inline-flex;
   align-items: center;
   vertical-align: middle;
+  min-height: 1lh;
 }
 
 .detail-box {

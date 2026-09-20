@@ -152,8 +152,15 @@ function RankValue({ rank, completed }: { rank: number | null; completed: boolea
   const { hidden, alwaysShowCompletedScores } = useScoreVisibility();
   const [revealed, reveal] = useScoreReveal();
 
-  if (rank == null) return <>—</>;
-  if (!hidden || revealed || (completed && alwaysShowCompletedScores)) return <>#{rank}</>;
+  // Every branch renders inside .anime-detail-page__rank-slot, not just the
+  // hidden one — its vertical-align: middle changes the <p> line's own
+  // height (ScoreValue.css / AnimeDetailPage.css), so a branch rendered
+  // without it would sit on a shorter line than the others and the box
+  // would resize when this rank's reveal state changes.
+  if (rank == null) return <span className="anime-detail-page__rank-slot">—</span>;
+  if (!hidden || revealed || (completed && alwaysShowCompletedScores)) {
+    return <span className="anime-detail-page__rank-slot">#{rank}</span>;
+  }
 
   return (
     <span className="anime-detail-page__rank-slot" style={{ minWidth: `${String(rank).length + 1}ch` }}>

@@ -65,3 +65,13 @@
   font-weight: 400;
 }
 
+/* At this density one text line (~13px, from the 11px font above) is
+   *shorter* than the reveal control's own height (13px icon + 2px padding
+   on each side) — the opposite of the general case, so .score-chip__value's
+   1lh floor can't help, because here the control is the taller of the two
+   forms. Held to one line of its own context instead, so the row doesn't
+   grow purely from being hidden. */
+.score-chip--compact .reveal-control {
+  height: 1lh;
+  padding: 0;
+}

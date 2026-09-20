@@ -7,5 +7,9 @@
      without this the inline-flex box falls back to a synthesized baseline
      (its own bottom edge) and sits noticeably higher than surrounding text. */
   vertical-align: middle;
+  /* The reveal control has no text line of its own, so without a floor the
+     slot is shorter hidden than shown (same reason as ScoreChip.css's
+     .score-chip__value floor). */
+  min-height: 1lh;
   font-variant-numeric: tabular-nums;
 }

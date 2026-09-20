@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ApiError, getTopAnime, updateEntry } from '../api/client.ts'
+import { ApiError, getTopAnime, refreshTopAnime, updateEntry } from '../api/client.ts'
 import { TOP_ANIME_RANKING_TYPES, type TopAnimeItemDto, type TopAnimeRankingType } from '../api/types.ts'
 import { Pagination } from '../components/Pagination.tsx'
 import { RowPicture } from '../components/RowPicture.tsx'
@@ -21,15 +21,64 @@ function isRankingType(value: string | null): value is TopAnimeRankingType {
 
 // A given ranking list (up to 500 rows) is identical regardless of which page
 // is being viewed — `page` only slices it client-side — so each list is
-// cached at module scope and fetched at most once per app session, rather
-// than through usePageData's per-history-entry cache. That cache is keyed by
+// cached at module scope and read at most once per app session, rather than
+// through usePageData's per-history-entry cache. That cache is keyed by
 // location, so it would treat every page's own URL (see `page` below), and
 // every list's own URL (see `type` below), as a distinct resource needing its
 // own network fetch, flashing "Loading…" on every page or list change even
 // though a given list's data never varies once fetched. Keyed by ranking type
 // so switching lists doesn't invalidate or block on another list's cache.
+//
+// A type's first load reads the server's cache (GetRankingAsync — cache-only,
+// never calls MAL) and resolves with it immediately; that load then posts one
+// background refresh (RefreshAsync) for the type. A `fetched` outcome re-reads
+// and replaces the cached rows for that type, in place, with no loading
+// state; `skipped` and `failed` leave the cache exactly as it is. The refresh
+// rides along with a type's first load only — reusing an already-cached type
+// makes no request of any kind — so a list is refreshed at most once per
+// session however often it's re-selected (design D3).
 const cachedItemsByType = new Map<TopAnimeRankingType, TopAnimeItemDto[]>()
 const inFlightLoadByType = new Map<TopAnimeRankingType, Promise<TopAnimeItemDto[]>>()
+
+// Add/Edit/Delete entries made this session, keyed by anime id, re-applied
+// over any freshly re-read list before it replaces the cached one — a
+// background refresh's re-read can otherwise race an edit's own write and
+// revert it (design D4). Holds the same value setEntry below already
+// computes per anime, so this is a record of what it did, not new state to
+// keep in sync.
+const sessionEditsByAnimeId = new Map<number, TopAnimeItemDto['entry']>()
+
+// Mounted instances register here so a background refresh landing while
+// they're already on screen reaches the DOM even without a list switch —
+// mutating the Maps above doesn't itself trigger a React re-render.
+const cacheUpdateListeners = new Set<() => void>()
+
+function notifyCacheUpdate() {
+  for (const listener of cacheUpdateListeners) listener()
+}
+
+function applySessionEdits(items: TopAnimeItemDto[]): TopAnimeItemDto[] {
+  if (sessionEditsByAnimeId.size === 0) return items
+  return items.map((item) =>
+    sessionEditsByAnimeId.has(item.animeId) ? { ...item, entry: sessionEditsByAnimeId.get(item.animeId) ?? null } : item,
+  )
+}
+
+function refreshInBackground(type: TopAnimeRankingType) {
+  refreshTopAnime(type)
+    .then((result) => {
+      if (result.outcome !== 'fetched') return undefined
+
+      return getTopAnime(type).then((fresh) => {
+        cachedItemsByType.set(type, applySessionEdits(fresh))
+        notifyCacheUpdate()
+      })
+    })
+    .catch(() => {
+      // Swallowed like every other background refresh in this app — the
+      // cached rows, if any, are left exactly as they are.
+    })
+}
 
 // The most recently displayed list, tracked at module scope (not component
 // state) so that even across an unmount/remount — leaving Top Anime and
@@ -45,6 +94,7 @@ function loadTopAnimeOnce(type: TopAnimeRankingType): Promise<TopAnimeItemDto[]>
     inFlight = getTopAnime(type).then((result) => {
       cachedItemsByType.set(type, result)
       inFlightLoadByType.delete(type)
+      refreshInBackground(type)
       return result
     })
     inFlightLoadByType.set(type, inFlight)
@@ -80,6 +130,16 @@ export function TopAnimePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { openEditor } = useEntryEditor()
   const reportFailure = useActionFailure()
+  const [, forceRerender] = useReducer((n: number) => n + 1, 0)
+
+  // Picks up a background refresh landing for the list already on screen —
+  // see `cacheUpdateListeners` above.
+  useEffect(() => {
+    cacheUpdateListeners.add(forceRerender)
+    return () => {
+      cacheUpdateListeners.delete(forceRerender)
+    }
+  }, [])
 
   const typeParam = searchParams.get('type')
   const selectedType: TopAnimeRankingType = isRankingType(typeParam) ? typeParam : 'all'
@@ -124,8 +184,11 @@ export function TopAnimePage() {
   // an anime added from one list must also flip to "Edit" in every other
   // cached list it appears in (design.md D8) — so a later list switch, page
   // navigation, or a full remount sees the change instead of reverting to the
-  // last network response.
+  // last network response. Also recorded in `sessionEditsByAnimeId` so a
+  // background refresh's re-read can't revert it either (design D4).
   function setEntry(animeId: number, entry: TopAnimeItemDto['entry']) {
+    sessionEditsByAnimeId.set(animeId, entry)
+
     const patch = (list: TopAnimeItemDto[]) =>
       list.map((item) => (item.animeId === animeId ? { ...item, entry } : item))
 
@@ -296,11 +359,11 @@ export function TopAnimePage() {
                       </span>
                     </Link>
                     <div className="top-anime-showcase__scores">
-                      <ScoreChip role="mine" label="My score">
-                        {item.entry?.myScore ?? '—'}
-                      </ScoreChip>
                       <ScoreChip role="mal" label="MAL score">
                         <ScoreValue value={item.malScore} completed={isScoreRevealableStatus(item.entry?.status)} />
+                      </ScoreChip>
+                      <ScoreChip role="mine" label="My score">
+                        {item.entry?.myScore ?? '—'}
                       </ScoreChip>
                     </div>
                   </div>
@@ -330,10 +393,10 @@ export function TopAnimePage() {
                     </span>
                   </Link>
                   <span className="top-anime-card__scores">
-                    <span className="score--mine">{item.entry?.myScore ?? '—'}</span>
                     <span className="score--mal">
                       <ScoreValue value={item.malScore} completed={isScoreRevealableStatus(item.entry?.status)} />
                     </span>
+                    <span className="score--mine">{item.entry?.myScore ?? '—'}</span>
                   </span>
                 </li>
               ))}
@@ -351,10 +414,10 @@ export function TopAnimePage() {
                       {pickDisplayTitle(item.title, item.englishTitle)}
                     </span>
                   </Link>
-                  <span className="top-anime-row__my-score score--mine">{item.entry?.myScore ?? '—'}</span>
                   <span className="top-anime-row__mal-score score--mal">
                     <ScoreValue value={item.malScore} completed={isScoreRevealableStatus(item.entry?.status)} />
                   </span>
+                  <span className="top-anime-row__my-score score--mine">{item.entry?.myScore ?? '—'}</span>
                   {renderActionButton(item, 'top-anime-row__action')}
                 </li>
               ))}

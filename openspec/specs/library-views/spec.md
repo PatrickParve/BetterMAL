@@ -4,13 +4,17 @@
 The library-views capability governs My List and Top Anime: how my list is grouped, filtered by status, type, airing state and score, and sorted two levels deep, with grouping as an explicit choice rather than a side effect of sorting; how Top Anime's several ranking lists are drawn and refreshed daily; and the inline row actions both views share. Ranked order within either view reads anime-ranking rather than computing its own, and my list can be scoped in place to a recap period without leaving it.
 ## Requirements
 ### Requirement: My list grouped and ordered by status
-The system SHALL present my list as one list grouped and ordered as Currently watching → Rewatching → On hold → Plan to watch → Completed → Dropped, where each entry shows picture, title, type (TV/movie), progress, my score, MAL score (respecting the hide/unhide toggle), and an edit button. Rewatching sits directly after Currently watching because both are runs in progress. For entries in the **Plan to watch** group, each row SHALL additionally show an airing-status indicator alongside the type — **Not aired**, **Airing**, or **Aired** (mapped from the anime's `not_yet_aired`, `currently_airing`, and `finished_airing` values) — so the user can tell at a glance whether a queued show is already out, still airing, or has not yet started; when the airing status is unknown, no indicator is shown.
+The system SHALL present my list as one list grouped and ordered as Currently watching → Rewatching → On hold → Plan to watch → Completed → Dropped, where each entry shows picture, title, type (TV/movie), progress, MAL score (respecting the hide/unhide toggle), my score, and an edit button. The MAL score column SHALL sit ahead of the my-score control, per the `score-presentation` capability's ordering of a MAL/mine score pair; both columns keep the width and the centred alignment they have today, so the list's columns stay aligned with themselves. Rewatching sits directly after Currently watching because both are runs in progress. For entries in the **Plan to watch** group, each row SHALL additionally show an airing-status indicator alongside the type — **Not aired**, **Airing**, or **Aired** (mapped from the anime's `not_yet_aired`, `currently_airing`, and `finished_airing` values) — so the user can tell at a glance whether a queued show is already out, still airing, or has not yet started; when the airing status is unknown, no indicator is shown.
 
 Rows outside Plan to watch SHALL also show the airing-status indicator while the user is working with airing status — that is, while the airing-status filter has a selection — since the indicator is the value being filtered on. Outside that case, rows in other status groups SHALL NOT show the indicator.
 
 #### Scenario: Rendering the grouped list
 - **WHEN** the my-list page loads
-- **THEN** entries appear grouped in the order Currently watching, Rewatching, On hold, Plan to watch, Completed, Dropped, each showing picture, title, type, progress, my score, MAL score, and an edit button
+- **THEN** entries appear grouped in the order Currently watching, Rewatching, On hold, Plan to watch, Completed, Dropped, each showing picture, title, type, progress, MAL score, my score, and an edit button
+
+#### Scenario: The MAL score leads the pair
+- **WHEN** I look at any my-list row showing both scores
+- **THEN** the MAL score appears before my own score's control, and the Edit button still follows both
 
 #### Scenario: Rewatching sits with the in-progress groups
 - **WHEN** my list holds both Rewatching and Completed entries
@@ -818,7 +822,7 @@ Adding or editing an anime from one ranking list SHALL update that anime whereve
 - **THEN** going back to the All ranking shows that anime with an "Edit" action, not "Add"
 
 ### Requirement: Top anime ranked list
-The system SHALL present a Top anime page as a ranked list covering up to rank 500, where every entry — whatever form it takes — shows its rank, picture, title, my score, and MAL score. The page shows one selected ranking list at a time (see "Top anime ranking list selector"); everything below applies to whichever list is selected. Because this page ranks anime overall, an entry's anime may not be in my list; the flat-row tier (rank 11 and beyond) SHALL additionally carry a list-action button, conditional — "Add" when the anime is not yet in my list, and "Edit" when it is — the showcase and top-ten tiers (ranks 1–10) SHALL NOT carry one, keeping those tiers focused on the ranking and scores alone. The list SHALL be paginated at 50 entries per page, with page-number controls plus left/right arrows at the bottom, and left/right arrow controls at the top-right.
+The system SHALL present a Top anime page as a ranked list covering up to rank 500, where every entry — whatever form it takes — shows its rank, picture, title, MAL score, and my score, in that order, per the `score-presentation` capability's ordering of a MAL/mine score pair. The page shows one selected ranking list at a time (see "Top anime ranking list selector"); everything below applies to whichever list is selected. Because this page ranks anime overall, an entry's anime may not be in my list; the flat-row tier (rank 11 and beyond) SHALL additionally carry a list-action button, conditional — "Add" when the anime is not yet in my list, and "Edit" when it is — the showcase and top-ten tiers (ranks 1–10) SHALL NOT carry one, keeping those tiers focused on the ranking and scores alone. The list SHALL be paginated at 50 entries per page, with page-number controls plus left/right arrows at the bottom, and left/right arrow controls at the top-right.
 
 The page-number controls SHALL show the first page, the last page, and the current page with at most one page on each side of it, collapsing any gap between those groups into an ellipsis. On page 6 of 10 this yields `1 … 5 6 7 … 10`.
 
@@ -828,13 +832,13 @@ Changing the page, by any control, SHALL add a step to the browser's own navigat
 
 The ranking SHALL be presented in three tiers, each visually distinct from the next, so the shape of the page itself communicates where an anime sits in the ranking:
 
-- **Ranks 1–3 — showcase cards.** Three cards, each a self-contained bordered surface carrying its rank, poster, title, and both scores. They SHALL be laid out in ascending rank order following the reading direction, so the first card is rank 1; the presentation SHALL NOT reorder them visually away from their document order. Each card SHALL carry a prominent rank badge in a gold, silver, and bronze family for ranks 1, 2, and 3 respectively, and the card SHALL pick up its own medal colour beyond the badge (for example in its border and surface tint) so the three are distinguishable from one another at a glance and from every other tier. Rank 1 SHALL read as the most prominent of the three. The medal colours SHALL render the same in light and dark mode, since a medal's colour is its meaning. The card's two score chips SHALL be the same size as each other regardless of their label or value text differing in length, so the pair reads as one deliberate row rather than two mismatched boxes.
-- **Ranks 4–10 — top-ten card row.** A single row of poster cards, smaller than the showcase cards, each carrying its own rank badge, title, and both scores, inside a bordered, coloured box of its own so the tier reads as a defined group rather than loose posters. The badge SHALL remain fully legible over any poster artwork, bright or dark, rather than relying on a translucent overlay whose contrast depends on the art beneath it.
-- **Ranks 11 and beyond — flat rows.** The existing full-width rows, each with plain `#N` rank text, poster, title, my score, right-aligned MAL score, and its action button.
+- **Ranks 1–3 — showcase cards.** Three cards, each a self-contained bordered surface carrying its rank, poster, title, and both scores, the MAL chip leading and my score's chip following it. They SHALL be laid out in ascending rank order following the reading direction, so the first card is rank 1; the presentation SHALL NOT reorder them visually away from their document order. Each card SHALL carry a prominent rank badge in a gold, silver, and bronze family for ranks 1, 2, and 3 respectively, and the card SHALL pick up its own medal colour beyond the badge (for example in its border and surface tint) so the three are distinguishable from one another at a glance and from every other tier. Rank 1 SHALL read as the most prominent of the three. The medal colours SHALL render the same in light and dark mode, since a medal's colour is its meaning. The card's two score chips SHALL be the same size as each other regardless of their label or value text differing in length, so the pair reads as one deliberate row rather than two mismatched boxes.
+- **Ranks 4–10 — top-ten card row.** A single row of poster cards, smaller than the showcase cards, each carrying its own rank badge, title, and both scores, inside a bordered, coloured box of its own so the tier reads as a defined group rather than loose posters. The two scores SHALL sit at opposite edges of the card as they do today, with the MAL score now at the leading edge and my score at the trailing one. The badge SHALL remain fully legible over any poster artwork, bright or dark, rather than relying on a translucent overlay whose contrast depends on the art beneath it.
+- **Ranks 11 and beyond — flat rows.** The existing full-width rows, each with plain `#N` rank text, poster, title, right-aligned MAL score, my score, and its action button. The MAL column SHALL keep the end-of-cell alignment it has today, so the column of scores stays aligned with itself in its new position.
 
 The showcase tier's medal identity SHALL be drawn from the application-wide medal colours — the same gold, silver, and bronze the recap podium uses — rather than from a palette local to this page, so the two surfaces that rank a top three in the app cannot drift apart in colour. Its rank badge SHALL take the same form as the recap podium's: a medal-coloured outline around a neutral fill, carrying the rank as a bare number. The medal treatment carried over SHALL be colour and badge form only; the podium's own sizing, entrance animation, hover response, and rank-1 sheen SHALL NOT follow it onto this page.
 
-A showcase card's score chips SHALL be compact — sized for the narrow column beside the poster rather than to the app's default chip width — and within them the role label ("My score", "MAL") SHALL be large enough to read as a label rather than as fine print, at a size closer to its own value's than today's, while staying subordinate to that value.
+A showcase card's score chips SHALL be compact — sized for the narrow column beside the poster rather than to the app's default chip width — and within them the role label ("MAL score", "My score") SHALL be large enough to read as a label rather than as fine print, at a size closer to its own value's than today's, while staying subordinate to that value.
 
 Both card tiers (ranks 1–3 and 4–10) SHALL render an entry's poster in the same proportions the anime pages give that poster, so the artwork shown here is the artwork the anime's own detail page shows, not a differently-cropped portion of it. Neither tier SHALL crop a poster to proportions narrower than that box in order to fit its layout. The flat-row tier's small thumbnail is unaffected by this rule.
 
@@ -844,7 +848,11 @@ Because a page holds 50 entries, the showcase and top-ten tiers SHALL appear onl
 
 #### Scenario: Rendering the top-anime ranking
 - **WHEN** the top-anime page loads
-- **THEN** it shows the first page of 50 entries of the selected list, each with its rank, picture, title, my score, and MAL score, plus a list-action button for entries in the flat-row tier
+- **THEN** it shows the first page of 50 entries of the selected list, each with its rank, picture, title, MAL score, and my score, plus a list-action button for entries in the flat-row tier
+
+#### Scenario: Every tier puts MAL first
+- **WHEN** I look at a showcase card, a ranks-4-to-10 card, and a flat row on the same page
+- **THEN** all three show MAL's score ahead of my own
 
 #### Scenario: Paginating the ranking
 - **WHEN** I use the page-number controls or the left/right arrows (at the bottom or top-right)
@@ -899,8 +907,8 @@ Because a page holds 50 entries, the showcase and top-ten tiers SHALL appear onl
 - **THEN** the showcase cards appear without an entrance animation, rank 1 carries no sweeping sheen, and hovering a card does not lift it
 
 #### Scenario: A showcase card's two score boxes match
-- **WHEN** I look at a showcase card's "My score" and "MAL" chips
-- **THEN** the two boxes are the same width and height as each other, even though "My score" is longer text than "MAL"
+- **WHEN** I look at a showcase card's "MAL score" and "My score" chips
+- **THEN** the two boxes are the same width and height as each other, even though "My score" and "MAL score" differ in text length
 
 #### Scenario: A showcase chip's label is readable
 - **WHEN** I look at a showcase card's score chips
@@ -931,13 +939,29 @@ Because a page holds 50 entries, the showcase and top-ten tiers SHALL appear onl
 - **THEN** its entries are numbered from rank 1, with the top three in the showcase tier, rather than carrying their positions in the overall ranking
 
 ### Requirement: Daily refresh of the Top Anime ranking
-The system SHALL re-fetch a Top Anime ranking list's lean listing fields the first time that list is viewed on a local calendar day after its own last fetch, serving it from cache on same-day revisits. Each selectable list SHALL keep its own last-fetched time, so viewing one list never marks another as fetched for the day. If a list has never been viewed, it SHALL never be proactively fetched — opening the page SHALL NOT warm the lists the user has not selected.
+The system SHALL serve a Top Anime ranking list from its cache without waiting on MyAnimeList, and SHALL refresh that list from MAL separately from the read that serves it. Reading a list SHALL therefore never block on a live fetch: whatever is cached for that list is answered immediately, however stale, and the refresh runs alongside.
 
-At most one refresh per list SHALL be in flight at a time: a second request for the same list arriving while its refresh is running SHALL wait for it and then serve the refreshed cache, rather than starting a second fetch of that list. Requests for two different lists SHALL NOT wait on each other. A fetch that fails SHALL NOT count as that list's fetch for the day — the next visit to that list retries — and SHALL NOT prevent the page from serving whatever is already cached for it.
+The system SHALL re-fetch a list's lean listing fields the first time that list is viewed on a local calendar day after its own last fetch, serving it from cache without a re-fetch on same-day revisits. Each selectable list SHALL keep its own last-fetched time, so viewing one list never marks another as fetched for the day. If a list has never been viewed, it SHALL never be proactively fetched — opening the page SHALL NOT warm the lists the user has not selected.
 
-#### Scenario: New-day visit
-- **WHEN** I open a Top Anime ranking list that has not been fetched yet on the current local calendar day
-- **THEN** the system re-fetches that list live and updates its cache
+When a visit's refresh fetches new data, the page SHALL take it up in place: the rows the reader is looking at SHALL be replaced by the refreshed ones without a loading state, without leaving the page, and without losing any list membership the reader has just changed from that page. A refresh that fetched nothing new SHALL leave the page exactly as it is.
+
+A list the client has already loaded during the current application session SHALL continue to be served from what the client already holds, with no request of any kind, per "Fast switching between ranking lists" — so a list is refreshed at most once per session however often it is re-selected, and the daily cadence above bounds it further.
+
+A list with nothing cached at all — one selected for the first time ever — has nothing to serve immediately and SHALL behave as it does today: the previously shown list stays on screen, muted, until the new one arrives, or a plain loading state is shown if no list is on screen yet.
+
+At most one refresh per list SHALL be in flight at a time: a second request for the same list arriving while its refresh is running SHALL wait for it rather than starting a second fetch of that list. Requests for two different lists SHALL NOT wait on each other. A fetch that fails SHALL NOT count as that list's fetch for the day — the next visit to that list retries — and SHALL NOT disturb what the page is already showing for it.
+
+#### Scenario: A new-day visit shows the cache first
+- **WHEN** I open a Top Anime ranking list that has not been fetched yet on the current local calendar day and has rows cached from an earlier day
+- **THEN** yesterday's cached rows appear immediately, without waiting on MyAnimeList
+
+#### Scenario: The refresh lands while I am reading
+- **WHEN** that visit's background refresh finishes with new data
+- **THEN** the rows on screen are replaced by the refreshed ones in place, with no loading state and no navigation
+
+#### Scenario: A refresh that changes nothing leaves the page alone
+- **WHEN** a visit's refresh is skipped because the list was already fetched today, or it fails
+- **THEN** the page keeps showing exactly the rows it was showing
 
 #### Scenario: Same-day revisit
 - **WHEN** I reopen the same ranking list again on the same local day
@@ -947,9 +971,17 @@ At most one refresh per list SHALL be in flight at a time: a second request for 
 - **WHEN** I have already viewed the All list today and then select the Movie list for the first time today
 - **THEN** the Movie list is fetched live, because the All list's fetch does not count as Movie's
 
+#### Scenario: A list already loaded this session is not refreshed again
+- **WHEN** I select Movie, then All, then Movie again within one session
+- **THEN** the second Movie selection makes no request at all — neither a read nor a refresh
+
+#### Scenario: A never-cached list still waits
+- **WHEN** I select a ranking list that has never been fetched, so nothing is cached for it
+- **THEN** the previously shown list stays on screen, muted, until the new list arrives — the behaviour that list already has today
+
 #### Scenario: Concurrent visits share one refresh
 - **WHEN** a second request for the same ranking list arrives while its refresh is already running
-- **THEN** no additional MAL fetch is started, and the second request is served from the refreshed cache once the first completes
+- **THEN** no additional MAL fetch is started, and the second request waits for the first rather than racing it
 
 #### Scenario: Different lists refresh in parallel
 - **WHEN** requests for two different ranking lists arrive at the same time, neither fetched yet today
@@ -966,6 +998,10 @@ At most one refresh per list SHALL be in flight at a time: a second request for 
 #### Scenario: Never visited stays unfetched
 - **WHEN** a Top Anime ranking list has never been viewed
 - **THEN** no background job fetches it, and viewing any other list does not fetch it either
+
+#### Scenario: An edit survives a refresh landing
+- **WHEN** I add an anime to my list from a ranking row and that list's background refresh lands immediately afterwards
+- **THEN** that row still reads "Edit", not "Add", because the refresh does not undo the membership change I just made
 
 ### Requirement: Consistent list placement across my-list view modes
 The system SHALL place the my-list entry list at the same vertical offset below its status header in flat (ungrouped) view as in grouped view, for every status filter. Switching between grouped and flat view, or changing the sort, SHALL NOT shift the list up or down relative to the header it sits under. The header-to-list spacing SHALL be defined by a single rule shared by both view modes, rather than by per-mode values that can diverge.

@@ -287,10 +287,11 @@ function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
             </span>
           </Link>
           <span className="profile-list-row__trailing">
-            Me <span className="score--mine">{item.myScore}</span> · MAL{' '}
+            MAL{' '}
             <span className="score--mal">
               <ScoreValue value={item.malScore} completed={item.isCompleted} />
-            </span>
+            </span>{' '}
+            · Me <span className="score--mine">{item.myScore}</span>
           </span>
         </li>
       ))}

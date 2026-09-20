@@ -46,7 +46,7 @@ public class TopAnimeServiceTests
         new() { Node = new MalAnimeNode { Id = id, Title = $"Anime {id}", NumEpisodes = numEpisodes }, Ranking = new MalRankingInfo { Rank = rank } };
 
     [Fact]
-    public async Task GetRankingAsync_FetchingOneListDoesNotMarkAnotherAsFetchedToday()
+    public async Task RefreshAsync_FetchingOneListDoesNotMarkAnotherAsFetchedToday()
     {
         using var db = CreateDb();
         var malClient = new FakeMalClient(new Dictionary<string, List<MalAnimeListEdge>>
@@ -55,17 +55,17 @@ public class TopAnimeServiceTests
         });
         var service = CreateService(db, malClient);
 
-        await service.GetRankingAsync(TopAnimeRankingType.All);
+        await service.RefreshAsync(TopAnimeRankingType.All);
 
-        // Movie has never been fetched, so viewing it live-fetches too — it
+        // Movie has never been fetched, so refreshing it live-fetches too — it
         // was not marked fresh by All's fetch.
-        await service.GetRankingAsync(TopAnimeRankingType.Movie);
+        await service.RefreshAsync(TopAnimeRankingType.Movie);
 
         Assert.Equal(["all", "movie"], malClient.RankingCalls);
     }
 
     [Fact]
-    public async Task GetRankingAsync_RefreshingOneListLeavesAnotherListsCachedRowsIntact()
+    public async Task RefreshAsync_RefreshingOneListLeavesAnotherListsCachedRowsIntact()
     {
         using var db = CreateDb();
         var malClient = new FakeMalClient(new Dictionary<string, List<MalAnimeListEdge>>
@@ -75,10 +75,11 @@ public class TopAnimeServiceTests
         });
         var service = CreateService(db, malClient);
 
+        await service.RefreshAsync(TopAnimeRankingType.All);
         var allBeforeMovie = await service.GetRankingAsync(TopAnimeRankingType.All);
         Assert.Equal([1, 2], allBeforeMovie.Select(i => i.AnimeId));
 
-        await service.GetRankingAsync(TopAnimeRankingType.Movie);
+        await service.RefreshAsync(TopAnimeRankingType.Movie);
 
         // All's rows are untouched by Movie's fetch — same two anime, same ranks.
         var allRows = await db.TopAnimeRankingEntries.Where(r => r.RankingType == "all").ToListAsync();
@@ -91,7 +92,7 @@ public class TopAnimeServiceTests
     }
 
     [Fact]
-    public async Task GetRankingAsync_SameDayRevisitMakesNoMalCall()
+    public async Task RefreshAsync_SameDayRevisitMakesNoMalCall()
     {
         using var db = CreateDb();
         var malClient = new FakeMalClient(new Dictionary<string, List<MalAnimeListEdge>>
@@ -100,16 +101,16 @@ public class TopAnimeServiceTests
         });
         var service = CreateService(db, malClient);
 
-        await service.GetRankingAsync(TopAnimeRankingType.All);
+        await service.RefreshAsync(TopAnimeRankingType.All);
         Assert.Single(malClient.RankingCalls);
 
-        await service.GetRankingAsync(TopAnimeRankingType.All);
+        await service.RefreshAsync(TopAnimeRankingType.All);
 
         Assert.Single(malClient.RankingCalls); // still just the one fetch
     }
 
     [Fact]
-    public async Task GetRankingAsync_NewDayRevisitFetchesAgain()
+    public async Task RefreshAsync_NewDayRevisitFetchesAgain()
     {
         using var db = CreateDb();
         db.TopAnimeFetchLogs.Add(new TopAnimeFetchLog
@@ -125,13 +126,13 @@ public class TopAnimeServiceTests
         });
         var service = CreateService(db, malClient);
 
-        await service.GetRankingAsync(TopAnimeRankingType.All);
+        await service.RefreshAsync(TopAnimeRankingType.All);
 
         Assert.Single(malClient.RankingCalls);
     }
 
     [Fact]
-    public async Task GetRankingAsync_FailedFetchLeavesTheListUnmarkedAndStillServesCache()
+    public async Task RefreshAsync_FailedFetchLeavesTheListUnmarkedAndStillServesCache()
     {
         using var db = CreateDb();
         // Seed yesterday's successfully-cached row directly, bypassing the
@@ -145,9 +146,10 @@ public class TopAnimeServiceTests
         var malClient = new FakeMalClient(failing: ["all"]);
         var service = CreateService(db, malClient);
 
-        var result = await service.GetRankingAsync(TopAnimeRankingType.All);
+        await service.RefreshAsync(TopAnimeRankingType.All);
 
         // Cache is still served despite the failed live fetch.
+        var result = await service.GetRankingAsync(TopAnimeRankingType.All);
         Assert.Single(result);
         Assert.Equal(1, result[0].AnimeId);
 
@@ -155,6 +157,72 @@ public class TopAnimeServiceTests
         // row is unchanged from yesterday's seed.
         var log = await db.TopAnimeFetchLogs.SingleAsync(f => f.RankingType == "all");
         Assert.Equal(yesterday, log.LastFetchedAt);
+    }
+
+    // The core of this change: reading a list is a pure cache read, however
+    // stale that cache is — only RefreshAsync ever calls MAL.
+    [Fact]
+    public async Task GetRankingAsync_MakesNoMalCallEvenWhenTheCacheIsStaleByDays()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1" });
+        db.TopAnimeRankingEntries.Add(new TopAnimeRankingEntry { RankingType = "all", AnimeId = 1, Rank = 1 });
+        db.TopAnimeFetchLogs.Add(new TopAnimeFetchLog { RankingType = "all", LastFetchedAt = DateTimeOffset.UtcNow.AddDays(-30) });
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<string, List<MalAnimeListEdge>>
+        {
+            ["all"] = [Edge(1, 1)],
+        });
+        var service = CreateService(db, malClient);
+
+        var result = await service.GetRankingAsync(TopAnimeRankingType.All);
+
+        Assert.Single(result);
+        Assert.Empty(malClient.RankingCalls);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ReportsFetchedOnAFirstFetch()
+    {
+        using var db = CreateDb();
+        var malClient = new FakeMalClient(new Dictionary<string, List<MalAnimeListEdge>>
+        {
+            ["all"] = [Edge(1, 1)],
+        });
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshAsync(TopAnimeRankingType.All);
+
+        Assert.Equal(TopAnimeRefreshOutcome.Fetched, result.Outcome);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ReportsSkippedOnASameDaySecondCall()
+    {
+        using var db = CreateDb();
+        var malClient = new FakeMalClient(new Dictionary<string, List<MalAnimeListEdge>>
+        {
+            ["all"] = [Edge(1, 1)],
+        });
+        var service = CreateService(db, malClient);
+
+        await service.RefreshAsync(TopAnimeRankingType.All);
+        var result = await service.RefreshAsync(TopAnimeRankingType.All);
+
+        Assert.Equal(TopAnimeRefreshOutcome.Skipped, result.Outcome);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ReportsFailedWhenTheMalClientThrows()
+    {
+        using var db = CreateDb();
+        var malClient = new FakeMalClient(failing: ["all"]);
+        var service = CreateService(db, malClient);
+
+        var result = await service.RefreshAsync(TopAnimeRankingType.All);
+
+        Assert.Equal(TopAnimeRefreshOutcome.Failed, result.Outcome);
     }
 
     // gate-editing-on-aired-episodes task 5.8: TopAnimeItemDto carries the
@@ -172,6 +240,7 @@ public class TopAnimeServiceTests
         });
         var service = CreateService(db, malClient, airedSoFar: new Dictionary<int, int> { [1] = 7 });
 
+        await service.RefreshAsync(TopAnimeRankingType.All);
         var result = await service.GetRankingAsync(TopAnimeRankingType.All);
 
         var row = Assert.Single(result);
@@ -185,7 +254,7 @@ public class TopAnimeServiceTests
     // reveals, but the gate records nothing for the anime that makes up the
     // bulk of a ranking list — one with no list entry and no link to one.
     [Fact]
-    public async Task GetRankingAsync_FullyFetchedStrangerRecordsNoUpdate()
+    public async Task RefreshAsync_FullyFetchedStrangerRecordsNoUpdate()
     {
         using var db = CreateDb();
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60) });
@@ -197,13 +266,13 @@ public class TopAnimeServiceTests
         });
         var service = CreateService(db, malClient);
 
-        await service.GetRankingAsync(TopAnimeRankingType.All);
+        await service.RefreshAsync(TopAnimeRankingType.All);
 
         Assert.Empty(await db.AnimeUpdates.ToListAsync());
     }
 
     [Fact]
-    public async Task GetRankingAsync_FullyFetchedLinkedAnimeStillRecordsItsEpisodeCountReveal()
+    public async Task RefreshAsync_FullyFetchedLinkedAnimeStillRecordsItsEpisodeCountReveal()
     {
         using var db = CreateDb();
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60) });
@@ -216,7 +285,7 @@ public class TopAnimeServiceTests
         });
         var service = CreateService(db, malClient);
 
-        await service.GetRankingAsync(TopAnimeRankingType.All);
+        await service.RefreshAsync(TopAnimeRankingType.All);
 
         var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
         Assert.Equal(AnimeUpdateKinds.EpisodeCountReleased, update.Kinds);
@@ -225,7 +294,7 @@ public class TopAnimeServiceTests
     // --- cache-type-ahead-search-index tasks.md 5.2: a refresh invalidates the search index ---
 
     [Fact]
-    public async Task GetRankingAsync_CachingANotYetSeenAnimeInvalidatesTheSearchIndex()
+    public async Task RefreshAsync_CachingANotYetSeenAnimeInvalidatesTheSearchIndex()
     {
         using var db = CreateDb();
         var malClient = new FakeMalClient(new Dictionary<string, List<MalAnimeListEdge>>
@@ -235,13 +304,13 @@ public class TopAnimeServiceTests
         var searchIndex = new FakeAnimeSearchIndex();
         var service = CreateService(db, malClient, searchIndex: searchIndex);
 
-        await service.GetRankingAsync(TopAnimeRankingType.All);
+        await service.RefreshAsync(TopAnimeRankingType.All);
 
         Assert.Equal(1, searchIndex.InvalidateCallCount);
     }
 
     [Fact]
-    public async Task GetRankingAsync_LeanlyRewritingAnExistingRowInvalidatesTheSearchIndex()
+    public async Task RefreshAsync_LeanlyRewritingAnExistingRowInvalidatesTheSearchIndex()
     {
         using var db = CreateDb();
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1" });
@@ -254,7 +323,7 @@ public class TopAnimeServiceTests
         var searchIndex = new FakeAnimeSearchIndex();
         var service = CreateService(db, malClient, searchIndex: searchIndex);
 
-        await service.GetRankingAsync(TopAnimeRankingType.All);
+        await service.RefreshAsync(TopAnimeRankingType.All);
 
         Assert.Equal(1, searchIndex.InvalidateCallCount);
     }
