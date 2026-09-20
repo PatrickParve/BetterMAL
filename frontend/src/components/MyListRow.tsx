@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { Link } from 'react-router-dom'
 import type { MyListItemDto } from '../api/types.ts'
-import { airingStatusShortLabel, hasAiredEpisodes, isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_CLASS } from '../utils/anime.ts'
+import { airingStatusShortLabel, episodeCeiling, hasAiredEpisodes, isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_CLASS } from '../utils/anime.ts'
 import { ProgressBar } from './ProgressBar.tsx'
 import { RowPicture } from './RowPicture.tsx'
 import { ScoreValue } from './ScoreValue.tsx'
@@ -65,7 +65,7 @@ export const MyListRow = memo(function MyListRow({
             aired={item.airingStatus === 'currently_airing' ? item.episodesAired : null}
             onIncrement={() => onIncrement(item)}
             onSetWatched={(value) => onSetWatched(item, value)}
-            max={item.episodesAired ?? item.totalEpisodes}
+            max={episodeCeiling(item.episodesAired, item.totalEpisodes)}
             incrementPending={incrementPending}
             incrementLabel={`Increment episodes watched for ${displayTitle}`}
           />

@@ -180,13 +180,21 @@ public class UserAnimeEntryEditService(
 
         // Cap against what's actually out, not just the eventual total: a
         // still-airing show can't be watched past its aired-so-far count even
-        // once its total episode count is known. A finished show has no
-        // stored rows in the future, so airedSoFar already resolves to its
-        // last stored episode — the `?? anime.TotalEpisodes` fallback only
-        // matters while no airing data is stored at all. An anime that has
-        // aired no episode has no fallback: its ceiling is 0 outright
-        // (gate-editing-on-aired-episodes design.md D1).
-        var maxEpisodes = hasAired ? airedSoFar ?? anime.TotalEpisodes : 0;
+        // once its total episode count is known. The lower of the two wins
+        // when both are known, so stored airing data reporting more episodes
+        // than the published total (AniList grouping two MAL entries into
+        // one, or numbering a season continuously from an earlier one) never
+        // raises the ceiling past the total (design.md D3/D4 of
+        // fix-auto-date-fill-and-episode-cap — frontend counterpart:
+        // episodeCeiling in frontend/src/utils/anime.ts). A finished show has
+        // no stored rows in the future, so airedSoFar already resolves to its
+        // last stored episode — either figure alone stands in for the other
+        // when only one is known. An anime that has aired no episode has no
+        // fallback: its ceiling is 0 outright (gate-editing-on-aired-episodes
+        // design.md D1).
+        var maxEpisodes = !hasAired ? 0
+            : airedSoFar is { } aired && anime.TotalEpisodes is { } total ? Math.Min(aired, total)
+            : airedSoFar ?? anime.TotalEpisodes;
         if (maxEpisodes is { } cap && newEpisodes > cap)
         {
             if (!hasAired)
@@ -196,8 +204,25 @@ public class UserAnimeEntryEditService(
 
         var previousEpisodesWatched = entry.EpisodesWatched;
 
-        // Started-date rule fires on the 0 -> >0 transition, and never overwrites an existing start date.
-        if (entry.EpisodesWatched == 0 && newEpisodes > 0 && entry.StartedAt is null)
+        // The finish date this entry will hold once the whole request is
+        // applied — the value it's arriving with, or the one already stored
+        // otherwise (design.md D1).
+        var resolvedCompletedAt = request.HasCompletedAt ? request.CompletedAt : entry.CompletedAt;
+
+        // Started-date rule fires on the 0 -> >0 transition, and fills only
+        // where the user has said nothing about either date: skipped
+        // whenever a start date is already stored or this same request
+        // supplies one (even to clear it — ApplyDates would overwrite
+        // whatever the fill wrote anyway, so filling first is a no-op in
+        // outcome — design.md D2), and skipped whenever a finish date will
+        // stand once this request is applied, stored or supplied here. A
+        // finish date means this is a rewatch's first episode or a backfill
+        // rather than a first start, and filling today would otherwise trip
+        // ApplyDates's "Finish date cannot be earlier than start date" check
+        // over a pair the user never entered.
+        if (entry.EpisodesWatched == 0 && newEpisodes > 0
+            && entry.StartedAt is null && !request.HasStartedAt
+            && resolvedCompletedAt is null)
             entry.StartedAt = today;
 
         entry.EpisodesWatched = newEpisodes;

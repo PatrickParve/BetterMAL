@@ -345,6 +345,71 @@ public class UserAnimeEntryEditServiceAiringGateTests
         Assert.Equal(WatchStatus.Watching, stored.Status);
     }
 
+    // --- ApplyEpisodesWatched's maxEpisodes ceiling (design.md D3/D4 of
+    // fix-auto-date-fill-and-episode-cap): the lower of aired-so-far and the
+    // total wins when both are known, so stored airing data claiming more
+    // rows than the published total never raises the ceiling past it.
+
+    [Fact]
+    public async Task EditToTheAiredCountAboveTheTotalIsRejected()
+    {
+        using var db = CreateDb();
+        await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Watching, episodesWatched: 0, airingStatus: "finished_airing");
+
+        var ex = await Assert.ThrowsAsync<EntryEditRejectedException>(() =>
+            CreateService(db, airedSoFar: 13).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { EpisodesWatched = 13 }));
+
+        Assert.Equal("Episodes watched cannot exceed the number of episodes available (12).", ex.Message);
+    }
+
+    [Fact]
+    public async Task EditToTheTotalCompletesTheEntryWhenStoredAiredRowsExceedIt()
+    {
+        using var db = CreateDb();
+        await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Watching, episodesWatched: 0, airingStatus: "finished_airing");
+
+        var result = await CreateService(db, airedSoFar: 13).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { EpisodesWatched = 12 });
+
+        Assert.Equal(WatchStatus.Completed, result.Status);
+        Assert.Equal(12, result.EpisodesWatched);
+    }
+
+    [Fact]
+    public async Task StillAiringCeilingIsTheAiredCountNotTheTotal()
+    {
+        using var db = CreateDb();
+        await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Watching, episodesWatched: 0, airingStatus: "currently_airing");
+
+        var ex = await Assert.ThrowsAsync<EntryEditRejectedException>(() =>
+            CreateService(db, airedSoFar: 3).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { EpisodesWatched = 4 }));
+
+        Assert.Equal("Episodes watched cannot exceed the number of episodes available (3).", ex.Message);
+    }
+
+    [Fact]
+    public async Task CeilingFallsBackToTheTotalWhenNoAiredCountIsStored()
+    {
+        using var db = CreateDb();
+        await SeedAsync(db, 1, totalEpisodes: 12, WatchStatus.Watching, episodesWatched: 0, airingStatus: "finished_airing");
+
+        var ex = await Assert.ThrowsAsync<EntryEditRejectedException>(() =>
+            CreateService(db, airedSoFar: null).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { EpisodesWatched = 13 }));
+
+        Assert.Equal("Episodes watched cannot exceed the number of episodes available (12).", ex.Message);
+    }
+
+    [Fact]
+    public async Task CeilingFallsBackToTheAiredCountWhenTheTotalIsUnknown()
+    {
+        using var db = CreateDb();
+        await SeedAsync(db, 1, totalEpisodes: null, WatchStatus.Watching, episodesWatched: 0, airingStatus: "currently_airing");
+
+        var ex = await Assert.ThrowsAsync<EntryEditRejectedException>(() =>
+            CreateService(db, airedSoFar: 5).UpdateEntryAsync(1, new UserAnimeEntryEditRequest { EpisodesWatched = 6 }));
+
+        Assert.Equal("Episodes watched cannot exceed the number of episodes available (5).", ex.Message);
+    }
+
     private sealed class FakeEntrySyncScheduler : IEntrySyncScheduler
     {
         public void ScheduleSync(int animeId) { }

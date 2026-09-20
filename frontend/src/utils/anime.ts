@@ -85,6 +85,17 @@ export function hasAiredEpisodes(airingStatus: string | null, episodesAired: num
   return episodesAired !== null ? episodesAired >= 1 : airingStatus !== 'not_yet_aired'
 }
 
+// Mirrors backend/AnimeTracker.Api/Services/Entries/UserAnimeEntryEditService.cs
+// ApplyEpisodesWatched's maxEpisodes (design.md D3/D4 of
+// fix-auto-date-fill-and-episode-cap): the lower of the two figures wins
+// when both are known, so stored airing data reporting more episodes than
+// the published total never raises the ceiling past the total — either
+// figure alone stands in for the other when only one is known, and no cap
+// applies when neither is.
+export function episodeCeiling(episodesAired: number | null, totalEpisodes: number | null): number | null {
+  return episodesAired !== null && totalEpisodes !== null ? Math.min(episodesAired, totalEpisodes) : episodesAired ?? totalEpisodes
+}
+
 // Compact airing-status labels for the My list Plan-to-watch badge. The
 // detail page uses its own longer phrasing (AIRING_STATUS_LABELS in
 // AnimeDetailPage.tsx) — the list wants something terse enough to sit next

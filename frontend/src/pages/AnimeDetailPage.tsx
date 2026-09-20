@@ -32,6 +32,7 @@ import { usePageData } from "../hooks/usePageData.ts";
 import { useScoreReveal } from "../hooks/useScoreReveal.ts";
 import {
   dedupePictureOptions,
+  episodeCeiling,
   formatRuntime,
   hasAiredEpisodes,
   isScoreRevealableStatus,
@@ -571,7 +572,7 @@ export function AnimeDetailPage() {
                 aired={detail.airingStatus === "currently_airing" ? detail.episodesAired : null}
                 onIncrement={detail.entry ? handleIncrement : undefined}
                 onSetWatched={detail.entry ? handleSetWatched : undefined}
-                max={detail.episodesAired ?? detail.totalEpisodes}
+                max={episodeCeiling(detail.episodesAired, detail.totalEpisodes)}
                 incrementPending={incrementPending}
                 incrementLabel={`Increment episodes watched for ${pickDisplayTitle(detail.title, detail.englishTitle)}`}
               />

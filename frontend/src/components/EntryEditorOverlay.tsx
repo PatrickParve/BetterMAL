@@ -4,7 +4,7 @@ import { Modal } from './Modal.tsx'
 import { ApiError, deleteEntry, updateEntry } from '../api/client.ts'
 import type { EntryEditorTarget, UserAnimeEntryDto, UserAnimeEntryEditRequest, WatchStatus } from '../api/types.ts'
 import { useAnimeRank } from '../context/AnimeRankContext.tsx'
-import { hasAiredEpisodes, isHandOrderable } from '../utils/anime.ts'
+import { episodeCeiling, hasAiredEpisodes, isHandOrderable } from '../utils/anime.ts'
 import './EntryEditorOverlay.css'
 
 const STATUS_OPTIONS: { value: WatchStatus; label: string }[] = [
@@ -103,6 +103,7 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
   // eligibility checks above, so an option can be unavailable for either
   // reason (gate-editing-on-aired-episodes design.md D2/D5).
   const hasAired = hasAiredEpisodes(airingStatus, episodesAired)
+  const episodesMax = episodeCeiling(episodesAired, totalEpisodes)
   // Only a Rewatching entry being ended early (choosing Completed rather than
   // reaching the total) asks this question — never from any other status.
   const endingRewatchEarly = initialStatus === 'Rewatching' && status === 'Completed'
@@ -266,7 +267,7 @@ export function EntryEditorOverlay({ target, onClose }: EntryEditorOverlayProps)
             <input
               type="number"
               min={0}
-              max={totalEpisodes ?? undefined}
+              max={episodesMax ?? undefined}
               value={episodesWatched}
               onChange={(event) => setEpisodesWatched(Number(event.target.value))}
             />
