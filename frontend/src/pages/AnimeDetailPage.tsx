@@ -661,7 +661,11 @@ export function AnimeDetailPage() {
                 {detail.entry.rewatchCount !== 0 && (
                   <p>Rewatch count: {detail.entry.rewatchCount}</p>
                 )}
-                {detail.entry.status === "Completed" && (
+                {/* Completed keeps its "No info" placeholder unchanged; Rewatching shows the
+                    line only when a date is stored — a rewatch is a rewatch of a viewing that
+                    was already finished, so the stored date is neither lost nor made wrong by it. */}
+                {(detail.entry.status === "Completed" ||
+                  (detail.entry.status === "Rewatching" && detail.entry.completedAt !== null)) && (
                   <p>Completed: {formatDate(detail.entry.completedAt)}</p>
                 )}
               </section>

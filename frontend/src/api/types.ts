@@ -505,9 +505,19 @@ export type EpisodeProgressDto = {
   unresolvedAnime: UnresolvedEpisodeEntryDto[]
 }
 
+// Per box, the media-type scopes holding at least one entry that box would
+// list, in tab order (add-time-spent-and-trim-empty-scopes design.md D1).
+// `all` and `series` are deliberately absent from both lists: the client
+// offers those two unconditionally rather than reading them here (design.md D3).
+export type ScopeOptionsDto = {
+  topAnime: TopAnimeMediaType[]
+  rewatched: TopAnimeMediaType[]
+}
+
 export type ProfileDto = {
   stats: AnimeStatsDto
   episodeProgress: EpisodeProgressDto
+  scopeOptions: ScopeOptionsDto
   recentActivity: ActivityFeedItemDto[]
   topAnime: TopAnimeSectionDto
   rewatched: RewatchedSectionDto
@@ -569,6 +579,25 @@ export type RewatchedSeriesItemDto = {
 // that total descending then title case-insensitively, with no cap.
 export type RewatchedSeriesSectionDto = {
   items: RewatchedSeriesItemDto[]
+}
+
+// One franchise ranked by "Most time spent": display fields from its root
+// anime and its total watch time in seconds — first viewings plus rewatches,
+// summed across every member, main line and extras alike
+// (add-time-spent-and-trim-empty-scopes design.md D7) — the same per-entry
+// arithmetic the profile's own Days stat uses, so the two can never disagree.
+export type TimeSpentSeriesItemDto = {
+  seriesId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  watchedSeconds: number
+}
+
+// Every series with above-zero total watch time (design.md D8), ordered by
+// that total descending then title case-insensitively, with no cap.
+export type TimeSpentSeriesSectionDto = {
+  items: TimeSpentSeriesItemDto[]
 }
 
 // A change held for review since a previous process start — an unsent edit

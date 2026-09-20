@@ -147,6 +147,7 @@ public class CrossSiteRequestGuardTests
         "api/profile/activity",
         "api/profile/rewatched",
         "api/profile/rewatched-series",
+        "api/profile/time-spent-series",
         "api/profile/top-anime",
         "api/profile/top-series",            // writes: enqueues a background series build (ProfileService/GetTopSeriesSectionAsync)
         "api/rankings",

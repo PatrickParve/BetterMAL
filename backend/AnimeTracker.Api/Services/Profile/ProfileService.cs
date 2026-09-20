@@ -84,6 +84,7 @@ public class ProfileService(
         return new ProfileDto(
             BuildStats(entries),
             BuildEpisodeProgress(entries, airedCounts),
+            BuildScopeOptions(entries, rankingSnapshot),
             recentActivity,
             BuildTopAnimeSection(entries, rankingSnapshot, TopAnimeMediaTypeScope.All),
             BuildRewatchedSection(entries, TopAnimeMediaTypeScope.All),
@@ -186,6 +187,20 @@ public class ProfileService(
 
     private static RewatchedSeriesItemDto ToRewatchedSeriesItem(SeriesRewatchResult s) =>
         new(s.SeriesId, s.Title, s.EnglishTitle, s.PictureUrl, s.RewatchSeconds);
+
+    // No ScheduleMissingSeriesBuildsAsync call here (design.md D6): the same
+    // profile page's Top series read already backfills missing series on
+    // every visit, so a second enqueue from this read would only contend on
+    // the same queue for no extra coverage.
+    public async Task<TimeSpentSeriesSectionDto> GetTimeSpentSeriesSectionAsync(CancellationToken ct = default)
+    {
+        var rankingIndex = await seriesRankingLookup.LoadAsync(ct);
+        var items = rankingIndex.TimeSpentSeries().Select(ToTimeSpentSeriesItem).ToList();
+        return new TimeSpentSeriesSectionDto(items);
+    }
+
+    private static TimeSpentSeriesItemDto ToTimeSpentSeriesItem(SeriesWatchTimeResult s) =>
+        new(s.SeriesId, s.Title, s.EnglishTitle, s.PictureUrl, s.WatchedSeconds);
 
     // Fire-and-forget: enqueues a bounded batch of my-list anime with no
     // stored series onto the existing background build queue, reusing the
@@ -531,6 +546,25 @@ public class ProfileService(
 
     private static RewatchedEntryDto ToRewatchedEntry(UserAnimeEntry e) =>
         new(e.AnimeId, e.Anime.Title, e.Anime.EnglishTitle, e.Anime.PictureUrl, e.RewatchCount, e.MyScore);
+
+    // Each predicate below is the owning section's own membership rule —
+    // BuildTopAnimeSection's ranking membership, BuildRewatchedSection's
+    // RewatchCount > 0 — rather than a third copy of either, so "offered" and
+    // "non-empty" cannot disagree (add-time-spent-and-trim-empty-scopes
+    // design.md D2). The rule is deliberately one-sided: a type is offered
+    // when it has entries, not only when selecting it would also narrow what
+    // All shows (design.md D2's rejection of the my-list filters' two-sided
+    // rule).
+    private static ScopeOptionsDto BuildScopeOptions(List<UserAnimeEntry> entries, AnimeRankingSnapshot snapshot)
+    {
+        var topAnime = TopAnimeMediaTypeScope.MediaTypes
+            .Where(scope => snapshot.RankedEntries.Any(e => TopAnimeMediaTypeScope.Matches(scope, e.Anime.MediaType)))
+            .ToList();
+        var rewatched = TopAnimeMediaTypeScope.MediaTypes
+            .Where(scope => entries.Any(e => e.RewatchCount > 0 && TopAnimeMediaTypeScope.Matches(scope, e.Anime.MediaType)))
+            .ToList();
+        return new ScopeOptionsDto(topAnime, rewatched);
+    }
 
     private static ScoreDistributionDto BuildScoreDistribution(List<UserAnimeEntry> entries)
     {

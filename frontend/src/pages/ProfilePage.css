@@ -612,3 +612,91 @@
   gap: 2px;
   padding: 3px;
 }
+
+/* Same strip mechanics as top-anime-strip/rewatched-strip/top-series-strip
+   (tile basis, gap, hover-scale, drag-scroll, scrollbar hiding) — four near-
+   identical blocks is deliberate for now (design.md D10). The badge sits
+   over the picture rather than in a footer, so the tile shape follows
+   .rewatched-strip__item's, not .top-series-strip__item's. */
+.time-spent-strip {
+  display: flex;
+  gap: 10px;
+  padding: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* See .top-anime-strip: stops end-of-strip flicks from chaining to the
+     document, and from being read as a back/forward navigation. */
+  overscroll-behavior-x: contain;
+  cursor: grab;
+  user-select: none;
+  scrollbar-width: none;
+}
+
+.time-spent-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.time-spent-strip:active {
+  cursor: grabbing;
+}
+
+.time-spent-strip--fits {
+  overflow-x: hidden;
+  cursor: default;
+}
+
+.time-spent-strip--fits:active {
+  cursor: default;
+}
+
+.time-spent-strip__item {
+  position: relative;
+  box-sizing: border-box;
+  flex: 0 0 calc((100% - 9 * 10px) / 10);
+  min-width: 0;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  transition: transform 0.15s ease;
+}
+
+.time-spent-strip__item:hover,
+.time-spent-strip__item:focus-visible {
+  transform: scale(1.08);
+  z-index: 1;
+  outline: none;
+}
+
+.time-spent-strip__picture {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: var(--code-bg);
+  pointer-events: none;
+}
+
+.time-spent-strip__picture--placeholder {
+  border: none;
+}
+
+/* Same badge as .rewatched-strip__count/.rewatched-strip__count--time — a
+   formatted duration overlay, white/silver, sized for the longer text. */
+.time-spent-strip__count {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  min-width: 22px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(8, 6, 13, 0.75);
+  border: 1px solid rgba(210, 214, 224, 0.5);
+  color: #e4e6ec;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}

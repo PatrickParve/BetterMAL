@@ -81,4 +81,22 @@ public class ProfileController(IProfileService profileService) : ControllerBase
         var section = await profileService.GetRewatchedSeriesSectionAsync(ct);
         return Ok(section);
     }
+
+    /// <summary>"Most time spent": every franchise with above-zero total
+    /// watch time, ranked by that total descending
+    /// (add-time-spent-and-trim-empty-scopes design.md D7). Deliberately not
+    /// embedded in <see cref="Get"/>, for the same reason as <see
+    /// cref="GetTopSeries"/>: it pays for its own <c>SeriesRankingLookup</c>
+    /// load rather than being folded into <c>top-series</c>, which is
+    /// accepted because the lookup short-circuits on a cold install and the
+    /// repo already runs this shape of query per keystroke in
+    /// <c>SeriesSearchLookup</c> (design.md D6). Like rewatched-series it does
+    /// not enqueue background series builds — the same page's Top series
+    /// read already does.</summary>
+    [HttpGet("api/profile/time-spent-series")]
+    public async Task<IActionResult> GetTimeSpentSeries(CancellationToken ct)
+    {
+        var section = await profileService.GetTimeSpentSeriesSectionAsync(ct);
+        return Ok(section);
+    }
 }

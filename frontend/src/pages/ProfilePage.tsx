@@ -4,6 +4,7 @@ import {
   getProfile,
   getRewatchedSection,
   getRewatchedSeriesSection,
+  getTimeSpentSeriesSection,
   getTopAnimeSection,
   getTopSeriesSection,
 } from '../api/client.ts'
@@ -12,6 +13,7 @@ import type {
   ProfileDto,
   RewatchedSectionDto,
   RewatchedSeriesSectionDto,
+  TimeSpentSeriesSectionDto,
   TopAnimeMediaType,
   TopAnimeSectionDto,
   TopSeriesItemDto,
@@ -170,14 +172,28 @@ const REWATCHED_SCOPE_TABS: { value: RewatchedScope; label: string }[] = [
   ...MEDIA_TYPE_TABS.slice(1),
 ]
 
-const REWATCHED_EMPTY_MESSAGES: Record<RewatchedScope, string> = {
+// Only "all" and "series" remain reachable: a media type is never offered
+// unless it holds an entry the section would list (design.md D2), so a
+// media-type scope can no longer render empty (tasks 7.8/7.9). Narrowed from
+// Record<RewatchedScope, string> so a future re-add of a per-type message has
+// to widen this type deliberately rather than slot back in unnoticed.
+const REWATCHED_EMPTY_MESSAGES: Record<'all' | 'series', string> = {
   all: 'No shows have been rewatched',
   series: 'No series have been rewatched',
-  tv: 'No TV shows have been rewatched',
-  movie: 'No movies have been rewatched',
-  ova: 'No OVAs have been rewatched',
-  ona: 'No ONAs have been rewatched',
-  special: 'No specials have been rewatched',
+}
+
+// Design D4: a stale restored scope is corrected by derivation at read time,
+// never by a write. "all" and "series" are never trimmed (D3) — only a media
+// type can be missing from ScopeOptions. Every scope reads as offered before
+// `profile` resolves, which keeps today's behaviour on that render; it's
+// unreachable with a stale value in practice, since a fresh visit's stored
+// value is already 'all', and a restore seeds `profile` from the same
+// snapshot `useRestorableState` seeds the stored scopes from, on the same
+// render.
+function isScopeOffered(scope: RewatchedScope, offered: TopAnimeMediaType[] | undefined): boolean {
+  if (scope === 'all' || scope === 'series') return true
+  if (!offered) return true
+  return offered.includes(scope)
 }
 
 const STAT_LABELS: { key: keyof ProfileDto['stats']; label: string }[] = [
@@ -310,8 +326,11 @@ export function ProfilePage() {
   // Each media-type tab is its own resource key, not just a view control on
   // top of one shared fetch — so restoring a page left on "TV" shows TV data
   // instead of a background refresh of "All" silently swapping the grid out
-  // from under a tab that still reads as selected.
-  const [mediaType, setMediaType] = useRestorableState<TopAnimeMediaType>('mediaType', 'all')
+  // from under a tab that still reads as selected. Read as `storedMediaType`
+  // rather than `mediaType`: the value actually used below is the derived,
+  // offered-scope-checked one further down (design.md D4).
+  const [storedMediaType, setMediaType] = useRestorableState<TopAnimeMediaType>('mediaType', 'all')
+  const mediaType = isScopeOffered(storedMediaType, profile?.scopeOptions.topAnime) ? storedMediaType : 'all'
   const {
     data: topAnime,
     loading: topAnimeLoading,
@@ -322,10 +341,15 @@ export function ProfilePage() {
   // changes rewatchedScope below, leaving this — and the resource key it
   // drives — exactly as it was, so switching into and back out of Series
   // never re-fetches a media-type scope that isn't even shown.
-  const [rewatchedMediaType, setRewatchedMediaType] = useRestorableState<TopAnimeMediaType>(
+  const [storedRewatchedMediaType, setRewatchedMediaType] = useRestorableState<TopAnimeMediaType>(
     'rewatchedMediaType',
     'all',
   )
+  // Guarded like rewatchedScope below (design.md D4): it's the value the row
+  // returns to when leaving Series, and can go stale on its own.
+  const rewatchedMediaType = isScopeOffered(storedRewatchedMediaType, profile?.scopeOptions.rewatched)
+    ? storedRewatchedMediaType
+    : 'all'
   const { data: rewatched, loading: rewatchedLoading } = usePageData<RewatchedSectionDto>(
     `rewatched:${rewatchedMediaType}`,
     () => getRewatchedSection(rewatchedMediaType),
@@ -335,7 +359,10 @@ export function ProfilePage() {
   // rewatchedMediaType that also selects Series. Selecting a media-type tab
   // updates both this and rewatchedMediaType together; selecting Series
   // updates only this one.
-  const [rewatchedScope, setRewatchedScope] = useRestorableState<RewatchedScope>('rewatchedScope', 'all')
+  const [storedRewatchedScope, setRewatchedScope] = useRestorableState<RewatchedScope>('rewatchedScope', 'all')
+  const rewatchedScope = isScopeOffered(storedRewatchedScope, profile?.scopeOptions.rewatched)
+    ? storedRewatchedScope
+    : 'all'
   function selectRewatchedScope(value: RewatchedScope) {
     setRewatchedScope(value)
     if (value !== 'series') setRewatchedMediaType(value)
@@ -382,6 +409,15 @@ export function ProfilePage() {
   const rankedTopSeries = topSeries ? rankTopSeries(topSeries.items, topSeriesBasis) : []
   const displayedTopSeries = topSeriesMultiOnly ? filterMultiEntry(rankedTopSeries) : rankedTopSeries
 
+  // "Most time spent" has no view control (design.md D5), so — unlike
+  // rewatched-series — there's no idle variant to key off of: this resource
+  // key never changes, and the section is always rendered, so it always
+  // loads.
+  const { data: timeSpentSeries, loading: timeSpentSeriesLoading } = usePageData<TimeSpentSeriesSectionDto>(
+    'time-spent-series',
+    getTimeSpentSeriesSection,
+  )
+
   // The favourites score filter (design.md decision D7): each ranking holds
   // its own selection, restored on back-navigation and defaulting to All on
   // a fresh visit. A restored selection naming a score the reloaded ranking
@@ -423,6 +459,7 @@ export function ProfilePage() {
   // (design.md D10/task 10.6).
   const rewatchedStripScroll = useStripScroll(`rewatched:${rewatchedScope}`)
   const topSeriesStripScroll = useStripScroll('top-series')
+  const timeSpentStripScroll = useStripScroll('time-spent-series')
 
   if (loading) {
     return <p className="profile-page__loading">Loading…</p>
@@ -431,6 +468,16 @@ export function ProfilePage() {
   if (!profile) {
     return <p className="profile-page__empty">Couldn't load profile data.</p>
   }
+
+  // Design D2: a type is offered when it holds at least one entry the
+  // section would list — exactly what ProfileDto.scopeOptions computes
+  // server-side, in the tab order both constants already use.
+  const offeredTopAnimeTabs = MEDIA_TYPE_TABS.filter(
+    (tab) => tab.value === 'all' || profile.scopeOptions.topAnime.includes(tab.value),
+  )
+  const offeredRewatchedTabs = REWATCHED_SCOPE_TABS.filter(
+    (tab) => tab.value === 'all' || tab.value === 'series' || profile.scopeOptions.rewatched.includes(tab.value),
+  )
 
   return (
     <div className="profile-page">
@@ -535,29 +582,33 @@ export function ProfilePage() {
           )}
         </div>
 
-        <div className="profile-media-tabs" role="tablist" aria-label="Filter by media type">
-          {MEDIA_TYPE_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              role="tab"
-              aria-selected={mediaType === tab.value}
-              className={
-                mediaType === tab.value ? 'profile-media-tabs__tab profile-media-tabs__tab--active' : 'profile-media-tabs__tab'
-              }
-              onClick={() => setMediaType(tab.value)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        {/* All alone is a control with nothing to choose between, reachable
+            only when the ranking is empty — where the box already shows its
+            own message below. */}
+        {offeredTopAnimeTabs.length > 1 && (
+          <div className="profile-media-tabs" role="tablist" aria-label="Filter by media type">
+            {offeredTopAnimeTabs.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={mediaType === tab.value}
+                className={
+                  mediaType === tab.value ? 'profile-media-tabs__tab profile-media-tabs__tab--active' : 'profile-media-tabs__tab'
+                }
+                onClick={() => setMediaType(tab.value)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {!displayedTopAnime && topAnimeLoading ? null : !displayedTopAnime || displayedTopAnime.items.length === 0 ? (
-          <p className="profile-page__section-empty">
-            {mediaType === 'all'
-              ? 'Score some anime to build your top list.'
-              : `No scored ${MEDIA_TYPE_TABS.find((tab) => tab.value === mediaType)?.label} yet.`}
-          </p>
+          // The only reachable case is mediaType === 'all': any other
+          // offered media type holds at least one entry by construction
+          // (design.md D2), so it can never land here empty.
+          <p className="profile-page__section-empty">Score some anime to build your top list.</p>
         ) : (
           <div
             className={
@@ -690,8 +741,10 @@ export function ProfilePage() {
       <section className="profile-box">
         <h2>Most rewatched</h2>
 
+        {/* All and Series are never trimmed (design.md D3), so this row
+            always holds at least two options and is always drawn. */}
         <div className="profile-media-tabs" role="tablist" aria-label="Filter by media type">
-          {REWATCHED_SCOPE_TABS.map((tab) => (
+          {offeredRewatchedTabs.map((tab) => (
             <button
               key={tab.value}
               type="button"
@@ -752,7 +805,10 @@ export function ProfilePage() {
             </div>
           )
         ) : !displayedRewatched && rewatchedLoading ? null : !displayedRewatched || displayedRewatched.items.length === 0 ? (
-          <p className="profile-page__section-empty">{REWATCHED_EMPTY_MESSAGES[rewatchedMediaType]}</p>
+          // The only reachable case is rewatchedMediaType === 'all': any
+          // other offered media type holds a rewatch by construction
+          // (design.md D2), so it can never land here empty.
+          <p className="profile-page__section-empty">{REWATCHED_EMPTY_MESSAGES.all}</p>
         ) : (
           <div
             className={
@@ -785,6 +841,57 @@ export function ProfilePage() {
                   />
                 )}
                 <span className="rewatched-strip__count">{item.rewatchCount}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="profile-box">
+        <h2>Most time spent</h2>
+
+        {/* No band, no control row (design.md D5): the section answers one
+            question at franchise level and offers nothing to filter. No
+            "hold the last section on screen" ref either — the note on the
+            Top series load applies here too, since this resource key never
+            changes and so the strip can't collapse and re-open under it. */}
+        {!timeSpentSeries && timeSpentSeriesLoading ? null : !timeSpentSeries || timeSpentSeries.items.length === 0 ? (
+          <p className="profile-page__section-empty">
+            No series have any watch time yet. If yours haven't been built, use{' '}
+            <Link to="/settings">"Build all series from my list"</Link> on the Settings page.
+          </p>
+        ) : (
+          <div
+            className={
+              timeSpentSeries.items.length <= STRIP_VISIBLE_TILES
+                ? 'time-spent-strip time-spent-strip--fits'
+                : 'time-spent-strip'
+            }
+            ref={timeSpentStripScroll.ref}
+            {...timeSpentStripScroll.handlers}
+          >
+            {timeSpentSeries.items.map((item) => (
+              <Link
+                key={item.seriesId}
+                to={`/series/${item.seriesId}`}
+                className="time-spent-strip__item"
+                draggable={false}
+                onClick={timeSpentStripScroll.onItemClick}
+              >
+                {item.pictureUrl ? (
+                  <img
+                    src={item.pictureUrl}
+                    alt={pickDisplayTitle(item.title, item.englishTitle)}
+                    className="time-spent-strip__picture"
+                    draggable={false}
+                  />
+                ) : (
+                  <div
+                    className="time-spent-strip__picture time-spent-strip__picture--placeholder"
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="time-spent-strip__count">{formatRewatchTime(item.watchedSeconds)}</span>
               </Link>
             ))}
           </div>

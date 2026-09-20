@@ -29,6 +29,7 @@ import type {
   SeriesDto,
   SeriesListDto,
   SeriesLookupResult,
+  TimeSpentSeriesSectionDto,
   TopAnimeItemDto,
   TopAnimeMediaType,
   TopAnimeRankingType,
@@ -333,6 +334,15 @@ export function getTopSeriesSection(): Promise<TopSeriesSectionDto> {
 // server-side; the profile page's Top series read already does.
 export function getRewatchedSeriesSection(): Promise<RewatchedSeriesSectionDto> {
   return fetchJson<RewatchedSeriesSectionDto>('/api/profile/rewatched-series')
+}
+
+// Every series with above-zero total watch time — first viewings plus
+// rewatches — pre-ordered by that total descending then title (design.md
+// D8) — the "Most time spent" section. Like getRewatchedSeriesSection, this
+// does not trigger background series builds server-side; the profile page's
+// Top series read already does.
+export function getTimeSpentSeriesSection(): Promise<TimeSpentSeriesSectionDto> {
+  return fetchJson<TimeSpentSeriesSectionDto>('/api/profile/time-spent-series')
 }
 
 // The ranking editor's score selector plus one tier (design.md D7).

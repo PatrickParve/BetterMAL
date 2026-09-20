@@ -35,4 +35,14 @@ public interface IProfileService
     /// D10), and queueing the same ids twice only contends on one
     /// queue.</summary>
     Task<RewatchedSeriesSectionDto> GetRewatchedSeriesSectionAsync(CancellationToken ct = default);
+
+    /// <summary>"Most time spent": every franchise with above-zero total
+    /// watch time — first viewings plus rewatches, summed across every
+    /// member, main line and extras alike — using the same per-entry
+    /// arithmetic <c>WatchMath</c> uses for the profile's own <c>Days</c>
+    /// stat (add-time-spent-and-trim-empty-scopes design.md D7/D8), so a
+    /// franchise total and that stat can never disagree. Deliberately does
+    /// not schedule background series builds itself, for the same reason as
+    /// <see cref="GetRewatchedSeriesSectionAsync"/> (design.md D6).</summary>
+    Task<TimeSpentSeriesSectionDto> GetTimeSpentSeriesSectionAsync(CancellationToken ct = default);
 }

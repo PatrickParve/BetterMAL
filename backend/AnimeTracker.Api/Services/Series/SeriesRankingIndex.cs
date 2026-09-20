@@ -443,6 +443,41 @@ public sealed class SeriesRankingIndex
             .ToList();
     }
 
+    /// <summary>Every series with above-zero total watch time — first
+    /// viewings plus rewatches, summed over <em>every</em> member, main line
+    /// and extras alike — ranked by that total descending then title
+    /// (design.md D7). A total above zero is exactly "some member in my list
+    /// has at least one episode watched", since every contribution is
+    /// episodes times a strictly positive duration, so no second eligibility
+    /// predicate is needed (design.md D8). Deliberately does not apply
+    /// EligibleSeries()'s two-aired-main-line-entries coverage rule nor
+    /// ListedSeries()'s version-neighbour rule, for the reason
+    /// RewatchedSeries() already records: those exist to protect an average,
+    /// and a sum of one entry's time is exactly right.</summary>
+    public List<SeriesWatchTimeResult> TimeSpentSeries()
+    {
+        var results = new List<SeriesWatchTimeResult>();
+
+        foreach (var group in _membersBySeriesId)
+        {
+            var members = group.ToList();
+            var totalSeconds = members.Sum(MemberWatchedSeconds);
+            if (totalSeconds <= 0)
+                continue;
+
+            var root = members.First(m => m.AnimeId == m.SeriesId);
+            var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
+                root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.MalPictureUrl);
+            results.Add(new SeriesWatchTimeResult(
+                group.Key, title, englishTitle, pictureUrl, totalSeconds));
+        }
+
+        return results
+            .OrderByDescending(r => r.WatchedSeconds)
+            .ThenBy(r => r.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     // A member's aired-so-far figure for WatchMath.EffectiveWatchedEpisodes
     // (polish-rewatch design.md D2, task 3.1): a finished-airing member has
     // aired its full published total (null when that total itself is
@@ -481,6 +516,24 @@ public sealed class SeriesRankingIndex
 
         return (long)rewatchEpisodes * WatchMath.EpisodeSeconds(m.AverageEpisodeDurationSeconds);
     }
+
+    // The profile's Days expression per entry (design.md D7), reached through
+    // WatchMath's primitives so a franchise total and the whole-list stat can
+    // never disagree. The explicit EntryStatus-is-null guard states "not in
+    // my list contributes nothing" where it is decided, rather than leaving
+    // it to two null-coalescings (FirstViewingEpisodes already reads
+    // EpisodesWatched ?? 0, which is zero for a non-list member regardless).
+    // Inherits RewatchEpisodesIncludingCurrentRun's documented no-published-
+    // total fallback gap unchanged — still a lower bound.
+    private static long MemberWatchedSeconds(SeriesRankingMemberProjection m)
+    {
+        if (m.EntryStatus is null)
+            return 0; // not in my list
+
+        var episodes = WatchMath.FirstViewingEpisodes(m.TotalEpisodes, m.EpisodesWatched ?? 0, m.EntryStatus)
+            + WatchMath.RewatchEpisodesIncludingCurrentRun(m.RewatchCount ?? 0, m.TotalEpisodes, m.EpisodesWatched ?? 0, m.EntryStatus);
+        return (long)episodes * WatchMath.EpisodeSeconds(m.AverageEpisodeDurationSeconds);
+    }
 }
 
 /// <summary>One series' worth of Top series data: display fields from the
@@ -516,3 +569,13 @@ public sealed record SeriesRewatchResult(
     string? EnglishTitle,
     string? PictureUrl,
     long RewatchSeconds);
+
+/// <summary>One series' worth of watch-time data: display fields from the
+/// root member and the total watch time — first viewings plus rewatches —
+/// summed across every member (design.md D7).</summary>
+public sealed record SeriesWatchTimeResult(
+    int SeriesId,
+    string Title,
+    string? EnglishTitle,
+    string? PictureUrl,
+    long WatchedSeconds);

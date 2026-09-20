@@ -129,6 +129,43 @@ public class WatchMathTests
             rewatchCount: 2, totalEpisodes: null, episodesWatched: 3, status: WatchStatus.Rewatching));
     }
 
+    // --- FirstViewingEpisodes primitive (add-time-spent-and-trim-empty-scopes
+    // design.md D7, tasks.md 5.7): the entry-shaped overload delegates to the
+    // primitive, so the two must always agree. ---
+
+    [Fact]
+    public void FirstViewingEpisodes_RewatchingUsesThePublishedTotal()
+    {
+        var entry = Entry(episodesWatched: 3, rewatchCount: 1, totalEpisodes: 12);
+        entry.Status = WatchStatus.Rewatching;
+
+        Assert.Equal(12, WatchMath.FirstViewingEpisodes(entry.Anime.TotalEpisodes, entry.EpisodesWatched, entry.Status));
+        Assert.Equal(WatchMath.FirstViewingEpisodes(entry.Anime.TotalEpisodes, entry.EpisodesWatched, entry.Status),
+            WatchMath.FirstViewingEpisodes(entry));
+    }
+
+    [Fact]
+    public void FirstViewingEpisodes_RewatchingWithNoPublishedTotalFallsBackToEpisodesWatched()
+    {
+        var entry = Entry(episodesWatched: 3, rewatchCount: 1, totalEpisodes: null);
+        entry.Status = WatchStatus.Rewatching;
+
+        Assert.Equal(3, WatchMath.FirstViewingEpisodes(entry.Anime.TotalEpisodes, entry.EpisodesWatched, entry.Status));
+        Assert.Equal(WatchMath.FirstViewingEpisodes(entry.Anime.TotalEpisodes, entry.EpisodesWatched, entry.Status),
+            WatchMath.FirstViewingEpisodes(entry));
+    }
+
+    [Fact]
+    public void FirstViewingEpisodes_AnOrdinaryWatchingEntryIsItsOwnEpisodesWatched()
+    {
+        var entry = Entry(episodesWatched: 5, rewatchCount: 0, totalEpisodes: 12);
+        entry.Status = WatchStatus.Watching;
+
+        Assert.Equal(5, WatchMath.FirstViewingEpisodes(entry.Anime.TotalEpisodes, entry.EpisodesWatched, entry.Status));
+        Assert.Equal(WatchMath.FirstViewingEpisodes(entry.Anime.TotalEpisodes, entry.EpisodesWatched, entry.Status),
+            WatchMath.FirstViewingEpisodes(entry));
+    }
+
     [Theory]
     [InlineData("movie", true)]
     [InlineData("Movie", true)]

@@ -133,6 +133,25 @@ public record RewatchedSeriesItemDto(
 /// media-type scopes.</summary>
 public record RewatchedSeriesSectionDto(List<RewatchedSeriesItemDto> Items);
 
+/// <summary>One franchise ranked by "Most time spent": display fields from
+/// its root anime and its total watch time in seconds — first viewings plus
+/// rewatches, summed across every member, main line and extras alike
+/// (design.md D7) — the same per-entry arithmetic the profile's own
+/// <c>Days</c> stat uses, so the two can never disagree.</summary>
+// SeriesId is the root entry's MAL id (key-series-by-root-anime-id
+// design.md D1/D7), so a link built from it reaches the root anime.
+public record TimeSpentSeriesItemDto(
+    int SeriesId,
+    string Title,
+    string? EnglishTitle,
+    string? PictureUrl,
+    long WatchedSeconds);
+
+/// <summary>Every series with above-zero total watch time (design.md D8),
+/// ordered by that total descending then title case-insensitively, with no
+/// cap — mirrors <see cref="RewatchedSeriesSectionDto"/>'s shape.</summary>
+public record TimeSpentSeriesSectionDto(List<TimeSpentSeriesItemDto> Items);
+
 /// <summary>One entry the progress bar can't resolve a total for — neither a
 /// published episode count nor a known non-zero aired count, despite the
 /// anime having actually started airing — identifying enough to let the
@@ -155,6 +174,13 @@ public record UnresolvedEpisodeEntryDto(int AnimeId, string Title, string? Engli
 public record EpisodeProgressDto(
     int EpisodesWatched, int EpisodesTotal, int UnresolvedEntries, int TotalEntries,
     List<UnresolvedEpisodeEntryDto> UnresolvedAnime);
+
+/// <summary>Per box, the media-type scopes holding at least one entry that box
+/// would list, in tab order (add-time-spent-and-trim-empty-scopes design.md
+/// D1). <c>all</c> and <c>series</c> are deliberately absent from both lists:
+/// the client offers those two unconditionally rather than reading them here
+/// (design.md D3).</summary>
+public record ScopeOptionsDto(List<string> TopAnime, List<string> Rewatched);
 
 public record ScoreDistributionBucketDto(int Score, int Count);
 
@@ -179,10 +205,14 @@ public record OpinionDivergenceItemDto(
 /// FavouriteSeasons/FavouriteYears rank my whole list on the same Bayesian
 /// basis as a recap's season/year rankings (profile-stats "Favourite seasons
 /// and years", design.md decision 6) — sent in full, not truncated to five,
-/// since the "See all" overlay needs the tail.</summary>
+/// since the "See all" overlay needs the tail. ScopeOptions is which
+/// media-type scopes TopAnime's and Rewatched's own filters should offer,
+/// computed once here from the same data (add-time-spent-and-trim-empty-scopes
+/// design.md D1).</summary>
 public record ProfileDto(
     AnimeStatsDto Stats,
     EpisodeProgressDto EpisodeProgress,
+    ScopeOptionsDto ScopeOptions,
     List<ActivityFeedItemDto> RecentActivity,
     TopAnimeSectionDto TopAnime,
     RewatchedSectionDto Rewatched,

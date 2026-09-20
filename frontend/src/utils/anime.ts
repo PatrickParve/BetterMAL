@@ -240,10 +240,13 @@ export function formatRuntime(totalSeconds: number): string {
 }
 
 // A separate formatter from formatRuntime, not an option on it (design.md
-// D11): the rewatch badge sits over a poster and needs something shorter,
-// in days and decimal hours rather than days/hours/minutes, so no existing
-// caller of formatRuntime is affected by adding this. e.g. 3d 7h 40min ->
-// "3d 7.7h", 23min -> "0.38h", 24min -> "0.4h" (trailing zero trimmed).
+// D11): a poster badge needs something shorter than days/hours/minutes, in
+// days and decimal hours instead, so no existing caller of formatRuntime is
+// affected by adding this. States any series-level watch total on the
+// profile page — "Most rewatched"'s Series scope and "Most time spent"
+// alike — so the two read identically where they sit one above the other.
+// e.g. 3d 7h 40min -> "3d 7.7h", 23min -> "0.38h", 24min -> "0.4h" (trailing
+// zero trimmed).
 export function formatRewatchTime(totalSeconds: number): string {
   const totalHours = totalSeconds / 3600
 
