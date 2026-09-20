@@ -77,4 +77,79 @@ public class AnimeUpdateRecorderTests
         var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
         Assert.False(update.Seen);
     }
+
+    // record-both-ends-of-a-schedule-move design.md D2/tasks 1.4: both ends
+    // are written under the same kind-bit guard the Previous* fields already
+    // use, so no value is stored for a kind the row does not carry.
+    [Fact]
+    public async Task ARecordedPremiereChangeStoresBothDates()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "My show" };
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        await db.SaveChangesAsync();
+
+        var moves = new ScheduleMoveDetails(
+            PreviousStartDate: new DateOnly(2026, 10, 8),
+            NewStartDate: new DateOnly(2026, 10, 1));
+        await CreateRecorder(db).RecordAsync(anime, AnimeUpdateKinds.StartDateChanged, moves, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync();
+
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal(new DateOnly(2026, 10, 8), update.PreviousStartDate);
+        Assert.Equal(new DateOnly(2026, 10, 1), update.NewStartDate);
+    }
+
+    [Fact]
+    public async Task ARecordedSlotChangeStoresBothSlots()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "My show" };
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        await db.SaveChangesAsync();
+
+        var moves = new ScheduleMoveDetails(
+            PreviousBroadcastDayOfWeek: "mondays",
+            PreviousBroadcastTime: new TimeOnly(12, 0),
+            NewBroadcastDayOfWeek: "tuesdays",
+            NewBroadcastTime: new TimeOnly(13, 30));
+        await CreateRecorder(db).RecordAsync(anime, AnimeUpdateKinds.BroadcastSlotChanged, moves, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync();
+
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal("mondays", update.PreviousBroadcastDayOfWeek);
+        Assert.Equal(new TimeOnly(12, 0), update.PreviousBroadcastTime);
+        Assert.Equal("tuesdays", update.NewBroadcastDayOfWeek);
+        Assert.Equal(new TimeOnly(13, 30), update.NewBroadcastTime);
+    }
+
+    [Fact]
+    public async Task ASlotChangeStoresNoPremiereValuesAndViceVersa()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "My show" };
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        await db.SaveChangesAsync();
+
+        // One ScheduleMoveDetails carrying values for both kinds, but only
+        // BroadcastSlotChanged in Kinds — the premiere fields must not leak
+        // into the row despite being present on the struct handed in.
+        var moves = new ScheduleMoveDetails(
+            PreviousStartDate: new DateOnly(2026, 10, 8),
+            NewStartDate: new DateOnly(2026, 10, 1),
+            PreviousBroadcastDayOfWeek: "mondays",
+            PreviousBroadcastTime: new TimeOnly(12, 0),
+            NewBroadcastDayOfWeek: "tuesdays",
+            NewBroadcastTime: new TimeOnly(13, 30));
+        await CreateRecorder(db).RecordAsync(anime, AnimeUpdateKinds.BroadcastSlotChanged, moves, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync();
+
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Null(update.PreviousStartDate);
+        Assert.Null(update.NewStartDate);
+        Assert.NotNull(update.NewBroadcastDayOfWeek);
+    }
 }

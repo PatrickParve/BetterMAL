@@ -128,6 +128,85 @@ public class ProfileServiceActivityFeedTests
         Assert.Contains("9", item.Summary);
     }
 
+    // --- 4.5: the 30-day window with a 20-row floor ---
+
+    [Fact]
+    public async Task ABusyMonthYieldsEveryRowNotJustTwenty()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        // 60 distinct anime, each a lone Added row (its own AnimeId/group
+        // pair), all well within the 30-day window.
+        var window = Enumerable.Range(1, 60)
+            .Select(i => Log(i, i, ActivityChangeType.Added, now.AddMinutes(-i), "Added as Watching"))
+            .ToList();
+
+        var profile = await CreateService(db, window).GetProfileAsync();
+
+        Assert.Equal(60, profile.RecentActivity.Count);
+    }
+
+    [Fact]
+    public async Task AQuietWindowTopsUpFromOlderLogsInOneUnbrokenOrder()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        var cutoff = now.AddDays(-30);
+
+        // 3 rows inside the last 30 days.
+        var recentRows = new List<ActivityLog>
+        {
+            Log(1, 1, ActivityChangeType.Added, now, "Added as Watching"),
+            Log(2, 2, ActivityChangeType.Added, now.AddDays(-5), "Added as Watching"),
+            Log(3, 3, ActivityChangeType.Added, now.AddDays(-10), "Added as Watching"),
+        };
+        // 20 further rows before the cutoff, most recent first — only the
+        // nearest 17 should be needed to reach the floor of 20.
+        var olderRows = Enumerable.Range(1, 20)
+            .Select(i => Log(3 + i, 3 + i, ActivityChangeType.Added, cutoff.AddDays(-i), "Added as Watching"))
+            .ToList();
+
+        var profile = await CreateService(db, [.. recentRows, .. olderRows]).GetProfileAsync();
+
+        Assert.Equal(20, profile.RecentActivity.Count);
+        Assert.Equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+            profile.RecentActivity.Select(i => i.AnimeId));
+    }
+
+    [Fact]
+    public async Task AShortHistoryReturnsWhatItHas()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        // 8 rows, every one older than the 30-day window.
+        var window = Enumerable.Range(1, 8)
+            .Select(i => Log(i, i, ActivityChangeType.Added, now.AddDays(-40 - i), "Added as Watching"))
+            .ToList();
+
+        var profile = await CreateService(db, window).GetProfileAsync();
+
+        Assert.Equal(8, profile.RecentActivity.Count);
+    }
+
+    [Fact]
+    public async Task TheCollapsingRulesAreUnchangedByTheWiderWindow()
+    {
+        using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        List<ActivityLog> window =
+        [
+            Log(4, 1, ActivityChangeType.ScoreChanged, now, "Score 9"),
+            Log(3, 1, ActivityChangeType.ScoreChanged, now.AddDays(-1), "Score 8"),
+            Log(2, 1, ActivityChangeType.ScoreChanged, now.AddDays(-2), "Score 7"),
+            Log(1, 1, ActivityChangeType.ScoreChanged, now.AddDays(-3), "Score 6"),
+        ];
+
+        var profile = await CreateService(db, window).GetProfileAsync();
+
+        var item = Assert.Single(profile.RecentActivity);
+        Assert.Contains("9", item.Summary);
+    }
+
     [Fact]
     public async Task ConsecutiveEpisodeRowsCollapseInTheHistory()
     {
@@ -157,9 +236,14 @@ public class ProfileServiceActivityFeedTests
             throw new NotImplementedException();
     }
 
+    // recent backs both GetRecentAsync (the wider 400-row top-up read) and
+    // GetSinceAsync (the 30-day window read, filtered by cutoff here since
+    // the fake holds no database of its own).
     private sealed class FakeActivityLogRepository(List<ActivityLog> recent, List<ActivityLog> all) : IActivityLogRepository
     {
-        public Task<List<ActivityLog>> GetRecentAsync(int count, CancellationToken ct = default) => Task.FromResult(recent);
+        public Task<List<ActivityLog>> GetRecentAsync(int count, CancellationToken ct = default) => Task.FromResult(recent.Take(count).ToList());
+        public Task<List<ActivityLog>> GetSinceAsync(DateTimeOffset cutoffUtc, int maxRows, CancellationToken ct = default) =>
+            Task.FromResult(recent.Where(l => l.Timestamp >= cutoffUtc).Take(maxRows).ToList());
         public Task<List<ActivityLog>> GetAllAsync(CancellationToken ct = default) => Task.FromResult(all);
         public Task<List<ActivityLog>> GetEpisodeProgressInRangeAsync(DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
             throw new NotImplementedException();

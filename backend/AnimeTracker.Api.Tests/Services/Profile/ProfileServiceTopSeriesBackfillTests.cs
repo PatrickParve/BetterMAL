@@ -160,6 +160,8 @@ public class ProfileServiceTopSeriesBackfillTests
     {
         public Task<List<ActivityLog>> GetRecentAsync(int count, CancellationToken ct = default) =>
             throw new NotImplementedException();
+        public Task<List<ActivityLog>> GetSinceAsync(DateTimeOffset cutoffUtc, int maxRows, CancellationToken ct = default) =>
+            throw new NotImplementedException();
         public Task<List<ActivityLog>> GetAllAsync(CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<ActivityLog>> GetEpisodeProgressInRangeAsync(DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
             throw new NotImplementedException();

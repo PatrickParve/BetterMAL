@@ -156,18 +156,26 @@ public class AnimeUpdateService(
     {
         var anime = update.Anime;
 
-        DayOfWeek? currentDay = null;
-        TimeOnly? currentTime = null;
+        DayOfWeek? newDay = null;
+        TimeOnly? newTime = null;
         DayOfWeek? previousDay = null;
         TimeOnly? previousTime = null;
 
         // Only relevant to a broadcast-slot-changed card (task 6.4): both
         // ends of the move, converted through the same local-time path as
-        // every other broadcast time in the app.
+        // every other broadcast time in the app. The moved-to slot is read
+        // from the update's recorded pair where present, falling back to the
+        // anime's live pair as a whole only for a row that predates this
+        // being stored (design.md D3) — never mixing a recorded day with a
+        // live time or vice versa.
         if ((update.Kinds & AnimeUpdateKinds.BroadcastSlotChanged) != 0)
         {
-            if (MalMappingExtensions.ParseMalDayOfWeek(anime.BroadcastDayOfWeek) is { } jstDay && anime.BroadcastTime is { } jstTime)
-                (currentDay, currentTime) = broadcastConverter.ConvertBroadcastSlot(jstDay, jstTime, now);
+            var recordedNewSlot = update.NewBroadcastDayOfWeek is not null && update.NewBroadcastTime is not null;
+            var newJstDayOfWeek = recordedNewSlot ? update.NewBroadcastDayOfWeek : anime.BroadcastDayOfWeek;
+            var newJstTime = recordedNewSlot ? update.NewBroadcastTime : anime.BroadcastTime;
+
+            if (MalMappingExtensions.ParseMalDayOfWeek(newJstDayOfWeek) is { } jstDay && newJstTime is { } jstTime)
+                (newDay, newTime) = broadcastConverter.ConvertBroadcastSlot(jstDay, jstTime, now);
 
             if (MalMappingExtensions.ParseMalDayOfWeek(update.PreviousBroadcastDayOfWeek) is { } prevJstDay && update.PreviousBroadcastTime is { } prevJstTime)
                 (previousDay, previousTime) = broadcastConverter.ConvertBroadcastSlot(prevJstDay, prevJstTime, now);
@@ -186,8 +194,9 @@ public class AnimeUpdateService(
             update.PreviousStartDate,
             previousDay,
             previousTime,
-            currentDay,
-            currentTime,
+            update.NewStartDate ?? anime.AiredFrom,
+            newDay,
+            newTime,
             update.MovedEpisode,
             update.PreviousEpisodeDate,
             update.NewEpisodeDate,

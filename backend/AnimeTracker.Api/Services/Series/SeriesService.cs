@@ -170,11 +170,11 @@ public class SeriesService(
         // whole, unfiltered mainLineMembers regardless of any pick.
         var slots = BuildSlots(mainLineMembers);
         var defaultPick = slots.ToDictionary(s => s.SlotKey, s => s.DefaultBranchHeadAnimeId);
-        var stats = BuildStats(mainLineMembers, VisibleMainLineMembers(mainLineMembers, defaultPick), extraMembers, allAnime, airedEpisodesByAnimeId, globalRankByAnimeId);
+        var stats = BuildStats(mainLineMembers, VisibleMainLineMembers(mainLineMembers, defaultPick), extraMembers, airedEpisodesByAnimeId, globalRankByAnimeId);
         var statsByPick = EnumeratePickCombinations(slots)
             .Select(combo => new SeriesStatsByPickDto(
                 slots.Select(s => combo[s.SlotKey]).ToList(),
-                BuildStats(mainLineMembers, VisibleMainLineMembers(mainLineMembers, combo), extraMembers, allAnime, airedEpisodesByAnimeId, globalRankByAnimeId)))
+                BuildStats(mainLineMembers, VisibleMainLineMembers(mainLineMembers, combo), extraMembers, airedEpisodesByAnimeId, globalRankByAnimeId)))
             .ToList();
 
         return new SeriesDto(
@@ -603,7 +603,7 @@ public class SeriesService(
     // about favourite tie order, need no dictionary of their own.
     internal static SeriesStatsDto BuildStats(
         List<SeriesMember> mainLineMembers, List<SeriesMember> visibleMainLineMembers, List<SeriesMember> extraMembers,
-        List<AnimeMetadata> allAnime, Dictionary<int, int?> airedEpisodesByAnimeId,
+        Dictionary<int, int?> airedEpisodesByAnimeId,
         IReadOnlyDictionary<int, int?>? globalRankByAnimeId = null)
     {
         var visibleMainLineAnime = visibleMainLineMembers.Select(m => m.Anime).ToList();
@@ -663,14 +663,14 @@ public class SeriesService(
             orderedMembers.Where(m => m.Anime.UserEntry?.RewatchCount is > 0),
             m => m.Anime.UserEntry!.RewatchCount);
 
-        var studios = allAnime
+        var studios = visibleMainLineAnime
             .Select(a => a.Studio)
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .Distinct()
             .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
             .Select(s => s!)
             .ToList();
-        var genres = allAnime
+        var genres = visibleMainLineAnime
             .SelectMany(a => a.Genres ?? [])
             .Distinct()
             .OrderBy(g => g, StringComparer.OrdinalIgnoreCase)

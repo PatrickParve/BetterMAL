@@ -17,7 +17,19 @@ public class ProfileService(
     IEpisodeScheduleService episodeScheduleService,
     IAnimeRankingService rankingService) : IProfileService
 {
-    private const int RecentActivityCount = 20;
+    // The Latest-updates feed's floor: a quiet 30-day window still reaches
+    // back until it holds this many rows (design.md D4).
+    private const int RecentActivityFloor = 20;
+
+    // The Latest-updates feed's window: every row within the last 30 days is
+    // shown, uncapped (design.md D4) — RecentActivityMaxRows below is a
+    // safety valve, not this rule.
+    private const int RecentActivityWindowDays = 30;
+
+    // A safety valve, not a product rule: bounds one profile read's
+    // Include-bearing query against a pathologically busy 30-day window. Set
+    // well above any plausible month and expected never to bind.
+    private const int RecentActivityMaxRows = 5000;
 
     // Bounded per read so a cold install's my-list (which can hold thousands
     // of anime with no series) doesn't turn opening the profile page into
@@ -44,7 +56,6 @@ public class ProfileService(
     public async Task<ProfileDto> GetProfileAsync(CancellationToken ct = default)
     {
         var entries = await entryRepository.GetAllForListViewAsync(ct);
-        var recentActivityWindow = await activityLogRepository.GetRecentAsync(RecentActivityFetchWindow, ct);
         var orderedAnimeIds = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
 
         // profile-stats "All-list episode progress" (design.md decision 8):
@@ -68,11 +79,12 @@ public class ProfileService(
 
         var (theyLikedItIDidnt, iLikedItTheyDidnt) = BuildOpinionDivergence(entries);
         var (favouriteSeasons, favouriteYears) = BuildFavouriteSeasonsAndYears(entries, rankingSnapshot);
+        var recentActivity = await BuildRecentActivityFeedAsync(ct);
 
         return new ProfileDto(
             BuildStats(entries),
             BuildEpisodeProgress(entries, airedCounts),
-            BuildActivityFeed(recentActivityWindow),
+            recentActivity,
             BuildTopAnimeSection(entries, rankingSnapshot, TopAnimeMediaTypeScope.All),
             BuildRewatchedSection(entries, TopAnimeMediaTypeScope.All),
             BuildScoreDistribution(entries),
@@ -80,6 +92,25 @@ public class ProfileService(
             iLikedItTheyDidnt,
             favouriteSeasons,
             favouriteYears);
+    }
+
+    // The Latest-updates feed's 30-day window with a 20-row floor (design.md
+    // D4): the common case is one read of everything since the cutoff, built
+    // straight into the feed. Only a month quiet enough to collapse to fewer
+    // than the floor pays for the second, wider read — reusing today's fixed
+    // 400-row query and rebuilding over it with the same cutoff and floor, so
+    // the top-up is a strict continuation of the recent rows rather than a
+    // second list stitched on.
+    private async Task<List<ActivityFeedItemDto>> BuildRecentActivityFeedAsync(CancellationToken ct)
+    {
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-RecentActivityWindowDays);
+        var window = await activityLogRepository.GetSinceAsync(cutoff, RecentActivityMaxRows, ct);
+        var feed = BuildActivityFeed(window, cutoff, RecentActivityFloor);
+        if (feed.Count >= RecentActivityFloor)
+            return feed;
+
+        var widerWindow = await activityLogRepository.GetRecentAsync(RecentActivityFetchWindow, ct);
+        return BuildActivityFeed(widerWindow, cutoff, RecentActivityFloor);
     }
 
     public async Task<List<ActivityFeedItemDto>> GetActivityHistoryAsync(CancellationToken ct = default)
@@ -264,7 +295,13 @@ public class ProfileService(
     // latest membership state. A completion is the newest progress row for
     // its anime whenever one exists, so it wins over the increases behind it
     // without a separate adjacency check.
-    private static List<ActivityFeedItemDto> BuildActivityFeed(List<ActivityLog> window)
+    //
+    // Termination (design.md D4): walking stops once the log under
+    // consideration is older than cutoff AND the feed already holds floor
+    // items — so a busy window is carried in full (nothing in it is ever
+    // "older than cutoff"), and a quiet one keeps reaching back, past the
+    // cutoff, until it reaches floor or the window runs out.
+    private static List<ActivityFeedItemDto> BuildActivityFeed(List<ActivityLog> window, DateTimeOffset cutoff, int floor)
     {
         var merges = ActivityFeedComposer.FindCompletionScoreMerges(window);
         var droppedScoreLogIds = merges.Values.Select(m => m.ScoreLogId).ToHashSet();
@@ -274,6 +311,9 @@ public class ProfileService(
 
         foreach (var log in window)
         {
+            if (log.Timestamp < cutoff && feed.Count >= floor)
+                break;
+
             if (droppedScoreLogIds.Contains(log.Id))
                 continue;
 
@@ -288,8 +328,6 @@ public class ProfileService(
 
             var mergedScore = merges.TryGetValue(log.Id, out var merge) ? merge.Score : null;
             feed.Add(ToActivityFeedItem(log, mergedScore));
-            if (feed.Count == RecentActivityCount)
-                break;
         }
 
         return feed;

@@ -3,11 +3,11 @@ import { useSearchParams } from 'react-router-dom'
 import { getSearchPage } from '../api/client.ts'
 import type { AnimeBrowseItemDto, SeriesSearchResultDto } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
-import { FilterMultiSelect, type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
+import { FilterMultiSelect } from '../components/FilterMultiSelect.tsx'
 import { SeriesBadge } from '../components/SeriesBadge.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
-import { MEDIA_TYPE_ORDER, mediaTypeLabel } from '../utils/anime.ts'
+import { MEDIA_TYPE_FILTER_OPTIONS, mediaTypeFilterOptions } from '../utils/anime.ts'
 import './SearchPage.css'
 
 type SortKey = 'relevance' | 'popularity' | 'malScore' | 'alphabetical' | 'myScore'
@@ -119,19 +119,7 @@ export function SearchPage() {
 
   // Type filter options: only the media types actually present in the loaded
   // candidate set, mirroring MyListPage's presentTypes/hasUnknownType (D6).
-  const typeOptions = useMemo(() => {
-    const presentTypes = new Set<string>()
-    let hasUnknownType = false
-    for (const item of items) {
-      if (item.mediaType) presentTypes.add(item.mediaType)
-      else hasUnknownType = true
-    }
-    const options: FilterMultiSelectOption[] = MEDIA_TYPE_ORDER.filter((value) => presentTypes.has(value)).map(
-      (value) => ({ value, label: mediaTypeLabel(value) }),
-    )
-    if (hasUnknownType) options.push({ value: 'unknown', label: 'Unknown' })
-    return options
-  }, [items])
+  const typeOptions = useMemo(() => mediaTypeFilterOptions(items.map((item) => item.mediaType)), [items])
 
   const filteredItems = useMemo(
     () => (typeFilter === null ? items : items.filter((item) => typeFilter.includes(item.mediaType ?? 'unknown'))),
@@ -163,9 +151,13 @@ export function SearchPage() {
           {totalCount > 0 && (
             <span className="search-page__count">{filteredItems.length + series.length} results</span>
           )}
-          {typeOptions.length > 0 && (
-            <FilterMultiSelect label="Type" options={typeOptions} selected={typeFilter} onChange={setTypeFilter} />
-          )}
+          <FilterMultiSelect
+            label="Type"
+            options={typeOptions}
+            widthOptions={MEDIA_TYPE_FILTER_OPTIONS}
+            selected={typeFilter}
+            onChange={setTypeFilter}
+          />
           <select
             className="search-page__sort"
             value={sort}

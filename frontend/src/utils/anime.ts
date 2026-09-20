@@ -6,6 +6,7 @@ import {
   type SeriesStatus,
   type WatchStatus,
 } from '../api/types.ts'
+import { type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
 
 // Prefer the English title wherever an anime title is displayed, falling
 // back to the default (usually romaji/native) title when MAL has none.
@@ -130,6 +131,35 @@ export function mediaTypeLabel(raw: string | null | undefined): string {
   if (known) return known
   const spaced = raw.replace(/_/g, ' ')
   return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+}
+
+// The complete universe of options a Type filter can ever offer, independent
+// of what data has loaded — reserves a filter trigger's width before any
+// entry has arrived (fit-my-list-filters-to-the-list design D7). `Unknown`
+// is unconditional here, unlike the *offered* type lists below, which add it
+// only when an untyped entry is actually present.
+export const MEDIA_TYPE_FILTER_OPTIONS: FilterMultiSelectOption[] = [
+  ...MEDIA_TYPE_ORDER.map((value) => ({ value, label: mediaTypeLabel(value) })),
+  { value: 'unknown', label: 'Unknown' },
+]
+
+// Builds the present-types option list for a Type filter — canonical order
+// (MEDIA_TYPE_ORDER then Unknown, the latter added only when a null value is
+// seen). Shared by SeasonPage, YearPage and SearchPage, whose Type filters
+// used to build this same loop independently.
+export function mediaTypeFilterOptions(values: Iterable<string | null>): FilterMultiSelectOption[] {
+  const present = new Set<string>()
+  let hasUnknown = false
+  for (const value of values) {
+    if (value) present.add(value)
+    else hasUnknown = true
+  }
+  const options: FilterMultiSelectOption[] = MEDIA_TYPE_ORDER.filter((value) => present.has(value)).map((value) => ({
+    value,
+    label: mediaTypeLabel(value),
+  }))
+  if (hasUnknown) options.push({ value: 'unknown', label: 'Unknown' })
+  return options
 }
 
 // Mirrors backend Services/Ranking/RankBand.cs RankBandResolver.Resolve's
@@ -271,6 +301,15 @@ export const AIRING_STATUS_LABELS: Record<AiringStatus, string> = {
   currently_airing: 'Currently airing',
   not_yet_aired: 'Not yet aired',
 }
+
+// The complete universe of options an Airing filter can ever offer — the
+// same width-reservation role as MEDIA_TYPE_FILTER_OPTIONS (design D7).
+export const AIRING_FILTER_OPTIONS: FilterMultiSelectOption[] = [
+  { value: 'finished_airing', label: AIRING_STATUS_LABELS.finished_airing },
+  { value: 'currently_airing', label: AIRING_STATUS_LABELS.currently_airing },
+  { value: 'not_yet_aired', label: AIRING_STATUS_LABELS.not_yet_aired },
+  { value: 'unknown', label: 'Unknown' },
+]
 
 // My list's two-level sort (D5): a primary key with an optional tiebreaker,
 // each direction-aware and built so a missing value never leads the list.
@@ -430,7 +469,7 @@ export function composeComparator(
 // The Series page's seven sort orders (add-series-browser design.md D8).
 export type SeriesSortKey = 'alphabetical' | 'malScore' | 'myScore' | 'status' | 'newest' | 'oldest' | 'myProgress'
 
-const SERIES_STATUS_ORDER: Record<SeriesStatus, number> = { Airing: 0, Ongoing: 1, Upcoming: 2, Finished: 3 }
+const SERIES_STATUS_ORDER: Record<SeriesStatus, number> = { Airing: 0, Ongoing: 1, Finished: 2 }
 
 // Watched ÷ aired over the main line, not watched ÷ total — being current on
 // a running series ranks alongside having finished a done one. A series with
@@ -499,7 +538,7 @@ export function sortSeries(items: SeriesListItemDto[], sort: SeriesSortKey): Ser
 // design.md D6). URL-friendly lowercase values, distinct from the wire
 // SeriesProgressBadge/SeriesStatus values they map to.
 export type SeriesProgressFilterValue = 'watched' | 'behind' | 'dropped' | 'unwatched'
-export type SeriesStatusFilterValue = 'airing' | 'ongoing' | 'upcoming' | 'finished'
+export type SeriesStatusFilterValue = 'airing' | 'ongoing' | 'finished'
 
 export const SERIES_PROGRESS_FILTER_OPTIONS: { value: SeriesProgressFilterValue; label: string }[] = [
   { value: 'watched', label: 'Watched' },
@@ -511,7 +550,6 @@ export const SERIES_PROGRESS_FILTER_OPTIONS: { value: SeriesProgressFilterValue;
 export const SERIES_STATUS_FILTER_OPTIONS: { value: SeriesStatusFilterValue; label: string }[] = [
   { value: 'airing', label: 'Airing' },
   { value: 'ongoing', label: 'Ongoing' },
-  { value: 'upcoming', label: 'Upcoming' },
   { value: 'finished', label: 'Finished' },
 ]
 
@@ -528,7 +566,6 @@ const PROGRESS_FILTER_BADGES: Record<SeriesProgressFilterValue, SeriesProgressBa
 const STATUS_FILTER_VALUES: Record<SeriesStatusFilterValue, SeriesStatus> = {
   airing: 'Airing',
   ongoing: 'Ongoing',
-  upcoming: 'Upcoming',
   finished: 'Finished',
 }
 

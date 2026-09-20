@@ -29,27 +29,29 @@ function buildNewsLine(kind: AnimeUpdateKind, item: AnimeUpdateDto): string | nu
     case 'StartDateReleased':
       return item.airedFrom !== null ? `Premiere: ${formatUpdateDate(item.airedFrom)}` : null
     case 'StartDateChanged': {
-      if (!item.airedFrom || !item.previousStartDate) return null
-      const to = new Date(item.airedFrom)
+      if (!item.newStartDate || !item.previousStartDate) return null
+      const to = new Date(item.newStartDate)
       const was = new Date(item.previousStartDate)
       // "Moved up"/"Moved down" rest on an up/down metaphor that reads both
       // ways depending on whether the reader pictures a calendar running up
       // or down (design.md D1) — "Moved earlier"/"Delayed" name the thing
       // that moved instead, so neither can be read in reverse. Where the two
-      // dates coincide (the "to" value is live, the "was" value is
-      // recorded, so a move that later reverses can land back on itself)
-      // neither verb applies — the guard below reports the move without a
-      // direction rather than claiming one between a date and itself.
+      // dates coincide (a row recorded before both ends were stored falls
+      // back to the anime's current value, which can equal the recorded
+      // "was" value, or the anime returned to the date it moved from —
+      // record-both-ends-of-a-schedule-move design.md D4) neither verb
+      // applies — the guard below reports the move without a direction
+      // rather than claiming one between a date and itself.
       if (to.getTime() === was.getTime()) {
-        return `Premiere moved to ${formatUpdateDate(item.airedFrom)}`
+        return `Premiere moved to ${formatUpdateDate(item.newStartDate)}`
       }
       const verb = to > was ? 'Delayed' : 'Moved earlier'
-      return `${verb} to ${formatUpdateDate(item.airedFrom)} · was ${formatUpdateDate(item.previousStartDate)}`
+      return `${verb} to ${formatUpdateDate(item.newStartDate)} · was ${formatUpdateDate(item.previousStartDate)}`
     }
     case 'BroadcastSlotChanged': {
-      if (!item.currentBroadcastDayOfWeek || !item.currentBroadcastTime || !item.previousBroadcastDayOfWeek || !item.previousBroadcastTime)
+      if (!item.newBroadcastDayOfWeek || !item.newBroadcastTime || !item.previousBroadcastDayOfWeek || !item.previousBroadcastTime)
         return null
-      return `Now ${formatSlot(item.currentBroadcastDayOfWeek, item.currentBroadcastTime)} · was ${formatSlot(item.previousBroadcastDayOfWeek, item.previousBroadcastTime)}`
+      return `Now ${formatSlot(item.newBroadcastDayOfWeek, item.newBroadcastTime)} · was ${formatSlot(item.previousBroadcastDayOfWeek, item.previousBroadcastTime)}`
     }
     case 'EpisodesMoved':
       return item.movedEpisode !== null && item.newEpisodeDate && item.previousEpisodeDate

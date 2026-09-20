@@ -14,6 +14,13 @@ export type FilterMultiSelectOption = { value: string; label: string }
 type FilterMultiSelectProps = {
   label: string
   options: FilterMultiSelectOption[]
+  // The full universe of values this control could ever offer, independent
+  // of what's currently on offer — width reservation only (D7 of
+  // fit-my-list-filters-to-the-list). It never appears in the panel, never
+  // affects emit()'s All-normalisation, and never affects which values pass
+  // the filter. Defaults to `options`, so a caller with no universe to give
+  // keeps today's behaviour of sizing to whatever it currently offers.
+  widthOptions?: FilterMultiSelectOption[]
   selected: string[] | null
   onChange: (next: string[] | null) => void
 }
@@ -22,7 +29,7 @@ type FilterMultiSelectProps = {
 // list's type and airing-status filters). A native <select multiple> was
 // rejected: it renders as a fixed-height scrolling box, has no room for a
 // summary label, and behaves badly for multi-selection on macOS (D7).
-export function FilterMultiSelect({ label, options, selected, onChange }: FilterMultiSelectProps) {
+export function FilterMultiSelect({ label, options, widthOptions = options, selected, onChange }: FilterMultiSelectProps) {
   const [open, setOpen] = useState(false)
   const [alignEnd, setAlignEnd] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -79,21 +86,43 @@ export function FilterMultiSelect({ label, options, selected, onChange }: Filter
     return `${value.length} selected`
   }
 
-  // The count branch above is now unreachable for a full selection — emit()
-  // normalises that to `null` before it ever reaches summary() — so "N
-  // selected" only ever describes a genuinely partial selection.
+  // One option means every selection this control could express is the view
+  // already on screen (see `unavailable` below), so its label states that
+  // one value rather than the ordinary All/None/label/count states; zero
+  // options falls through to bareSummary(null), which reads All since
+  // `unavailable` only holds with `selected === null` (D5).
   function summary(): string {
+    if (unavailable && options.length === 1) return `${label}: ${options[0].label}`
     return `${label}: ${bareSummary(selected)}`
   }
 
-  // Every bare state the control could ever show for its current options:
-  // All, None, each option's own label, and "N selected" for every count in
-  // between (2..options.length - 1; a full count is unreachable, see emit).
+  // Every bare state the control could ever show, for either the options it
+  // currently offers or the wider universe `widthOptions` reserves against —
+  // unioned rather than built from the universe alone, because
+  // `mediaTypeLabel` prettifies any raw value MAL adds that the app hasn't
+  // mapped yet, so an offered label can sit outside the universe and would
+  // otherwise be clipped (design D7). Deduped since the two lists usually
+  // overlap heavily.
   function summaryCandidates(): string[] {
+    const n = Math.max(widthOptions.length, options.length)
     const counts: string[] = []
-    for (let n = 2; n <= options.length - 1; n++) counts.push(`${n} selected`)
-    return ['All', 'None', ...options.map((option) => option.label), ...counts]
+    for (let i = 2; i <= n - 1; i++) counts.push(`${i} selected`)
+    const candidates = [
+      'All',
+      'None',
+      ...widthOptions.map((option) => option.label),
+      ...options.map((option) => option.label),
+      ...counts,
+    ]
+    return [...new Set(candidates)]
   }
+
+  // One option left means every selection this control could express is the
+  // view already on screen; zero options means there's nothing to express
+  // either way. Gated on `selected === null` so a control that is itself
+  // narrowing the view — a stale selection over a since-narrowed base — stays
+  // available and its restriction can still be lifted (D5).
+  const unavailable = selected === null && options.length <= 1
 
   // Handled at the container so it fires regardless of which element inside
   // the panel has focus (button, a checkbox, a shortcut) — stopPropagation
@@ -110,9 +139,13 @@ export function FilterMultiSelect({ label, options, selected, onChange }: Filter
     <div className="filter-multi-select" ref={containerRef} onKeyDown={handleKeyDown}>
       <button
         type="button"
+        // No `&& !unavailable` guard needed here: `unavailable` only ever
+        // holds when `selected === null`, which is already the branch that
+        // leaves the accent off.
         className={`filter-multi-select__button${selected !== null ? ' filter-multi-select--active' : ''}`}
         aria-haspopup="true"
         aria-expanded={open}
+        disabled={unavailable}
         onClick={() => setOpen((prev) => !prev)}
       >
         <StableLabel current={summary()} candidates={summaryCandidates().map((candidate) => `${label}: ${candidate}`)} />

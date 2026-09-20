@@ -191,9 +191,12 @@ export type AnimeUpdateKind =
 // One card of news about an anime (anime-updates spec) — every kind noticed
 // in a single detection pass merged into one row. totalEpisodes/airedFrom are
 // the anime's *current* values, read live, so a later correction shows up
-// here without the row itself changing; the previous* fields are the
-// exception, reported exactly as recorded since for those the news is the
-// movement itself.
+// here without the row itself changing. previous*/new* are the opposite:
+// both ends of a schedule move, read from the update itself so the pair a
+// card reports cannot change because the anime moved again
+// (record-both-ends-of-a-schedule-move) — except new* falls back to the
+// anime's current value for a row recorded before the moved-to value was
+// stored.
 export type AnimeUpdateDto = {
   id: number
   animeId: number
@@ -207,8 +210,9 @@ export type AnimeUpdateDto = {
   previousStartDate: string | null
   previousBroadcastDayOfWeek: string | null
   previousBroadcastTime: string | null
-  currentBroadcastDayOfWeek: string | null
-  currentBroadcastTime: string | null
+  newStartDate: string | null
+  newBroadcastDayOfWeek: string | null
+  newBroadcastTime: string | null
   movedEpisode: number | null
   previousEpisodeDate: string | null
   newEpisodeDate: string | null
@@ -818,7 +822,7 @@ export type SeriesStatsDto = {
   genres: string[]
 }
 
-export type SeriesStatus = 'Airing' | 'Ongoing' | 'Upcoming' | 'Finished'
+export type SeriesStatus = 'Airing' | 'Ongoing' | 'Finished'
 
 // One version slot on the main line (rebuild-series-by-story-component
 // design.md D4): alternativeAnimeIds is every alternative the slot holds, in

@@ -113,4 +113,70 @@ public class AnimeMetadataChangeDetectorTests
 
         Assert.Empty(await db.RelationDiscoveries.ToListAsync());
     }
+
+    // record-both-ends-of-a-schedule-move design.md D2: both ends of a
+    // schedule move are in hand at the moment RecordFieldUpdates compares
+    // before against anime, so it passes the just-written value as the
+    // moved-to end — no new read, no new query.
+    [Fact]
+    public async Task APremiereMovePassesTheJustWrittenDateAsTheMovedToEnd()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata
+        {
+            Id = 1,
+            Title = "Anime 1",
+            LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60),
+            AiringStatus = "not_yet_aired",
+            AiredFrom = new DateOnly(2026, 10, 8),
+        };
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        await db.SaveChangesAsync();
+
+        var detector = CreateDetector(db, new SeriesBuildTrigger());
+        var before = detector.Snapshot(anime);
+
+        anime.AiredFrom = new DateOnly(2026, 10, 1);
+
+        await detector.RecordAsync(anime, before, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync();
+
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal(new DateOnly(2026, 10, 8), update.PreviousStartDate);
+        Assert.Equal(new DateOnly(2026, 10, 1), update.NewStartDate);
+    }
+
+    [Fact]
+    public async Task ASlotMovePassesTheJustWrittenSlotAsTheMovedToEnd()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata
+        {
+            Id = 1,
+            Title = "Anime 1",
+            LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60),
+            AiringStatus = "currently_airing",
+            BroadcastDayOfWeek = "mondays",
+            BroadcastTime = new TimeOnly(12, 0),
+        };
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        await db.SaveChangesAsync();
+
+        var detector = CreateDetector(db, new SeriesBuildTrigger());
+        var before = detector.Snapshot(anime);
+
+        anime.BroadcastDayOfWeek = "tuesdays";
+        anime.BroadcastTime = new TimeOnly(13, 30);
+
+        await detector.RecordAsync(anime, before, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync();
+
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal("mondays", update.PreviousBroadcastDayOfWeek);
+        Assert.Equal(new TimeOnly(12, 0), update.PreviousBroadcastTime);
+        Assert.Equal("tuesdays", update.NewBroadcastDayOfWeek);
+        Assert.Equal(new TimeOnly(13, 30), update.NewBroadcastTime);
+    }
 }

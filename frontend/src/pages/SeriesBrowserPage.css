@@ -79,11 +79,6 @@
   --tab-color: var(--status-onhold);
   --tab-bg: var(--status-onhold-bg);
 }
-.series-browser-page__filter-button--upcoming {
-  --tab-border: var(--status-plantowatch-border);
-  --tab-color: var(--status-plantowatch);
-  --tab-bg: var(--status-plantowatch-bg);
-}
 .series-browser-page__filter-button--finished {
   --tab-border: var(--status-completed-border);
   --tab-color: var(--status-completed);

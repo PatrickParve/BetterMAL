@@ -830,7 +830,15 @@ export function SeriesPage() {
   const myMediaTypes = new Set(
     series.extras.filter((e) => e.entry != null).map((e) => e.mediaType ?? 'unknown'),
   )
+  // series-page "The 'In my list' control SHALL NOT be rendered when no
+  // extra of the series is in my list" (design.md D2): also narrows the
+  // filter's effective state below, so a restored `mineOnly` can't narrow a
+  // section whose control is absent.
+  const anyExtraIsMine = series.extras.some((e) => e.entry != null)
 
+  // series-page design.md D2: a restored `mineOnly` only narrows a group
+  // when the control that could turn it off is actually on screen.
+  const mineOnlyEffective = mineOnly && anyExtraIsMine
   const extrasGroups = groupExtras(series.extras)
   // Membership, not status, per group's visible tiles (design.md decision 3);
   // narrowed further by the type filter, which composes with it rather than
@@ -844,10 +852,10 @@ export function SeriesPage() {
       const typeAdmitted = group.items.filter(typeAdmits)
       // design.md D1: the group's heading opens it in full unless it's
       // already showing everything, in which case the heading collapses it.
-      const showsAll = !isCollapsed && (!mineOnly || isUnfiltered)
+      const showsAll = !isCollapsed && (!mineOnlyEffective || isUnfiltered)
       const visibleItems = isCollapsed
         ? []
-        : mineOnly && !isUnfiltered
+        : mineOnlyEffective && !isUnfiltered
           ? typeAdmitted.filter((e) => e.entry != null)
           : typeAdmitted
       return { group, key, isCollapsed, showsAll, visibleItems, typeAdmittedCount: typeAdmitted.length }
@@ -867,7 +875,7 @@ export function SeriesPage() {
   // collapsing a group, from a heading, the expand/collapse-all control, or
   // a media-type button, never changes what this reads while the filter
   // itself is unchanged.
-  const filterActive = mineOnly && unfilteredGroups.size === 0
+  const filterActive = mineOnlyEffective && unfilteredGroups.size === 0
 
   // Multi-select toggle for the media-type filter row (design.md decision 3):
   // selecting narrows every group to that type, alongside whatever else is
@@ -1292,14 +1300,16 @@ export function SeriesPage() {
           <div className="series-page__more-header">
             <h2>More</h2>
             <div className="series-page__more-controls">
-              <button
-                type="button"
-                className={`series-page__toggle-mine${filterActive ? ' series-page__toggle-mine--active' : ''}`}
-                aria-pressed={filterActive}
-                onClick={toggleMineOnly}
-              >
-                In my list
-              </button>
+              {anyExtraIsMine && (
+                <button
+                  type="button"
+                  className={`series-page__toggle-mine${filterActive ? ' series-page__toggle-mine--active' : ''}`}
+                  aria-pressed={filterActive}
+                  onClick={toggleMineOnly}
+                >
+                  In my list
+                </button>
+              )}
               <button type="button" className="series-page__toggle-all" onClick={toggleAllExtrasGroups}>
                 {extrasGroups.length > 1
                   ? nothingHidden
@@ -1320,7 +1330,7 @@ export function SeriesPage() {
                 // SHALL NOT be selectable" while the filter is on (design.md
                 // D5): disabled, with the reason in its accessible name
                 // rather than only in its greyed-out styling.
-                const unavailable = mineOnly && !myMediaTypes.has(type)
+                const unavailable = mineOnlyEffective && !myMediaTypes.has(type)
                 return (
                   <button
                     key={type}

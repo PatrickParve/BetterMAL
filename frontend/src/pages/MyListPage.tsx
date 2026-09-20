@@ -126,6 +126,44 @@ function statusFiltersLabel(statusFilters: StatusFilter): string {
   return statusFilters.length === 0 ? 'All' : statusFilters.map((status) => STATUS_LABELS[status]).join(', ')
 }
 
+// The three filter predicates, factored out so the option pass below (which
+// tests each candidate against the *other* two) and the match pass apply
+// exactly the same rule rather than two copies of it (design D8, tasks.md
+// 3.1).
+function passesType(item: MyListItemDto, typeFilter: string[] | null): boolean {
+  return typeFilter === null || typeFilter.includes(item.mediaType ?? 'unknown')
+}
+
+function passesAiring(item: MyListItemDto, airingFilter: string[] | null): boolean {
+  return airingFilter === null || airingFilter.includes(item.airingStatus ?? 'unknown')
+}
+
+function passesScore(item: MyListItemDto, scoreFilter: ScoreFilter): boolean {
+  if (scoreFilter === 'any') return true
+  if (scoreFilter === 'rated') return item.entry.myScore != null
+  if (scoreFilter === 'unrated') return item.entry.myScore == null
+  return item.entry.myScore === Number(scoreFilter)
+}
+
+// Builds a Type/Airing option list from the values a base actually holds,
+// unioned with the control's own current selection (design D4, tasks.md
+// 3.4) — so a selection stays offered, and untickable, even once the rest of
+// the page has narrowed away from it. `order` never includes 'unknown'; it's
+// appended once, whenever the base holds an untyped/unstatused entry or the
+// selection itself names it.
+function narrowedFilterOptions(
+  order: readonly string[],
+  present: Set<string>,
+  hasUnknown: boolean,
+  selection: string[] | null,
+  labelFor: (value: string) => string,
+): FilterMultiSelectOption[] {
+  const forced = new Set(selection ?? [])
+  const values = order.filter((value) => present.has(value) || forced.has(value))
+  if (hasUnknown || forced.has('unknown')) values.push('unknown')
+  return values.map((value) => ({ value, label: labelFor(value) }))
+}
+
 type Derivation =
   | { mode: 'grouped'; total: number; shown: number; groups: { status: WatchStatus; items: MyListItemDto[] }[] }
   | { mode: 'flat'; total: number; shown: number; items: MyListItemDto[] }
@@ -441,65 +479,113 @@ export function MyListPage() {
     return items.filter((item) => scopedAnimeIds.has(item.animeId))
   }, [items, hasRecapScope, scopedAnimeIds])
 
-  // Type/airing filter option lists: only the values actually present in the
-  // list, so a control never offers a choice that returns nothing (D6) —
-  // scoped, same as everything else below, so an option the scope holds
-  // none of isn't offered either.
-  const filterOptions = useMemo(() => {
+  // Recap scope -> status tabs. Kept addressable on its own (rather than
+  // folded into `candidates` below) because `derived.total` must stay its
+  // length — that's what separates "Nothing here yet" from "Nothing matches
+  // these filters" (design D8, tasks.md 3.2).
+  const statusScoped = useMemo(
+    () => (statusFilters.length === 0 ? scopedItems : scopedItems.filter((item) => statusFilters.includes(item.entry.status))),
+    [scopedItems, statusFilters],
+  )
+
+  // The find-in-list text counts as one of the "other controls" the three
+  // filters read (design D3) — narrowed here, once, ahead of the option/match
+  // pass below.
+  const candidates = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (!needle) return statusScoped
+    return statusScoped.filter((item) => {
+      const titleMatch = item.title.toLowerCase().includes(needle)
+      const englishMatch = item.englishTitle ? item.englishTitle.toLowerCase().includes(needle) : false
+      return titleMatch || englishMatch
+    })
+  }, [statusScoped, query])
+
+  // One pass over `candidates` produces the three option lists and the
+  // matched set together (design D8): each entry is tested once against each
+  // predicate, and it counts toward a control's options exactly when it
+  // passes the *other* two — never its own, so a filter never narrows its
+  // own options (design D1) — and toward `matched` when it passes all three.
+  const { matched, typeOptions, airingOptions, scoreOptions, scoreDisabledLabel } = useMemo(() => {
     const presentTypes = new Set<string>()
     let hasUnknownType = false
     const presentAiring = new Set<string>()
     let hasUnknownAiring = false
-    const presentScores = new Set<number>()
-    for (const item of scopedItems) {
-      if (item.mediaType) presentTypes.add(item.mediaType)
-      else hasUnknownType = true
-      if (item.airingStatus) presentAiring.add(item.airingStatus)
-      else hasUnknownAiring = true
-      if (item.entry.myScore != null) presentScores.add(item.entry.myScore)
+    let scoreBaseTotal = 0
+    let scoreBaseRated = 0
+    const scoreCounts = new Map<number, number>()
+    const matched: MyListItemDto[] = []
+
+    for (const item of candidates) {
+      const t = passesType(item, typeFilter)
+      const a = passesAiring(item, airingFilter)
+      const s = passesScore(item, scoreFilter)
+
+      if (a && s) {
+        if (item.mediaType) presentTypes.add(item.mediaType)
+        else hasUnknownType = true
+      }
+      if (t && s) {
+        if (item.airingStatus) presentAiring.add(item.airingStatus)
+        else hasUnknownAiring = true
+      }
+      if (t && a) {
+        scoreBaseTotal++
+        if (item.entry.myScore != null) {
+          scoreBaseRated++
+          scoreCounts.set(item.entry.myScore, (scoreCounts.get(item.entry.myScore) ?? 0) + 1)
+        }
+      }
+      if (t && a && s) matched.push(item)
     }
 
-    const typeOptions: FilterMultiSelectOption[] = MEDIA_TYPE_ORDER.filter((value) => presentTypes.has(value)).map(
-      (value) => ({ value, label: mediaTypeLabel(value) }),
+    const typeOptions = narrowedFilterOptions(MEDIA_TYPE_ORDER, presentTypes, hasUnknownType, typeFilter, mediaTypeLabel)
+    const airingOptions = narrowedFilterOptions(
+      Object.keys(AIRING_STATUS_LABELS),
+      presentAiring,
+      hasUnknownAiring,
+      airingFilter,
+      (value) => (value === 'unknown' ? 'Unknown' : AIRING_STATUS_LABELS[value as AiringStatus]),
     )
-    if (hasUnknownType) typeOptions.push({ value: 'unknown', label: 'Unknown' })
 
-    const airingOptions: FilterMultiSelectOption[] = (Object.keys(AIRING_STATUS_LABELS) as AiringStatus[])
-      .filter((status) => presentAiring.has(status))
-      .map((status) => ({ value: status, label: AIRING_STATUS_LABELS[status] }))
-    if (hasUnknownAiring) airingOptions.push({ value: 'unknown', label: 'Unknown' })
-
-    // 10 down to 1, same order as the old fixed list — narrowed to scores at
-    // least one entry actually has, same rule as Type/Airing above.
-    const scoreOptions = Array.from({ length: 10 }, (_, i) => 10 - i).filter((value) => presentScores.has(value))
-
-    return { typeOptions, airingOptions, scoreOptions }
-  }, [scopedItems])
-
-  // One derivation: filter (status -> text -> type -> airing -> score), sort
-  // with the composed comparator, then either group by status or leave flat
-  // (D3). Runs off the raw query on every keystroke — what bounds the cost is
-  // the reveal cap (PAGE_SIZE) and its render-time reset, not a delay here.
-  const derived = useMemo<Derivation>(() => {
-    const statusScoped =
-      statusFilters.length === 0 ? scopedItems : scopedItems.filter((item) => statusFilters.includes(item.entry.status))
-    const needle = query.trim().toLowerCase()
-
-    const matched = statusScoped.filter((item) => {
-      if (needle) {
-        const titleMatch = item.title.toLowerCase().includes(needle)
-        const englishMatch = item.englishTitle ? item.englishTitle.toLowerCase().includes(needle) : false
-        if (!titleMatch && !englishMatch) return false
-      }
-      if (typeFilter !== null && !typeFilter.includes(item.mediaType ?? 'unknown')) return false
-      if (airingFilter !== null && !airingFilter.includes(item.airingStatus ?? 'unknown')) return false
-      if (scoreFilter === 'rated' && item.entry.myScore == null) return false
-      if (scoreFilter === 'unrated' && item.entry.myScore != null) return false
-      if (scoreFilter !== 'any' && scoreFilter !== 'rated' && scoreFilter !== 'unrated' && item.entry.myScore !== Number(scoreFilter))
-        return false
-      return true
+    // A score value is offered iff present and not universal over the base;
+    // Rated/Unrated are offered iff the base is mixed (design D2). The base
+    // excludes the score filter's own restriction, same as the two controls
+    // above (design D1).
+    const scoreBaseUnrated = scoreBaseTotal - scoreBaseRated
+    const ratedUnratedOffered = scoreBaseRated > 0 && scoreBaseUnrated > 0
+    const offeredValues = Array.from({ length: 10 }, (_, i) => 10 - i).filter((value) => {
+      const count = scoreCounts.get(value) ?? 0
+      return count > 0 && count < scoreBaseTotal
     })
 
+    // Presentation order: Any, Rated, 10..1, Unrated. `scoreFilter`'s own
+    // current value is forced in regardless of the rule above (design D4).
+    const scoreOptions: ScoreFilter[] = ['any']
+    if (ratedUnratedOffered || scoreFilter === 'rated') scoreOptions.push('rated')
+    for (let value = 10; value >= 1; value--) {
+      if (offeredValues.includes(value) || scoreFilter === String(value)) scoreOptions.push(String(value) as ScoreFilter)
+    }
+    if (ratedUnratedOffered || scoreFilter === 'unrated') scoreOptions.push('unrated')
+
+    // Disabled exactly when nothing besides Any would ever be offered and the
+    // score filter isn't itself narrowing the list (design D5). By D2's own
+    // proof there are exactly three ways to reach this — a mixed base or two
+    // distinct scores always leave something else offerable (tasks.md 3.6).
+    let scoreDisabledLabel: string | null = null
+    if (scoreFilter === 'any' && !ratedUnratedOffered && offeredValues.length === 0) {
+      if (scoreBaseTotal === 0) scoreDisabledLabel = 'Any'
+      else if (scoreBaseRated === 0) scoreDisabledLabel = 'Unrated'
+      else scoreDisabledLabel = String([...scoreCounts.keys()][0])
+    }
+
+    return { matched, typeOptions, airingOptions, scoreOptions, scoreDisabledLabel }
+  }, [candidates, typeFilter, airingFilter, scoreFilter])
+
+  // Sorts and groups `matched` (design D8) — what matches, and the `shown`/
+  // `total` counts, are unchanged from before this change; only where the
+  // option lists come from moved.
+  const derived = useMemo<Derivation>(() => {
     const comparator = composeComparator(sort, sortDirection, sortThen)
 
     if (groupByStatus) {
@@ -515,18 +601,7 @@ export function MyListPage() {
     }
 
     return { mode: 'flat', total: statusScoped.length, shown: matched.length, items: [...matched].sort(comparator) }
-  }, [
-    scopedItems,
-    statusFilters,
-    query,
-    typeFilter,
-    airingFilter,
-    scoreFilter,
-    sort,
-    sortDirection,
-    sortThen,
-    groupByStatus,
-  ])
+  }, [matched, statusScoped, statusFilters, sort, sortDirection, sortThen, groupByStatus])
 
   // Reveal the next page of an array that is already filtered, sorted and in
   // memory once the sentinel comes into view — no network call and no control
@@ -773,9 +848,10 @@ export function MyListPage() {
           onDirectionToggle: () => setSortDirection((prev) => (prev === 'natural' ? 'reversed' : 'natural')),
           onGroupByStatusChange: setGroupByStatus,
         }}
-        typeOptions={filterOptions.typeOptions}
-        airingOptions={filterOptions.airingOptions}
-        scoreOptions={filterOptions.scoreOptions}
+        typeOptions={typeOptions}
+        airingOptions={airingOptions}
+        scoreOptions={scoreOptions}
+        scoreDisabledLabel={scoreDisabledLabel}
       />
 
       {hasResultsLine && (

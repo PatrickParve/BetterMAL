@@ -1,7 +1,7 @@
-/* min-width + centred text so "Upcoming" and "Finished" render at the same
-   width (polish-series-badges-and-filters design.md D5) — matches
-   SeriesCompletionBadge's own sizing rule so the two sit as evenly sized
-   controls beside each other. */
+/* min-width + centred text so every status renders at the same width as
+   "Finished", its widest label (polish-series-badges-and-filters design.md
+   D5) — matches SeriesCompletionBadge's own sizing rule so the two sit as
+   evenly sized controls beside each other. */
 .series-status-pill {
   display: inline-flex;
   align-items: center;
@@ -29,12 +29,6 @@
   border-color: var(--status-onhold-border);
   background: var(--status-onhold-bg);
   color: var(--status-onhold);
-}
-
-.series-status-pill--upcoming {
-  border-color: var(--status-plantowatch-border);
-  background: var(--status-plantowatch-bg);
-  color: var(--status-plantowatch);
 }
 
 .series-status-pill--finished {

@@ -22,9 +22,11 @@ public enum AnimeUpdateKinds
 /// one row per kind (design.md D1). Current facts (episode count, premiere
 /// date) are deliberately not stored here and are read live from
 /// <see cref="AnimeMetadata"/>, so a later correction is reflected on an old
-/// card instead of leaving it stating a superseded value (design.md D3). Only
-/// the schedule-change kinds store anything, because for those the news *is*
-/// the movement and the anime's current record holds only where it landed.</summary>
+/// card instead of leaving it stating a superseded value (design.md D3). The
+/// schedule-change kinds store both ends of the move — where it moved from
+/// and where it moved to — because for those the news *is* the movement, and
+/// the anime's current record holds only where it stands now (record-both-ends-
+/// of-a-schedule-move design.md D1).</summary>
 public class AnimeUpdate
 {
     public long Id { get; set; }
@@ -33,14 +35,18 @@ public class AnimeUpdate
     public DateTimeOffset DetectedAt { get; set; }
     public AnimeUpdateKinds Kinds { get; set; }
 
-    // Moved-from values for the schedule-change kinds (design.md D3) — never
+    // Both ends of the move for the schedule-change kinds — neither is
     // re-derived from the anime's current record, which by then holds only
-    // the value it moved to. The broadcast pair mirrors AnimeMetadata's own
-    // JST day/time columns and is converted for display, the same as every
+    // where its schedule stands now (record-both-ends-of-a-schedule-move
+    // design.md D1). The broadcast pairs mirror AnimeMetadata's own JST
+    // day/time columns and are converted for display, the same as every
     // other broadcast time in the app.
     public DateOnly? PreviousStartDate { get; set; }
     public string? PreviousBroadcastDayOfWeek { get; set; } // JST, e.g. "mondays"
     public TimeOnly? PreviousBroadcastTime { get; set; } // JST
+    public DateOnly? NewStartDate { get; set; }
+    public string? NewBroadcastDayOfWeek { get; set; } // JST, e.g. "mondays"
+    public TimeOnly? NewBroadcastTime { get; set; } // JST
 
     // The earliest episode that moved, when Kinds includes EpisodesMoved, with
     // the local calendar dates it moved between (design.md D16).

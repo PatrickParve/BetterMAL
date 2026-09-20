@@ -18,6 +18,16 @@ public class ActivityLogRepository(AnimeTrackerDbContext db) : IActivityLogRepos
             .Take(count)
             .ToListAsync(ct);
 
+    public Task<List<ActivityLog>> GetSinceAsync(DateTimeOffset cutoffUtc, int maxRows, CancellationToken ct = default) =>
+        db.ActivityLogs.AsNoTracking()
+            .Include(l => l.Anime)
+            .Where(l => l.Timestamp >= cutoffUtc)
+            .OrderByDescending(l => l.Timestamp)
+            // See the comment on the same ordering in GetRecentAsync.
+            .ThenByDescending(l => l.Id)
+            .Take(maxRows)
+            .ToListAsync(ct);
+
     public Task<List<ActivityLog>> GetAllAsync(CancellationToken ct = default) =>
         db.ActivityLogs.AsNoTracking()
             .Include(l => l.Anime)

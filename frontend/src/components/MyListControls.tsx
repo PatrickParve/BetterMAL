@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import type { SortDirection, SortKey } from '../utils/anime.ts'
+import { AIRING_FILTER_OPTIONS, MEDIA_TYPE_FILTER_OPTIONS, type SortDirection, type SortKey } from '../utils/anime.ts'
 import { FilterMultiSelect, type FilterMultiSelectOption } from './FilterMultiSelect.tsx'
 import { StableLabel } from './StableLabel.tsx'
 import './MyListControls.css'
@@ -60,6 +60,23 @@ function directionLabel(key: SortKey, direction: SortDirection): string {
   return direction === 'natural' ? pair.natural : pair.reversed
 }
 
+function scoreOptionLabel(value: ScoreFilter): string {
+  if (value === 'any') return 'Score: Any'
+  if (value === 'rated') return 'Score: Rated'
+  if (value === 'unrated') return 'Score: Unrated'
+  return `Score: ${value}`
+}
+
+// Every value the score select could ever hold, in presentation order —
+// used only to size the hidden twin select beside the live one (design D7,
+// tasks.md 4.5), independent of what the list currently narrows down to.
+const SCORE_FILTER_WIDTH_VALUES: ScoreFilter[] = [
+  'any',
+  'rated',
+  ...Array.from({ length: 10 }, (_, i) => String(10 - i) as ScoreFilter),
+  'unrated',
+]
+
 export type MyListFiltersProps = {
   query: string
   onQueryChange: (value: string) => void
@@ -87,10 +104,14 @@ type MyListControlsProps = {
   sort: MyListSortProps
   typeOptions: FilterMultiSelectOption[]
   airingOptions: FilterMultiSelectOption[]
-  // Only the score values at least one list entry actually has (MyListPage's
-  // filterOptions) — so the select never offers a score nothing was ever
-  // rated, matching the Type/Airing options beside it.
-  scoreOptions: number[]
+  // The choices that would change the list (MyListPage's one-pass option
+  // memo), in presentation order — not "the score values at least one entry
+  // has", since Rated/Unrated and a value are each dropped when choosing
+  // them wouldn't narrow, or would empty, what's currently listed (design D2).
+  scoreOptions: ScoreFilter[]
+  // Non-null exactly when the score control has nothing left to choose
+  // between (design D5) — the value its disabled label should name.
+  scoreDisabledLabel: string | null
 }
 
 function FindGlyph() {
@@ -106,7 +127,7 @@ function FindGlyph() {
 // label + wrapping controls row (design D2). Purely presentational: every
 // value and every setter/handler comes from MyListPage, which keeps the
 // restorable state and the sort-choice decoding (design D11).
-export function MyListControls({ filters, sort, typeOptions, airingOptions, scoreOptions }: MyListControlsProps) {
+export function MyListControls({ filters, sort, typeOptions, airingOptions, scoreOptions, scoreDisabledLabel }: MyListControlsProps) {
   const findInputRef = useRef<HTMLInputElement>(null)
 
   return (
@@ -144,28 +165,55 @@ export function MyListControls({ filters, sort, typeOptions, airingOptions, scor
             </button>
           )}
         </div>
-        <FilterMultiSelect label="Type" options={typeOptions} selected={filters.typeFilter} onChange={filters.onTypeFilterChange} />
+        <FilterMultiSelect
+          label="Type"
+          options={typeOptions}
+          widthOptions={MEDIA_TYPE_FILTER_OPTIONS}
+          selected={filters.typeFilter}
+          onChange={filters.onTypeFilterChange}
+        />
         <FilterMultiSelect
           label="Airing"
           options={airingOptions}
+          widthOptions={AIRING_FILTER_OPTIONS}
           selected={filters.airingFilter}
           onChange={filters.onAiringFilterChange}
         />
-        <select
-          className={`my-list-controls__select${filters.scoreFilter !== 'any' ? ' my-list-controls--active' : ''}`}
-          value={filters.scoreFilter}
-          onChange={(event) => filters.onScoreFilterChange(event.target.value as ScoreFilter)}
-          aria-label="Filter by score"
-        >
-          <option value="any">Score: Any</option>
-          <option value="rated">Score: Rated</option>
-          {scoreOptions.map((value) => (
-            <option key={value} value={value}>
-              Score: {value}
-            </option>
-          ))}
-          <option value="unrated">Score: Unrated</option>
-        </select>
+        {/* The single-area grid mirrors StableLabel's cell technique (see
+            StableLabel.css) — a native select can't use StableLabel itself
+            (a hidden <span> can't account for the browser's own dropdown
+            arrow), so the hidden twin select beside the live one reserves
+            that width directly (design D7). */}
+        <div className="my-list-controls__score">
+          <select
+            className={`my-list-controls__select${filters.scoreFilter !== 'any' ? ' my-list-controls--active' : ''}`}
+            value={filters.scoreFilter}
+            onChange={(event) => filters.onScoreFilterChange(event.target.value as ScoreFilter)}
+            disabled={scoreDisabledLabel !== null}
+            aria-label="Filter by score"
+          >
+            {scoreDisabledLabel !== null ? (
+              <option value="any">Score: {scoreDisabledLabel}</option>
+            ) : (
+              scoreOptions.map((value) => (
+                <option key={value} value={value}>
+                  {scoreOptionLabel(value)}
+                </option>
+              ))
+            )}
+          </select>
+          <select
+            className="my-list-controls__select my-list-controls__select--sizer"
+            aria-hidden="true"
+            tabIndex={-1}
+          >
+            {SCORE_FILTER_WIDTH_VALUES.map((value) => (
+              <option key={value} value={value}>
+                {scoreOptionLabel(value)}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <span id="my-list-controls-sort-label" className="my-list-controls__label my-list-controls__label--sort">

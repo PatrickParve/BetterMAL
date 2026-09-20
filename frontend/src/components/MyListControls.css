@@ -67,6 +67,34 @@
   color: var(--text);
 }
 
+.my-list-controls__select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Single-area grid, the same technique StableLabel.css uses for its own
+   cell: the live select and its hidden twin both occupy 'value', so the
+   pair is exactly as wide as whichever draws widest. A native select can't
+   be sized by a hidden <span> the way StableLabel sizes a button label — it
+   draws its own dropdown arrow, which only another real select can account
+   for (fit-my-list-filters-to-the-list design D7). */
+.my-list-controls__score {
+  display: grid;
+  grid-template-areas: 'value';
+}
+
+.my-list-controls__score > .my-list-controls__select {
+  grid-area: value;
+}
+
+.my-list-controls__score > .my-list-controls__select:not(.my-list-controls__select--sizer) {
+  width: 100%;
+}
+
+.my-list-controls__select--sizer {
+  visibility: hidden;
+}
+
 .my-list-controls__find {
   position: relative;
   display: flex;

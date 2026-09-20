@@ -22,6 +22,22 @@ public class AnimeUpdateServiceTests
     private static AnimeUpdateService CreateService(AnimeTrackerDbContext db) =>
         new(db, new AnimeUpdateRelevance(db, new RelationResolver(db)), new BroadcastLocalTimeConverter());
 
+    private static AnimeUpdateService CreateServiceWithPassthroughConverter(AnimeTrackerDbContext db) =>
+        new(db, new AnimeUpdateRelevance(db, new RelationResolver(db)), new FakeBroadcastLocalTimeConverter());
+
+    // The house fake (mirrors MainDashboardServiceReopenTests and friends): a
+    // pass-through so a slot test can assert on the JST day/time it stored
+    // without doing Helsinki/Tokyo DST arithmetic by hand.
+    private sealed class FakeBroadcastLocalTimeConverter : IBroadcastLocalTimeConverter
+    {
+        public DateOnly GetStartOfWeek(DateOnly referenceDate) => referenceDate;
+        public DateOnly GetLocalDate(DateTimeOffset instantUtc) => DateOnly.FromDateTime(instantUtc.UtcDateTime);
+        public TimeOnly GetLocalTime(DateTimeOffset instantUtc) => TimeOnly.FromDateTime(instantUtc.UtcDateTime);
+        public DateTimeOffset LocalMidnightUtc(DateOnly localDate) => new(localDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        public (DayOfWeek LocalDayOfWeek, TimeOnly LocalTime) ConvertBroadcastSlot(DayOfWeek jstDayOfWeek, TimeOnly jstTime, DateTimeOffset referenceUtc) =>
+            (jstDayOfWeek, jstTime);
+    }
+
     [Fact]
     public async Task StandaloneNonDroppedEntryQualifiesWithNoRelationsAtAll()
     {
@@ -281,5 +297,121 @@ public class AnimeUpdateServiceTests
 
         Assert.Equal(13, dto.TotalEpisodes); // live value, follows the correction
         Assert.Equal(new DateOnly(2024, 10, 5), dto.PreviousStartDate); // recorded value, unaffected
+    }
+
+    // anime-updates spec, "A later correction does not rewrite an earlier
+    // update" — could not be written before record-both-ends-of-a-schedule-move
+    // stored the moved-to value on the row itself.
+    [Fact]
+    public async Task APremiereUpdateReportsThePairItWasRecordedForAfterTheAnimeMovesAgain()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1,
+            Title = "Solo",
+            AiredFrom = new DateOnly(2026, 11, 20), // the anime's premiere moved a second time
+        });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        db.AnimeUpdates.Add(new AnimeUpdate
+        {
+            AnimeId = 1,
+            DetectedAt = DateTimeOffset.UtcNow,
+            Kinds = AnimeUpdateKinds.StartDateChanged,
+            PreviousStartDate = new DateOnly(2026, 10, 8),
+            NewStartDate = new DateOnly(2026, 10, 1), // what this row recorded for its own move
+        });
+        await db.SaveChangesAsync();
+
+        var dto = Assert.Single(await CreateService(db).GetHistoryAsync());
+
+        Assert.Equal(new DateOnly(2026, 10, 8), dto.PreviousStartDate);
+        Assert.Equal(new DateOnly(2026, 10, 1), dto.NewStartDate); // recorded pair, not the anime's current date
+    }
+
+    [Fact]
+    public async Task ASlotUpdateReportsThePairItWasRecordedForAfterTheAnimeMovesAgain()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1,
+            Title = "Solo",
+            BroadcastDayOfWeek = "wednesdays", // the anime's slot moved a second time
+            BroadcastTime = new TimeOnly(15, 0),
+        });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        db.AnimeUpdates.Add(new AnimeUpdate
+        {
+            AnimeId = 1,
+            DetectedAt = DateTimeOffset.UtcNow,
+            Kinds = AnimeUpdateKinds.BroadcastSlotChanged,
+            PreviousBroadcastDayOfWeek = "mondays",
+            PreviousBroadcastTime = new TimeOnly(12, 0),
+            NewBroadcastDayOfWeek = "tuesdays", // what this row recorded for its own move
+            NewBroadcastTime = new TimeOnly(13, 30),
+        });
+        await db.SaveChangesAsync();
+
+        var dto = Assert.Single(await CreateServiceWithPassthroughConverter(db).GetHistoryAsync());
+
+        Assert.Equal(DayOfWeek.Monday, dto.PreviousBroadcastDayOfWeek);
+        Assert.Equal(new TimeOnly(12, 0), dto.PreviousBroadcastTime);
+        Assert.Equal(DayOfWeek.Tuesday, dto.NewBroadcastDayOfWeek); // recorded pair, not the anime's current slot
+        Assert.Equal(new TimeOnly(13, 30), dto.NewBroadcastTime);
+    }
+
+    // anime-updates spec, "An update recorded before both ends were stored" —
+    // rows predating the backfill (or the deploy) have no recorded moved-to
+    // value and must keep showing the anime's current one.
+    [Fact]
+    public async Task APremiereUpdateWithNoRecordedMovedToValueFallsBackToTheAnimesCurrentValue()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Solo", AiredFrom = new DateOnly(2026, 10, 1) });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        db.AnimeUpdates.Add(new AnimeUpdate
+        {
+            AnimeId = 1,
+            DetectedAt = DateTimeOffset.UtcNow,
+            Kinds = AnimeUpdateKinds.StartDateChanged,
+            PreviousStartDate = new DateOnly(2026, 10, 8),
+            NewStartDate = null, // recorded before this change shipped
+        });
+        await db.SaveChangesAsync();
+
+        var dto = Assert.Single(await CreateService(db).GetHistoryAsync());
+
+        Assert.Equal(new DateOnly(2026, 10, 1), dto.NewStartDate); // falls back to the anime's current value
+    }
+
+    [Fact]
+    public async Task ASlotUpdateWithNoRecordedMovedToValueFallsBackToTheAnimesCurrentValue()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1,
+            Title = "Solo",
+            BroadcastDayOfWeek = "tuesdays",
+            BroadcastTime = new TimeOnly(13, 30),
+        });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        db.AnimeUpdates.Add(new AnimeUpdate
+        {
+            AnimeId = 1,
+            DetectedAt = DateTimeOffset.UtcNow,
+            Kinds = AnimeUpdateKinds.BroadcastSlotChanged,
+            PreviousBroadcastDayOfWeek = "mondays",
+            PreviousBroadcastTime = new TimeOnly(12, 0),
+            NewBroadcastDayOfWeek = null, // recorded before this change shipped
+            NewBroadcastTime = null,
+        });
+        await db.SaveChangesAsync();
+
+        var dto = Assert.Single(await CreateServiceWithPassthroughConverter(db).GetHistoryAsync());
+
+        Assert.Equal(DayOfWeek.Tuesday, dto.NewBroadcastDayOfWeek); // falls back to the anime's current slot
+        Assert.Equal(new TimeOnly(13, 30), dto.NewBroadcastTime);
     }
 }

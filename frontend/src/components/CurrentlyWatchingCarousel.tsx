@@ -44,7 +44,7 @@ function buildCorrectiveEdit(record: {
 export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCompleted }: CurrentlyWatchingCarouselProps) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [pendingId, setPendingId] = useState<number | null>(null)
-  const [overflowing, setOverflowing] = useState(false)
+  const [bounds, setBounds] = useState({ overflowing: false, atStart: true, atEnd: true })
   // Completions left in the row without a saved score, keyed by anime id,
   // each with the card's finish date as loaded (main-dashboard: "A
   // completion left in Currently watching can be undone from its card").
@@ -54,20 +54,31 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
   const incrementEpisode = useEpisodeIncrement()
   const setEpisodesWatched = useSetEpisodesWatched()
 
-  // Arrows only make sense when the row actually overflows — recompute on
-  // resize (font/zoom/window changes) and whenever the item count changes.
+  // Arrows only make sense when the row actually overflows, and each one
+  // disables once the row can no longer move further in its direction —
+  // recompute on resize (font/zoom/window changes), on scroll (arrow click,
+  // trackpad, touch) and whenever the item count changes.
   useEffect(() => {
     const node = trackRef.current
     if (!node || items.length === 0) return
 
-    function updateOverflow() {
-      setOverflowing(node!.scrollWidth > node!.clientWidth + 1)
+    function updateBounds() {
+      const { scrollLeft, scrollWidth, clientWidth } = node!
+      setBounds({
+        overflowing: scrollWidth > clientWidth + 1,
+        atStart: scrollLeft <= 1,
+        atEnd: scrollLeft >= scrollWidth - clientWidth - 1,
+      })
     }
 
-    updateOverflow()
-    const observer = new ResizeObserver(updateOverflow)
+    updateBounds()
+    const observer = new ResizeObserver(updateBounds)
     observer.observe(node)
-    return () => observer.disconnect()
+    node.addEventListener('scroll', updateBounds)
+    return () => {
+      observer.disconnect()
+      node.removeEventListener('scroll', updateBounds)
+    }
   }, [items])
 
   // Count patches keep an id in `items`, so only a server read prunes a
@@ -167,8 +178,14 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
     <section className="dashboard-section dashboard-section--carousel">
       <h2>Currently watching</h2>
       <div className="carousel">
-        {overflowing && (
-          <button type="button" className="carousel__arrow" onClick={() => scroll(-1)} aria-label="Scroll left">
+        {bounds.overflowing && (
+          <button
+            type="button"
+            className="carousel__arrow"
+            onClick={() => scroll(-1)}
+            disabled={bounds.atStart}
+            aria-label="Scroll left"
+          >
             ‹
           </button>
         )}
@@ -208,8 +225,14 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
             />
           ))}
         </div>
-        {overflowing && (
-          <button type="button" className="carousel__arrow" onClick={() => scroll(1)} aria-label="Scroll right">
+        {bounds.overflowing && (
+          <button
+            type="button"
+            className="carousel__arrow"
+            onClick={() => scroll(1)}
+            disabled={bounds.atEnd}
+            aria-label="Scroll right"
+          >
             ›
           </button>
         )}

@@ -56,10 +56,15 @@
   cursor: pointer;
 }
 
-.carousel__arrow:hover {
+.carousel__arrow:enabled:hover {
   color: var(--text-h);
   background: var(--accent-bg);
   border-color: var(--accent-border);
+}
+
+.carousel__arrow:disabled {
+  cursor: default;
+  opacity: 0.4;
 }
 
 .carousel__countdown {

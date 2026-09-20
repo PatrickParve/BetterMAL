@@ -8,6 +8,16 @@ public interface IActivityLogRepository
 {
     Task<List<ActivityLog>> GetRecentAsync(int count, CancellationToken ct = default);
 
+    /// <summary>Every log newer than <paramref name="cutoffUtc"/>, most recent
+    /// first, bounded by <paramref name="maxRows"/> as a safety valve — backs
+    /// the "Latest updates" feed's 30-day window. Ordering matches <see
+    /// cref="GetRecentAsync"/> (<c>Timestamp desc, Id desc</c>); that ordering
+    /// is not optional, since <see
+    /// cref="AnimeTracker.Api.Services.Profile.ProfileService.BuildActivityFeed"/>'s
+    /// completion/score merge depends on rows arriving in this exact
+    /// order.</summary>
+    Task<List<ActivityLog>> GetSinceAsync(DateTimeOffset cutoffUtc, int maxRows, CancellationToken ct = default);
+
     /// <summary>Full history, most recent first — backs the "Latest updates"
     /// box's edit-history overlay.</summary>
     Task<List<ActivityLog>> GetAllAsync(CancellationToken ct = default);

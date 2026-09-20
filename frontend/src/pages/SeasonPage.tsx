@@ -4,13 +4,13 @@ import { getSeasonPage, refreshSeason } from '../api/client.ts'
 import type { AnimeBrowseItemDto } from '../api/types.ts'
 import { RECAP_SEASONS, type RecapSeasonName } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
-import { FilterMultiSelect, type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
+import { FilterMultiSelect } from '../components/FilterMultiSelect.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { useOnDemandProbe, useSeasonBounds } from '../hooks/useSeasonBounds.ts'
-import { MEDIA_TYPE_ORDER, mediaTypeLabel, seasonPointIndex, shiftSeason } from '../utils/anime.ts'
+import { MEDIA_TYPE_FILTER_OPTIONS, mediaTypeFilterOptions, seasonPointIndex, shiftSeason } from '../utils/anime.ts'
 import {
   EARLIEST_YEAR,
   currentSeasonTarget,
@@ -260,19 +260,7 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
   // Every media type present in the whole loaded listing — filtering is
   // client-side now, so selecting one type can no longer hide the others
   // from this picker; no accumulation workaround is needed.
-  const typeOptions = useMemo(() => {
-    const presentTypes = new Set<string>()
-    let hasUnknownType = false
-    for (const item of items) {
-      if (item.mediaType) presentTypes.add(item.mediaType)
-      else hasUnknownType = true
-    }
-    const options: FilterMultiSelectOption[] = MEDIA_TYPE_ORDER.filter((value) => presentTypes.has(value)).map(
-      (value) => ({ value, label: mediaTypeLabel(value) }),
-    )
-    if (hasUnknownType) options.push({ value: 'unknown', label: 'Unknown' })
-    return options
-  }, [items])
+  const typeOptions = useMemo(() => mediaTypeFilterOptions(items.map((item) => item.mediaType)), [items])
 
   function setTarget(next: { year: number; season: RecapSeasonName }) {
     setSearchParams((prev) => {
@@ -474,9 +462,13 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
               </option>
             ))}
           </select>
-          {typeOptions.length > 0 && (
-            <FilterMultiSelect label="Type" options={typeOptions} selected={typeFilter} onChange={setTypeFilter} />
-          )}
+          <FilterMultiSelect
+            label="Type"
+            options={typeOptions}
+            widthOptions={MEDIA_TYPE_FILTER_OPTIONS}
+            selected={typeFilter}
+            onChange={setTypeFilter}
+          />
           <label className="season-page__checkbox">
             <input type="checkbox" checked={inMyList} onChange={(event) => setInMyList(event.target.checked)} />
             In my list

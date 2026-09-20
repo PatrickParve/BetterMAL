@@ -236,7 +236,7 @@ public class AnimeMetadataChangeDetector(
         else if (before.AiredFrom is not null && anime.AiredFrom is not null && before.AiredFrom != anime.AiredFrom)
         {
             kinds |= AnimeUpdateKinds.StartDateChanged;
-            moves = moves with { PreviousStartDate = before.AiredFrom };
+            moves = moves with { PreviousStartDate = before.AiredFrom, NewStartDate = anime.AiredFrom };
         }
 
         var slotKnownBefore = before.BroadcastDayOfWeek is not null || before.BroadcastTime is not null;
@@ -249,6 +249,8 @@ public class AnimeMetadataChangeDetector(
             {
                 PreviousBroadcastDayOfWeek = before.BroadcastDayOfWeek,
                 PreviousBroadcastTime = before.BroadcastTime,
+                NewBroadcastDayOfWeek = anime.BroadcastDayOfWeek,
+                NewBroadcastTime = anime.BroadcastTime,
             };
         }
 

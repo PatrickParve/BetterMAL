@@ -44,7 +44,7 @@ public class SeriesServiceComputeStatusTests
     }
 
     [Fact]
-    public void MainLineAiringWithNothingFinishedReadsAiringNotUpcoming()
+    public void MainLineAiringWithNothingFinishedReadsAiring()
     {
         var firstSeasonAiring = Anime(1, "currently_airing");
         var mainLine = new List<AnimeMetadata> { firstSeasonAiring };
@@ -75,12 +75,12 @@ public class SeriesServiceComputeStatusTests
     }
 
     [Fact]
-    public void NothingAiredYetReadsUpcoming()
+    public void NothingAiredYetReadsOngoing()
     {
         var notYetAired = Anime(1, "not_yet_aired");
         var mainLine = new List<AnimeMetadata> { notYetAired };
         var members = new List<AnimeMetadata> { notYetAired };
 
-        Assert.Equal("Upcoming", SeriesService.ComputeStatus(mainLine, members));
+        Assert.Equal("Ongoing", SeriesService.ComputeStatus(mainLine, members));
     }
 }

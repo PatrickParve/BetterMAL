@@ -104,11 +104,15 @@ public record SeriesScoresDto(
 /// (profile-navbar-and-dropped-scores design.md decision 3); the name is
 /// kept as the wire contract for the frontend's
 /// <c>series.stats.mainLineCompletedByMe</c>. <c>ExtrasCompleted</c> counts extras marked Completed, the extras-side
-/// twin of <c>EntriesCompleted</c>. The highest-scored/most-rewatched/favourite/studios/genres figures
-/// span every member, main line and extras alike; the highest-scored and
+/// twin of <c>EntriesCompleted</c>. The highest-scored/most-rewatched/favourite
+/// figures span every member, main line and extras alike; the highest-scored and
 /// most-rewatched lists carry every tied entry rather than one arbitrary
 /// winner (design.md decision 8), and <c>MostRewatchedAnimeIds</c> is empty
-/// when no member has been rewatched at all.</summary>
+/// when no member has been rewatched at all. <c>Studios</c> and <c>Genres</c>,
+/// by contrast, are scoped to the visible main line — the main line after the
+/// version-slot pick resolves — the same member basis the episode, runtime and
+/// watched figures above already use, so a slot pick moves them together
+/// (trim-dead-controls-and-widen-updates design.md D3).</summary>
 public record SeriesStatsDto(
     int MainLineEpisodeTotal,
     long MainLineRuntimeSeconds,
@@ -154,7 +158,7 @@ public record SeriesSlotDto(int SlotKey, List<int> AlternativeAnimeIds, int Defa
 public record SeriesStatsByPickDto(List<int> BranchHeadAnimeIds, SeriesStatsDto Stats);
 
 /// <summary>Full projection of a franchise for the series page. <c>Status</c>
-/// is one of "Airing", "Ongoing", "Upcoming", or "Finished" (design.md/task
+/// is one of "Airing", "Ongoing", or "Finished" (design.md/task
 /// 3.4) — computed server-side since it depends on every member's airing
 /// status, not just the root's. "Airing" is main-line-only: it is returned
 /// only when a main-line member is currently airing. "Ongoing" now covers

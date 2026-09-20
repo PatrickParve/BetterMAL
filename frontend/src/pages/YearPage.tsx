@@ -3,13 +3,13 @@ import { Navigate, useSearchParams } from 'react-router-dom'
 import { getYearPage, refreshYear } from '../api/client.ts'
 import type { AnimeBrowseItemDto } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
-import { FilterMultiSelect, type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
+import { FilterMultiSelect } from '../components/FilterMultiSelect.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { useOnDemandProbe, useSeasonBounds } from '../hooks/useSeasonBounds.ts'
-import { MEDIA_TYPE_ORDER, mediaTypeLabel } from '../utils/anime.ts'
+import { MEDIA_TYPE_FILTER_OPTIONS, mediaTypeFilterOptions } from '../utils/anime.ts'
 import { EARLIEST_YEAR, currentSeasonTarget, isAddressableYear, probeTarget, yearsInRange } from '../utils/browseRange.ts'
 import './YearPage.css'
 
@@ -222,19 +222,7 @@ function YearPageView({ year }: { year: number }) {
   // Every media type present in the whole loaded listing — filtering is
   // client-side now, so selecting one type can no longer hide the others
   // from this picker; no accumulation workaround is needed.
-  const typeOptions = useMemo(() => {
-    const presentTypes = new Set<string>()
-    let hasUnknownType = false
-    for (const item of items) {
-      if (item.mediaType) presentTypes.add(item.mediaType)
-      else hasUnknownType = true
-    }
-    const options: FilterMultiSelectOption[] = MEDIA_TYPE_ORDER.filter((value) => presentTypes.has(value)).map(
-      (value) => ({ value, label: mediaTypeLabel(value) }),
-    )
-    if (hasUnknownType) options.push({ value: 'unknown', label: 'Unknown' })
-    return options
-  }, [items])
+  const typeOptions = useMemo(() => mediaTypeFilterOptions(items.map((item) => item.mediaType)), [items])
 
   function setYear(next: number) {
     setSearchParams((prev) => {
@@ -408,9 +396,13 @@ function YearPageView({ year }: { year: number }) {
               </option>
             ))}
           </select>
-          {typeOptions.length > 0 && (
-            <FilterMultiSelect label="Type" options={typeOptions} selected={typeFilter} onChange={setTypeFilter} />
-          )}
+          <FilterMultiSelect
+            label="Type"
+            options={typeOptions}
+            widthOptions={MEDIA_TYPE_FILTER_OPTIONS}
+            selected={typeFilter}
+            onChange={setTypeFilter}
+          />
           <label className="year-page__checkbox">
             <input type="checkbox" checked={inMyList} onChange={(event) => setInMyList(event.target.checked)} />
             In my list

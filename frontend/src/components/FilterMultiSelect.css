@@ -18,6 +18,7 @@
   display: grid;
   grid-template-areas: 'value';
   align-items: center;
+  text-align: left;
   padding: 0 22px 0 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
@@ -27,10 +28,18 @@
   white-space: nowrap;
 }
 
-.filter-multi-select__button:hover,
-.filter-multi-select__button[aria-expanded='true'] {
+.filter-multi-select__button:hover:not(:disabled),
+.filter-multi-select__button[aria-expanded='true']:not(:disabled) {
   color: var(--text-h);
   border-color: var(--accent-border);
+}
+
+/* Same disabled idiom as .my-list-controls__direction:disabled — an
+   unavailable trigger (fit-my-list-filters-to-the-list) reads as inactive
+   rather than losing its place in the cluster. */
+.filter-multi-select__button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Reads as a dropdown like the selects beside it. Positioned within the

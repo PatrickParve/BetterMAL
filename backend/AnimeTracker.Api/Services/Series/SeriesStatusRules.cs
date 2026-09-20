@@ -1,7 +1,7 @@
 namespace AnimeTracker.Api.Services.Series;
 
-/// <summary>The series status pill's four-step precedence (design.md D5 of
-/// add-series-browser), extracted out of <see
+/// <summary>The series status pill's three-step precedence (design.md D5 of
+/// trim-dead-controls-and-widen-updates), extracted out of <see
 /// cref="SeriesService.ComputeStatus"/> so a lightweight projection with no
 /// navigation properties — <see cref="SeriesRankingIndex.ListedSeries"/> —
 /// can compute the same pill without loading entities. Takes airing-status
@@ -16,11 +16,7 @@ public static class SeriesStatusRules
         if (allAiringStatuses.Any(s => s == "currently_airing"))
             return "Ongoing";
 
-        var anyFinished = allAiringStatuses.Any(s => s == "finished_airing");
         var anyUpcoming = allAiringStatuses.Any(s => s == "not_yet_aired");
-
-        if (!anyFinished && anyUpcoming)
-            return "Upcoming";
 
         return anyUpcoming ? "Ongoing" : "Finished";
     }
