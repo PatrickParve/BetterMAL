@@ -4,7 +4,9 @@
 The anime-detail capability governs the single-anime page: its layout and data completeness, the prequel/sequel relation controls and the more-relations overlay, the link to the anime's series and to its external MyAnimeList page, on-page progress and status editing, and the picture choice offered for a my-list anime. A refresh that fails is shown as a failure rather than as an empty page, and the page reads itself once per visit.
 ## Requirements
 ### Requirement: Single anime detail layout
-The system SHALL show a single anime page whose title sits in the page's own header block, per the `page-header-design` capability, above a body carrying a large picture on the left and, near the top-right, a box showing rank and MAL score (both respecting the hide/unhide toggle, per the "Rank is hidden like the MAL score" requirement) and, only once the anime has a score of mine, a separate box beside it showing my score, the rewatch count when it is not zero, and my finish date while my status is Completed — per the "The two score boxes share one size" requirement. Below those it SHALL show an info box (type, status, source, duration, studio, aired-from/to, and genres) and, beneath it, a synopsis/background box whenever the anime has a synopsis or a background. Any info field for which no data is available SHALL display "No info" rather than being blank.
+The system SHALL show a single anime page whose title sits in the page's own header block, per the `page-header-design` capability, above a body carrying a large picture on the left and, near the top-right, a box showing rank and MAL score (both respecting the hide/unhide toggle, per the "Rank is hidden like the MAL score" requirement) and, only once the anime has a score of mine, a separate box beside it showing my score, the rewatch count when it is not zero, and my finish date per the rule below — per the "The two score boxes share one size" requirement. Below those it SHALL show an info box (type, status, source, duration, studio, aired-from/to, and genres) and, beneath it, a synopsis/background box whenever the anime has a synopsis or a background. Any info field for which no data is available SHALL display "No info" rather than being blank.
+
+My box SHALL show my finish date while my status is **Completed**, whether or not a finish date is stored — an entry marked Completed with no stored finish date SHALL keep showing the line with the "No info" placeholder in place of a date, as it does today. My box SHALL **also** show my finish date while my status is **Rewatching**, whenever a finish date is stored: a rewatch is a rewatch of a viewing I already finished, and the date I finished it is neither lost nor made wrong by starting another run. While my status is Rewatching and no finish date is stored, no finish-date line SHALL be shown at all — there is nothing to carry through. Under every other status the finish-date line SHALL NOT be shown, even when a finish date is stored.
 
 The synopsis/background box SHALL carry a Synopsis section only when the anime has a synopsis, and a Background section only when it has a background. When the anime has neither, the box SHALL be omitted entirely: no empty box, no heading, and no placeholder text such as "No synopsis available." A synopsis or background that is empty or consists only of whitespace SHALL count as absent. The "No info" rule applies to the info box's fields only, not to the synopsis/background box.
 
@@ -22,7 +24,27 @@ The aired-episode count SHALL come from the anime's stored per-episode airing ro
 
 #### Scenario: Rendering the detail layout
 - **WHEN** I open the detail page of an anime that has a synopsis and a score of mine
-- **THEN** it shows the title in the page's header block above a body with a large picture on the left, a "rank and MAL score" box and a separate "my score" box — showing my score, the rewatch count when it is not zero, and my finish date while my status is Completed — side by side, an info box (type, status, source, duration, studio, aired-from/to, genres), and a synopsis/background box
+- **THEN** it shows the title in the page's header block above a body with a large picture on the left, a "rank and MAL score" box and a separate "my score" box — showing my score, the rewatch count when it is not zero, and my finish date per the finish-date rule — side by side, an info box (type, status, source, duration, studio, aired-from/to, genres), and a synopsis/background box
+
+#### Scenario: A rewatch keeps the finish date on screen
+- **WHEN** I open the detail page of an anime I completed on a known date and have since marked Rewatching
+- **THEN** my box still shows that finish date, alongside my score and the rewatch count
+
+#### Scenario: Starting a rewatch does not move the date
+- **WHEN** I mark a completed anime as Rewatching and reopen its detail page
+- **THEN** the finish date shown is the same date that was shown before the rewatch started
+
+#### Scenario: Rewatching with no stored finish date
+- **WHEN** I open the detail page of an anime marked Rewatching for which no finish date has ever been stored
+- **THEN** my box shows no finish-date line at all, rather than a line reading "No info"
+
+#### Scenario: Completed with no stored finish date is unchanged
+- **WHEN** I open the detail page of an anime marked Completed for which no finish date has been stored
+- **THEN** my box still shows the finish-date line with the "No info" placeholder, exactly as it does today
+
+#### Scenario: Other statuses do not show a stored finish date
+- **WHEN** I open the detail page of an anime I completed and have since marked Dropped, On-hold, or Watching
+- **THEN** my box shows no finish-date line, even though a finish date is still stored for it
 
 #### Scenario: No synopsis and no background
 - **WHEN** I open the detail page of an anime that has neither a synopsis nor a background
