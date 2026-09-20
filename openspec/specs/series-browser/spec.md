@@ -79,7 +79,7 @@ Each listed series SHALL be shown as a card in a grid, in the same card and grid
 - the series' picture — the one the `series-identity` capability resolves, which is the series' chosen picture when it has one and its root entry's displayed picture otherwise, the same one the series page's header shows — or a placeholder when neither exists;
 - the series' display title — likewise the one `series-identity` resolves, which is the series' chosen title when it has one and the root entry's title otherwise, with the English title preferred exactly as it is elsewhere in the app when no title has been chosen;
 - the MAL average and my average across the **main line**, each rendered to two decimals, matching the series page's `MAL · main series` and `Mine · main series` chips in both computation and appearance;
-- the series' status pill, one of `Airing`, `Ongoing`, `Upcoming`, or `Finished`, computed by the precedence the `series-page` capability defines and carrying the same four distinct colours the series page uses;
+- the series' status pill, one of `Airing`, `Ongoing`, or `Finished`, computed by the precedence the `series-page` capability defines and carrying the same three distinct colours the series page uses;
 - my progress badge — one of `Completed`, `Caught up`, `N behind`, `Dropped`, or `Unwatched`, or no badge, by the precedence the next requirement defines, carrying the same colours the series page uses for those states;
 - the series' year span, rendered as `2013 – 2023`, or as the single year when every entry aired in one year;
 - the main-line episode total; and
@@ -132,6 +132,10 @@ The whole card SHALL link to that series' page, targeting the series' root anime
 #### Scenario: Badges are evenly sized across cards
 - **WHEN** I compare a card showing "Finished"/"Completed" against one showing "Airing"/"3 behind"
 - **THEN** both cards' pills and badges render at the same consistent size, regardless of label length
+
+#### Scenario: A card carries no fourth status
+- **WHEN** a listed series has no member that has aired at all
+- **THEN** its card's pill reads "Ongoing", and no card anywhere on the page carries a fourth status value
 
 ### Requirement: A Rewatching entry counts as fully watched in a card's figures
 Wherever a series card counts **my watched main-line episodes**, a main-line entry marked **Rewatching** SHALL count as fully watched — as the greater of its own episodes-watched figure and its aired-episode figure — rather than as its current in-progress count. Entering Rewatching resets episodes-watched to zero, so without this rule a franchise the user has seen in full and is part-way through watching again reads as barely started.
@@ -278,7 +282,7 @@ The system SHALL offer a sort control over the whole listed set, with these orde
 | Alphabetical | display title, case-insensitive | ascending |
 | MAL average | main-line MAL average | descending |
 | My average | main-line my-score average | descending |
-| Status | `Airing`, then `Ongoing`, then `Upcoming`, then `Finished` | that fixed order |
+| Status | `Airing`, then `Ongoing`, then `Finished` | that fixed order |
 | Newest | the series' first-aired date | descending — the most recently started series first |
 | Oldest | the series' first-aired date | ascending — the earliest started series first |
 | My progress | main-line episodes watched divided by main-line episodes aired so far | descending — completed first, nothing watched last |
@@ -353,7 +357,7 @@ The page SHALL open on **My average**, and SHALL keep the chosen sort in the URL
 
 #### Scenario: Sorting by status
 - **WHEN** I sort by status
-- **THEN** airing series come first, then ongoing, then upcoming, then finished
+- **THEN** airing series come first, then ongoing, then finished
 
 #### Scenario: Newest puts the latest start first
 - **WHEN** I sort by Newest and one series began in 2024 while another began in 2005
@@ -494,7 +498,7 @@ The page SHALL restore with back-navigation as every routed page does: its loade
 The system SHALL offer three independent filter groups over the whole listed set, applied client-side to the already-loaded list alongside sorting — no re-fetch on any filter change:
 
 - **Progress** (multi-select): `Watched` (the card's progress badge is `Completed` or `Caught up` — everything from the main series that has aired has been watched), `Behind`, `Dropped`, `Unwatched`.
-- **Status** (multi-select): `Airing`, `Ongoing`, `Upcoming`, `Finished` — the status pill's own four values.
+- **Status** (multi-select): `Airing`, `Ongoing`, `Finished` — the status pill's own three values. There SHALL be no button for a series none of whose members has aired; such a series reads `Ongoing` and is matched by the `Ongoing` button.
 - **Entries** (a single toggle): `Multi-entry only` — while on, only series whose main line holds two or more entries are listed.
 
 Selecting more than one button within a multi-select group SHALL show a series matching **any** selected button in that group (an OR within the group). Selections across groups SHALL AND together: a series SHALL be listed only when it satisfies every group that has a selection. Selecting nothing in a group SHALL apply no filter for that group.
@@ -580,4 +584,12 @@ The selected filters — all three groups — SHALL be kept in the URL, as the s
 #### Scenario: Filters survive back-navigation
 - **WHEN** I select filters, including "Multi-entry only", open a series, and navigate back
 - **THEN** the same filters are still applied
+
+#### Scenario: A status a link no longer names is ignored
+- **WHEN** I open a link whose URL names a status filter value the page no longer offers
+- **THEN** the page lists every series as though no status filter were selected, rather than showing an error or an empty list
+
+#### Scenario: An entirely unaired series is reachable by filter
+- **WHEN** a listed series has no member that has aired and I select the "Ongoing" status filter
+- **THEN** that series is listed
 

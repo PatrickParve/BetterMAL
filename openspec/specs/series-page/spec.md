@@ -461,19 +461,20 @@ The series page SHALL show the root entry's picture, the series title, a status 
 
 The header SHALL be the page's hero rather than a thumbnail strip: the picture SHALL be rendered large enough to read as the page's subject, and the title, status pill, personal badge, year span, external links, score averages, and main-line progress SHALL all sit inside that one block, so the series' summary is read in one place instead of down a column of separate panels.
 
-The status pill SHALL take one of four values, chosen by this precedence:
+The status pill SHALL take one of three values, chosen by this precedence:
 
 1. `Airing` — a **main-line** entry of the series is currently airing.
 2. `Ongoing` — no main-line entry is currently airing, and some member of the series is currently airing.
-3. `Upcoming` — no member has finished airing and at least one has not yet aired.
-4. `Ongoing` — some member has not yet aired.
-5. `Finished` — otherwise.
+3. `Ongoing` — some member has not yet aired.
+4. `Finished` — otherwise.
+
+There SHALL be no separate value for a series none of whose members has aired at all. Such a series has something still to come, which is exactly what `Ongoing` means, and SHALL read `Ongoing` under rule 3 alongside every other series with an announced, unaired member.
 
 `Airing` SHALL therefore be reserved for a series with something of its main line on the air right now, and `Ongoing` for a series with nothing of its main line on the air but something still to come — either an announced, not-yet-aired member, or a member outside the main line that is currently airing. A series whose main line has finished but whose OVA or special is currently broadcasting SHALL read `Ongoing`, not `Airing` and not `Finished`.
 
 `Finished` SHALL continue to be reserved for a series with nothing left to come: a series whose aired members have all finished but which has an announced, not-yet-aired member SHALL read `Ongoing`, not `Finished`. The pill SHALL have no `Finished · sequel upcoming` state.
 
-The four values SHALL be visually distinguishable from one another, each carrying its own colour rather than two of them sharing one. `Airing` SHALL carry the same colour this page already uses to mark an entry as on the air now, so the header pill and the timeline's on-air marking agree.
+The three values SHALL be visually distinguishable from one another, each carrying its own colour rather than two of them sharing one. `Airing` SHALL carry the same colour this page already uses to mark an entry as on the air now, so the header pill and the timeline's on-air marking agree.
 
 The progress bar and progress readout beneath the header SHALL treat `Airing` exactly as they treat `Ongoing`: both values SHALL select the broadcast progress bar and show the aired-episode figure, since both describe a series that is still running.
 
@@ -490,7 +491,7 @@ A main-line entry marked **Rewatching** SHALL count as **fully watched** through
 
 Rules (2) and (5) SHALL be decided without needing any entry's broadcast episode count — only watch status and watched-episode counts — so a currently-airing entry's unknown broadcast count SHALL NOT block them; it SHALL only be able to produce no badge once evaluation reaches rules (3)/(4). An entry that has not aired at all SHALL NOT count toward any of these figures, and an entry that is not in my list SHALL count as zero episodes watched.
 
-`Completed` SHALL carry the colour the app already uses for a Completed watch status. `Caught up` SHALL keep the colour that already marks an entry as on the air now. `N behind` SHALL keep its existing warning colour. `Dropped` SHALL carry the colour the app already uses for a Dropped watch status. `Unwatched` SHALL carry the colour the app already uses for a Plan-to-watch status. All five SHALL remain visually distinct from one another and from the status pill's own four colours.
+`Completed` SHALL carry the colour the app already uses for a Completed watch status. `Caught up` SHALL keep the colour that already marks an entry as on the air now. `N behind` SHALL keep its existing warning colour. `Dropped` SHALL carry the colour the app already uses for a Dropped watch status. `Unwatched` SHALL carry the colour the app already uses for a Plan-to-watch status. All five SHALL remain visually distinct from one another and from the status pill's own three colours.
 
 The status pill and the personal badge SHALL each render at a consistent, uniform size regardless of their label's length, so the two sit beside each other as evenly sized controls rather than ragged text of varying width.
 
@@ -514,7 +515,7 @@ A main line consisting of a single still-running entry — a long-running show t
 
 #### Scenario: A first season airing before anything has finished
 - **WHEN** a series' only aired member is a main-line entry that is currently airing, and no member has finished airing
-- **THEN** the pill reads "Airing", not "Upcoming"
+- **THEN** the pill reads "Airing", not "Ongoing"
 
 #### Scenario: Finished means nothing is left to come
 - **WHEN** every member of a series has finished airing and no member is unaired
@@ -522,7 +523,7 @@ A main line consisting of a single still-running entry — a long-running show t
 
 #### Scenario: Nothing has aired yet
 - **WHEN** no member of a series has finished airing, none is currently airing, and at least one has not yet aired
-- **THEN** the pill reads "Upcoming"
+- **THEN** the pill reads "Ongoing" — the same value every other series with something still to come carries, with no separate value of its own
 
 #### Scenario: Airing and Ongoing are told apart at a glance
 - **WHEN** I compare a series reading "Airing" with one reading "Ongoing"
@@ -705,7 +706,9 @@ The progress figures SHALL be named rather than left to be inferred from a bare 
 
 Episodes aired SHALL be summed over exactly those main-line entries whose total episode count is known, counting an entry that has finished airing as its full total, a currently airing entry as the episodes it has aired so far, and an entry that has not yet aired as none — so the aired figure can never exceed the total the page shows.
 
-The page SHALL additionally show the highest MAL-scored entry, my highest-scored entry, and the studios and genres the series spans.
+The page SHALL additionally show the highest MAL-scored entry, my highest-scored entry, and the studios and genres of the series.
+
+Studios and Genres SHALL be taken from the **main line as the picked route shows it** — the same member basis the episode total, the runtime, the aired figure, the watched figures and the entries-completed main-line figure already use — and SHALL NOT include a studio or genre carried only by an extra. A franchise's OVAs, specials, side stories and other extras SHALL therefore contribute nothing to either list, however many of them the series holds. Each list SHALL remain de-duplicated and ordered case-insensitively as it is today, and SHALL be omitted when the picked main line yields no value for it.
 
 The page SHALL additionally show which entry or entries are tied for the most rewatches across the series (main line and extras alike), naming each tied entry and its rewatch count. This stat SHALL NOT be shown at all when no member of the series has been rewatched, rather than showing a stat naming zero-rewatch entries.
 
@@ -884,6 +887,22 @@ Whether the series is settled SHALL be evaluated afresh from the current data ea
 #### Scenario: No rewatch stat when nothing has been rewatched
 - **WHEN** no member of a series has a rewatch count above zero
 - **THEN** the page shows no "Most rewatched" stat at all
+
+#### Scenario: An extra's studio stays out of Studios
+- **WHEN** a series' main line was animated by one studio and one of its OVAs by a different studio
+- **THEN** the Studios stat names the main line's studio alone, and does not name the OVA's
+
+#### Scenario: An extra's genre stays out of Genres
+- **WHEN** a series' main line carries no comedy entry but one of its specials is tagged Comedy
+- **THEN** the Genres stat does not list Comedy
+
+#### Scenario: Studios and Genres follow the picked route
+- **WHEN** a version slot's two alternatives were animated by different studios and I pick the other alternative
+- **THEN** the Studios stat reports the picked alternative's studio, moving with the episode and runtime figures beside it
+
+#### Scenario: A main line with no studio on record shows no Studios stat
+- **WHEN** no entry of the picked main line has a studio recorded, while one of the series' extras does
+- **THEN** the Studios stat is not shown at all
 
 ### Requirement: Series figures follow the picked route
 Where a series' main line holds one or more version slots, the page's figures SHALL take two different member scopes.
@@ -1201,6 +1220,50 @@ An edit saved from a tile SHALL update it in place without reloading the page.
 #### Scenario: A rewatched extra shows its count
 - **WHEN** an extra has a rewatch count of 1
 - **THEN** its tile shows a rewatch indicator reading 1
+
+### Requirement: The "in my list" control is offered only when it can narrow something
+
+The More section's "in my list" control SHALL be rendered only when at least one of
+the entries the More section holds is in my list. When none of them is, the control
+SHALL NOT be rendered at all — not as a disabled control, and not as a control that
+filters everything away — since its only possible effect there is to empty every
+group in the section.
+
+The population deciding this SHALL be exactly the population the filter narrows: the
+entries the More section shows, real extras and related entries alike. The control
+SHALL therefore be present exactly when activating it could leave at least one tile
+standing.
+
+While the control is withheld, the filter SHALL be treated as **off** regardless of
+any filter state the page restored, so a group can never be left narrowed with no
+control able to widen it again. Restoring a page whose stored filter state says "on"
+into a series with nothing of mine among its extras SHALL show every group
+unfiltered.
+
+Nothing else in the More section SHALL depend on this. The media-type filter row, the
+expand/collapse-all control, each group's heading, the hidden-count control and the
+groups themselves SHALL render and behave exactly as they do when the control is
+present.
+
+#### Scenario: A series with no extras of mine offers no filter
+
+- **WHEN** I open a series whose More section holds extras and related entries, none of which is in my list
+- **THEN** no "in my list" control is shown, and the expand/collapse-all control and media-type filter row are shown as usual
+
+#### Scenario: One extra of mine is enough
+
+- **WHEN** exactly one of the entries in a series' More section is in my list
+- **THEN** the "in my list" control is shown and behaves exactly as it does on a series with many
+
+#### Scenario: A restored filter cannot strand a section
+
+- **WHEN** I return to a series whose stored More-section state has the filter on, and no entry in its More section is in my list
+- **THEN** every expanded group shows all of its entries, as though the filter were off
+
+#### Scenario: The groups are otherwise untouched
+
+- **WHEN** the "in my list" control is withheld and I activate a group's heading
+- **THEN** that group opens showing every one of its entries, and collapses again on a second activation, exactly as it would with the control present
 
 ### Requirement: The More section offers media-type filter buttons
 Above the More section the page SHALL offer one button per media type present among that series' extras and related entries — TV, Movie, OVA, ONA, Special, Music, PV, and any other type those entries carry — as a multi-select set.

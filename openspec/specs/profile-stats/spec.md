@@ -168,6 +168,14 @@ A score set as part of finishing an anime SHALL be reported on the completion's 
 
 The feed SHALL show at most one row per anime per field group, reporting that anime's newest value for that group; older rows for the same anime and group SHALL be dropped from the feed. The field groups are: progress (episode increases and completions), score, rewatch count, and list membership (additions and removals). Rows for different anime, or for different field groups of the same anime, SHALL NOT collapse into each other. The full edit history SHALL remain unaffected by this collapsing and SHALL still record every step.
 
+**The feed SHALL cover the last 30 days.** It SHALL carry every row that survives the filtering, merging and collapsing above and whose change falls within the 30 days ending now, with no cap on how many that is — a busy month SHALL be shown in full rather than cut off at a fixed count.
+
+**A quiet month SHALL NOT empty the box.** When the last 30 days yield fewer than 20 rows, the feed SHALL reach further back in time, by the same rules, until it holds 20 rows or the activity log is exhausted. Rows reached this way SHALL be ordered among the rest exactly as they would be otherwise — most recent first, with no marker or break separating the two — so the feed reads as one continuous list rather than a recent section and an older one.
+
+Every rule above SHALL apply identically inside and outside the 30-day window. The window and the 20-row floor SHALL govern only **how far back** the feed reaches, and SHALL change nothing about which change types it carries, how a completion and its score merge, or how rows collapse per anime and field group.
+
+The box SHALL continue to show five whole rows at rest and to scroll within itself, however many rows the feed holds.
+
 A removal SHALL keep reading correctly after the entry it describes is gone — it names the anime from cached metadata, which outlives the entry.
 
 #### Scenario: Showing recent activity
@@ -233,6 +241,26 @@ A removal SHALL keep reading correctly after the entry it describes is gone — 
 #### Scenario: Excluding decreases and other status changes
 - **WHEN** an anime's episode count decreased, or its status changed to something other than completed, or it was dropped, or its start or finish date changed
 - **THEN** no such item appears in the latest-updates feed
+
+#### Scenario: A busy month is shown in full
+- **WHEN** my activity over the last 30 days collapses to 60 feed rows
+- **THEN** all 60 are in the feed, reachable by scrolling the box, rather than the newest 20 alone
+
+#### Scenario: A quiet month reaches further back
+- **WHEN** my activity over the last 30 days collapses to 3 feed rows and older activity exists
+- **THEN** the feed holds 20 rows — those 3 followed by the next most recent 17 from before the window — in one unbroken most-recent-first list
+
+#### Scenario: A short history shows what there is
+- **WHEN** my entire activity log collapses to 8 feed rows, all of them older than 30 days
+- **THEN** the feed holds those 8 rows rather than being empty
+
+#### Scenario: The collapsing rules are unchanged by the wider window
+- **WHEN** an anime's score was changed four times within the last 30 days
+- **THEN** the feed still shows one score row for that anime, carrying its newest score
+
+#### Scenario: The full history is unaffected
+- **WHEN** the feed covers the last 30 days and I open the full edit history
+- **THEN** the history still records every edit ever made, without a 30-day bound of its own
 
 ### Requirement: Latest-updates titles are truncated to one line
 Each row of the "Latest updates" feed SHALL show its anime's title on a single line, cut off with an ellipsis when the title is longer than the row allows, so that a long title never pushes the row's other content out of place. The full title SHALL be available on hover.
