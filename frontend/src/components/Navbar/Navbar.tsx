@@ -1,7 +1,9 @@
-import { NavLink } from 'react-router-dom'
 import { SearchBar } from '../SearchBar.tsx'
 import { UpdatesMenu } from '../Updates/UpdatesMenu.tsx'
 import { useScoreVisibility } from '../../context/ScoreVisibilityContext.tsx'
+import { measureNavbar, useNavbarHidden } from '../../state/navbarReveal.ts'
+import { currentSeasonTarget } from '../../utils/browseRange.ts'
+import { NavbarPageLink } from './NavbarPageLink.tsx'
 import { SettingsLink } from './SettingsLink.tsx'
 import './Navbar.css'
 
@@ -10,18 +12,21 @@ type NavLinkSpec = { to: string; label: string; end?: boolean }
 // One ordered list, so the left group's order (navigation-and-search: Home,
 // My List, Series, Recap, Top, Season, Year, Airing) reads directly from
 // this source rather than from where three separate constants happened to
-// sit around the two dynamically-linked entries (Recap, Year). Series and
-// Home both need `end` — NavLink's default prefix matching would otherwise
-// mark Series current on an individual series' page (/series/:animeId) too,
-// and Home current on every route.
-function leftNavLinks(recapLink: string, yearLink: string): NavLinkSpec[] {
+// sit around the three dynamically-linked entries (Recap, Season, Year).
+// Series and Home both need `end` — NavbarPageLink's underlying NavLink
+// match would otherwise mark Series current on an individual series' page
+// (/series/:animeId) too, and Home current on every route. Every entry here
+// renders through NavbarPageLink (below), which layers the current-page
+// click rule (navigation-and-search "The current page's navbar link returns
+// me to the top"; design D5) on top of NavLink's own matching.
+function leftNavLinks(recapLink: string, seasonLink: string, yearLink: string): NavLinkSpec[] {
   return [
     { to: '/', label: 'Home', end: true },
     { to: '/my-list', label: 'My List' },
     { to: '/series', label: 'Series', end: true },
     { to: recapLink, label: 'Recap' },
     { to: '/top', label: 'Top' },
-    { to: '/season', label: 'Season' },
+    { to: seasonLink, label: 'Season' },
     { to: yearLink, label: 'Year' },
     { to: '/airing', label: 'Airing' },
   ]
@@ -33,22 +38,35 @@ function linkClassName({ isActive }: { isActive: boolean }) {
 
 export function Navbar() {
   const { hidden, toggle } = useScoreVisibility()
+  // Sticky reveal state (design D1/D3) — a class on this header, not layout,
+  // so hiding it never shifts the page's content.
+  const navbarHidden = useNavbarHidden()
   // Built at render, not hoisted into NAV_LINKS, so a long-lived tab open
   // across midnight still targets the current year (design.md decision 1).
-  // NavLink's active match compares pathname only, so this is marked active
-  // on /recap whatever period is actually showing.
+  // NavbarPageLink's underlying NavLink match compares pathname only, so
+  // this is marked active — and current for the click rule above — on
+  // /recap whatever period is actually showing.
   const recapLink = `/recap?mode=yearly&year=${new Date().getFullYear()}&filter=aired`
-  // Same reasoning as recapLink above — built at render so the Year link
-  // always opens the current year, even in a tab left open across New Year.
+  // Same reasoning as recapLink above, and for the Season link below — built
+  // at render so the link always targets the current year/season, even in a
+  // tab left open across New Year or a season boundary (design D7).
   const yearLink = `/year?year=${new Date().getFullYear()}`
+  // The current season's address, in the same year-then-season parameter
+  // order as SeasonPage's own replacementUrl — so this link's string equals
+  // the address the page sits at once there, and a click at the top replaces
+  // rather than pushing a second entry for the same view (design D6/D7).
+  // Opening Season from the navbar no longer passes through the page's own
+  // redirect for a bare /season, which is what caused its reload.
+  const seasonTarget = currentSeasonTarget()
+  const seasonLink = `/season?year=${seasonTarget.year}&season=${seasonTarget.season}`
 
   return (
-    <header className="navbar">
+    <header className={navbarHidden ? 'navbar navbar--hidden' : 'navbar'} ref={measureNavbar}>
       <nav className="navbar__links navbar__links--left" aria-label="Primary">
-        {leftNavLinks(recapLink, yearLink).map((link) => (
-          <NavLink key={link.label} to={link.to} end={link.end} className={linkClassName}>
+        {leftNavLinks(recapLink, seasonLink, yearLink).map((link) => (
+          <NavbarPageLink key={link.label} to={link.to} end={link.end} className={linkClassName}>
             {link.label}
-          </NavLink>
+          </NavbarPageLink>
         ))}
       </nav>
 
@@ -73,9 +91,9 @@ export function Navbar() {
             </span>
           </button>
           <UpdatesMenu />
-          <NavLink to="/profile" className={linkClassName}>
+          <NavbarPageLink to="/profile" className={linkClassName}>
             Profile
-          </NavLink>
+          </NavbarPageLink>
           <SettingsLink />
         </div>
       </div>

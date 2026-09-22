@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useClickOutside } from '../../hooks/useClickOutside.ts'
 import { UpdatesHistoryOverlay } from './UpdatesHistoryOverlay.tsx'
 import { UpdatesDropdown } from './UpdatesDropdown.tsx'
@@ -79,7 +80,14 @@ export function UpdatesMenu() {
 
       {open && <UpdatesDropdown items={items} onNavigate={closeDropdown} onOpenHistory={openHistory} />}
 
-      {historyOpen && <UpdatesHistoryOverlay onClose={() => setHistoryOpen(false)} />}
+      {/* Portaled to the document body (design D2): the navbar becomes
+          sticky (Navbar.css), which makes it a stacking context, and its
+          hidden state is applied with a transform, which would make it the
+          containing block for this overlay's fixed-position backdrop —
+          trapping it inside the navbar's own bounds and z-index instead of
+          covering the whole window. React events still bubble through the
+          component tree from a portaled node, so nothing here loses them. */}
+      {historyOpen && createPortal(<UpdatesHistoryOverlay onClose={() => setHistoryOpen(false)} />, document.body)}
     </div>
   )
 }

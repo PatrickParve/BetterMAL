@@ -38,6 +38,7 @@ import { useLandscapePicture } from '../hooks/useLandscapePicture.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { useScoreReveal } from '../hooks/useScoreReveal.ts'
+import { scrollWindowTo } from '../state/navbarReveal.ts'
 import {
   formatEpisodeTotal,
   formatRuntime,
@@ -515,16 +516,20 @@ export function SeriesPage() {
   // page tall enough to reach the target — and scrolls the window (not
   // `scrollIntoView`, which would silently pick the nearest scrollable
   // ancestor; the page's horizontally-scrolling timeline above the More
-  // section makes that ambiguous). No offset, since nothing on this page is
-  // sticky or fixed. When the target exceeds the maximum scroll offset,
-  // `window.scrollTo` clamps on its own — that clamp *is* "get as far down
-  // as possible" when the group is too near the end to reach the top.
+  // section makes that ambiguous). Goes through scrollWindowTo with
+  // `navbar: 'hide'` rather than window.scrollTo directly (navigation-and-
+  // search "Content the page pins to the top is not covered"; design D3):
+  // the navbar is sticky now, so a pin that put the heading at scroll 0
+  // would otherwise sit right under it. When the target exceeds the maximum
+  // scroll offset, `window.scrollTo` clamps on its own — that clamp *is*
+  // "get as far down as possible" when the group is too near the end to
+  // reach the top.
   useLayoutEffect(() => {
     if (pendingScrollGroupKey === null) return
     const heading = groupHeadingRefs.current.get(pendingScrollGroupKey)
     if (heading) {
       const target = heading.getBoundingClientRect().top + window.scrollY
-      window.scrollTo(0, target)
+      scrollWindowTo(target, { navbar: 'hide' })
     }
     setPendingScrollGroupKey(null)
   }, [pendingScrollGroupKey])
@@ -545,7 +550,10 @@ export function SeriesPage() {
     const box = mainLineBoxRef.current
     if (box) {
       const target = box.getBoundingClientRect().top + window.scrollY
-      window.scrollTo(0, target)
+      // navbar: 'hide' for the same reason as the group-pin scroll above —
+      // the box is being pinned to the top of the window, which the sticky
+      // navbar would otherwise cover.
+      scrollWindowTo(target, { navbar: 'hide' })
     }
     setPendingScrollToMainLine(false)
   }, [pendingScrollToMainLine])

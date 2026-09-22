@@ -1,6 +1,6 @@
-import { NavLink } from 'react-router-dom'
 import { oldestRunningJob, settingsNeedsAttention, useAppStatus } from '../../context/AppStatusContext.tsx'
 import { JobProgressTrack } from '../JobProgressTrack.tsx'
+import { NavbarPageLink } from './NavbarPageLink.tsx'
 
 function settingsClassName({ isActive }: { isActive: boolean }) {
   return isActive ? 'navbar__settings navbar__settings--active' : 'navbar__settings'
@@ -31,7 +31,7 @@ export function SettingsLink() {
   const runningJob = oldestRunningJob(status)
 
   return (
-    <NavLink
+    <NavbarPageLink
       to="/settings"
       className={settingsClassName}
       aria-label={accessibleName(needsAttention, runningJob !== null)}
@@ -41,7 +41,7 @@ export function SettingsLink() {
       {runningJob && (
         <JobProgressTrack done={runningJob.done} total={runningJob.total} className="navbar__settings-progress" />
       )}
-    </NavLink>
+    </NavbarPageLink>
   )
 }
 

@@ -6,7 +6,9 @@ The page-state-restoration capability governs back/forward navigation as a resto
 ### Requirement: Back/forward navigation restores a page rather than rebuilding it
 The web client SHALL treat a page reached by back/forward navigation (the browser's back and forward buttons, keyboard shortcuts, or a trackpad swipe gesture) as a *restore* rather than a fresh visit. On a restore, the page SHALL render immediately from the data it held when the user navigated away, without an intermediate loading or empty state.
 
-A page reached any other way — a navbar or in-page link, a typed URL, a reload — SHALL be a fresh visit: it loads from scratch with its default view state, exactly as it does today.
+A page reached any other way SHALL be a fresh visit: it opens on its default view state and loads its data from scratch, exactly as it does today. The other ways are a navbar or in-page link from another page, a typed URL, a reload, and the current page's own navbar link clicked while the page is already at its top. The one exception to loading from scratch is a fresh visit that lands on the page already on screen, for the same view whose data that page already holds: it SHALL show that data at once rather than a loading state.
+
+Clicking the current page's own navbar link while that page is scrolled down SHALL NOT be a visit of any kind, as `navigation-and-search` sets out in "The current page's navbar link returns me to the top". The page, its history entry and its restorable state SHALL be left exactly as they are, and only its scroll position changes.
 
 Restoration state SHALL be held in memory for the lifetime of the browser tab's application session and SHALL NOT be persisted; a reload SHALL start with nothing to restore.
 
@@ -17,8 +19,12 @@ How many history entries' state is retained SHALL be bounded so a long session c
 - **THEN** the page appears already populated with the data it had, showing no loading text and no empty flash
 
 #### Scenario: A fresh visit still loads from scratch
-- **WHEN** I reach a page by clicking its navbar link rather than navigating back
+- **WHEN** I reach a page from another page by clicking its navbar link, rather than navigating back
 - **THEN** the page loads its data as a fresh visit and shows its normal loading state
+
+#### Scenario: The current page's link while scrolled is not a visit
+- **WHEN** I scroll down a page and click that page's own navbar link
+- **THEN** the page is neither reloaded nor reset, and going back afterwards leads to wherever it led before the click
 
 #### Scenario: A reload discards restorable state
 - **WHEN** I reload the browser and then navigate back to a page I had visited before the reload
@@ -54,7 +60,7 @@ A page's view controls — filter tabs, media-type filters, sort selections, sec
 
 A control that holds several selections at once, or a selection per section of the page, SHALL be restored whole rather than reduced to a single value.
 
-On a fresh visit those same controls SHALL open on their documented defaults. A page SHALL NOT persist view-control selections across visits by any other mechanism.
+On a fresh visit those same controls SHALL open on their documented defaults. A page SHALL NOT persist view-control selections across visits by any other mechanism. Clicking the current page's own navbar link while the page is scrolled down is not a visit, and SHALL leave every selection as it was.
 
 A restored selection that names something the restored page no longer renders — a group that has since disappeared, an option no longer offered — SHALL be ignored rather than treated as an error.
 
@@ -75,8 +81,12 @@ A restored selection that names something the restored page no longer renders �
 - **THEN** each section is in the state I left it in
 
 #### Scenario: A fresh visit opens on defaults
-- **WHEN** I select a non-default filter, then reach that page again by clicking its navbar link
+- **WHEN** I select a non-default filter, go to another page, and then reach that page again by clicking its navbar link
 - **THEN** the filter is back on its default
+
+#### Scenario: Returning to the top keeps my selections
+- **WHEN** I select a non-default filter, scroll down, and click the navbar link for the page I am on
+- **THEN** the page is back at its top with that filter still selected
 
 ### Requirement: Scroll position is restored with the page
 The client SHALL record each history entry's scroll position when navigating away from it and SHALL restore that position when that entry is returned to by back/forward navigation. Restoration SHALL happen once the restored content has been laid out, so the target position is reachable rather than clamped to a shorter page.

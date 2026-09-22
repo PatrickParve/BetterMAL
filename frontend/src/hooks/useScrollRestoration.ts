@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useLocation, useNavigationType } from 'react-router-dom'
+import { scrollWindowTo } from '../state/navbarReveal.ts'
 import { usePageState } from '../state/PageStateContext.tsx'
 import * as pageStateStore from '../state/pageStateStore.ts'
 
@@ -42,7 +43,7 @@ export function useScrollRestoration(): void {
 
   // Assigned during render, so it already points at the entry being
   // displayed before any layout effect of a navigation runs — including the
-  // fresh-visit `scrollTo(0, 0)` below and any scroll event that produces.
+  // fresh-visit scroll to 0 below and any scroll event that produces.
   const keyRef = useRef(key)
   keyRef.current = key
 
@@ -79,7 +80,10 @@ export function useScrollRestoration(): void {
         pageStateStore.putScroll(keyRef.current, window.scrollY)
         return
       }
-      window.scrollTo(0, 0)
+      // Arriving at a page shows the navbar (navigation-and-search, design
+      // D3) — every fresh visit's scroll goes through scrollWindowTo rather
+      // than window.scrollTo directly, so it's never read as my scrolling.
+      scrollWindowTo(0, { navbar: 'show' })
       return
     }
 
@@ -96,7 +100,10 @@ export function useScrollRestoration(): void {
       // the page hadn't reached yet when `scrollTo` actually ran, stopping
       // the retry one frame before the target was truly reachable.
       const reachable = document.documentElement.scrollHeight - window.innerHeight >= target
-      window.scrollTo(0, target)
+      // Every attempt re-arms scrollWindowTo's own hold, so a restore that
+      // waits on data across several attempts never lapses into "my
+      // scrolling" between them (design D3).
+      scrollWindowTo(target, { navbar: 'show' })
       rafId = requestAnimationFrame(() => {
         if (reachable || performance.now() >= deadline) return
         attempt()
@@ -107,6 +114,11 @@ export function useScrollRestoration(): void {
     // asynchronous and carry nothing identifying a clamped `scrollTo`'s own
     // scroll event from the user's, so watching them cancelled the loop
     // before the target was reached whenever the clamp's event arrived late.
+    // `bettermal:user-scroll` (NavbarPageLink, design D5) joins the same
+    // list: a click on the current page's own navbar link is none of wheel,
+    // touchstart or keydown, but it's still my own scrolling, and without
+    // this the loop would drag the page back down under the navbar's
+    // scroll-to-top.
     function onUserInput(event: Event) {
       if (event instanceof KeyboardEvent && !SCROLL_KEYS.has(event.key)) return
       cancelled = true
@@ -115,6 +127,7 @@ export function useScrollRestoration(): void {
     window.addEventListener('wheel', onUserInput, { passive: true })
     window.addEventListener('touchstart', onUserInput, { passive: true })
     window.addEventListener('keydown', onUserInput)
+    window.addEventListener('bettermal:user-scroll', onUserInput)
     attempt()
 
     return () => {
@@ -123,6 +136,7 @@ export function useScrollRestoration(): void {
       window.removeEventListener('wheel', onUserInput)
       window.removeEventListener('touchstart', onUserInput)
       window.removeEventListener('keydown', onUserInput)
+      window.removeEventListener('bettermal:user-scroll', onUserInput)
     }
   }, [location.key, navigationType, isRestore, snapshot, keepScroll])
 }

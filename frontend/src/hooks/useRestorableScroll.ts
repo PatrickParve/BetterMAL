@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useLayoutEffect, useRef } from 'react'
 import { usePageState } from '../state/PageStateContext.tsx'
 import * as pageStateStore from '../state/pageStateStore.ts'
 
@@ -35,7 +35,14 @@ export function useRestorableScroll(restoreKey: string, axis: ScrollAxis) {
   const snapshotRef = useRef(snapshot)
   snapshotRef.current = snapshot
 
-  return useCallback((el: HTMLElement | null) => {
+  // The attached DOM node, read by the fresh-visit reset effect below — kept
+  // outside the ref callback because that callback only runs when the node
+  // itself attaches or detaches, which a fresh visit that reuses an
+  // already-mounted strip never does.
+  const nodeRef = useRef<HTMLElement | null>(null)
+
+  const refCallback = useCallback((el: HTMLElement | null) => {
+    nodeRef.current = el
     if (!el) return
     const node = el
     const { offset: offsetProp, size: sizeProp, client: clientProp } = AXIS_PROPS[axisRef.current]
@@ -94,4 +101,23 @@ export function useRestorableScroll(restoreKey: string, axis: ScrollAxis) {
       }
     }
   }, [])
+
+  // Fresh-visit strips start at their beginning (page-state-restoration "A
+  // fresh visit opens on defaults"; design D6) — including one whose DOM
+  // node a fresh visit reuses rather than remounts, the one case the ref
+  // callback above never re-runs for. That happens when the current page's
+  // own navbar link is clicked already at the top: React Router replaces the
+  // history entry without unmounting the page (NavbarPageLink), so this key
+  // changes under an already-attached node. Skipped on a restore, whose own
+  // target the ref callback's retry loop is applying to this same node.
+  const lastKeyRef = useRef(key)
+  useLayoutEffect(() => {
+    if (key === lastKeyRef.current) return
+    lastKeyRef.current = key
+    if (isRestore) return
+    const node = nodeRef.current
+    if (node) node[AXIS_PROPS[axis].offset] = 0
+  }, [key, isRestore, axis])
+
+  return refCallback
 }

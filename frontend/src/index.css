@@ -293,6 +293,18 @@ body {
   overscroll-behavior-y: none;
 }
 
+/* Keeps keyboard focus and scrollIntoView clear of the sticky navbar
+   (design D8): the browser applies scroll-padding to focus-induced
+   scrolling, scrollIntoView and fragment jumps on the root scroller, so an
+   element brought into view from above lands below the navbar instead of
+   under it. It has no effect on an explicit window.scrollTo with
+   coordinates, so navbarReveal.ts's scrollWindowTo (restoration, the
+   navbar's own pins) is untouched. Falls back to 0px before the navbar's
+   height is measured (navbarReveal.ts's measureNavbar). */
+html {
+  scroll-padding-top: var(--navbar-height, 0px);
+}
+
 body {
   margin: 0;
 }
