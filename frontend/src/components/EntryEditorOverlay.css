@@ -159,13 +159,11 @@
   color: #fff;
 }
 
-/* Solid buttons (Save, Delete-confirm) keep their own colour on hover
-   rather than picking up the plain-button accent tint above — the same
-   "an active/filled control doesn't change on hover" rule the recap page's
-   filled tabs follow. */
+/* Solid buttons (Save, Delete-confirm) darken their own fill on hover
+   rather than picking up the plain-button accent tint above (design D5). */
 .entry-editor__buttons button.entry-editor__save:hover:not(:disabled) {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .entry-editor__buttons button.entry-editor__delete {
@@ -187,8 +185,8 @@
 }
 
 .entry-editor__buttons button.entry-editor__delete-confirm:hover:not(:disabled) {
-  background: #e5484d;
-  border-color: #e5484d;
+  background: color-mix(in srgb, #e5484d 85%, black);
+  border-color: color-mix(in srgb, #e5484d 85%, black);
 }
 
 .entry-editor__buttons button.entry-editor__rank {

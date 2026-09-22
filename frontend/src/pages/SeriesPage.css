@@ -164,7 +164,7 @@
   cursor: pointer;
 }
 
-.series-page__stats-action:hover {
+.series-page__stats-action:hover:not(:disabled) {
   color: var(--text-h);
   border-color: var(--accent-border);
 }
@@ -416,6 +416,12 @@
   border-color: var(--accent-border);
 }
 
+/* Thickened outline on hover (design D3) — see MyListControls.css. */
+.series-page__type-filter-button--active:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 .series-page__type-filter-button:disabled {
   opacity: 0.6;
   cursor: default;
@@ -482,6 +488,12 @@
   color: var(--text-h);
   background: var(--accent-bg);
   border-color: var(--accent-border);
+}
+
+/* Thickened outline on hover (design D3) — see MyListControls.css. */
+.series-page__toggle-mine--active:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .series-page__extras-group-toggle {

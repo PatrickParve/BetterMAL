@@ -143,6 +143,11 @@
   cursor: pointer;
 }
 
+.year-page__checkbox:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
 .year-page__empty {
   padding: 48px 0;
   text-align: center;

@@ -92,7 +92,7 @@
   cursor: pointer;
 }
 
-.anime-detail-page__refresh-notice-retry:hover {
+.anime-detail-page__refresh-notice-retry:hover:not(:disabled) {
   opacity: 0.85;
 }
 
@@ -194,7 +194,7 @@
   width: 100%;
 }
 
-.anime-detail-page__action:hover {
+.anime-detail-page__action:hover:not(:disabled) {
   color: var(--text-h);
   border-color: var(--accent-border);
 }

@@ -7,6 +7,10 @@
   --accent: #aa3bff;
   --accent-bg: rgba(170, 59, 255, 0.1);
   --accent-border: rgba(170, 59, 255, 0.5);
+  /* The one filled-button hover fill (design D5 of highlight-controls-on-hover).
+     Declared once here, not repeated in the dark block below: it resolves
+     against whichever --accent :root holds, so it tracks the theme on its own. */
+  --accent-hover: color-mix(in srgb, var(--accent) 85%, black);
   --social-bg: rgba(244, 243, 236, 0.5);
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
@@ -506,4 +510,25 @@ button:not(:disabled),
    just the calendar-picker indicator — takes the pointer. */
 input[type='date'] {
   cursor: pointer;
+}
+
+/* Every dropdown highlights on hover (navigation-and-search, design D1 of
+   highlight-controls-on-hover), expressed once here rather than per-component,
+   so a dropdown added later carries it without anything being remembered
+   about it. select:not(:disabled):hover is (0,2,1): it beats every
+   per-component base rule (0,1,0)/(0,1,1), so the hover shows everywhere;
+   it loses to the few component hover rules that are more specific, such as
+   .entry-editor__field select:hover:not(:disabled) (0,3,1) and
+   .my-list-row__score-select--mine:hover (0,3,0), which keep their own look;
+   and it ties with .airing-page__jump select:hover (0,2,1), where the
+   component rule loads later and wins with the same border colour anyway.
+   Text fields are deliberately not covered by a matching global rule: the
+   app's inputs don't share one shape (the navbar search field and My list's
+   find field are borderless inside a bordered wrapper, checkbox/date inputs
+   use native rendering), so a global input rule would either do nothing or
+   fight those wrappers — the few bare text fields get this same hover
+   written in their own stylesheets instead. */
+select:not(:disabled):hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
 }

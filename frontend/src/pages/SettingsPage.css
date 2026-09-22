@@ -245,7 +245,12 @@
   gap: 8px;
 }
 
-.settings-box__buttons button {
+/* The accept/decline pairs (.settings-box__buttons) and the job actions
+   (.settings-action__control, SettingsAction's button prop) are the same
+   kind of button — a plain, unclassed <button> in a titled block — so they
+   deliberately share one recipe rather than each growing its own. */
+.settings-box__buttons button,
+.settings-action__control button {
   font: inherit;
   font-size: 13px;
   padding: 6px 12px;
@@ -256,12 +261,14 @@
   cursor: pointer;
 }
 
-.settings-box__buttons button:hover:not(:disabled) {
+.settings-box__buttons button:hover:not(:disabled),
+.settings-action__control button:hover:not(:disabled) {
   color: var(--text-h);
   border-color: var(--accent-border);
 }
 
-.settings-box__buttons button:disabled {
+.settings-box__buttons button:disabled,
+.settings-action__control button:disabled {
   opacity: 0.6;
   cursor: default;
 }
@@ -432,6 +439,10 @@
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
+}
+
+.settings-refresh-picker__search input:hover:not(:disabled) {
+  border-color: var(--accent-border);
 }
 
 .settings-refresh-picker__dropdown {

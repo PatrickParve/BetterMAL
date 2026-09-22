@@ -38,6 +38,9 @@ import {
   seasonPointIndex,
   shiftSeason,
 } from '../utils/anime.ts'
+// The recap shares the Season and Year pages' floor — MyAnimeList's first
+// season archive year — instead of keeping its own.
+import { EARLIEST_YEAR } from '../utils/browseRange.ts'
 import './RecapPage.css'
 
 type RankingBasis = 'mine' | 'mal'
@@ -48,9 +51,6 @@ const MODE_OPTIONS: { value: RecapMode; label: string; family?: 'year' | 'season
   { value: 'season', label: 'Season', family: 'season' },
 ]
 
-// A generous floor for the year selects — recaps look at the past, so
-// there's no MAL-catalog-style ceiling to mirror like SeasonPage's.
-const EARLIEST_YEAR = 1960
 const TOP_TEN_SIZE = 10
 
 function describeTimeRanking(row: RecapTimeRankingDto): RankingOverlayRow {
@@ -123,9 +123,9 @@ function parseScoreParam(value: string | null): number | null {
 
 // Bounds always widen to include whatever's actually selected (mirrors
 // SeasonPage's yearOptions) — a URL-addressed year outside the normal
-// 1960-current window (or an as-yet-unreached future one) still has a
-// valid <select> value instead of silently snapping to whichever option
-// happens to be first in the list.
+// EARLIEST_YEAR-current window (or an as-yet-unreached future one) still
+// has a valid <select> value instead of silently snapping to whichever
+// option happens to be first in the list.
 function yearOptions(low: number, high: number): number[] {
   return Array.from({ length: high - low + 1 }, (_, i) => high - i)
 }

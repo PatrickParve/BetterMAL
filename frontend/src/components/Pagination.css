@@ -18,8 +18,8 @@
   cursor: pointer;
 }
 
-.pagination__arrow:hover,
-.pagination__page:hover {
+.pagination__arrow:hover:not(:disabled),
+.pagination__page:hover:not(:disabled) {
   color: var(--text-h);
   background: var(--accent-bg);
   border-color: var(--accent-border);

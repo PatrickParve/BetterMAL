@@ -101,12 +101,19 @@
 
 .profile-box__header-row {
   display: flex;
-  /* flex-start, not center: the control button is taller than a bare h2
-     (its own padding/border), so centering pushed this box's title down
-     relative to the other profile boxes' flush-top titles. */
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+/* The control is centred on the title's line, then pulled back in by a
+   negative block margin so its margin box adds no height to the row: the
+   title's line box is at least 23.6px, the control's margin box at most
+   14.1px, so the row's height stays the title's own. That keeps
+   title-to-content at the box's flat 12px gap and the title flush to the
+   top, whether or not a box carries a control. */
+.profile-box__header-row > .profile-box__control {
+  margin-block: -1em;
 }
 
 .profile-box__control {
@@ -130,6 +137,12 @@
   color: var(--text-h);
   background: var(--accent-bg);
   border-color: var(--accent-border);
+}
+
+/* Thickened outline on hover (design D3) — see MyListControls.css. */
+.profile-box__control--active:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .profile-stats {

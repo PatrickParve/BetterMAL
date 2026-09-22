@@ -52,11 +52,11 @@
   color: #fff;
 }
 
-/* A filled control doesn't change colour on hover, the same rule the
-   editor's Save button follows. */
-.my-list-page__clear-filters.my-list-page__clear-filters--reset:hover {
-  background: var(--accent);
-  border-color: var(--accent);
+/* A filled action button darkens its fill on hover instead of staying
+   unchanged (design D5), the same rule the editor's Save button follows. */
+.my-list-page__clear-filters.my-list-page__clear-filters--reset:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
   color: #fff;
 }
 
@@ -179,6 +179,14 @@
   color: var(--text-h);
   background: var(--tab-bg, var(--accent-bg));
   border-color: var(--tab-color, var(--accent-border));
+}
+
+/* Thickened outline in the tab's own status colour (design D3) — see
+   MyListControls.css. Falls back to the accent colour for "All", which
+   carries no --tab-color. */
+.my-list-page__tab--active:hover:not(:disabled) {
+  border-color: var(--tab-color, var(--accent));
+  box-shadow: inset 0 0 0 1px var(--tab-color, var(--accent));
 }
 
 .my-list-page__group-header {
@@ -351,7 +359,7 @@
   cursor: pointer;
 }
 
-.my-list-row__score-select:hover,
+.my-list-row__score-select:hover:not(:disabled),
 .my-list-row__score-select:focus-visible {
   color: var(--text-h);
   background: var(--code-bg);
@@ -371,7 +379,7 @@
   color: var(--mine);
 }
 
-.my-list-row__score-select.my-list-row__score-select--mine:hover,
+.my-list-row__score-select.my-list-row__score-select--mine:hover:not(:disabled),
 .my-list-row__score-select.my-list-row__score-select--mine:focus-visible {
   color: var(--mine);
   background: var(--mine-bg);

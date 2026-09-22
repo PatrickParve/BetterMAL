@@ -111,6 +111,13 @@
   color: var(--text);
 }
 
+/* The find input itself is borderless (see .my-list-controls__find-input
+   below), so the hover goes on this wrapper — it's the bordered box. */
+.my-list-controls__find:hover {
+  border-color: var(--accent-border);
+  color: var(--text-h);
+}
+
 .my-list-controls__find svg {
   flex: 0 0 auto;
   opacity: 0.6;
@@ -192,6 +199,10 @@
   overflow: hidden;
 }
 
+.my-list-controls__segmented:hover {
+  border-color: var(--accent-border);
+}
+
 .my-list-controls__segmented-button {
   font: inherit;
   font-size: 14px;
@@ -207,7 +218,11 @@
   border-left: none;
 }
 
-.my-list-controls__segmented-button:hover {
+/* Neutral tint, not the accent one: the accent tint is what marks the
+   selected segment (--selected below), so a hovered segment using it too
+   would look chosen (design D4). */
+.my-list-controls__segmented-button:not(.my-list-controls__segmented-button--selected):hover {
+  background: var(--code-bg);
   color: var(--text-h);
 }
 
@@ -228,4 +243,22 @@
   background: var(--accent-bg);
   border-color: var(--accent-border);
   color: var(--text-h);
+}
+
+/* A narrowing filter is already tinted, so hovering it can't just repeat
+   that colour (design D3) — its outline thickens in the accent colour
+   instead, as a 1px inset ring so it adds no layout, the same technique
+   .search-bar:hover uses. Every other "on" control that's already coloured
+   at rest gets the same treatment in its own stylesheet:
+   .filter-multi-select__button.filter-multi-select--active
+   (FilterMultiSelect.css), .profile-box__control--active (ProfilePage.css),
+   .series-page__type-filter-button--active and
+   .series-page__toggle-mine--active (SeriesPage.css), and the status-
+   coloured .series-browser-page__filter-button--active (SeriesBrowserPage.css)
+   and .my-list-page__tab--active (MyListPage.css), which use
+   var(--tab-color) in place of var(--accent) so a pressed red filter
+   thickens in red rather than switching to purple. */
+.my-list-controls--active:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }

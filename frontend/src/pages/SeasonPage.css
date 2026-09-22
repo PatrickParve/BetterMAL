@@ -142,6 +142,11 @@
   cursor: pointer;
 }
 
+.season-page__checkbox:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
 .season-page__empty {
   padding: 48px 0;
   text-align: center;

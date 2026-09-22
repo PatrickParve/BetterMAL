@@ -92,3 +92,7 @@
   color: var(--text-h);
   cursor: pointer;
 }
+
+.related-anime-overlay__buttons button:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}

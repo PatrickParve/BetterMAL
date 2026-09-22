@@ -54,6 +54,11 @@
   cursor: pointer;
 }
 
+.anime-rank__header-actions button:hover:not(:disabled) {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
 .anime-rank__title {
   display: flex;
   align-items: center;
@@ -139,6 +144,10 @@
   cursor: pointer;
   white-space: nowrap;
   flex: 0 0 auto;
+}
+
+.anime-rank__score-tab:not(.anime-rank__score-tab--active):hover:not(:disabled) {
+  border-color: var(--accent-border);
 }
 
 .anime-rank__score-tab-count {
@@ -275,8 +284,15 @@
   color: #fff;
 }
 
-.anime-rank__promote:hover {
-  filter: brightness(1.1);
+/* Darkens on hover, the app's one filled-hover idiom (design D5), rather
+   than brightening — brightening would lower the white label's contrast in
+   the dark theme, where --accent is already light. Qualified with the
+   ancestor class and button type so this outranks
+   .anime-rank__row-buttons button:not(:disabled):hover, which would
+   otherwise still set border-color on source order/specificity alone. */
+.anime-rank__row-buttons button.anime-rank__promote:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .anime-rank__cut-line {
@@ -342,6 +358,10 @@
   background: transparent;
   color: #e5484d;
   cursor: pointer;
+}
+
+.anime-rank__retry:hover:not(:disabled) {
+  background: rgba(229, 72, 77, 0.1);
 }
 
 /* Reserves its own width from the widest state ("Saving…") so the Close

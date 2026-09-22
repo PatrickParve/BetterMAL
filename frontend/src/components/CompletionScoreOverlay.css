@@ -72,13 +72,40 @@
   cursor: pointer;
 }
 
+/* Cancel's outlined hover. .completion-score__save and
+   .completion-score__save-and-rank both sit under this same selector too,
+   so their own hover rules below have to outrank it. */
+.completion-score__buttons button:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+
 .completion-score__save {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
 }
 
+/* Darkens on hover instead of picking up the plain outlined hover above
+   (design D5) — qualified with the button type, same as
+   .completion-score__save-and-rank:hover below, so this outranks
+   .completion-score__buttons button:hover instead of losing to it on
+   source order. */
+.completion-score__buttons button.completion-score__save:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
 .completion-score__save-and-rank {
   border-color: var(--accent-border);
   color: var(--accent);
+}
+
+/* Its resting border is already the accent, so the plain outlined hover
+   above would change nothing — same recipe as .entry-editor__rank's hover.
+   Qualified with the button type, same as EntryEditorOverlay.css's own
+   overrides, so this outranks .completion-score__buttons button:hover
+   above instead of losing to it on source order. */
+.completion-score__buttons button.completion-score__save-and-rank:hover:not(:disabled) {
+  background: var(--accent-bg);
+  border-color: var(--accent);
 }

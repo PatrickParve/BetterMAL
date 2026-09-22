@@ -39,7 +39,7 @@
    on the page this opens from (My List), rather than a solid fill — colours
    only, so an active pill's size never changes. */
 .recap-picker-overlay__tab--active,
-.recap-picker-overlay__tab--active:hover {
+.recap-picker-overlay__tab--active:hover:not(:disabled) {
   border-color: var(--accent-border);
   background: var(--accent-bg);
   color: var(--text-h);

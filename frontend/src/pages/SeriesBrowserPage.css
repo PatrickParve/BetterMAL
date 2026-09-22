@@ -118,6 +118,14 @@
   border-color: var(--tab-color, var(--accent-border));
 }
 
+/* Thickened outline in the filter's own status colour (design D3) — see
+   MyListControls.css. Falls back to the accent colour for the entries
+   filter, which carries no --tab-color. */
+.series-browser-page__filter-button--active:hover:not(:disabled) {
+  border-color: var(--tab-color, var(--accent));
+  box-shadow: inset 0 0 0 1px var(--tab-color, var(--accent));
+}
+
 .series-browser-page__sort {
   font: inherit;
   font-size: 14px;

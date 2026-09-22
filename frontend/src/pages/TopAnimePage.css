@@ -187,7 +187,7 @@
   flex: 0 0 auto;
 }
 
-.top-anime-row__action:hover {
+.top-anime-row__action:hover:not(:disabled) {
   color: var(--text-h);
   border-color: var(--accent-border);
 }

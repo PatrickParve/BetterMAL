@@ -35,7 +35,7 @@
   cursor: pointer;
 }
 
-.airing-page__nav button:hover {
+.airing-page__nav button:hover:not(:disabled) {
   color: var(--text-h);
   background: var(--accent-bg);
   border-color: var(--accent-border);

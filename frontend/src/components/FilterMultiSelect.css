@@ -65,6 +65,13 @@
   color: var(--text-h);
 }
 
+/* Thickened outline on hover, not a colour change (design D3) — see the
+   comment at .my-list-controls--active:hover in MyListControls.css. */
+.filter-multi-select__button.filter-multi-select--active:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 .filter-multi-select__panel {
   position: absolute;
   top: calc(100% + 4px);
