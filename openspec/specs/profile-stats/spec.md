@@ -112,9 +112,9 @@ The system SHALL render the poster in every profile list row — "Latest updates
 
 A poster SHALL keep the proportions of the poster art at whatever height its row has: where a list sets its own row height, the poster's width SHALL follow that height rather than staying at a width fixed for some other row height.
 
-Where the anime's displayed picture is **at least as wide as it is tall**, the row SHALL draw it whole at its own proportions on the terms the `artwork-presentation` capability sets out: the row keeps its height, the picture takes the width its proportions give it at that height up to that capability's bound, and the row's title and everything after it begin further along by that extra width. A portrait poster keeps exactly the box described above, and no row's height changes in either case — so a list showing eight whole rows still shows eight whole rows, and a feed sized to five rows still holds five.
+Where the anime's displayed picture is **not a poster**, meaning an upright or a wide picture in the sense the `artwork-presentation` capability defines, the row SHALL draw it whole at its own proportions on the terms the `artwork-presentation` capability sets out: the row keeps its height, the picture takes the width its proportions give it at that height up to that capability's bound, and the row's title and everything after it begin further along by that extra width. A poster keeps exactly the box described above, and no row's height changes in either case — so a list showing eight whole rows still shows eight whole rows, and a feed sized to five rows still holds five.
 
-This requirement governs the profile's **list rows** only. The poster **strips** in "My top anime", "Most rewatched" and "Top series" are not list rows and SHALL keep the fixed tile size their own requirements set, cropping to it as they do today.
+This requirement governs the profile's **list rows** only. The poster **strips** ("My top anime", "Top series", "Most rewatched" and "Most time spent") are not list rows. They draw their pictures whole as height-bound tiles under "Poster strips keep a fixed tile height and scroll horizontally only".
 
 #### Scenario: Poster fills a latest-updates row
 - **WHEN** the Latest updates box renders a row
@@ -140,13 +140,17 @@ This requirement governs the profile's **list rows** only. The poster **strips**
 - **WHEN** a Latest updates, edit-history, or divergence row's anime has a displayed picture wider than it is tall
 - **THEN** the whole picture is shown at the row's height and at its own width there, with no part cropped away
 
+#### Scenario: An upright picture is not cropped
+- **WHEN** a Latest updates, edit-history, or divergence row's anime has an upright displayed picture, such as a 4:5 picture
+- **THEN** the whole picture is shown at the row's height and at its own width there, a little wider than a poster
+
 #### Scenario: Landscape artwork does not change how many rows fit
 - **WHEN** a list holding landscape artwork renders
 - **THEN** it shows the same number of whole rows it shows without it, each at the same height
 
-#### Scenario: The poster strips are unaffected
-- **WHEN** "My top anime", "Most rewatched" or "Top series" holds an anime with landscape artwork
-- **THEN** every tile in that strip is still the same fixed size, cropped to it as before
+#### Scenario: The poster strips follow their own rule
+- **WHEN** "My top anime", "Top series", "Most rewatched" or "Most time spent" holds an anime with landscape artwork
+- **THEN** that tile keeps the strip's tile height rather than a list row's, and its whole picture is drawn under the strips' own rule
 
 ### Requirement: Latest updates activity feed
 The system SHALL show a "Latest updates" feed built from the ActivityLog, most recent first, scrollable within its box, containing only: anime added to the list (any status), episode-count increases, completions, score changes, rewatch-count changes, and anime removed from the list. The feed SHALL NOT show episode-count decreases, status changes other than completion, drops, or start/finish date changes.
@@ -1059,21 +1063,23 @@ The system SHALL give each poster tile in the "My top anime" and "Most rewatched
 - **WHEN** a tile scales up and grows into the gap beside an adjacent tile
 - **THEN** the hovered tile renders above its neighbours rather than being partly covered by them
 
-### Requirement: Poster strips keep a fixed tile size and scroll horizontally only
-The "My top anime", "Top series", and "Most rewatched" strips SHALL size their poster tiles as a fixed fraction of the strip's width — ten tiles across the visible width — regardless of how many entries the strip contains. Tiles SHALL NOT shrink to fit additional entries; entries beyond the tenth SHALL be reached by scrolling the strip horizontally.
+### Requirement: Poster strips keep a fixed tile height and scroll horizontally only
+The "My top anime", "Top series", "Most rewatched", and "Most time spent" strips SHALL size their poster tiles as a fixed fraction of the strip's width (ten poster tiles across the visible width), regardless of how many entries the strip contains. Tiles SHALL NOT shrink to fit additional entries. Entries beyond those that fit SHALL be reached by scrolling the strip horizontally.
 
-Ten tiles SHALL actually fit: the tile's full rendered width, including any border it carries, SHALL be what the ten-across computation divides the strip's visible width into, so that a strip holding exactly ten entries shows all ten whole — the tenth SHALL NOT be clipped at the strip's trailing edge, and this SHALL hold for a strip that cannot be scrolled as much as for one that can.
+Every tile in a strip SHALL be the height of a poster tile. A tile whose picture is a poster SHALL be exactly the size a poster tile is today. A tile whose picture is upright or wide SHALL keep that height and take the width its picture's proportions give it there. That width SHALL be bounded as the `artwork-presentation` capability bounds a height-bound tile, so the whole picture is shown rather than cropped to the poster tile. The tile's badge, and in "Top series" its score chips beneath the picture, keep their positions relative to the tile.
+
+Ten poster tiles SHALL actually fit: the tile's full rendered width, including any border it carries, SHALL be what the ten-across computation divides the strip's visible width into, so that a strip holding exactly ten entries pictured as posters shows all ten whole — the tenth SHALL NOT be clipped at the strip's trailing edge, and this SHALL hold for a strip that cannot be scrolled as much as for one that can.
 
 Each strip SHALL scroll along the horizontal axis only. Vertical scrolling within a strip SHALL be impossible: a trackpad or wheel gesture SHALL NOT be able to displace the strip's contents up or down, including where a hovered tile's scaled-up size exceeds the strip's height.
 
-A strip holding no more entries than fit across its visible width SHALL NOT be scrollable at all: no wheel gesture and no drag SHALL displace its contents by any amount, and the strip SHALL NOT present itself as scrollable — including the grab cursor, which SHALL appear only on a strip that can actually be scrolled. Sub-pixel differences between the tiles' total width and the strip's width SHALL NOT make a strip that fits behave as a scrollable one.
+A strip whose tiles all fit across its visible width SHALL NOT be scrollable at all: no wheel gesture and no drag SHALL displace its contents by any amount, and the strip SHALL NOT present itself as scrollable — including the grab cursor, which SHALL appear only on a strip that can actually be scrolled. Whether the tiles fit SHALL be decided by their actual rendered widths, not by how many entries there are. So a strip of ten entries that holds a wider tile scrolls, and a strip becomes scrollable, or stops being scrollable, as soon as a tile's picture loads and changes that tile's width. A hovered tile's scaled-up size SHALL NOT count toward whether the tiles fit. Sub-pixel differences between the tiles' total width and the strip's width SHALL NOT make a strip that fits behave as a scrollable one.
 
 #### Scenario: Exactly ten entries are all whole
-- **WHEN** a strip holds exactly ten entries
+- **WHEN** a strip holds exactly ten entries, all pictured as posters
 - **THEN** all ten tiles are fully visible, with the tenth's trailing edge inside the strip rather than cut off by it
 
 #### Scenario: The tenth tile of a longer strip
-- **WHEN** a strip holds more than ten entries and sits at its starting scroll position
+- **WHEN** a strip holds more than ten entries, all pictured as posters, and sits at its starting scroll position
 - **THEN** the tenth tile is whole and the eleventh is the first one reached by scrolling
 
 #### Scenario: More than ten top anime
@@ -1081,7 +1087,7 @@ A strip holding no more entries than fit across its visible width SHALL NOT be s
 - **THEN** the tiles stay the same size as when there were exactly ten, and the rest are reached by scrolling the strip
 
 #### Scenario: Exactly ten entries do not scroll
-- **WHEN** a media-type filter leaves a strip with exactly ten entries
+- **WHEN** a media-type filter leaves a strip with exactly ten entries, all pictured as posters
 - **THEN** the strip cannot be scrolled or dragged in either direction, and its cursor does not offer to drag it
 
 #### Scenario: Switching to a filter that fits stops the scrolling
@@ -1090,11 +1096,23 @@ A strip holding no more entries than fit across its visible width SHALL NOT be s
 
 #### Scenario: Tile size matches between the strips
 - **WHEN** two of the strips are shown at the same window width
-- **THEN** their tiles are the same size
+- **THEN** their poster tiles are the same size, and every tile in both is the same height
 
 #### Scenario: No vertical drift
 - **WHEN** I make a vertical scroll gesture with the pointer over any strip
 - **THEN** the strip's contents do not move up or down
+
+#### Scenario: A landscape tile is wider but no taller
+- **WHEN** "My top anime" holds an anime whose displayed picture is landscape
+- **THEN** its tile is the same height as the poster tiles beside it and wider than them, and the whole picture is shown
+
+#### Scenario: A wider tile makes a full strip scroll
+- **WHEN** a strip holds exactly ten entries, one of them pictured as a landscape picture
+- **THEN** the strip can be scrolled, offers the grab cursor, and the entries past its visible width are reached by scrolling it
+
+#### Scenario: A strip that fits stays still while a tile is hovered
+- **WHEN** a strip whose tiles all fit has one of them hovered and scaled up
+- **THEN** the strip still cannot be scrolled or dragged
 
 ### Requirement: Poster strips show no scrollbar
 The "My top anime", "Top series", and "Most rewatched" strips SHALL NOT render a visible scrollbar, in any browser, whether or not they overflow — the posters are the content and a bar under them is noise.
