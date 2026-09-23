@@ -355,16 +355,14 @@
   color: var(--fam-from);
 }
 
-/* Each strip is an inline-size container so its tile size can be written as
-   a length rather than a percentage of the strip (uncrop-artwork-everywhere
-   design D6): a tile whose picture isn't a poster keeps the poster tile's
-   height while its width follows the picture, so that height has to be
-   expressible without reference to the tile's own width. 100cqw resolves
-   against this strip's content box — the same box the old `100%` flex basis
-   did — so --strip-tile-w is exactly the ten-across basis it replaces, and
-   --strip-tile-h exactly the 2:3 height aspect-ratio gave it. Declared
-   here, read on the tiles, where this strip is the nearest container. The
-   other three strips below repeat the same pair. */
+/* --strip-tile-w and --strip-tile-h are the one tile size all four strips
+   share: ten across the strip's content box (100cqw, hence the inline-size
+   container), 2:3 tall. Every tile is exactly that size whatever its
+   picture — a non-poster picture is drawn whole inside it over a blurred
+   fill by PosterPicture, never by widening the tile. Written as lengths
+   rather than percentages so Top series can size its picture area from the
+   same width. Declared here, read on the tiles, where this strip is the
+   nearest container. The other three strips below repeat the same pair. */
 .top-anime-strip {
   --strip-tile-w: calc((100cqw - 9 * 10px) / 10);
   --strip-tile-h: calc(var(--strip-tile-w) * 3 / 2);
@@ -394,8 +392,9 @@
 /* A strip whose tiles all fit across it (design.md decision 4): padding,
    gap, and tile sizing are untouched so nothing shifts when a strip crosses
    the threshold, only whether it can scroll at all. Whether they fit is
-   measured from the tiles' rendered widths (useStripScroll), not counted,
-   since a tile holding a non-poster picture is wider than a poster tile. */
+   measured from the tiles' rendered widths (useStripScroll) rather than
+   counted, because the measurement is exact: it includes the border-box and
+   a 1px sub-pixel tolerance. */
 .top-anime-strip--fits {
   overflow-x: hidden;
   cursor: default;
@@ -439,34 +438,6 @@
   display: block;
   background: var(--code-bg);
   pointer-events: none;
-}
-
-/* A tile whose picture isn't a poster (artwork-presentation's height-bound
-   tile rule, design D6): same height as a poster tile, and as wide as its
-   picture is at that height, so the whole picture shows instead of a
-   centre slice. The picture's height is the poster tile's content height
-   (its height less the 1px border either side), written as a length rather
-   than as 100% of the tile so the tile's content-sized width comes straight
-   from the image's own ratio with no percentage in the way — the same
-   WebKit flex-basis hazard RowPicture.css describes. The width is capped at
-   16/9 of that height, as a row picture's is, so a 16:9 key visual lands
-   exactly on the cap and anything wider is drawn whole inside it over its
-   blurred fill. The badge stays anchored to the tile's corner. The other
-   two badge strips below repeat this block. */
-.top-anime-strip__item:has(> .poster-picture:not(.poster-picture--poster)) {
-  --strip-picture-h: calc(var(--strip-tile-h) - 2px);
-  flex: 0 0 auto;
-}
-
-.top-anime-strip__item > .poster-picture:not(.poster-picture--poster) {
-  width: auto;
-  height: auto;
-}
-
-.top-anime-strip__item > .poster-picture:not(.poster-picture--poster) > .poster-picture__art {
-  width: auto;
-  height: var(--strip-picture-h);
-  max-width: calc(var(--strip-picture-h) * 16 / 9);
 }
 
 .top-anime-strip__picture--placeholder {
@@ -557,22 +528,6 @@
   display: block;
   background: var(--code-bg);
   pointer-events: none;
-}
-
-.rewatched-strip__item:has(> .poster-picture:not(.poster-picture--poster)) {
-  --strip-picture-h: calc(var(--strip-tile-h) - 2px);
-  flex: 0 0 auto;
-}
-
-.rewatched-strip__item > .poster-picture:not(.poster-picture--poster) {
-  width: auto;
-  height: auto;
-}
-
-.rewatched-strip__item > .poster-picture:not(.poster-picture--poster) > .poster-picture__art {
-  width: auto;
-  height: var(--strip-picture-h);
-  max-width: calc(var(--strip-picture-h) * 16 / 9);
 }
 
 .rewatched-strip__picture--placeholder {
@@ -670,10 +625,10 @@
   outline: none;
 }
 
-/* An explicit height rather than aspect-ratio: 2 / 3, so the picture area
-   is a length a non-poster tile below can keep while its width follows the
-   picture. It's the same box aspect-ratio gave: 2:3 of the tile's content
-   width, the tile's basis less its 1px border either side. */
+/* An explicit height rather than aspect-ratio: 2 / 3, since the picture area
+   is sized from the shared tile width (--strip-tile-w). It's the same box
+   aspect-ratio gave: 2:3 of the tile's content width, the tile's basis less
+   its 1px border either side. */
 .top-series-strip__picture {
   --strip-picture-h: calc((var(--strip-tile-w) - 2px) * 3 / 2);
   width: 100%;
@@ -691,31 +646,6 @@
   display: flex;
   gap: 2px;
   padding: 3px;
-}
-
-/* Same height-bound rule as the badge strips' tiles above: the picture area
-   keeps the poster tile's picture height, and the tile takes the picture's
-   width there, capped at 16/9 of it. The chip row still spans the tile, but
-   width: 0 / min-width: 100% keeps it from widening the tile on its own
-   account, so the tile's width is the picture's alone. */
-.top-series-strip__item:has(> .poster-picture:not(.poster-picture--poster)) {
-  flex: 0 0 auto;
-}
-
-.top-series-strip__item > .poster-picture:not(.poster-picture--poster) {
-  width: auto;
-}
-
-.top-series-strip__item > .poster-picture:not(.poster-picture--poster) > .poster-picture__art {
-  width: auto;
-  height: var(--strip-picture-h);
-  max-width: calc(var(--strip-picture-h) * 16 / 9);
-}
-
-.top-series-strip__item:has(> .poster-picture:not(.poster-picture--poster)) > .top-series-strip__chips {
-  width: 0;
-  min-width: 100%;
-  box-sizing: border-box;
 }
 
 /* Same strip mechanics as top-anime-strip/rewatched-strip/top-series-strip
@@ -782,22 +712,6 @@
   display: block;
   background: var(--code-bg);
   pointer-events: none;
-}
-
-.time-spent-strip__item:has(> .poster-picture:not(.poster-picture--poster)) {
-  --strip-picture-h: calc(var(--strip-tile-h) - 2px);
-  flex: 0 0 auto;
-}
-
-.time-spent-strip__item > .poster-picture:not(.poster-picture--poster) {
-  width: auto;
-  height: auto;
-}
-
-.time-spent-strip__item > .poster-picture:not(.poster-picture--poster) > .poster-picture__art {
-  width: auto;
-  height: var(--strip-picture-h);
-  max-width: calc(var(--strip-picture-h) * 16 / 9);
 }
 
 .time-spent-strip__picture--placeholder {

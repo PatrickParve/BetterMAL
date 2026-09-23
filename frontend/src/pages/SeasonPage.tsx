@@ -225,7 +225,7 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
   const [visibleCount, setVisibleCount] = useRestorableState('visibleCount', PAGE_SIZE)
   const visibleItems = displayed.slice(0, visibleCount)
   // Tops the reveal up so its last row is never left with a lone card
-  // (a wide card takes two columns, so a step no longer ends on a full row).
+  // (below the desktop breakpoint the auto-fill column count needn't divide the step).
   const gridRef = useCompleteLastRow(displayed, visibleCount, setVisibleCount)
 
   const firstUnwatchedIndex = sort === 'myScore' ? displayed.findIndex((item) => item.myScore === null) : -1

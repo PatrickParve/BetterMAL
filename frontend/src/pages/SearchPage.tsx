@@ -144,7 +144,7 @@ export function SearchPage() {
 
   const visibleItems = filteredItems.slice(0, visibleCount)
   // Tops the reveal up so its last row is never left with a lone card
-  // (a wide card takes two columns, so a step no longer ends on a full row).
+  // (below the desktop breakpoint the auto-fill column count needn't divide the step).
   const gridRef = useCompleteLastRow(filteredItems, visibleCount, setVisibleCount)
 
   return (

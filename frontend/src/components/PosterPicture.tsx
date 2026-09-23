@@ -20,10 +20,12 @@ type PosterPictureProps = {
 // five strips, TopAnimePage, RecapPage, ScoreBoardOverlay) render many
 // pictures from one component, where hooks rules forbid a hook per picture,
 // and a picture's load should re-render one wrapper rather than a page.
-// Hosts whose own geometry depends on the shape — a grid card spanning two
-// columns, a timeline card widening, a strip tile taking its picture's width
-// — read it off the wrapper's `poster-picture--{shape}` class with `:has()`
-// instead, so no host has to hold per-item state of its own.
+// Hosts whose own geometry depends on the shape — a More tile spanning two
+// columns, a timeline card widening, the Top anime showcase poster taking
+// its picture's width — read it off the wrapper's `poster-picture--{shape}`
+// class with `:has()` instead, so no host has to hold per-item state of its
+// own. A host that leaves its box alone, as the grid cards and the profile
+// strips' tiles do, gets the picture drawn whole inside it over the fill.
 //
 // The blurred fill behind the art exists only for non-poster shapes
 // (design D3): a poster fills its box, so it renders exactly as it did

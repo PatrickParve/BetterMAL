@@ -224,16 +224,17 @@ function formatStatValue(key: keyof ProfileDto['stats'], value: number | null): 
 // the page's other strips (design.md decision 3).
 //
 // `fits` says whether every tile fits across the strip's visible width, and
-// drives the strip's `--fits` class (uncrop-artwork-everywhere design D6).
-// It's measured rather than counted: a tile holding a non-poster picture is
-// wider than a poster tile, so ten entries no longer always fit. The last
-// tile's right edge is compared with the strip's inner right edge, both
-// taken from the first tile's left edge so the strip's own scroll offset
-// cancels out. offsetLeft/offsetWidth ignore transforms, so a hover-scaled
-// tile can't tip the result, and the 1px tolerance absorbs their
-// pixel-snapping, so ten poster tiles that exactly fill the strip never read
-// as overflowing. A ResizeObserver on the strip and each tile re-measures
-// when the window resizes or a tile widens as its picture loads.
+// drives the strip's `--fits` class. Every tile is the same fixed size
+// whatever its picture, so ten entries always fit; it's still measured
+// rather than counted because the measurement is exact. The last tile's
+// right edge is compared with the strip's inner right edge, both taken from
+// the first tile's left edge so the strip's own scroll offset cancels out.
+// offsetLeft/offsetWidth are border-box and ignore transforms, so a
+// hover-scaled tile can't tip the result, and the 1px tolerance absorbs
+// their sub-pixel snapping, so ten tiles that exactly fill the strip never
+// read as overflowing. A ResizeObserver on the strip and each tile
+// re-measures when the window resizes, and the node-list diff in
+// `observeTiles` re-measures after a filter switch swaps the tiles.
 function useStripScroll(restoreKey: string) {
   const elRef = useRef<HTMLDivElement | null>(null)
   const drag = useRef({ isDown: false, startX: 0, scrollLeft: 0, dragged: false })

@@ -3,19 +3,19 @@ import { useCallback, useLayoutEffect, useRef, type Dispatch, type SetStateActio
 // A progressively revealed card grid (Season, Year, Search, the Series
 // browser) slices its already-loaded list to `visibleCount` and reveals
 // another step as a sentinel below the grid scrolls into view. A step of 24
-// used to end on a full row at six columns, but a card holding a wide
-// picture takes two (artwork-presentation's column-grid rule), and an
-// auto-fill grid below the desktop breakpoint needn't divide the step
-// evenly either. A step could therefore end with a lone card on its last
-// row, which then sat there alone until the sentinel just below it was
-// reached and the next step filled in beside it.
+// (48 on Search) ends on a full row at six columns, but an auto-fill grid
+// below the desktop breakpoint has whatever column count fits the window,
+// which needn't divide the step, and a window resize changes it again. A
+// step could therefore end with a lone card on its last row, which then sat
+// there alone until the sentinel just below it was reached and the next
+// step filled in beside it.
 //
 // This tops the revealed count up until the last revealed row is complete.
-// It's measured from the laid-out grid rather than counted, because whether
-// a card spans two columns is only known once its picture has loaded. It
-// only ever reveals more, never less, so it can't fight the sentinel or cut
-// back a restored grid, and it stops at the end of the list, where a short
-// last row is simply where the list ends.
+// It's measured from the laid-out grid rather than counted, because the
+// column count below the desktop breakpoint is only known once the grid has
+// laid out. It only ever reveals more, never less, so it can't fight the
+// sentinel or cut back a restored grid, and it stops at the end of the list,
+// where a short last row is simply where the list ends.
 //
 // Returns a callback ref for the grid element: the grid mounts and unmounts
 // with its page's terminal state, which an effect's dependency list can't
@@ -52,15 +52,15 @@ export function useCompleteLastRow(
 
   // Before paint, after every reveal and every change of list, so a lone
   // card never shows for a frame. Each top-up re-renders and lands back here,
-  // so a newly revealed card that wraps (a wide one whose picture was already
-  // cached) is topped up after in turn, until the last row is complete.
+  // so a reveal that still leaves the last row short is topped up again,
+  // until the last row is complete.
   useLayoutEffect(() => {
     topUp()
   }, [topUp, items, visibleCount])
 
-  // A card turning wide as its picture loads, or the window resizing, moves
-  // cards without rendering this page. Either one that leaves the last row
-  // short pushes a card onto a new row, which changes the grid's size.
+  // A window resize moves cards without rendering this page. One that
+  // leaves the last row short pushes a card onto a new row, which changes
+  // the grid's size.
   return useCallback(
     (el: HTMLElement | null) => {
       observerRef.current?.disconnect()

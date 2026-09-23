@@ -26,34 +26,15 @@
    in SeasonPage.css for why a min-width-based track count is fragile to
    small container-width changes. */
 .current-season__grid {
-  --card-grid-gap: 16px;
-  container-type: inline-size;
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: var(--card-grid-gap);
+  gap: 16px;
 }
 
 @media (max-width: 1024px) {
   .current-season__grid {
-    --card-grid-gap: 12px;
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: var(--card-grid-gap);
-  }
-}
-
-/* A wide picture's card (square included) spans two tracks, drawn whole at
-   one track's picture height (artwork-presentation's column-grid rule,
-   AnimeCard.css). Only where the grid has room for two tracks — 252px is
-   two 120px floors plus the narrow layout's 12px gap, the one layout
-   that can drop to a single track: there, `span 2` would add an implicit
-   second column and scroll the page sideways, so the card stays one track
-   and draws its picture whole inside it. grid-auto-flow stays at its
-   default, never `dense`, so the cards keep their order and a wide card
-   that doesn't fit at a row's end leaves that row one track short. */
-@container (min-width: 252px) {
-  .current-season__grid > .anime-card:has(.poster-picture--wide) {
-    grid-column: span 2;
-    --card-span: 2;
+    gap: 12px;
   }
 }
 
