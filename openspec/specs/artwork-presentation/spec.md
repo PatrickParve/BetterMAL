@@ -68,8 +68,8 @@ The airing page's slots, which were row picture slots before, are banner boxes. 
 The detail page, the update cards and the picture picker already draw pictures whole under their own capabilities' rules; this requirement SHALL NOT change any of them. The series page header, timeline cards and "More" tiles draw their pictures whole under `series-page`'s rules.
 
 #### Scenario: A card grid is not drawn as rows
-- **WHEN** a season, year, search or browse listing includes an anime with landscape artwork
-- **THEN** its card is drawn under the column-grid rule, not as a height-bound row slot
+- **WHEN** a season, year, search or Series browser listing includes an anime with landscape artwork
+- **THEN** its card is drawn under the fixed poster box rule, not as a height-bound row slot
 
 #### Scenario: Already-whole surfaces are untouched
 - **WHEN** an anime with landscape artwork is opened on its detail page, or shown in an update card or the picture picker
@@ -165,14 +165,18 @@ Every surface this capability governs SHALL share this one classification, so a 
 
 Every surface that draws an anime's picture as a card, a tile or a poster box, rather than as a row picture slot, SHALL belong to exactly one of four families, and SHALL draw its pictures whole under that family's rule:
 
-- **Column grids**, whose cards sit in fixed columns in a sorted order: the season, year and search results grids; the Series browser grid; and the home page's "Followed shows airing" grid. The series page's "More" tiles also follow this rule, under `series-page`.
-- **Fixed poster boxes**, whose box shape is part of the surface's design: the home page's "Currently watching" carousel cards; the Top anime page's rank 4–10 cards; the recap podium's cards; and the recap score board's tiles. The series timeline cards also follow this rule, under `series-page`, with its one widened card size.
-- **Height-bound tiles**, whose height is fixed and whose width is free: the profile page's "My top anime", "Top series", "Most rewatched" (both scopes) and "Most time spent" strips; and the Top anime page's rank 1–3 showcase poster.
+- **Column grids**, whose cards sit in fixed columns in a sorted order and may span two of them: the series page's "More" tiles, under `series-page`.
+- **Fixed poster boxes**, whose box shape is part of the surface's design: the home page's "Currently watching" carousel cards and "Followed shows airing" grid cards; the season, year and search results grids' cards; the Series browser grid's cards; the Top anime page's rank 4–10 cards; the recap podium's cards; the recap score board's tiles; and the profile page's "My top anime", "Top series", "Most rewatched" (both scopes) and "Most time spent" strip tiles. The series timeline cards also follow this rule, under `series-page`, with its one widened card size.
+- **Height-bound tiles**, whose height is fixed and whose width is free: the Top anime page's rank 1–3 showcase poster.
 - **Banner boxes**, whose width is fixed by their card and which are wider than they are tall: the airing page's slot picture bands.
 
 #### Scenario: Every former exception has a family
 - **WHEN** any of the season, year, search or Series browser grids, the home carousel or "Followed shows airing" grid, a Top anime card or showcase, the recap podium or score board, or a profile poster strip shows an anime with landscape artwork
 - **THEN** that picture is drawn whole under its surface's family rule, not cropped to a poster box
+
+#### Scenario: The browse grids share the carousel's treatment
+- **WHEN** the same landscape picture appears on a "Currently watching" carousel card and on a season, year, search, Series browser or "Followed shows airing" card
+- **THEN** each card keeps its portrait picture box and draws the whole picture inside it over the same blurred fill
 
 #### Scenario: The airing band is a banner box
 - **WHEN** the airing page shows a slot with any picture
@@ -190,49 +194,47 @@ A card whose picture is **upright** SHALL keep one column, and its picture SHALL
 
 Where a grid has room for only one column, a wide card SHALL stay one column and its picture SHALL be drawn whole inside it. A wide card SHALL never make the page scroll sideways.
 
-Where a grid reveals its cards progressively as it is scrolled, each reveal SHALL end on a complete row whenever more cards remain to be revealed. A wide card inside the revealed part SHALL NOT leave a card alone on the last revealed row, waiting for the next reveal to fill in beside it. The grid SHALL reveal as many further cards as that row needs, and SHALL do so again whenever a picture loading as wide pushes a card onto a new row. Only the last row of the whole list MAY be short, since that is where the list ends.
+This rule SHALL apply only to the surfaces "Which surfaces are cards, tiles and poster boxes" names as column grids. A grid that surface list names as fixed poster boxes, such as the season, year, search, Series browser and "Followed shows airing" grids, SHALL NOT span a card over two columns for any picture.
 
 #### Scenario: A landscape card spans two columns
-- **WHEN** a season grid includes an anime whose displayed picture is landscape
-- **THEN** its card spans two columns and shows the whole picture, with nothing cut off
+- **WHEN** a series page's More grid includes an entry whose displayed picture is landscape
+- **THEN** its tile spans two columns and shows the whole picture, with nothing cut off
 
 #### Scenario: A square card spans two columns
-- **WHEN** a Series browser grid includes a series whose displayed picture is square
-- **THEN** its card spans two columns and shows the whole picture square
+- **WHEN** a series page's More grid includes an entry whose displayed picture is square
+- **THEN** its tile spans two columns and shows the whole picture square
 
 #### Scenario: A wide card stays in line with its row
-- **WHEN** a row of a grid holds a two-column card and one-column cards
+- **WHEN** a row of a column grid holds a two-column card and one-column cards
 - **THEN** every card's picture area is the same height, and every card's title and information begin on the same lines
 
 #### Scenario: Sort order is never changed
-- **WHEN** a wide card's turn in the sort order falls in a row's last column
-- **THEN** it begins the next row, the row before ends one column short, and every card still appears in the page's sort order
+- **WHEN** a wide card's turn in a column grid's order falls in a row's last column
+- **THEN** it begins the next row, the row before ends one column short, and every card still appears in the page's order
 
 #### Scenario: An upright card keeps one column
-- **WHEN** a grid includes an anime whose displayed picture is upright
+- **WHEN** a column grid includes an entry whose displayed picture is upright
 - **THEN** its card keeps one column and shows the whole picture inside its picture area
 
 #### Scenario: A narrow grid does not scroll sideways
-- **WHEN** a grid is narrow enough to hold only one column and includes a wide card
+- **WHEN** a column grid is narrow enough to hold only one column and includes a wide card
 - **THEN** that card stays one column with its whole picture drawn inside it, and the page does not scroll sideways
 
-#### Scenario: A reveal ends on a full row
-- **WHEN** a Season, Year, Search or Series browser grid reveals its next cards and a wide card among them takes two columns
-- **THEN** the last revealed row is still complete, with no card on it alone, and the cards continue in the page's sort order
-
-#### Scenario: A picture loading wide keeps the last row full
-- **WHEN** a revealed card's picture loads as wide and pushes the last revealed card onto a row of its own
-- **THEN** the grid reveals the cards that complete that row, without waiting for the grid to be scrolled further
-
 #### Scenario: A grid of posters is unchanged
-- **WHEN** a grid's pictures are all posters
+- **WHEN** a column grid's pictures are all posters
 - **THEN** every card is exactly the size, and in exactly the position, it is today
+
+#### Scenario: A browse grid never spans
+- **WHEN** a season, year, search, Series browser or "Followed shows airing" grid includes an anime whose displayed picture is wide
+- **THEN** its card occupies one column like every other card in that grid
 
 ### Requirement: A fixed poster box draws its picture whole inside it
 
 A fixed poster box SHALL keep its size and shape whatever picture it holds. A poster SHALL fill it exactly as it does today. An upright or wide picture SHALL be drawn whole inside the box, centred, and as large as the box allows at the picture's own proportions.
 
 Nothing about the surface around the box SHALL change: the card or tile carrying it, how many of them are shown, how they are sized, stepped, aligned, ordered or counted, and the information they carry are the same whatever the picture's shape. Each surface's own requirements about those things therefore hold unchanged.
+
+Where fixed poster boxes sit in a grid, every card SHALL occupy one column whatever its picture's shape, so no card's picture can leave a row short, push a card onto a new row, or move any card when it loads. Where they sit in a strip, every tile SHALL be the strip's poster tile size whatever its picture's shape, so no picture can change how many tiles fit across the strip.
 
 #### Scenario: A landscape podium card keeps its box
 - **WHEN** the recap podium's first-ranked anime has a landscape picture
@@ -250,6 +252,26 @@ Nothing about the surface around the box SHALL change: the card or tile carrying
 - **WHEN** a Top anime rank 4–10 card's anime has a landscape picture
 - **THEN** the seven cards still form one row of equal cards, and that card shows its whole picture inside its picture box
 
+#### Scenario: A landscape season card keeps one column
+- **WHEN** a season grid includes an anime whose displayed picture is landscape
+- **THEN** its card is the same size as its neighbours, occupies one column, and shows the whole picture inside its portrait picture box over the blurred fill
+
+#### Scenario: A wide card in a row's last column stays there
+- **WHEN** the card whose turn falls in the last column of a year, search or Series browser grid's row holds a wide picture
+- **THEN** it takes that last column like any other card, and the row spans the content width
+
+#### Scenario: Followed shows airing keeps its columns
+- **WHEN** the home page's "Followed shows airing" grid includes an anime whose displayed picture is square
+- **THEN** its card is the same size as its neighbours and shows the whole square picture inside its portrait picture box
+
+#### Scenario: A browse grid does not move as pictures load
+- **WHEN** a season grid loads a mixture of posters, upright pictures and landscape pictures
+- **THEN** no card changes size or position as they arrive
+
+#### Scenario: A strip tile keeps the poster tile's size
+- **WHEN** a profile poster strip holds an anime whose displayed picture is landscape
+- **THEN** its tile is exactly the size of the poster tiles beside it, and shows the whole picture inside it over the blurred fill
+
 ### Requirement: A height-bound tile takes its picture's width
 
 A height-bound tile SHALL keep its height whatever picture it holds. A tile whose picture is a poster SHALL keep exactly the size it has today.
@@ -258,13 +280,13 @@ A tile whose picture is upright or wide SHALL take the width its picture's propo
 
 Where a tile sits beside text in its card, as the Top anime showcase's poster sits beside its rank, title and scores, the tile SHALL NOT narrow that text below the width it needs to stay readable. Where the card cannot give the picture its full width, the picture SHALL be drawn whole within the width the tile can have.
 
-#### Scenario: A landscape strip tile is wider, not taller
-- **WHEN** a profile poster strip holds an anime whose displayed picture is landscape
-- **THEN** its tile is the same height as its neighbours and wider than them, and shows the whole picture
+#### Scenario: A landscape showcase poster is wider, not taller
+- **WHEN** the Top anime showcase's first-ranked anime has a landscape picture, at a width where the showcase cards are stacked in one column
+- **THEN** its poster is the same height as a poster's would be and wider than one, and shows the whole picture
 
-#### Scenario: A square strip tile is square
-- **WHEN** a profile poster strip holds an anime whose displayed picture is square
-- **THEN** its tile is as wide as it is tall, at the strip's tile height, and shows the whole picture
+#### Scenario: A square showcase poster is square
+- **WHEN** the Top anime showcase's first-ranked anime has a square picture, at a width where the showcase cards are stacked in one column
+- **THEN** its poster is as wide as it is tall, at the showcase poster's height, and shows the whole picture
 
 #### Scenario: A showcase card stays readable
 - **WHEN** the Top anime showcase's first-ranked anime has a landscape picture, at a width where the three showcase cards sit side by side

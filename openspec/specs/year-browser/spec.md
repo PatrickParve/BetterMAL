@@ -359,7 +359,7 @@ The Year page SHALL present its results using the same card content, the same gr
 
 Each card SHALL show the anime's title, picture, type and episode count at the leading edge of its meta line, and its MAL score at the trailing edge of that same line, under the same rules — `?` for an unknown episode count, nothing in the score slot for an anime with no MAL score, and no score furniture at all while the global hide-scores toggle is on.
 
-The results grid SHALL span the full content width with no unused right-hand gutter (except for the one short row a wide card can leave, under the season page's same exception), at a card count per row that is fixed at ordinary desktop widths and adapts below the mobile breakpoint. The header SHALL place the year step navigation in the horizontal center, the year dropdown immediately to its right, and the sort and filter controls after them.
+The results grid SHALL span the full content width with no unused right-hand gutter, at a card count per row that is fixed at ordinary desktop widths and adapts below the mobile breakpoint. Every card SHALL occupy one column whatever the shape of its picture, drawing an upright or wide picture whole inside its portrait picture box exactly as the season page's cards do. The header SHALL place the year step navigation in the horizontal center, the year dropdown immediately to its right, and the sort and filter controls after them.
 
 Results SHALL load and reveal exactly as the season page's do: the year's whole listing — the union of its four seasons under the selected sort and filters — is read in one request and revealed progressively as the grid is scrolled, with nothing capping how many of the year's anime can be reached, no request issued to reveal more, the revealed count restored on a back/forward navigation, a fresh visit opening on the first screenful, and no refresh able to leave the grid showing fewer anime than it was showing.
 
@@ -373,7 +373,11 @@ Results SHALL load and reveal exactly as the season page's do: the year's whole 
 
 #### Scenario: The grid fills the content width
 - **WHEN** year results are displayed at any window width
-- **THEN** the cards in each full row together span the content width, with no large empty space to the right of the grid, apart from a row that ends one column short because the wide card after it needed two columns
+- **THEN** the cards in each full row together span the content width, with no large empty space to the right of the grid
+
+#### Scenario: A wide picture keeps its card to one column
+- **WHEN** a year's grid includes an anime whose displayed picture is landscape
+- **THEN** its card occupies one column, the same size as its neighbours, and shows the whole picture inside its portrait picture box
 
 #### Scenario: Header control placement
 - **WHEN** I view the Year page header
