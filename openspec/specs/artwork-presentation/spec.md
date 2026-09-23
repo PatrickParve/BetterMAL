@@ -328,7 +328,7 @@ A banner box's picture SHALL be requested through the browser's native lazy load
 
 ### Requirement: Leftover space in a picture's box is filled from the picture itself
 
-Wherever an upright or wide picture drawn whole leaves part of its box uncovered, that uncovered space SHALL be filled with a softened, dimmed, blurred rendering of the same picture, so the box reads as belonging to the artwork rather than as empty bands. This covers a fixed poster box, a grid card's picture area, a height-bound tile past its bound, and the series page's cards and tiles. A banner box is the exception: it draws every picture whole on its own flat background and mounts no fill for any shape.
+Wherever an upright or wide picture drawn whole leaves part of its box uncovered, that uncovered space SHALL be filled with a softened, dimmed, blurred rendering of the same picture, so the box reads as belonging to the artwork rather than as empty bands. This covers a fixed poster box, a grid card's picture area, a height-bound tile past its bound, and the series page's cards and tiles. A banner box is the exception: it draws every picture whole on its own flat background and mounts no fill for any shape. The recap podium's box is a narrower exception: it mounts no fill for any shape, and an upright or wide picture there is drawn whole and centred on the card itself, with no box of its own colour behind it.
 
 The fill SHALL:
 
@@ -351,6 +351,10 @@ A poster SHALL carry no fill. A box whose picture is drawn to its full extent sh
 #### Scenario: A banner box has no fill
 - **WHEN** the airing page's slot band shows a poster, a square picture or a very wide picture
 - **THEN** the space around the picture shows the band's flat background, and no blurred rendering of the picture is drawn
+
+#### Scenario: A podium picture that is not a poster has nothing behind it
+- **WHEN** a recap podium card shows a landscape, square or upright picture
+- **THEN** the picture is drawn whole and centred in the card's picture area, with no blurred rendering of it and no box of its own colour behind it, so only the card's own surface shows around it
 
 #### Scenario: The fill costs no request
 - **WHEN** a card shows an upright picture with the fill behind it

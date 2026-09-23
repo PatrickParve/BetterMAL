@@ -1172,7 +1172,7 @@ The podium SHALL be laid out as a descending row: the cards SHALL sit side by si
 Each card SHALL carry, at minimum:
 
 - its rank, in a badge coloured for that rank — gold for first, silver for second, bronze for third, and for fourth and fifth a neutral badge visibly subordinate to the three medals and distinct from all of them, in both the light and the dark theme;
-- the anime's poster art at a size that reads as artwork rather than as a thumbnail, with a placeholder of the same size when the anime has no picture;
+- the anime's picture at a size that reads as artwork rather than as a thumbnail, with a placeholder of the same size when the anime has no picture. A poster fills the card's poster-sized picture area. A picture that is not a poster is drawn whole and centred in that same area, so every card keeps its size whatever its picture's shape, with no blurred fill and no box behind it, only the card's own surface around it;
 - the anime's title, up to two lines, with the full title available on hover when it is truncated;
 - its score on the currently selected ranking basis, in the app's existing score language for that basis.
 
@@ -1187,6 +1187,18 @@ The podium SHALL show only as many cards as the period has entries: two entries 
 #### Scenario: The best of a period stands out
 - **WHEN** a recap with ten or more entries is shown
 - **THEN** its top five appear as cards in one descending row, the first-ranked card largest and leading, the fourth and fifth smaller than the third, and every card's lower edge on one line
+
+#### Scenario: A landscape picture does not change the card
+- **WHEN** the podium's first-ranked anime has a landscape picture and the others hold posters
+- **THEN** the first card is exactly the height it would be with a poster, is still the widest card and leads the row, and the whole picture is drawn centred in its picture area with no blurred fill and no box behind it, and the row still steps down from first to third, with the fourth and fifth the same height
+
+#### Scenario: A square picture is drawn whole
+- **WHEN** a podium card's anime has a square picture
+- **THEN** the whole picture is drawn across the card's picture width, centred, with no blurred fill and no box behind it, and the card's height, badge, title and score box are unchanged
+
+#### Scenario: An upright picture is drawn whole
+- **WHEN** a podium card's anime has an upright picture, such as a 4:5 picture
+- **THEN** the card is the same size it would be with a poster, and the whole picture is drawn centred in its picture area with no blurred fill and no box behind it
 
 #### Scenario: The podium fills its section
 - **WHEN** the top-10 section is wider than the podium's cards need
