@@ -172,25 +172,31 @@
   z-index: 2;
 }
 
+/* PosterPicture's wrapper (or the placeholder). The tier border, radius
+   and hover shadow live here rather than on the <img>, so they outline the
+   whole tile even when a non-poster picture is drawn whole inside it over
+   its blurred fill. */
 .score-board__poster {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  object-fit: cover;
   display: block;
   border-radius: 6px;
   border: 2px solid var(--tier-border);
   overflow: hidden;
   background: var(--code-bg);
   transition: box-shadow 0.15s ease;
-  /* Explicit hint (spec allows the UA to ignore it) toward the
-     highest-quality resampling available for what is now a gentle downscale
-     rather than a steep one — the tile grew from ~100px to ~150px+ tracks
-     specifically to close that gap. That grid/aspect-ratio change is the
-     actual fix for the softness; this hint and the top-based lift above are
-     unrelated (resolution, not compositing) and are left as they were. */
+}
+
+/* Explicit hint (spec allows the UA to ignore it) toward the
+   highest-quality resampling available for what is now a gentle downscale
+   rather than a steep one — the tile grew from ~100px to ~150px+ tracks
+   specifically to close that gap. That grid/aspect-ratio change is the
+   actual fix for the softness; this hint and the top-based lift above are
+   unrelated (resolution, not compositing) and are left as they were. */
+.score-board__poster .poster-picture__art {
   image-rendering: high-quality;
 }
 

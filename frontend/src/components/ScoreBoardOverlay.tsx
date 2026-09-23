@@ -5,6 +5,7 @@ import type { RecapRowDto } from '../api/types.ts'
 import { useRestorableScroll } from '../hooks/useRestorableScroll.ts'
 import { mediaTypeLabel, pickDisplayTitle, scoreTier } from '../utils/anime.ts'
 import { Modal } from './Modal.tsx'
+import { PosterPicture } from './PosterPicture.tsx'
 import './ScoreBoardOverlay.css'
 
 export type ScoreBoardGroup = { score: number; items: RecapRowDto[] }
@@ -105,14 +106,7 @@ export function ScoreBoardOverlay({ title, groups, onClose }: ScoreBoardOverlayP
                           onFocus={(e: FocusEvent<HTMLAnchorElement>) => showCard(item, group.score, e.currentTarget)}
                           onBlur={hideCard}
                         >
-                          {item.pictureUrl ? (
-                            <img src={item.pictureUrl} alt="" loading="lazy" className="score-board__poster" />
-                          ) : (
-                            <div
-                              className="score-board__poster score-board__poster--placeholder"
-                              aria-hidden="true"
-                            />
-                          )}
+                          <PosterPicture src={item.pictureUrl} loading="lazy" className="score-board__poster" />
                         </Link>
                       )
                     })}

@@ -52,14 +52,40 @@
 
 .anime-card__picture {
   width: 100%;
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
   border-radius: 8px;
   background: var(--code-bg);
 }
 
+/* The placeholder keeps the in-flow 2:3 box and border it has always had. */
 .anime-card__picture--placeholder {
+  aspect-ratio: 2 / 3;
   border: 1px solid var(--border);
+}
+
+/* The picture area is one grid track's 2:3 box however many tracks the card
+   spans (uncrop-artwork-everywhere design D4), so a spanning card's title
+   and meta line up with its row neighbours'. The padding-top technique
+   rather than aspect-ratio, since the height has to come from one track's
+   width rather than the card's own — which also keeps the frame clear of
+   the WebKit aspect-ratio-in-an-fr-track mis-sizing ScoreBoardOverlay.css
+   documents. 100% is the card's width, i.e. N tracks plus N − 1 gaps.
+   --card-span and --card-grid-gap are set by the grid the card sits in; the
+   fallbacks make a card outside a grid (the home carousel's) compute
+   exactly 150%, the box aspect-ratio: 2 / 3 gave before. */
+.anime-card__picture.poster-picture {
+  height: 0;
+  padding-top: calc(
+    (100% - (var(--card-span, 1) - 1) * var(--card-grid-gap, 0px)) / var(--card-span, 1) * 3 / 2
+  );
+}
+
+/* Against the padding box, so it covers the frame above. For a non-poster
+   picture PosterPicture.css's `contain` then draws the art at the frame's
+   height and its own width, capped at the frame's width — whole, centred,
+   with the blurred fill in whatever's left over. */
+.anime-card__picture .poster-picture__art {
+  position: absolute;
+  inset: 0;
 }
 
 .anime-card__title {

@@ -7,6 +7,7 @@ import { FilterMultiSelect } from '../components/FilterMultiSelect.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
 import { usePageData } from '../hooks/usePageData.ts'
+import { useCompleteLastRow } from '../hooks/useCompleteLastRow.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { useOnDemandProbe, useSeasonBounds } from '../hooks/useSeasonBounds.ts'
 import { MEDIA_TYPE_FILTER_OPTIONS, mediaTypeFilterOptions } from '../utils/anime.ts'
@@ -194,6 +195,9 @@ function YearPageView({ year }: { year: number }) {
   // code resetting it explicitly (task 2.8 of an earlier change).
   const [visibleCount, setVisibleCount] = useRestorableState('visibleCount', PAGE_SIZE)
   const visibleItems = displayed.slice(0, visibleCount)
+  // Tops the reveal up so its last row is never left with a lone card
+  // (a wide card takes two columns, so a step no longer ends on a full row).
+  const gridRef = useCompleteLastRow(displayed, visibleCount, setVisibleCount)
 
   const firstUnwatchedIndex = sort === 'myScore' ? displayed.findIndex((item) => item.myScore === null) : -1
 
@@ -411,7 +415,7 @@ function YearPageView({ year }: { year: number }) {
       </div>
 
       {terminalState === 'grid' && (
-        <div className="year-page__grid">
+        <div ref={gridRef} className="year-page__grid">
           {visibleItems.map((item, index) => (
             <Fragment key={item.animeId}>
               {index === firstUnwatchedIndex && index > 0 && <div className="year-page__divider">Unwatched</div>}

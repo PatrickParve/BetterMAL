@@ -4,6 +4,7 @@ import { getSeriesList } from '../api/client.ts'
 import type { SeriesListItemDto } from '../api/types.ts'
 import { SeriesCard } from '../components/SeriesCard.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
+import { useCompleteLastRow } from '../hooks/useCompleteLastRow.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import {
   filterSeries,
@@ -131,6 +132,9 @@ export function SeriesBrowserPage() {
   }, [sortedItems, setVisibleCount])
 
   const visibleItems = sortedItems.slice(0, visibleCount)
+  // Tops the reveal up so its last row is never left with a lone card
+  // (a wide card takes two columns, so a step no longer ends on a full row).
+  const gridRef = useCompleteLastRow(sortedItems, visibleCount, setVisibleCount)
 
   // The page's terminal states: the grid whenever there's anything to show;
   // otherwise a loading indicator while the read is in flight; otherwise,
@@ -220,7 +224,7 @@ export function SeriesBrowserPage() {
       </div>
 
       {terminalState === 'grid' && (
-        <div className="series-browser-page__grid">
+        <div ref={gridRef} className="series-browser-page__grid">
           {visibleItems.map((item) => (
             <SeriesCard key={item.seriesId} item={item} />
           ))}

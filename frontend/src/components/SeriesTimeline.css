@@ -60,7 +60,7 @@
    the rail from contributing its own width to the column's sizing — the
    card's --card-w decides that — while still resolving to the column's full
    width once it's known, so the rail is never a hard-coded pixel figure that
-   would be wrong for a landscape card.
+   would be wrong for a wide-picture card.
 
    The buttons stack one per row (SeriesPage.css), so the rail's own height
    is exactly as tall as the widest slot's option count needs — --picker-rows
@@ -82,7 +82,7 @@
    than as a duration signal, so every card (dated or not) is now the same
    size, evenly spaced by a plain fixed gap. Elapsed time is carried by each
    card's own air-range text, not by card width, gap size, or a coloured
-   edge. --card-w drives the card's width so a landscape card (below) can
+   edge. --card-w drives the card's width so a wide-picture card (below) can
    widen by overriding one custom property rather than duplicating the rule. */
 .series-timeline__card {
   --card-w: 192px;
@@ -96,10 +96,13 @@
 }
 
 /* One alternative width, not a per-image computed one, so a wider card can
-   never be read as a duration or magnitude signal (series-page spec). The
-   picture's height stays pinned to the portrait width's figure below, since
-   --card-w has already widened by the time it's read there. */
-.series-timeline__card--landscape {
+   never be read as a duration or magnitude signal (series-page spec). Keyed
+   on PosterPicture's shape class, so a square picture takes it as well as
+   a landscape one; an upright picture keeps the portrait card and is drawn
+   whole inside it. The picture's height stays pinned to the portrait
+   width's figure below, since --card-w has already widened by the time
+   it's read there. */
+.series-timeline__card:has(.poster-picture--wide) {
   --card-w: 384px;
 }
 
@@ -132,12 +135,11 @@
 
 /* height rather than aspect-ratio: an identical result for a portrait card
    (calc(192px * 3 / 2) = 288px, the same box 2 / 3 already produced), but one
-   that a landscape card can pin back to the portrait figure below instead of
-   inheriting its own widened --card-w. */
+   that a wide-picture card can pin back to the portrait figure below instead
+   of inheriting its own widened --card-w. */
 .series-timeline__card-picture {
   width: 100%;
   height: calc(var(--card-w) * 3 / 2);
-  object-fit: cover;
   background: var(--code-bg);
 }
 
@@ -146,13 +148,12 @@
 }
 
 /* Every row of cards must keep its pictures', titles', and footers' edges on
-   one line, so a landscape card's picture area keeps the portrait height
-   (calc'd off the portrait width, not the card's own widened --card-w) and
-   shows the whole picture with `contain` rather than cropping it to fill a
-   taller box. */
-.series-timeline__card--landscape .series-timeline__card-picture {
+   one line, so a wide-picture card's picture area keeps the portrait height
+   (calc'd off the portrait width, not the card's own widened --card-w).
+   PosterPicture draws the whole picture inside it with `contain`, over the
+   blurred fill, rather than cropping it to fill a taller box. */
+.series-timeline__card:has(.poster-picture--wide) .series-timeline__card-picture {
   height: calc(192px * 3 / 2);
-  object-fit: contain;
 }
 
 .series-timeline__card-body {

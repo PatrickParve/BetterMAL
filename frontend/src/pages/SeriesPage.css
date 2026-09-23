@@ -45,6 +45,17 @@
   border: 1px solid var(--border);
 }
 
+/* An upright or square picture keeps the portrait width and takes its own
+   height there, so it's drawn whole — a square one square — rather than
+   cropped to 140/198 (the detail page's .anime-detail-page__picture
+   technique). The `auto` keyword lets a loaded image's intrinsic ratio win;
+   140/198 only holds the box until it has one. A poster never gets this
+   class, so it keeps the cropped box above. */
+.series-page__picture--whole {
+  height: auto;
+  aspect-ratio: auto 140 / 198;
+}
+
 /* Landscape art takes its own natural height instead of being cropped to
    the portrait 140/198 box, and is shown noticeably larger than the
    portrait box — width alone communicates that, since a landscape picture's
@@ -521,21 +532,40 @@
   text-align: center;
 }
 
-/* --extras-gap is read by SeriesExtraTile.css's landscape-tile sizer, so the
-   grid's actual gap and that calc can never drift apart. The 172px track
+/* --card-grid-gap is read by SeriesExtraTile.css's picture-frame sizer, so
+   the grid's actual gap and that calc can never drift apart. The 172px track
    floor is the measured worst case a tile's meta line needs to fit without
    truncating: "TV special · 2003 · 99 ep" is 142.2px at the tile's 12px
    font, plus ~4.3px of the app's 0.18px letter-spacing across 24 characters,
    plus the tile's 20px of horizontal padding ≈ 167px, with a little slack
    left for a wider system font. */
 .series-page__extras-grid {
-  --extras-gap: 12px;
+  --card-grid-gap: 12px;
+  container-type: inline-size;
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
-  gap: var(--extras-gap);
+  gap: var(--card-grid-gap);
+}
+
+/* A wide picture's tile (square included) spans two tracks so the picture
+   can be drawn whole at a useful size (series-page, artwork-presentation's
+   column-grid rule). Only where the grid has room for two tracks — two
+   172px floors plus one gap: below that, auto-fill drops to one track, and
+   `span 2` would add an implicit second column and scroll the page
+   sideways, so the tile stays one track and draws its picture whole inside
+   it. (356px = 2 × 172px + 12px, kept literal since calc() in a query
+   range isn't supported everywhere.) grid-auto-flow stays at its default,
+   never `dense`: a wide tile that doesn't fit at a row's end starts the
+   next row and the group keeps its order, leaving that row one track
+   short. */
+@container (min-width: 356px) {
+  .series-page__extras-grid > .series-extra-tile:has(.poster-picture--wide) {
+    grid-column: span 2;
+    --card-span: 2;
+  }
 }
 
 .series-page__extras-group-hint {

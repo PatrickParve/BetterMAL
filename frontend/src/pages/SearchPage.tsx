@@ -6,6 +6,7 @@ import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
 import { FilterMultiSelect } from '../components/FilterMultiSelect.tsx'
 import { SeriesBadge } from '../components/SeriesBadge.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
+import { useCompleteLastRow } from '../hooks/useCompleteLastRow.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { MEDIA_TYPE_FILTER_OPTIONS, mediaTypeFilterOptions } from '../utils/anime.ts'
 import './SearchPage.css'
@@ -142,6 +143,9 @@ export function SearchPage() {
   }, [filteredItems, setVisibleCount])
 
   const visibleItems = filteredItems.slice(0, visibleCount)
+  // Tops the reveal up so its last row is never left with a lone card
+  // (a wide card takes two columns, so a step no longer ends on a full row).
+  const gridRef = useCompleteLastRow(filteredItems, visibleCount, setVisibleCount)
 
   return (
     <div className="search-page">
@@ -190,7 +194,7 @@ export function SearchPage() {
         )
       ) : (
         <>
-          <div className="search-page__grid">
+          <div ref={gridRef} className="search-page__grid">
             {series.map((s) => (
               <AnimeCard
                 key={`series-${s.seriesId}`}

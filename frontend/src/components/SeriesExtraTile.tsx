@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { SeriesEntryDto } from '../api/types.ts'
-import { useLandscapePicture } from '../hooks/useLandscapePicture.ts'
 import { isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_CLASS, STATUS_LABELS } from '../utils/anime.ts'
+import { PosterPicture } from './PosterPicture.tsx'
 import { ScoreChip } from './ScoreChip.tsx'
 import { ScoreValue } from './ScoreValue.tsx'
 import { airedFigureLabel, watchedFigureLabel } from './SeriesEntryRow.tsx'
@@ -37,17 +37,12 @@ export function SeriesExtraTile({ entry, onEdit }: SeriesExtraTileProps) {
   const statusClass = entry.entry ? ` series-extra-tile--${STATUS_CLASS[entry.entry.status]}` : ''
   const aired = airedFigureLabel(entry)
   const watched = watchedFigureLabel(entry)
-  const [pictureRef, isLandscape] = useLandscapePicture(entry.pictureUrl)
 
   return (
-    <li className={`series-extra-tile${statusClass}${isLandscape ? ' series-extra-tile--landscape' : ''}`}>
+    <li className={`series-extra-tile${statusClass}`}>
       <Link to={tileHref(entry)} className="series-extra-tile__link">
         <span className="series-extra-tile__picture-frame">
-          {entry.pictureUrl ? (
-            <img ref={pictureRef} src={entry.pictureUrl} alt="" className="series-extra-tile__picture" />
-          ) : (
-            <div className="series-extra-tile__picture series-extra-tile__picture--placeholder" aria-hidden="true" />
-          )}
+          <PosterPicture src={entry.pictureUrl} className="series-extra-tile__picture" />
         </span>
         <span className="series-extra-tile__body">
           <span className="series-extra-tile__title" title={displayTitle}>

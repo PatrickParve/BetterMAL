@@ -1,0 +1,51 @@
+/* Shared card/tile/box picture (artwork-presentation, uncrop-artwork-
+   everywhere design D2/D3). The host's own class sits on this wrapper and
+   gives it its box; this file only says how the art and its fill sit inside
+   whatever box that is. isolation: isolate keeps the blurred fill clipped to
+   a rounded wrapper in WebKit, which otherwise lets a filtered child paint
+   past an overflow: hidden + border-radius corner. No transform here: see
+   ScoreBoardOverlay.css on composited layers going stale — and pixelated —
+   when a window moves to a display with a different pixel density.
+   :where() keeps this rule at zero specificity: the host's class sits on
+   the same element and sets its own position and background, and has to
+   win whichever order the two stylesheets land in the bundle. */
+:where(.poster-picture) {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--code-bg);
+}
+
+/* position: relative so the art paints in the same layer as the absolutely
+   positioned fill and, coming after it in the DOM, above it. */
+.poster-picture__art {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Drawn whole, as large as the box allows at its own proportions. Its
+   transparent letterbox is where the fill shows through. */
+.poster-picture--upright > .poster-picture__art,
+.poster-picture--wide > .poster-picture__art {
+  object-fit: contain;
+}
+
+/* Enlarged past the wrapper by the blur radius on every side rather than
+   with transform: scale(), so the blur's soft edge falls outside the clip
+   without putting a transform on the paint path (see the note above). */
+.poster-picture__fill {
+  --poster-fill-blur: 14px;
+  position: absolute;
+  top: calc(-1 * var(--poster-fill-blur));
+  left: calc(-1 * var(--poster-fill-blur));
+  width: calc(100% + 2 * var(--poster-fill-blur));
+  height: calc(100% + 2 * var(--poster-fill-blur));
+  object-fit: cover;
+  filter: blur(var(--poster-fill-blur));
+  opacity: var(--poster-fill-opacity);
+  pointer-events: none;
+}

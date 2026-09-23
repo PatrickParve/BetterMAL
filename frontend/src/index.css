@@ -15,6 +15,12 @@
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
+  /* How strongly a whole-drawn picture's blurred copy shows through behind
+     it (PosterPicture.css), over --code-bg. Dimmer in the dark theme, where
+     the same opacity over a near-black box reads as a glow rather than a
+     soft extension of the art. */
+  --poster-fill-opacity: 0.55;
+
   --status-watching: #16a34a;
   --status-watching-bg: rgba(22, 163, 74, 0.12);
   --status-watching-border: rgba(22, 163, 74, 0.45);
@@ -177,6 +183,8 @@
     --social-bg: rgba(47, 48, 58, 0.5);
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+
+    --poster-fill-opacity: 0.4;
 
     --status-watching: #4ade80;
     --status-watching-bg: rgba(74, 222, 128, 0.16);

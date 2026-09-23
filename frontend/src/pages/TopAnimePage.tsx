@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { ApiError, getTopAnime, refreshTopAnime, updateEntry } from '../api/client.ts'
 import { TOP_ANIME_RANKING_TYPES, type TopAnimeItemDto, type TopAnimeRankingType } from '../api/types.ts'
 import { Pagination } from '../components/Pagination.tsx'
+import { PosterPicture } from '../components/PosterPicture.tsx'
 import { RowPicture } from '../components/RowPicture.tsx'
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
@@ -339,14 +340,7 @@ export function TopAnimePage() {
                   className={`top-anime-showcase__item top-anime-showcase__item--rank-${item.rank}`}
                 >
                   <Link to={`/anime/${item.animeId}`} className="top-anime-showcase__poster-link">
-                    {item.pictureUrl ? (
-                      <img src={item.pictureUrl} alt="" className="top-anime-showcase__picture" />
-                    ) : (
-                      <div
-                        className="top-anime-showcase__picture top-anime-showcase__picture--placeholder"
-                        aria-hidden="true"
-                      />
-                    )}
+                    <PosterPicture src={item.pictureUrl} className="top-anime-showcase__picture" />
                   </Link>
                   <div className="top-anime-showcase__info">
                     <span className="top-anime-rank top-anime-rank--lg">{item.rank}</span>
@@ -379,14 +373,7 @@ export function TopAnimePage() {
                   <Link to={`/anime/${item.animeId}`} className="top-anime-card__link">
                     <span className="top-anime-rank top-anime-rank--sm">#{item.rank}</span>
                     <span className="top-anime-card__picture-frame">
-                      {item.pictureUrl ? (
-                        <img src={item.pictureUrl} alt="" className="top-anime-card__picture" />
-                      ) : (
-                        <div
-                          className="top-anime-card__picture top-anime-card__picture--placeholder"
-                          aria-hidden="true"
-                        />
-                      )}
+                      <PosterPicture src={item.pictureUrl} className="top-anime-card__picture" />
                     </span>
                     <span className="top-anime-card__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
                       {pickDisplayTitle(item.title, item.englishTitle)}

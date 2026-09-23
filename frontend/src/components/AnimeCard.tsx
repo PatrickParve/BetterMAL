@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { mediaTypeLabel, pickDisplayTitle } from '../utils/anime.ts'
+import { PosterPicture } from './PosterPicture.tsx'
 import './AnimeCard.css'
 
 type AnimeCardProps = {
@@ -30,11 +31,7 @@ export function AnimeCard({ animeId, title, englishTitle, pictureUrl, to, childr
   return (
     <div className={className ? `anime-card ${className}` : 'anime-card'}>
       <Link to={to ?? `/anime/${animeId}`} className="anime-card__link">
-        {pictureUrl ? (
-          <img src={pictureUrl} alt="" className="anime-card__picture" />
-        ) : (
-          <div className="anime-card__picture anime-card__picture--placeholder" aria-hidden="true" />
-        )}
+        <PosterPicture src={pictureUrl} className="anime-card__picture" />
         <span className="anime-card__title" title={pickDisplayTitle(title, englishTitle)}>
           {pickDisplayTitle(title, englishTitle)}
         </span>

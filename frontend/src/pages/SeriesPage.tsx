@@ -34,7 +34,7 @@ import { SeriesTitlePickerOverlay } from '../components/SeriesTitlePickerOverlay
 import { useActionFailure } from '../context/ActionFailureContext.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
-import { useLandscapePicture } from '../hooks/useLandscapePicture.ts'
+import { isLandscapeRatio, pictureShapeOf, useOrientationPicture } from '../hooks/useLandscapePicture.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { useScoreReveal } from '../hooks/useScoreReveal.ts'
@@ -435,7 +435,12 @@ export function SeriesPage() {
   const [rebuildCount, setRebuildCount] = useState<number | null>(null)
   const { openEditor } = useEntryEditor()
   const reportFailure = useActionFailure()
-  const [pictureRef, isLandscapePicture] = useLandscapePicture(data?.found ? data.series.pictureUrl : null)
+  // One ref, two facts (uncrop-artwork-everywhere design D7): strict
+  // landscape keeps the header's own landscape layout, while an upright or
+  // square picture is drawn whole at the portrait width instead of cropped.
+  const [pictureRef, pictureRatio] = useOrientationPicture(data?.found ? data.series.pictureUrl : null)
+  const isLandscapePicture = isLandscapeRatio(pictureRatio)
+  const isWholePicture = !isLandscapePicture && pictureShapeOf(pictureRatio) !== 'poster'
   const [showPicturePicker, setShowPicturePicker] = useState(false)
   const [showTitlePicker, setShowTitlePicker] = useState(false)
   // Called unconditionally here, ahead of the loading/not-found guards below,
@@ -1050,7 +1055,9 @@ export function SeriesPage() {
             ref={pictureRef}
             src={series.pictureUrl}
             alt=""
-            className={`series-page__picture${isLandscapePicture ? ' series-page__picture--landscape' : ''}`}
+            className={`series-page__picture${
+              isLandscapePicture ? ' series-page__picture--landscape' : isWholePicture ? ' series-page__picture--whole' : ''
+            }`}
           />
         ) : (
           <div className="series-page__picture series-page__picture--placeholder" aria-hidden="true" />

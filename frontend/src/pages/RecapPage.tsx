@@ -13,6 +13,7 @@ import {
   type RecapTimeRankingDto,
   type ScoreDistributionBucketDto,
 } from '../api/types.ts'
+import { PosterPicture } from '../components/PosterPicture.tsx'
 import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
 import { RowPicture } from '../components/RowPicture.tsx'
 import {
@@ -860,11 +861,7 @@ function RecapPageView({
         <Link to={`/anime/${item.animeId}`} className="recap-podium__link">
           <span className="recap-podium__badge">{rank}</span>
           <div className="recap-podium__picture-frame">
-            {item.pictureUrl ? (
-              <img src={item.pictureUrl} alt="" className="recap-podium__picture" />
-            ) : (
-              <div className="recap-podium__picture recap-podium__picture--placeholder" aria-hidden="true" />
-            )}
+            <PosterPicture src={item.pictureUrl} className="recap-podium__picture" />
           </div>
           <span className="recap-podium__title" title={displayTitle}>
             {displayTitle}

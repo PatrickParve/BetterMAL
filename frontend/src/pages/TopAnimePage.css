@@ -384,13 +384,14 @@
 }
 
 .top-anime-showcase__picture {
+  --showcase-picture-h: calc(140px * 368 / 260);
   display: block;
   width: 140px;
   /* Matches AnimeDetailPage's own poster box, not the flatter 2/3 the card
-     grids use — the width here is definite, so aspect-ratio is safe
-     directly on the <img> (design.md D6). */
-  aspect-ratio: 260 / 368;
-  object-fit: cover;
+     grids use (design.md D6). An explicit height rather than aspect-ratio:
+     the same box, but one a non-poster picture below can keep while its
+     width follows the picture. */
+  height: var(--showcase-picture-h);
   border-radius: 8px;
   background: var(--code-bg);
 }
@@ -401,6 +402,46 @@
      shows through. */
   background: none;
   border: 1px solid var(--border);
+}
+
+/* A non-poster picture (artwork-presentation's height-bound tile rule,
+   uncrop-artwork-everywhere design D6) keeps the poster's height and takes
+   its own width there, up to 16/9 of that height — all in px, no
+   percentages, per the WebKit flex-basis note in RowPicture.css. The link
+   may then shrink back toward the poster's 140px when the card is narrow:
+   the wrapper is a flex container so the art, as its flex item, shrinks
+   with it, and PosterPicture's `contain` keeps it whole over its blurred
+   fill. Scoped to non-posters so a poster, and the placeholder, keep the
+   fixed box and `flex: 0 0 auto` link they've always had. */
+.top-anime-showcase__item:has(.poster-picture:not(.poster-picture--poster)) .top-anime-showcase__poster-link {
+  flex: 0 1 auto;
+  min-width: 140px;
+}
+
+.top-anime-showcase__poster-link > .poster-picture:not(.poster-picture--poster) {
+  display: flex;
+  width: auto;
+}
+
+.top-anime-showcase__poster-link > .poster-picture:not(.poster-picture--poster) > .poster-picture__art {
+  flex: 0 1 auto;
+  min-width: 0;
+  width: auto;
+  height: var(--showcase-picture-h);
+  max-width: calc(var(--showcase-picture-h) * 16 / 9);
+}
+
+/* Beside a non-poster picture the info column takes a zero basis, so the
+   picture gets first claim on the card's width and the column grows into
+   whatever it leaves — but never below 180px, about what the two score
+   chips need side by side with their labels unwrapped. That floor is
+   itself capped at the width a poster would leave the column (the card's
+   content width less the 140px poster and the item's 14px gap), so a
+   narrow card never clips the column: a wide picture can widen the card's
+   picture, never squeeze the text more than a poster already does. */
+.top-anime-showcase__item:has(.poster-picture:not(.poster-picture--poster)) .top-anime-showcase__info {
+  flex: 1 1 0;
+  min-width: min(180px, 100% - 140px - 14px);
 }
 
 .top-anime-showcase__info {
@@ -568,12 +609,14 @@
   padding-top: calc(368 / 260 * 100%);
 }
 
+/* PosterPicture's wrapper (or the placeholder) fills the frame; a
+   non-poster picture is drawn whole inside it over its blurred fill, so the
+   seven cards stay one row of equal boxes whatever their art's shape. */
 .top-anime-card__picture {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
   border-radius: 8px;
   background: var(--code-bg);
 }

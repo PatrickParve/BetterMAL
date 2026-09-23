@@ -60,4 +60,12 @@
     flex-basis: auto;
     width: 100%;
   }
+
+  /* align-items: flex-start above makes a stacked column shrink-to-fit.
+     The "Followed shows airing" grid is an inline-size container
+     (CurrentSeasonSection.css), so it no longer lends this column its
+     content's width, and the column has to be told to fill the row. */
+  .home-page__main {
+    width: 100%;
+  }
 }

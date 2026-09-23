@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   getProfile,
@@ -25,6 +25,7 @@ import { AnimeRankOverlay } from '../components/AnimeRankOverlay.tsx'
 import { EditHistoryOverlay } from '../components/EditHistoryOverlay.tsx'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
+import { PosterPicture } from '../components/PosterPicture.tsx'
 import { RowPicture } from '../components/RowPicture.tsx'
 import {
   describeSeasonRanking,
@@ -43,11 +44,6 @@ import { useRestorableScroll } from '../hooks/useRestorableScroll.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { formatRewatchTime, formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
 import './ProfilePage.css'
-
-// The strip's defining constant (design.md decision 4): must agree with the
-// tile `flex` basis in ProfilePage.css (`calc((100% - 9 * 10px) / 10)`),
-// which lays out exactly this many tiles across the strip's visible width.
-const STRIP_VISIBLE_TILES = 10
 
 type TopSeriesBasis = 'mine' | 'mal'
 
@@ -226,10 +222,62 @@ function formatStatValue(key: keyof ProfileDto['stats'], value: number | null): 
 // strip's section (and, for sections with a view control, the control's
 // current value) so its offset is recorded and restored independently of
 // the page's other strips (design.md decision 3).
+//
+// `fits` says whether every tile fits across the strip's visible width, and
+// drives the strip's `--fits` class (uncrop-artwork-everywhere design D6).
+// It's measured rather than counted: a tile holding a non-poster picture is
+// wider than a poster tile, so ten entries no longer always fit. The last
+// tile's right edge is compared with the strip's inner right edge, both
+// taken from the first tile's left edge so the strip's own scroll offset
+// cancels out. offsetLeft/offsetWidth ignore transforms, so a hover-scaled
+// tile can't tip the result, and the 1px tolerance absorbs their
+// pixel-snapping, so ten poster tiles that exactly fill the strip never read
+// as overflowing. A ResizeObserver on the strip and each tile re-measures
+// when the window resizes or a tile widens as its picture loads.
 function useStripScroll(restoreKey: string) {
   const elRef = useRef<HTMLDivElement | null>(null)
   const drag = useRef({ isDown: false, startX: 0, scrollLeft: 0, dragged: false })
   const scrollRef = useRestorableScroll(restoreKey, 'horizontal')
+  const [fits, setFits] = useState(true)
+  const resizeObserverRef = useRef<ResizeObserver | null>(null)
+  const observedTilesRef = useRef<Element[]>([])
+
+  const measureFit = useCallback(() => {
+    const el = elRef.current
+    const first = el?.firstElementChild
+    const last = el?.lastElementChild
+    if (!el || !(first instanceof HTMLElement) || !(last instanceof HTMLElement)) return
+    const style = getComputedStyle(el)
+    const innerWidth = el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+    const tilesWidth = last.offsetLeft + last.offsetWidth - first.offsetLeft
+    setFits(tilesWidth <= innerWidth + 1)
+  }, [])
+
+  // Observes the strip's current tiles, and measures, only when they're not
+  // the ones already observed — a filter switch swaps the tiles without
+  // remounting the strip, which the ref callback below would never see.
+  // Comparing node lists reads no layout, so running this after every render
+  // costs next to nothing when nothing changed.
+  const observeTiles = useCallback(() => {
+    const el = elRef.current
+    const observer = resizeObserverRef.current
+    if (!el || !observer) return
+    const tiles = Array.from(el.children)
+    const observed = observedTilesRef.current
+    if (tiles.length === observed.length && tiles.every((tile, i) => tile === observed[i])) return
+    for (const tile of observed) observer.unobserve(tile)
+    for (const tile of tiles) observer.observe(tile)
+    observedTilesRef.current = tiles
+    measureFit()
+  }, [measureFit])
+
+  // A layout effect, and the ref callback below, both run in React's commit
+  // phase, so the `fits` they set is applied before the browser paints: a
+  // strip that fits never shows a frame as scrollable, on mount or on a
+  // filter switch.
+  useLayoutEffect(() => {
+    observeTiles()
+  })
 
   function onMouseDown(event: React.MouseEvent<HTMLDivElement>) {
     const el = elRef.current
@@ -268,11 +316,20 @@ function useStripScroll(restoreKey: string) {
     (el: HTMLDivElement | null) => {
       elRef.current = el
       scrollRef(el)
+      resizeObserverRef.current?.disconnect()
+      resizeObserverRef.current = null
+      observedTilesRef.current = []
+      if (!el) return
+      const observer = new ResizeObserver(measureFit)
+      observer.observe(el)
+      resizeObserverRef.current = observer
+      observeTiles()
     },
-    [scrollRef],
+    [scrollRef, measureFit, observeTiles],
   )
 
   return {
+    fits,
     ref: setRef,
     handlers: { onMouseDown, onMouseMove, onMouseUp, onMouseLeave: onMouseUp },
     onItemClick,
@@ -612,7 +669,7 @@ export function ProfilePage() {
         ) : (
           <div
             className={
-              displayedTopAnime.items.length <= STRIP_VISIBLE_TILES ? 'top-anime-strip top-anime-strip--fits' : 'top-anime-strip'
+              topAnimeStripScroll.fits ? 'top-anime-strip top-anime-strip--fits' : 'top-anime-strip'
             }
             ref={topAnimeStripScroll.ref}
             {...topAnimeStripScroll.handlers}
@@ -625,19 +682,12 @@ export function ProfilePage() {
                 draggable={false}
                 onClick={topAnimeStripScroll.onItemClick}
               >
-                {item.pictureUrl ? (
-                  <img
-                    src={item.pictureUrl}
-                    alt={pickDisplayTitle(item.title, item.englishTitle)}
-                    className="top-anime-strip__picture"
-                    draggable={false}
-                  />
-                ) : (
-                  <div
-                    className="top-anime-strip__picture top-anime-strip__picture--placeholder"
-                    aria-hidden="true"
-                  />
-                )}
+                <PosterPicture
+                  src={item.pictureUrl}
+                  alt={pickDisplayTitle(item.title, item.englishTitle)}
+                  className="top-anime-strip__picture"
+                  draggable={false}
+                />
                 <span className="top-anime-strip__score">{item.myScore}</span>
               </Link>
             ))}
@@ -695,7 +745,7 @@ export function ProfilePage() {
         ) : (
           <div
             className={
-              displayedTopSeries.length <= STRIP_VISIBLE_TILES
+              topSeriesStripScroll.fits
                 ? 'top-series-strip top-series-strip--fits'
                 : 'top-series-strip'
             }
@@ -711,19 +761,12 @@ export function ProfilePage() {
                 title={topSeriesCountsTitle(item)}
                 onClick={topSeriesStripScroll.onItemClick}
               >
-                {item.pictureUrl ? (
-                  <img
-                    src={item.pictureUrl}
-                    alt={pickDisplayTitle(item.title, item.englishTitle)}
-                    className="top-series-strip__picture"
-                    draggable={false}
-                  />
-                ) : (
-                  <div
-                    className="top-series-strip__picture top-series-strip__picture--placeholder"
-                    aria-hidden="true"
-                  />
-                )}
+                <PosterPicture
+                  src={item.pictureUrl}
+                  alt={pickDisplayTitle(item.title, item.englishTitle)}
+                  className="top-series-strip__picture"
+                  draggable={false}
+                />
                 <span className="top-series-strip__chips">
                   <ScoreChip role="mal" size="compact">
                     <ScoreValue value={item.malMain.value} completed={item.malRevealed} />
@@ -769,7 +812,7 @@ export function ProfilePage() {
           ) : (
             <div
               className={
-                displayedRewatchedSeries.items.length <= STRIP_VISIBLE_TILES
+                rewatchedStripScroll.fits
                   ? 'rewatched-strip rewatched-strip--fits'
                   : 'rewatched-strip'
               }
@@ -784,19 +827,12 @@ export function ProfilePage() {
                   draggable={false}
                   onClick={rewatchedStripScroll.onItemClick}
                 >
-                  {item.pictureUrl ? (
-                    <img
-                      src={item.pictureUrl}
-                      alt={pickDisplayTitle(item.title, item.englishTitle)}
-                      className="rewatched-strip__picture"
-                      draggable={false}
-                    />
-                  ) : (
-                    <div
-                      className="rewatched-strip__picture rewatched-strip__picture--placeholder"
-                      aria-hidden="true"
-                    />
-                  )}
+                  <PosterPicture
+                    src={item.pictureUrl}
+                    alt={pickDisplayTitle(item.title, item.englishTitle)}
+                    className="rewatched-strip__picture"
+                    draggable={false}
+                  />
                   <span className="rewatched-strip__count rewatched-strip__count--time">
                     {formatRewatchTime(item.rewatchSeconds)}
                   </span>
@@ -812,7 +848,7 @@ export function ProfilePage() {
         ) : (
           <div
             className={
-              displayedRewatched.items.length <= STRIP_VISIBLE_TILES
+              rewatchedStripScroll.fits
                 ? 'rewatched-strip rewatched-strip--fits'
                 : 'rewatched-strip'
             }
@@ -827,19 +863,12 @@ export function ProfilePage() {
                 draggable={false}
                 onClick={rewatchedStripScroll.onItemClick}
               >
-                {item.pictureUrl ? (
-                  <img
-                    src={item.pictureUrl}
-                    alt={pickDisplayTitle(item.title, item.englishTitle)}
-                    className="rewatched-strip__picture"
-                    draggable={false}
-                  />
-                ) : (
-                  <div
-                    className="rewatched-strip__picture rewatched-strip__picture--placeholder"
-                    aria-hidden="true"
-                  />
-                )}
+                <PosterPicture
+                  src={item.pictureUrl}
+                  alt={pickDisplayTitle(item.title, item.englishTitle)}
+                  className="rewatched-strip__picture"
+                  draggable={false}
+                />
                 <span className="rewatched-strip__count">{item.rewatchCount}</span>
               </Link>
             ))}
@@ -863,7 +892,7 @@ export function ProfilePage() {
         ) : (
           <div
             className={
-              timeSpentSeries.items.length <= STRIP_VISIBLE_TILES
+              timeSpentStripScroll.fits
                 ? 'time-spent-strip time-spent-strip--fits'
                 : 'time-spent-strip'
             }
@@ -878,19 +907,12 @@ export function ProfilePage() {
                 draggable={false}
                 onClick={timeSpentStripScroll.onItemClick}
               >
-                {item.pictureUrl ? (
-                  <img
-                    src={item.pictureUrl}
-                    alt={pickDisplayTitle(item.title, item.englishTitle)}
-                    className="time-spent-strip__picture"
-                    draggable={false}
-                  />
-                ) : (
-                  <div
-                    className="time-spent-strip__picture time-spent-strip__picture--placeholder"
-                    aria-hidden="true"
-                  />
-                )}
+                <PosterPicture
+                  src={item.pictureUrl}
+                  alt={pickDisplayTitle(item.title, item.englishTitle)}
+                  className="time-spent-strip__picture"
+                  draggable={false}
+                />
                 <span className="time-spent-strip__count">{formatRewatchTime(item.watchedSeconds)}</span>
               </Link>
             ))}

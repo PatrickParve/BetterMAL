@@ -599,12 +599,15 @@ a.recap-page__stat--link:focus-visible {
   padding-top: calc(368 / 260 * 100%);
 }
 
+/* PosterPicture's wrapper (or the placeholder) fills the frame; a
+   non-poster picture is drawn whole inside it over its blurred fill, so the
+   card — and the podium's descending silhouette — keeps its size whatever
+   the art's shape. */
 .recap-podium__picture {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
   border-radius: 10px;
   background: var(--bg);
 }

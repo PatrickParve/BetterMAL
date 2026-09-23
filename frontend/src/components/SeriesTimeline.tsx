@@ -1,8 +1,8 @@
 import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import type { SeriesEntryDto, SeriesSlotDto } from '../api/types.ts'
-import { useLandscapePicture } from '../hooks/useLandscapePicture.ts'
 import { isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_LABELS } from '../utils/anime.ts'
+import { PosterPicture } from './PosterPicture.tsx'
 import { ScoreChip } from './ScoreChip.tsx'
 import { ScoreValue } from './ScoreValue.tsx'
 import { watchedFigureLabel } from './SeriesEntryRow.tsx'
@@ -175,18 +175,13 @@ function TimelineCard({
   const airRange = undated ? null : formatAirRange(entry)
   const watched = watchedFigureLabel(entry)
   const completed = isScoreRevealableStatus(entry.entry?.status)
-  const [pictureRef, isLandscape] = useLandscapePicture(entry.pictureUrl)
 
   return (
     <div
-      className={`series-timeline__card${undated ? ' series-timeline__card--undated' : ''}${isLandscape ? ' series-timeline__card--landscape' : ''}`}
+      className={`series-timeline__card${undated ? ' series-timeline__card--undated' : ''}`}
     >
       <Link to={`/anime/${entry.animeId}`} className="series-timeline__card-link">
-        {entry.pictureUrl ? (
-          <img ref={pictureRef} src={entry.pictureUrl} alt="" className="series-timeline__card-picture" />
-        ) : (
-          <div className="series-timeline__card-picture series-timeline__card-picture--placeholder" aria-hidden="true" />
-        )}
+        <PosterPicture src={entry.pictureUrl} className="series-timeline__card-picture" />
         <span className="series-timeline__card-body">
           <span className="series-timeline__card-title" title={displayTitle}>
             {displayTitle}

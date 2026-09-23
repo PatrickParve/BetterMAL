@@ -53,47 +53,46 @@
 
 .series-extra-tile__picture {
   width: 100%;
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
   background: var(--code-bg);
 }
 
+/* The placeholder keeps the in-flow 2:3 box it has always had (and the
+   1px border below it), so a tile with no picture is untouched. */
 .series-extra-tile__picture--placeholder {
+  aspect-ratio: 2 / 3;
   border-bottom: 1px solid var(--border);
 }
 
-/* A landscape tile spans two grid tracks so its picture can be shown at a
-   useful size instead of a thin band. The frame is sized (and centred) to
-   exactly one portrait track's footprint — the padding-top figure below
-   gives it the same height a portrait tile's picture already renders at —
-   and the picture is centred inside it at its own proportions, growing
-   past the frame's width into the tile's second track rather than
-   shrinking to fit. */
-.series-extra-tile--landscape {
-  grid-column: span 2;
+/* The picture area is one grid track's portrait height however many tracks
+   the tile spans (uncrop-artwork-everywhere design D4), so a spanning
+   tile's title, chips and footer line up with its row neighbours'. It's
+   the padding-top technique rather than aspect-ratio, since the height has
+   to come from one track's width rather than the tile's own. The 5px is
+   this tile's horizontal border (4px left + 1px right, above): 100% here is
+   the tile's content width, which for a span of N is N tracks plus N − 1
+   gaps minus one tile's border, so the border has to be added back before
+   dividing into tracks and taken off again after, or a spanning tile's
+   picture comes out 3.75px taller than a one-track tile's. At a span of 1
+   it reduces to exactly 150%, the 2:3 box aspect-ratio gave before.
+   --card-span / --card-grid-gap come from .series-page__extras-grid,
+   which also decides when a tile spans (SeriesPage.css). */
+.series-extra-tile__picture.poster-picture {
+  --tile-border-x: 5px;
+  height: 0;
+  padding-top: calc(
+    ((100% + var(--tile-border-x) - (var(--card-span, 1) - 1) * var(--card-grid-gap, 0px)) / var(--card-span, 1) -
+        var(--tile-border-x)) *
+      3 / 2
+  );
 }
 
-.series-extra-tile--landscape .series-extra-tile__picture-frame {
-  width: calc((100% - var(--extras-gap)) / 2);
-  padding-top: calc((100% - var(--extras-gap)) * 0.75);
-  margin: 0 auto;
-}
-
-.series-extra-tile--landscape .series-extra-tile__picture {
+/* Against the padding box, so it covers the padding-top frame above. For a
+   non-poster picture PosterPicture.css's `contain` then draws the art at
+   the frame's full height and its own width, capped at the frame's width,
+   centred — whole, with the blurred fill in whatever is left over. */
+.series-extra-tile__picture .poster-picture__art {
   position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: auto;
-  height: 100%;
-  max-width: 200%;
-  aspect-ratio: auto;
-  /* Without this, an unusually wide picture whose natural width would
-     exceed max-width gets clamped on width while height stays pinned to
-     100% — two fixed dimensions the image's own ratio doesn't match, which
-     the default object-fit (fill) would stretch to cover, distorting the
-     artwork instead of showing it whole. */
-  object-fit: contain;
+  inset: 0;
 }
 
 .series-extra-tile__body {
