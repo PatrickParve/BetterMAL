@@ -600,9 +600,11 @@ a.recap-page__stat--link:focus-visible {
 }
 
 /* PosterPicture's wrapper (or the placeholder) fills the frame; a
-   non-poster picture is drawn whole inside it over its blurred fill, so the
-   card — and the podium's descending silhouette — keeps its size whatever
-   the art's shape. */
+   non-poster picture is drawn whole and centred inside it, so the card — and
+   the podium's descending silhouette — keeps its size whatever the art's
+   shape. The podium mounts no blurred fill (PosterPicture's `noFill`) and
+   the rule below drops the wrapper's own background for such a picture, so
+   it sits on the card itself with nothing around it. */
 .recap-podium__picture {
   position: absolute;
   inset: 0;
@@ -610,6 +612,11 @@ a.recap-page__stat--link:focus-visible {
   height: 100%;
   border-radius: 10px;
   background: var(--bg);
+}
+
+.recap-podium__picture.poster-picture--upright,
+.recap-podium__picture.poster-picture--wide {
+  background: none;
 }
 
 .recap-podium__picture--placeholder {
@@ -728,6 +735,16 @@ a.recap-page__stat--link:focus-visible {
   animation-delay: 160ms;
 }
 
+/* Ranks 4 and 5 share one class, so they're picked by position (DOM order is
+   rank order) to carry the same 80ms step on from the medals. */
+.recap-podium__card:nth-child(4) {
+  animation-delay: 240ms;
+}
+
+.recap-podium__card:nth-child(5) {
+  animation-delay: 320ms;
+}
+
 .recap-podium__card:hover,
 .recap-podium__card:focus-within {
   transform: translateY(-4px) scale(1.015);
@@ -765,9 +782,13 @@ a.recap-page__stat--link:focus-visible {
      comfortably more than the 480px the layer travels — so no uncovered
      edge of it can ever scroll into view mid-cycle. */
   inset: -20% -520px;
+  /* Both layers fade to transparent on every edge of their tile, so no tile
+     edge is ever visible as a line. The second is a dome rather than a
+     linear band: a band spanning only the bottom 62% would end in a hard
+     horizontal edge that read as a line drifting across the card. */
   background-image:
     linear-gradient(90deg, transparent, color-mix(in srgb, var(--medal) 22%, transparent), transparent),
-    linear-gradient(90deg, transparent, color-mix(in srgb, var(--medal) 14%, transparent), transparent);
+    radial-gradient(50% 100% at 50% 100%, color-mix(in srgb, var(--medal) 16%, transparent), transparent);
   background-size: 160px 100%, 240px 62%;
   background-position: 0 0, 0 100%;
   background-repeat: repeat-x, repeat-x;

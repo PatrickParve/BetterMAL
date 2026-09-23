@@ -861,7 +861,7 @@ function RecapPageView({
         <Link to={`/anime/${item.animeId}`} className="recap-podium__link">
           <span className="recap-podium__badge">{rank}</span>
           <div className="recap-podium__picture-frame">
-            <PosterPicture src={item.pictureUrl} className="recap-podium__picture" />
+            <PosterPicture src={item.pictureUrl} className="recap-podium__picture" noFill />
           </div>
           <span className="recap-podium__title" title={displayTitle}>
             {displayTitle}
