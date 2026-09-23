@@ -19,7 +19,7 @@ public class SeriesListFiguresTests
 
     private static void AddAnime(
         AnimeTrackerDbContext db, int id, string airingStatus, int? totalEpisodes = null,
-        DateOnly? airedFrom = null, DateOnly? airedTo = null) =>
+        DateOnly? airedFrom = null, DateOnly? airedTo = null, int? averageEpisodeDurationSeconds = null) =>
         db.AnimeMetadata.Add(new AnimeMetadata
         {
             Id = id,
@@ -28,13 +28,26 @@ public class SeriesListFiguresTests
             TotalEpisodes = totalEpisodes,
             AiredFrom = airedFrom,
             AiredTo = airedTo,
+            AverageEpisodeDurationSeconds = averageEpisodeDurationSeconds,
         });
 
-    private static void AddMember(AnimeTrackerDbContext db, int seriesId, int animeId, bool isMainLine, int order) =>
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = animeId, SeriesId = seriesId, IsMainLine = isMainLine, Order = order });
+    private static void AddMember(
+        AnimeTrackerDbContext db, int seriesId, int animeId, bool isMainLine, int order,
+        int? versionSlotKey = null, int? branchHeadAnimeId = null) =>
+        db.SeriesMembers.Add(new SeriesMember
+        {
+            AnimeId = animeId, SeriesId = seriesId, IsMainLine = isMainLine, Order = order,
+            VersionSlotKey = versionSlotKey, BranchHeadAnimeId = branchHeadAnimeId,
+        });
 
-    private static void AddEntry(AnimeTrackerDbContext db, int animeId, WatchStatus status, int episodesWatched = 0, int? myScore = null) =>
-        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = animeId, Status = status, EpisodesWatched = episodesWatched, MyScore = myScore });
+    private static void AddEntry(
+        AnimeTrackerDbContext db, int animeId, WatchStatus status, int episodesWatched = 0, int? myScore = null,
+        int? rewatchCount = null) =>
+        db.UserAnimeEntries.Add(new UserAnimeEntry
+        {
+            AnimeId = animeId, Status = status, EpisodesWatched = episodesWatched, MyScore = myScore,
+            RewatchCount = rewatchCount ?? 0,
+        });
 
     // A ranked (band 0-2) UserAnimeEntry for AnimeRankingSnapshot.Build, built
     // the same way AnimeRankingSnapshotTests does — independent of the
@@ -302,5 +315,111 @@ public class SeriesListFiguresTests
         Assert.Equal(4, ranking.RankOf(200));
         Assert.Equal(6, ranking.RankOf(201));
         Assert.Equal(5.0, listed.MainLineAverageRank); // (4 + 6) / 2, not (4 + 6 + 0 + 0) / 4
+    }
+
+    [Fact]
+    public async Task WatchedSeconds_SumsEveryMemberIncludingExtrasAndRewatches()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, "finished_airing", totalEpisodes: 12, averageEpisodeDurationSeconds: 1500);
+        AddAnime(db, 101, "finished_airing", totalEpisodes: 1, averageEpisodeDurationSeconds: 7200); // extra
+        AddMember(db, 100, 100, isMainLine: true, order: 0);
+        AddMember(db, 100, 101, isMainLine: false, order: 0);
+        AddEntry(db, 100, WatchStatus.Completed, episodesWatched: 12, rewatchCount: 1); // first viewing 12 + one rewatch of 12
+        AddEntry(db, 101, WatchStatus.Completed, episodesWatched: 1);
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
+
+        Assert.Equal(24L * 1500 + 1L * 7200, listed.WatchedSeconds);
+    }
+
+    [Fact]
+    public async Task WatchedSeconds_ExtraOnlySeriesStillCarriesItsTotal()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, "finished_airing", totalEpisodes: 12); // main line, not in my list
+        AddAnime(db, 101, "finished_airing", totalEpisodes: 1, averageEpisodeDurationSeconds: 7200); // extra
+        AddMember(db, 100, 100, isMainLine: true, order: 0);
+        AddMember(db, 100, 101, isMainLine: false, order: 0);
+        AddEntry(db, 101, WatchStatus.Completed, episodesWatched: 1);
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
+
+        // The browser lists (and totals) this series even though "Most time
+        // spent" would omit it — the main-line gate is a profile-only rule.
+        Assert.Equal(1L * 7200, listed.WatchedSeconds);
+    }
+
+    [Fact]
+    public async Task WatchedSeconds_NothingWatchedIsZero()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, "finished_airing", totalEpisodes: 12, averageEpisodeDurationSeconds: 1500);
+        AddMember(db, 100, 100, isMainLine: true, order: 0);
+        AddEntry(db, 100, WatchStatus.PlanToWatch, episodesWatched: 0);
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
+
+        Assert.Equal(0, listed.WatchedSeconds);
+    }
+
+    // Same slot shape as ANonDefaultAlternativeQualifies (ProfileServiceTime-
+    // SpentSeriesTests): rule 1 (watch progress) makes 101 the default since
+    // it has more watched. WatchedSeconds still covers 102's episodes; the
+    // card-scale MainLineWatchedEpisodes, scoped to the default combination,
+    // does not (design.md D4).
+    [Fact]
+    public async Task WatchedSeconds_CoversANonDefaultAlternative()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, "finished_airing"); // trunk, not in my list
+        AddAnime(db, 101, "finished_airing", totalEpisodes: 12, averageEpisodeDurationSeconds: 1500);
+        AddAnime(db, 102, "finished_airing", totalEpisodes: 12, averageEpisodeDurationSeconds: 1500);
+        AddMember(db, 100, 100, isMainLine: true, order: 0);
+        AddMember(db, 100, 101, isMainLine: true, order: 1, versionSlotKey: 101, branchHeadAnimeId: 101);
+        AddMember(db, 100, 102, isMainLine: true, order: 2, versionSlotKey: 101, branchHeadAnimeId: 102);
+        AddEntry(db, 101, WatchStatus.Completed, episodesWatched: 12);
+        AddEntry(db, 102, WatchStatus.Watching, episodesWatched: 3);
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
+
+        Assert.Equal(12L * 1500 + 3L * 1500, listed.WatchedSeconds); // both alternatives' watch time
+        Assert.Equal(12, listed.MainLineWatchedEpisodes); // only 101, the default combination
+    }
+
+    // Pins design D4's guarantee: ListedSeries() and TimeSpentSeries() read
+    // one shared per-series total, computed from the same loaded index, so a
+    // series listed on both surfaces can never carry two different figures.
+    [Fact]
+    public async Task WatchedSeconds_EqualsTheProfilesTimeSpentTotal()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, "finished_airing", totalEpisodes: 12, averageEpisodeDurationSeconds: 1500);
+        AddAnime(db, 101, "finished_airing", totalEpisodes: 1, averageEpisodeDurationSeconds: 7200); // extra
+        AddMember(db, 100, 100, isMainLine: true, order: 0);
+        AddMember(db, 100, 101, isMainLine: false, order: 0);
+        AddEntry(db, 100, WatchStatus.Completed, episodesWatched: 12, rewatchCount: 1);
+        AddEntry(db, 101, WatchStatus.Completed, episodesWatched: 1);
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
+        var timeSpent = Assert.Single(index.TimeSpentSeries());
+
+        Assert.Equal(listed.SeriesId, timeSpent.SeriesId);
+        Assert.Equal(listed.WatchedSeconds, timeSpent.WatchedSeconds);
     }
 }

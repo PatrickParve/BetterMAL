@@ -480,8 +480,17 @@ export function composeComparator(
   }
 }
 
-// The Series page's seven sort orders (add-series-browser design.md D8).
-export type SeriesSortKey = 'alphabetical' | 'malScore' | 'myScore' | 'status' | 'newest' | 'oldest' | 'myProgress'
+// The Series page's eight sort orders (add-series-browser design.md D8,
+// extended by time-spent-sort-and-main-line-gate).
+export type SeriesSortKey =
+  | 'alphabetical'
+  | 'malScore'
+  | 'myScore'
+  | 'status'
+  | 'newest'
+  | 'oldest'
+  | 'myProgress'
+  | 'timeSpent'
 
 const SERIES_STATUS_ORDER: Record<SeriesStatus, number> = { Airing: 0, Ongoing: 1, Finished: 2 }
 
@@ -538,6 +547,9 @@ const SERIES_SORT_COMPARATORS: Record<SeriesSortKey, (a: SeriesListItemDto, b: S
   // first-aired years still sort last, not first.
   oldest: seriesNullsLast((item) => item.firstYear, 'ascending'),
   myProgress: seriesNullsLast(seriesProgressRatio, 'descending'),
+  // Never null (design.md D5), so a zero-total series sorts last by value
+  // alone and falls to sortSeries' title tie-break among the other zeros.
+  timeSpent: seriesNullsLast((item) => item.watchedSeconds, 'descending'),
 }
 
 // Sorts the whole listed set at once (design.md D8) — every comparator's

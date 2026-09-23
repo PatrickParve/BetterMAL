@@ -857,7 +857,7 @@ export function ProfilePage() {
             changes and so the strip can't collapse and re-open under it. */}
         {!timeSpentSeries && timeSpentSeriesLoading ? null : !timeSpentSeries || timeSpentSeries.items.length === 0 ? (
           <p className="profile-page__section-empty">
-            No series have any watch time yet. If yours haven't been built, use{' '}
+            No series have any of their main series watched yet. If yours haven't been built, use{' '}
             <Link to="/settings">"Build all series from my list"</Link> on the Settings page.
           </p>
         ) : (

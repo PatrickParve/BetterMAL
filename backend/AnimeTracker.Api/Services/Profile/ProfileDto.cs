@@ -147,9 +147,10 @@ public record TimeSpentSeriesItemDto(
     string? PictureUrl,
     long WatchedSeconds);
 
-/// <summary>Every series with above-zero total watch time (design.md D8),
-/// ordered by that total descending then title case-insensitively, with no
-/// cap — mirrors <see cref="RewatchedSeriesSectionDto"/>'s shape.</summary>
+/// <summary>Every franchise with at least one main-line member watched
+/// (time-spent-sort-and-main-line-gate design.md D1/D2), ordered by total
+/// watch time descending then title case-insensitively, with no cap —
+/// mirrors <see cref="RewatchedSeriesSectionDto"/>'s shape.</summary>
 public record TimeSpentSeriesSectionDto(List<TimeSpentSeriesItemDto> Items);
 
 /// <summary>One entry the progress bar can't resolve a total for — neither a

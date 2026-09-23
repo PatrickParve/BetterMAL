@@ -39,7 +39,8 @@ public class ProfileServiceTimeSpentSeriesTests
         AnimeTrackerDbContext db, int seriesId, int animeId, bool isMainLine, int order, string title,
         int? totalEpisodes = null, int? averageEpisodeDurationSeconds = null,
         int? rewatchCount = null, int? episodesWatched = null, WatchStatus status = WatchStatus.Completed,
-        string airingStatus = "finished_airing")
+        string airingStatus = "finished_airing", double? malScore = null, int? versionSlotKey = null,
+        int? branchHeadAnimeId = null, string membershipKind = "Core")
     {
         db.AnimeMetadata.Add(new AnimeMetadata
         {
@@ -48,8 +49,13 @@ public class ProfileServiceTimeSpentSeriesTests
             AiringStatus = airingStatus,
             TotalEpisodes = totalEpisodes,
             AverageEpisodeDurationSeconds = averageEpisodeDurationSeconds,
+            MalScore = malScore,
         });
-        db.SeriesMembers.Add(new SeriesMember { AnimeId = animeId, SeriesId = seriesId, IsMainLine = isMainLine, Order = order });
+        db.SeriesMembers.Add(new SeriesMember
+        {
+            AnimeId = animeId, SeriesId = seriesId, IsMainLine = isMainLine, Order = order,
+            VersionSlotKey = versionSlotKey, BranchHeadAnimeId = branchHeadAnimeId, MembershipKind = membershipKind,
+        });
         if (rewatchCount is not null || episodesWatched is not null)
         {
             db.UserAnimeEntries.Add(new UserAnimeEntry
@@ -83,7 +89,8 @@ public class ProfileServiceTimeSpentSeriesTests
     {
         using var db = CreateDb();
         AddSeriesShell(db, 100);
-        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Main"); // not in my list
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
+            averageEpisodeDurationSeconds: 1500, rewatchCount: 0, episodesWatched: 1);
         AddMember(db, 100, 101, isMainLine: false, order: 1, title: "Extra", totalEpisodes: 1,
             averageEpisodeDurationSeconds: 7200, rewatchCount: 0, episodesWatched: 1);
         await db.SaveChangesAsync();
@@ -92,7 +99,119 @@ public class ProfileServiceTimeSpentSeriesTests
         var section = await CreateService(db, entries).GetTimeSpentSeriesSectionAsync();
 
         var item = Assert.Single(section.Items);
-        Assert.Equal(1L * 7200, item.WatchedSeconds);
+        // Main line's one watched episode plus the extra's full runtime — the
+        // extra still counts once the series qualifies through the main line.
+        Assert.Equal(1L * 1500 + 1L * 7200, item.WatchedSeconds);
+    }
+
+    [Fact]
+    public async Task AFranchiseWithOnlyAnExtraWatchedIsOmitted()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Main"); // not in my list
+        AddMember(db, 100, 101, isMainLine: false, order: 1, title: "Extra", totalEpisodes: 1,
+            averageEpisodeDurationSeconds: 7200, rewatchCount: 0, episodesWatched: 1);
+        await db.SaveChangesAsync();
+
+        var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
+        var section = await CreateService(db, entries).GetTimeSpentSeriesSectionAsync();
+
+        Assert.Empty(section.Items);
+    }
+
+    [Fact]
+    public async Task APlanToWatchMainLineWithAWatchedExtraIsOmitted()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
+            averageEpisodeDurationSeconds: 1500, rewatchCount: 0, episodesWatched: 0,
+            status: WatchStatus.PlanToWatch);
+        AddMember(db, 100, 101, isMainLine: false, order: 1, title: "Extra", totalEpisodes: 1,
+            averageEpisodeDurationSeconds: 7200, rewatchCount: 0, episodesWatched: 1);
+        await db.SaveChangesAsync();
+
+        var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
+        var section = await CreateService(db, entries).GetTimeSpentSeriesSectionAsync();
+
+        Assert.Empty(section.Items);
+    }
+
+    [Fact]
+    public async Task ADroppedMainLineEntryWithOneEpisodeQualifies()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
+            averageEpisodeDurationSeconds: 1500, rewatchCount: 0, episodesWatched: 1,
+            status: WatchStatus.Dropped);
+        await db.SaveChangesAsync();
+
+        var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
+        var section = await CreateService(db, entries).GetTimeSpentSeriesSectionAsync();
+
+        var item = Assert.Single(section.Items);
+        Assert.Equal(1L * 1500, item.WatchedSeconds);
+    }
+
+    [Fact]
+    public async Task ARewatchingMainLineEntryWithNoNewEpisodesQualifies()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Main", totalEpisodes: 12,
+            averageEpisodeDurationSeconds: 1500, rewatchCount: 0, episodesWatched: 0,
+            status: WatchStatus.Rewatching);
+        await db.SaveChangesAsync();
+
+        var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
+        var section = await CreateService(db, entries).GetTimeSpentSeriesSectionAsync();
+
+        var item = Assert.Single(section.Items);
+        Assert.Equal(12L * 1500, item.WatchedSeconds); // first viewing counts as one full run
+    }
+
+    // Design D2's edge case: rule 1 (watch progress) sees nothing watched in
+    // either branch since 102's episodes-watched has reset to 0 for its
+    // in-progress rewatch, so rule 2 (MAL score) makes 101 the default. The
+    // gate and the total still see 102's first viewing, since every
+    // main-line member counts, not only the default combination.
+    [Fact]
+    public async Task ANonDefaultAlternativeQualifies()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Trunk"); // BranchHeadAnimeId null, not in my list
+        AddMember(db, 100, 101, isMainLine: true, order: 1, title: "Alternative A",
+            malScore: 9.0, versionSlotKey: 101, branchHeadAnimeId: 101); // not in my list
+        AddMember(db, 100, 102, isMainLine: true, order: 2, title: "Alternative B", totalEpisodes: 12,
+            averageEpisodeDurationSeconds: 1500, rewatchCount: 0, episodesWatched: 0,
+            status: WatchStatus.Rewatching, malScore: 7.0, versionSlotKey: 101, branchHeadAnimeId: 102);
+        await db.SaveChangesAsync();
+
+        var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
+        var section = await CreateService(db, entries).GetTimeSpentSeriesSectionAsync();
+
+        var item = Assert.Single(section.Items);
+        Assert.Equal(12L * 1500, item.WatchedSeconds); // 102's full first run, though 101 is the default alternative
+    }
+
+    [Fact]
+    public async Task AVersionNeighbourAloneDoesNotQualify()
+    {
+        using var db = CreateDb();
+        AddSeriesShell(db, 100);
+        AddMember(db, 100, 100, isMainLine: true, order: 0, title: "Main"); // not in my list
+        AddMember(db, 100, 101, isMainLine: false, order: 1, title: "Neighbour", totalEpisodes: 12,
+            averageEpisodeDurationSeconds: 1500, rewatchCount: 0, episodesWatched: 12,
+            membershipKind: "NeighbourTelling");
+        await db.SaveChangesAsync();
+
+        var entries = await db.UserAnimeEntries.AsNoTracking().Include(e => e.Anime).ToListAsync();
+        var section = await CreateService(db, entries).GetTimeSpentSeriesSectionAsync();
+
+        Assert.Empty(section.Items);
     }
 
     [Fact]

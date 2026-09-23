@@ -286,10 +286,17 @@ The system SHALL offer a sort control over the whole listed set, with these orde
 | Newest | the series' first-aired date | descending — the most recently started series first |
 | Oldest | the series' first-aired date | ascending — the earliest started series first |
 | My progress | main-line episodes watched divided by main-line episodes aired so far | descending — completed first, nothing watched last |
+| Time spent | the series' total watch time | descending — the most time spent first, nothing watched last |
 
 Sorting SHALL apply to every listed series at once, not only to those already scrolled into view, and switching sort SHALL NOT re-fetch.
 
 A series the sort key cannot rank — no MAL average, no my-average, no known first-aired date — SHALL be placed after every series the key can rank, rather than being dropped from the list or sorted as a zero. Under My progress, a series with no main-line episodes aired at all SHALL be placed after every series with a real ratio, including those whose ratio is zero.
+
+**Time spent SHALL sort by the same franchise total the profile's "Most time spent" section ranks by**, as the `profile-stats` capability defines it: first viewings plus rewatches, summed over **every** member of the series (main line and extras alike, version neighbours it holds included), each valued at that member's episode duration, with a member not in my list contributing nothing. The Series page SHALL NOT compute its own variant of this figure. The two surfaces SHALL read one total, so a series listed in both carries the same figure in each.
+
+This total is a sort key and not a card figure. It SHALL cover every member rather than the default combination of alternatives the card's episode figures use, because time I spent watching a non-default alternative is still time spent.
+
+The Time spent sort SHALL order by this total alone. It SHALL NOT apply the profile section's main-series listing rule. A series the Series page lists but "Most time spent" omits, such as one of which I have watched only an extra, SHALL still be ordered by its own total. A series with nothing watched has a total of zero, which is a real figure rather than an unrankable one. It SHALL sort after every series with a total above zero, among the other zero-total series by title.
 
 Every sort SHALL break ties on display title ascending, so the order is total and stable.
 
@@ -375,6 +382,30 @@ The page SHALL open on **My average**, and SHALL keep the chosen sort in the URL
 - **WHEN** I sort by my progress and one listed series has no main-line episodes aired at all
 - **THEN** it is placed after every series with a real watched-against-aired ratio, including those at zero
 
+#### Scenario: Sorting by time spent
+- **WHEN** I sort by time spent and I have spent four days on one series and six hours on another
+- **THEN** the four-day series is placed before the six-hour one
+
+#### Scenario: Time spent matches the profile
+- **WHEN** I sort by time spent and compare the order of the series that also appear in the profile's "Most time spent" strip
+- **THEN** each of those series carries the same total on both surfaces, so they are ordered the same way relative to one another, apart from ties that each surface breaks on its own title rule
+
+#### Scenario: Extras and rewatches count toward time spent
+- **WHEN** a series' total is used for sorting
+- **THEN** it includes its extras as well as its main line, and every recorded rewatch of every member as well as each member's first viewing
+
+#### Scenario: A non-default alternative counts toward time spent
+- **WHEN** a series' main line holds a version slot and I have watched both alternatives, twelve episodes of one and three of the other, so the card follows the first
+- **THEN** the other alternative's three episodes still count toward the series' total, even though the card's episode figures follow only the default combination
+
+#### Scenario: A series the profile omits is still ordered by its total
+- **WHEN** I sort by time spent and a listed series has only an extra watched, so the profile's "Most time spent" strip omits it
+- **THEN** it is placed according to that extra's watch time, not dropped and not sorted as zero
+
+#### Scenario: Nothing watched sorts last under time spent
+- **WHEN** I sort by time spent and two listed series have nothing watched at all
+- **THEN** both are placed after every series with time spent, ordered between themselves by display title
+
 #### Scenario: Unrankable series are kept, not dropped
 - **WHEN** I sort by MAL average and some listed series have no MAL average at all
 - **THEN** they are still listed, placed after every series that has one
@@ -400,11 +431,13 @@ The page SHALL open on **My average**, and SHALL keep the chosen sort in the URL
 - **THEN** it is sorted by my average
 
 ### Requirement: Series list read endpoint
-The system SHALL expose a read endpoint returning every series eligible for the Series page, each carrying the figures a card shows and the figures the page sorts and filters by: series id — which is the series' root anime id, carried once rather than as two fields — title and English title, picture, status, progress badge, both main-line averages, whether the MAL average may be revealed, first and last year, main-line episode total with its lower-bound marker, entry count, main-line episodes watched and aired, the count of main-line entries that have started airing, and the average position the series' main-line entries hold in my rankings.
+The system SHALL expose a read endpoint returning every series eligible for the Series page, each carrying the figures a card shows and the figures the page sorts and filters by: series id — which is the series' root anime id, carried once rather than as two fields — title and English title, picture, status, progress badge, both main-line averages, whether the MAL average may be revealed, first and last year, main-line episode total with its lower-bound marker, entry count, main-line episodes watched and aired, the count of main-line entries that have started airing, the average position the series' main-line entries hold in my rankings, and the series' total watch time.
 
 The **main-line aired entry count** SHALL count main-line members that have started airing — currently airing or finished airing — and SHALL exclude any that has not aired at all, matching the figure the profile's Top series section already uses for its own multi-entry filter.
 
 The **average ranking position** SHALL be the mean, over the series' main-line members that my rankings cover, of each member's overall position in those rankings, computed over the whole main line. A member my rankings do not cover — an unscored member above all — SHALL be excluded from the mean altogether: it SHALL NOT contribute a rank and SHALL NOT count toward the divisor. A series with no covered main-line member SHALL carry no value at all rather than a placeholder figure. The ranking itself SHALL be the one the app derives from my entries and my stored hand-ordering — this endpoint SHALL read it, never store or duplicate it, so a score edit changes both the average and the position with no rebuild.
+
+The **total watch time** SHALL be the franchise total the profile's "Most time spent" section ranks by, in whole seconds, computed over every member by that section's per-member rules and not by a restatement of them. Every eligible series SHALL carry it, including one "Most time spent" omits. A series with nothing watched SHALL carry zero rather than no value. Like every other figure here it SHALL be computed at read time from members' current entries, so marking an episode watched or recording a rewatch changes it with no rebuild.
 
 The endpoint SHALL compute those figures at read time from stored series members and my list, and SHALL NOT build, rebuild, or refresh any series, and SHALL make no MyAnimeList request — so its cost is bounded by what is stored no matter how incomplete the store is.
 
@@ -451,6 +484,22 @@ Score averages SHALL NOT be read from storage but computed from members' current
 #### Scenario: A score edit moves the position too
 - **WHEN** I raise my score on a main-line entry enough to move it up my rankings and the endpoint is called again
 - **THEN** that series' average position reflects the new ranking, with no rebuild
+
+#### Scenario: The watch total equals the profile's
+- **WHEN** a series appears both in this endpoint's response and in the profile's "Most time spent" section
+- **THEN** both carry the same total watch time for it
+
+#### Scenario: A series the profile omits still carries its total
+- **WHEN** a listed series has only an extra watched, a two-hour movie
+- **THEN** the endpoint returns it with a total watch time of two hours, though "Most time spent" does not list it
+
+#### Scenario: Nothing watched carries zero
+- **WHEN** every member of a listed series in my list is plan-to-watch with no episodes watched
+- **THEN** the endpoint returns a total watch time of zero for it
+
+#### Scenario: Watching an episode moves the total
+- **WHEN** I mark one more episode of a series' member watched and the endpoint is called again
+- **THEN** that series' total watch time has grown by that member's episode duration, with no rebuild
 
 #### Scenario: The response is deterministically ordered
 - **WHEN** the endpoint is called twice with no data change

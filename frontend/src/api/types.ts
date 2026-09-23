@@ -594,8 +594,9 @@ export type TimeSpentSeriesItemDto = {
   watchedSeconds: number
 }
 
-// Every series with above-zero total watch time (design.md D8), ordered by
-// that total descending then title case-insensitively, with no cap.
+// Every franchise with at least one main-line member watched
+// (time-spent-sort-and-main-line-gate design.md D1/D2), ordered by total
+// watch time descending then title case-insensitively, with no cap.
 export type TimeSpentSeriesSectionDto = {
   items: TimeSpentSeriesItemDto[]
 }
@@ -934,7 +935,10 @@ export type SeriesProgressBadge = 'None' | 'Completed' | 'CaughtUp' | 'Behind' |
 // members that have started airing (polish-search-sort-and-titles design.md
 // D7/D8) — the same figure the profile's Top series filter uses — and
 // mainLineAverageRank is the mean ranking position of the main-line members
-// my rankings cover, null when they cover none.
+// my rankings cover, null when they cover none. watchedSeconds is the
+// franchise total "Most time spent" ranks by, ungated and summed over every
+// member (time-spent-sort-and-main-line-gate design.md D3/D5) — used only by
+// the Time spent sort.
 export type SeriesListItemDto = {
   seriesId: number
   title: string
@@ -955,6 +959,7 @@ export type SeriesListItemDto = {
   mainLineAiredEpisodes: number
   mainLineAiredCount: number
   mainLineAverageRank: number | null
+  watchedSeconds: number
 }
 
 // Every series eligible for the Series page (add-series-browser design.md

@@ -35,7 +35,9 @@ public enum SeriesProgressBadge
 /// main-line members that have started airing — the same figure Top series
 /// filters on — and `MainLineAverageRank` is the mean overall ranking
 /// position of the main-line members my rankings cover, `null` when they
-/// cover none.</summary>
+/// cover none. `WatchedSeconds` is the franchise total "Most time spent"
+/// ranks by, ungated, and the Time spent sort's key
+/// (time-spent-sort-and-main-line-gate design.md D3/D5).</summary>
 // SeriesId is the root entry's MAL id (key-series-by-root-anime-id
 // design.md D1/D7), so the card's link target reads this same field.
 public record SeriesListItemDto(
@@ -57,7 +59,8 @@ public record SeriesListItemDto(
     int MainLineWatchedEpisodes,
     int MainLineAiredEpisodes,
     int MainLineAiredCount,
-    double? MainLineAverageRank);
+    double? MainLineAverageRank,
+    long WatchedSeconds);
 
 /// <summary>Every series eligible for the Series page (add-series-browser
 /// design.md D1), in the endpoint's deterministic default order — my

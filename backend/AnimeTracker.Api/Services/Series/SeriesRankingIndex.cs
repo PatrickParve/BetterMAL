@@ -191,12 +191,18 @@ public sealed class SeriesRankingIndex
             var mainLineAiredCount = mainLine.Count(m => m.AiringStatus != "not_yet_aired");
             var mainLineAverageRank = MainLineAverageRankOf(mainLine, ranking);
 
+            // Unlike the episode figures above, this figure deliberately
+            // covers every member — main line, extras and held version
+            // neighbours — rather than scopedMainLine (design.md D4,
+            // series-browser "a sort key and not a card figure").
+            var watchedSeconds = SeriesWatchedSeconds(members);
+
             results.Add(new SeriesListItemDto(
                 group.Key, title, englishTitle, pictureUrl,
                 status, badge, behindEpisodes, malAverage, mineAverage, malRevealed,
                 firstYear, lastYear, episodeTotal, hasUnknown, members.Count,
                 mainLineWatchedEpisodes, mainLineAiredEpisodes,
-                mainLineAiredCount, mainLineAverageRank));
+                mainLineAiredCount, mainLineAverageRank, watchedSeconds));
         }
 
         return results;
@@ -443,17 +449,17 @@ public sealed class SeriesRankingIndex
             .ToList();
     }
 
-    /// <summary>Every series with above-zero total watch time — first
-    /// viewings plus rewatches, summed over <em>every</em> member, main line
-    /// and extras alike — ranked by that total descending then title
-    /// (design.md D7). A total above zero is exactly "some member in my list
-    /// has at least one episode watched", since every contribution is
-    /// episodes times a strictly positive duration, so no second eligibility
-    /// predicate is needed (design.md D8). Deliberately does not apply
-    /// EligibleSeries()'s two-aired-main-line-entries coverage rule nor
-    /// ListedSeries()'s version-neighbour rule, for the reason
-    /// RewatchedSeries() already records: those exist to protect an average,
-    /// and a sum of one entry's time is exactly right.</summary>
+    /// <summary>Every series whose main series has been watched — at least
+    /// one main-line member, any alternative including a non-default one, has
+    /// watch time above zero — ranked by total watch time descending then
+    /// title (this change's design D1/D2). Extras and version neighbours
+    /// never satisfy the gate on their own; once a series qualifies, its
+    /// total still covers every member, extras included, in full — the gate
+    /// decides membership only, never how much a listed series' total is.
+    /// Deliberately does not apply EligibleSeries()'s two-aired-main-line-
+    /// entries coverage rule nor ListedSeries()'s version-neighbour rule, for
+    /// the reason RewatchedSeries() already records: those exist to protect
+    /// an average, and a sum of one entry's time is exactly right.</summary>
     public List<SeriesWatchTimeResult> TimeSpentSeries()
     {
         var results = new List<SeriesWatchTimeResult>();
@@ -461,9 +467,10 @@ public sealed class SeriesRankingIndex
         foreach (var group in _membersBySeriesId)
         {
             var members = group.ToList();
-            var totalSeconds = members.Sum(MemberWatchedSeconds);
-            if (totalSeconds <= 0)
+            if (!members.Any(m => m.IsMainLine && MemberWatchedSeconds(m) > 0))
                 continue;
+
+            var totalSeconds = SeriesWatchedSeconds(members);
 
             var root = members.First(m => m.AnimeId == m.SeriesId);
             var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
@@ -534,6 +541,13 @@ public sealed class SeriesRankingIndex
             + WatchMath.RewatchEpisodesIncludingCurrentRun(m.RewatchCount ?? 0, m.TotalEpisodes, m.EpisodesWatched ?? 0, m.EntryStatus);
         return (long)episodes * WatchMath.EpisodeSeconds(m.AverageEpisodeDurationSeconds);
     }
+
+    // The one franchise total both TimeSpentSeries() and ListedSeries() read
+    // (design.md D4): summed over every member — main line, extras and held
+    // version neighbours — never over the default-combination scopedMainLine,
+    // so the two surfaces cannot drift apart.
+    private static long SeriesWatchedSeconds(IEnumerable<SeriesRankingMemberProjection> members) =>
+        members.Sum(MemberWatchedSeconds);
 }
 
 /// <summary>One series' worth of Top series data: display fields from the

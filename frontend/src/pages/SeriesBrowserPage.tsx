@@ -29,6 +29,7 @@ const SORT_OPTIONS: { value: SeriesSortKey; label: string }[] = [
   { value: 'newest', label: 'Newest' },
   { value: 'oldest', label: 'Oldest' },
   { value: 'myProgress', label: 'My progress' },
+  { value: 'timeSpent', label: 'Time spent' },
 ]
 
 const DEFAULT_SORT: SeriesSortKey = 'myScore'

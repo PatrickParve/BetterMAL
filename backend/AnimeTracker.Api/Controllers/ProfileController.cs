@@ -82,9 +82,9 @@ public class ProfileController(IProfileService profileService) : ControllerBase
         return Ok(section);
     }
 
-    /// <summary>"Most time spent": every franchise with above-zero total
-    /// watch time, ranked by that total descending
-    /// (add-time-spent-and-trim-empty-scopes design.md D7). Deliberately not
+    /// <summary>"Most time spent": every franchise with at least one
+    /// main-line member watched, ranked by total watch time descending
+    /// (time-spent-sort-and-main-line-gate design.md D1/D2). Deliberately not
     /// embedded in <see cref="Get"/>, for the same reason as <see
     /// cref="GetTopSeries"/>: it pays for its own <c>SeriesRankingLookup</c>
     /// load rather than being folded into <c>top-series</c>, which is
