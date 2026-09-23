@@ -9,6 +9,8 @@ type PosterPictureProps = {
   alt?: string
   draggable?: boolean
   loading?: 'lazy' | 'eager'
+  /** A banner box: draw every shape whole, a poster included, on the box's own background with no fill. */
+  whole?: boolean
 }
 
 // artwork-presentation: the one place a card, tile or poster box draws its
@@ -25,10 +27,13 @@ type PosterPictureProps = {
 //
 // The blurred fill behind the art exists only for non-poster shapes
 // (design D3): a poster fills its box, so it renders exactly as it did
-// before this component, with no extra element. The fill is only mounted
-// once the art has loaded and been classified, so it's served from the same
-// cache entry — it never costs a second request.
-export function PosterPicture({ src, className, placeholderClassName, alt = '', draggable, loading }: PosterPictureProps) {
+// before this component, with no extra element. The exception is a banner
+// box (`whole`, e.g. the airing slot's picture band): it draws every shape
+// whole on the box's own flat background and mounts no fill at all, since a
+// blurred copy behind a poster in a wide, narrow box read as clutter. Where
+// the fill is mounted it's only after the art has loaded and been classified,
+// so it's served from the same cache entry — it never costs a second request.
+export function PosterPicture({ src, className, placeholderClassName, alt = '', draggable, loading, whole }: PosterPictureProps) {
   const [shapeRef, shape] = usePictureShape(src)
 
   if (!src) {
@@ -36,8 +41,8 @@ export function PosterPicture({ src, className, placeholderClassName, alt = '', 
   }
 
   return (
-    <span className={`poster-picture poster-picture--${shape} ${className}`}>
-      {shape !== 'poster' && (
+    <span className={`poster-picture poster-picture--${shape}${whole ? ' poster-picture--whole' : ''} ${className}`}>
+      {!whole && shape !== 'poster' && (
         <img className="poster-picture__fill" src={src} alt="" aria-hidden="true" draggable={false} />
       )}
       <img

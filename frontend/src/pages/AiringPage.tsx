@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { getAiringWeek } from '../api/client.ts'
 import type { AiringSlotDto, AiringWeekDto } from '../api/types.ts'
-import { RowPicture } from '../components/RowPicture.tsx'
+import { PosterPicture } from '../components/PosterPicture.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
 import { EARLIEST_YEAR, yearsInRange } from '../utils/browseRange.ts'
@@ -251,15 +251,17 @@ function AiringPageView({ referenceDate }: { referenceDate: string }) {
                   <ul className="airing-day__slots">
                     {day.slots.map((slot) => (
                       <li key={`${slot.animeId}-${slot.localTime}-${slot.episodeNumber ?? 'x'}`}>
+                        {/* A card, not a row: the picture band sits above the title
+                            because a seventh-of-a-page column can't share its width
+                            between a picture and its text. Time and episode share a
+                            header strip above the band, never over the picture, and
+                            grid placement sets that layout, so the DOM order stays
+                            time, title, episode for the link's accessible name. */}
                         <Link to={`/anime/${slot.animeId}`} className="airing-slot">
                           <span className="airing-slot__time">{slot.localTime}</span>
-                          <span className="airing-slot__body">
-                            <RowPicture src={slot.pictureUrl} className="airing-slot__thumb" />
-                            <span className="airing-slot__info">
-                              <span className="airing-slot__title">{pickDisplayTitle(slot.title, slot.englishTitle)}</span>
-                              <span className="airing-slot__episode">{formatEpisodeLabel(slot)}</span>
-                            </span>
-                          </span>
+                          <PosterPicture src={slot.pictureUrl} className="airing-slot__art" whole loading="lazy" />
+                          <span className="airing-slot__title">{pickDisplayTitle(slot.title, slot.englishTitle)}</span>
+                          <span className="airing-slot__episode">{formatEpisodeLabel(slot)}</span>
                         </Link>
                       </li>
                     ))}

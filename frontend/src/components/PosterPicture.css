@@ -34,6 +34,13 @@
   object-fit: contain;
 }
 
+/* A banner box (the airing slot's picture band) is wider than any poster,
+   so it draws every shape whole, a poster included, on the box's own
+   background: no fill is mounted for it. */
+.poster-picture--whole > .poster-picture__art {
+  object-fit: contain;
+}
+
 /* Enlarged past the wrapper by the blur radius on every side rather than
    with transform: scale(), so the blur's soft edge falls outside the clip
    without putting a transform on the paint path (see the note above). */

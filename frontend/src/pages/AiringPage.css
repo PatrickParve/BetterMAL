@@ -124,11 +124,28 @@
   min-height: 8px;
 }
 
+/* The picture band sizes itself from its card's width with cqi, so the card's
+   li is the query container. Inline-size containment is safe here: the li's
+   width always comes from its parent (a flex-column stretch or a grid track),
+   never from its content. */
+.airing-day__slots > li {
+  container-type: inline-size;
+}
+
+/* A card: a header strip with the time and episode, then the picture band,
+   then the title at the card's full width. Nothing is drawn over the picture.
+   The time column is auto and the episode takes the rest, so a long episode
+   label is what gives way. */
 .airing-slot {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "time episode"
+    "band band"
+    "title title";
+  --strip-x: 8px;
+  --strip-mid: 4px;
+  --strip-y: 6px;
   border: 1px solid var(--border);
   border-radius: 8px;
   color: inherit;
@@ -145,39 +162,74 @@
   outline-offset: 2px;
 }
 
-.airing-slot__body {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.airing-slot__thumb {
-  --row-picture-w: 52px;
-  --row-picture-h: 72px;
-  border-radius: 6px;
-}
-
-.airing-slot__thumb--placeholder {
-  border: 1px solid var(--border);
-}
-
-.airing-slot__info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  font-size: 13px;
-}
-
 .airing-slot__time {
+  grid-area: time;
+  align-self: center;
+  margin: var(--strip-y) var(--strip-mid) var(--strip-y) var(--strip-x);
   font-size: 12px;
   color: var(--text);
   opacity: 0.8;
   font-variant-numeric: tabular-nums;
 }
 
+/* border-box with the max-width is what keeps a long label inside the card:
+   it's a grid item, so the percentage resolves against the episode column. */
+.airing-slot__episode {
+  grid-area: episode;
+  align-self: center;
+  justify-self: end;
+  box-sizing: border-box;
+  max-width: calc(100% - var(--strip-x) - var(--strip-mid));
+  margin: var(--strip-y) var(--strip-x) var(--strip-y) var(--strip-mid);
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The narrowest seven-column layout leaves a card about 95px wide, where the
+   default strip would squeeze even "Ep 12" down to an ellipsis. */
+@container (max-width: 120px) {
+  .airing-slot {
+    --strip-x: 5px;
+    --strip-mid: 2px;
+    --strip-y: 5px;
+  }
+
+  .airing-slot__time,
+  .airing-slot__episode {
+    font-size: 11px;
+  }
+
+  .airing-slot__episode {
+    padding: 1px 5px;
+  }
+}
+
+/* Roughly 16:9 of the card's width, clamped, so a 16:9 key visual fills the
+   band across common laptop widths. Derived from the width alone, never the
+   picture, so every slot in the week is the same size and nothing moves as
+   pictures load. Any other shape is drawn whole on the band's flat
+   background. */
+.airing-slot__art {
+  grid-area: band;
+  height: clamp(64px, 56.25cqi, 96px);
+  background: var(--code-bg);
+}
+
+/* The bottom gap is a margin, not padding: overflow clips at the padding box,
+   so bottom padding would show the top of a clamped third line. */
 .airing-slot__title {
+  grid-area: title;
+  min-width: 0;
+  margin-bottom: 8px;
+  padding: 8px 10px 0;
+  font-size: 13px;
   color: var(--text-h);
   overflow: hidden;
   display: -webkit-box;
@@ -187,22 +239,20 @@
   min-height: calc(1.3em * 2);
 }
 
-.airing-slot__episode {
-  align-self: flex-start;
-  max-width: 100%;
-  font-size: 12px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--code-bg);
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 @media (max-width: 800px) {
+  /* stretch, not the base flex-start: each day has to span the page for its
+     cards to have a width to tile across, rather than shrink-wrapping to one. */
   .airing-page__grid {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Tile each day's cards rather than stretching one across the whole width.
+     auto-fill, not auto-fit, keeps the empty tracks, so a day with a single
+     slot doesn't stretch it. Every day's list is the same width, so every day
+     gets identical tracks and every card in the week stays the same size. */
+  .airing-day__slots {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   }
 }
