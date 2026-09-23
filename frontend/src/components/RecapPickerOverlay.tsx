@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { getRecapAvailability } from '../api/client.ts'
 import { RECAP_SEASONS, type RecapAvailabilityDto, type RecapMode, type RecapSeasonName, type RecapTimeFilter, type RecapYearAvailabilityDto } from '../api/types.ts'
 import { seasonLabel } from '../utils/anime.ts'
+import { currentSeasonTarget, EARLIEST_YEAR, yearsInRange } from '../utils/browseRange.ts'
 import { Modal } from './Modal.tsx'
 import './RecapPickerOverlay.css'
 
@@ -23,10 +24,6 @@ const MODE_OPTIONS: { value: RecapMode; label: string }[] = [
   { value: 'yearly', label: 'Yearly' },
   { value: 'season', label: 'Season' },
 ]
-
-function currentSeasonName(): RecapSeasonName {
-  return RECAP_SEASONS[Math.floor(new Date().getMonth() / 3)]
-}
 
 function sumCounts(years: RecapYearAvailabilityDto[], startYear: number, endYear: number): { watched: number; aired: number } {
   let watched = 0
@@ -54,14 +51,14 @@ export function RecapPickerOverlay({
   title = 'Recap a period',
   confirmLabel = 'Show recap',
 }: RecapPickerOverlayProps) {
-  const currentYear = useMemo(() => new Date().getFullYear(), [])
+  const current = useMemo(currentSeasonTarget, [])
   const [availability, setAvailability] = useState<RecapAvailabilityDto | null>(null)
 
   const [mode, setMode] = useState<RecapMode>('yearly')
-  const [from, setFrom] = useState(currentYear - 1)
-  const [to, setTo] = useState(currentYear)
-  const [year, setYear] = useState(currentYear)
-  const [season, setSeason] = useState<RecapSeasonName>(currentSeasonName)
+  const [from, setFrom] = useState(current.year - 1)
+  const [to, setTo] = useState(current.year)
+  const [year, setYear] = useState(current.year)
+  const [season, setSeason] = useState<RecapSeasonName>(current.season)
   const [filter, setFilter] = useState<RecapTimeFilter>('watched')
 
   useEffect(() => {
@@ -79,10 +76,21 @@ export function RecapPickerOverlay({
     }
   }, [])
 
+  // The picker's range matches the recap page's own (design D5 of
+  // bound-recap-and-airing-range): years reach back to whatever availability
+  // suggests, never before EARLIEST_YEAR, but availability can never raise
+  // the top past the current year — an anime starting next season still
+  // gives that year an aired count, and the recap page would refuse any
+  // period past the current one anyway.
   const knownYears = availability?.years.map((y) => y.year) ?? []
-  const minYear = knownYears.length > 0 ? Math.min(...knownYears, currentYear) : currentYear
-  const maxYear = knownYears.length > 0 ? Math.max(...knownYears, currentYear) : currentYear
-  const yearOptions = Array.from({ length: maxYear - minYear + 1 }, (_, i) => maxYear - i)
+  const earliestKnown = knownYears.length > 0 ? Math.min(...knownYears) : current.year
+  const yearOptions = yearsInRange(Math.max(EARLIEST_YEAR, earliestKnown), current.year)
+  // Within the current year, cut the season list to the current season —
+  // mirrors the recap page's own renderPeriodControls (design D4).
+  const seasonOptions =
+    year === current.year
+      ? RECAP_SEASONS.filter((s) => RECAP_SEASONS.indexOf(s) <= RECAP_SEASONS.indexOf(current.season))
+      : RECAP_SEASONS
 
   const counts =
     availability && mode !== 'season'
@@ -194,7 +202,7 @@ export function RecapPickerOverlay({
               <label>
                 Season
                 <select value={season} onChange={(e) => setSeason(e.target.value as RecapSeasonName)}>
-                  {RECAP_SEASONS.map((s) => (
+                  {seasonOptions.map((s) => (
                     <option key={s} value={s}>
                       {seasonLabel(s)}
                     </option>
@@ -203,7 +211,20 @@ export function RecapPickerOverlay({
               </label>
               <label>
                 Year
-                <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+                <select
+                  value={year}
+                  onChange={(e) => {
+                    const nextYear = Number(e.target.value)
+                    // Moving to the current year while a later season is
+                    // selected moves the season back to the current one,
+                    // since this select only changes the year half of the
+                    // target (design D4/D5).
+                    if (nextYear === current.year && RECAP_SEASONS.indexOf(season) > RECAP_SEASONS.indexOf(current.season)) {
+                      setSeason(current.season)
+                    }
+                    setYear(nextYear)
+                  }}
+                >
                   {yearOptions.map((y) => (
                     <option key={y} value={y}>
                       {y}

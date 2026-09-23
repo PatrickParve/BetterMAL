@@ -38,19 +38,23 @@ export function probeTarget(current: SeasonTarget): SeasonTarget {
   return shiftSeason(current.year, current.season, PROBE_OFFSET)
 }
 
-// The addressable ceiling *is* the navigable ceiling GET /api/season/bounds
-// returns — a URL reaches exactly what the arrows and dropdown offer, with no
-// second, wider ceiling (design D3). A season is addressable when it falls, in
-// season order, between winter of the archive's earliest year and that
-// ceiling.
+// A season is addressable when it falls, in season order, between winter of
+// the archive's earliest year and the ceiling the caller supplies — a URL
+// reaches exactly what the caller's arrows and dropdowns offer, with no
+// second, wider ceiling (design D3 of bound-browse-range-and-sorting). The
+// ceiling is the ceiling *that caller* navigates to: GET /api/season/bounds's
+// navigable ceiling for the Season and Year pages, and the current season for
+// the recap, which can never reach a season that hasn't started (design D2 of
+// bound-recap-and-airing-range).
 export function isAddressableSeason(target: SeasonTarget, ceiling: SeasonTarget): boolean {
   const index = seasonPointIndex(target.year, target.season)
   return index >= seasonPointIndex(EARLIEST_YEAR, 'winter') && index <= seasonPointIndex(ceiling.year, ceiling.season)
 }
 
 // The year counterpart of isAddressableSeason: a year is addressable when any
-// of its seasons is, so the range is simply [EARLIEST_YEAR, the ceiling's
-// year] — the same ceiling the season guard uses, not a second, wider one.
+// of its seasons is, so the range is simply [EARLIEST_YEAR, the ceiling
+// year] — the same caller-supplied ceiling isAddressableSeason uses, not a
+// second, wider one.
 export function isAddressableYear(year: number, ceilingYear: number): boolean {
   return year >= EARLIEST_YEAR && year <= ceilingYear
 }

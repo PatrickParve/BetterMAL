@@ -1,12 +1,13 @@
 namespace AnimeTracker.Api.Services.Season;
 
 /// <summary>The [EarliestYear, LatestYear/LatestSeason] range of seasons and
-/// years the season and year endpoints accept — winter EarliestYear to the
-/// outer ceiling. Both ends are accepted. The earliest end is always winter,
-/// so a year at or above EarliestYear needs no season test there. The caller
-/// must already have checked the season name passed to
-/// <see cref="ContainsSeason"/>, since SeasonCalendar.GetSeasonIndex returns
-/// -1 for an unknown one.</summary>
+/// years accepted — winter EarliestYear to the outer ceiling. Backs the
+/// season and year endpoints' own ceiling, and also the recap's
+/// winter-1917-to-current-season range (<see cref="Recap.RecapRange"/>).
+/// Both ends are accepted. The earliest end is always winter, so a year at
+/// or above EarliestYear needs no season test there. The caller must already
+/// have checked the season name passed to <see cref="ContainsSeason"/>,
+/// since SeasonCalendar.GetSeasonIndex returns -1 for an unknown one.</summary>
 public sealed record SeasonRequestRange(int EarliestYear, int LatestYear, string LatestSeason)
 {
     public bool ContainsYear(int year) => year >= EarliestYear && year <= LatestYear;

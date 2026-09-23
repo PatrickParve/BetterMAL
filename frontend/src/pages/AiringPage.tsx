@@ -1,9 +1,11 @@
-import { Link, useSearchParams } from 'react-router-dom'
+import { useMemo } from 'react'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { getAiringWeek } from '../api/client.ts'
 import type { AiringSlotDto, AiringWeekDto } from '../api/types.ts'
 import { RowPicture } from '../components/RowPicture.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
+import { EARLIEST_YEAR, yearsInRange } from '../utils/browseRange.ts'
 import './AiringPage.css'
 
 // Local calendar date, formatted without ever going through toISOString
@@ -19,8 +21,34 @@ function todayIso(): string {
   return toLocalIso(new Date())
 }
 
-function isIsoDate(value: string | null): value is string {
-  return value !== null && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value))
+// Mirrors the backend's AiringWeekRange.YearsAhead: the schedule reaches
+// this many years past the current one — at least a full year beyond
+// wherever airing rows are stored, and where the year selector already
+// stopped (design D7 of bound-recap-and-airing-range).
+const AIRING_YEARS_AHEAD = 1
+
+// The schedule's floor — the same earliest year the Season, Year and Recap
+// pages use. 1 January 1917 is a Monday, so the first week of the range is
+// exactly 1-7 January and the previous arrow needs no special case.
+const floorIso = `${EARLIEST_YEAR}-01-01`
+
+function ceilingIso(currentYear: number): string {
+  return `${currentYear + AIRING_YEARS_AHEAD}-12-31`
+}
+
+// A week is addressable when its ?week= names a real calendar date between
+// floorIso and ceilingIso(currentYear), inclusive. Never goes through
+// Date.parse (design D7): the range check is a plain string comparison,
+// which zero-padded four-digit ISO dates sort correctly under, and which
+// rejects a year like 0000 before any Date is constructed — new Date(y, ...)
+// would otherwise map a year below 100 onto 1900-something.
+function isAddressableWeekDate(value: string | null, today: string): value is string {
+  if (value === null || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  if (value < floorIso || value > ceilingIso(Number(today.slice(0, 4)))) return false
+  const month = Number(value.slice(5, 7))
+  if (month < 1 || month > 12) return false
+  const day = Number(value.slice(8, 10))
+  return day >= 1 && day <= new Date(Number(value.slice(0, 4)), month, 0).getDate()
 }
 
 // Twelve month names in the viewer's locale, built from a fixed reference
@@ -70,15 +98,36 @@ function formatWeekRange(weekStart: string, weekEnd: string): string {
   return `${start} – ${end}`
 }
 
+// Route guard (design D1/D7 of bound-recap-and-airing-range): validates the
+// URL's ?week= before anything mounts, and renders either a
+// history-replacing redirect to today's week or the page body with the
+// validated reference date as a prop. AiringPageView is rendered unkeyed, at
+// this fixed position, so stepping a week changes only its prop rather than
+// remounting the view.
+export function AiringPage() {
+  const [searchParams] = useSearchParams()
+  const today = useMemo(todayIso, [])
+  const weekParam = searchParams.get('week')
+
+  if (weekParam !== null && !isAddressableWeekDate(weekParam, today)) {
+    const params = new URLSearchParams(searchParams)
+    params.set('week', today)
+    return <Navigate to={`/airing?${params.toString()}`} replace />
+  }
+
+  return <AiringPageView referenceDate={weekParam ?? today} />
+}
+
 // Weekly schedule of my-list anime, laid out as seven local day-columns.
 // Navigation moves whole weeks at a time; the date picker jumps straight to the
 // week containing any chosen date; "current" jumps back to today's week. The
 // selected week lives in the URL (not component state) so it survives
 // back-navigation from an anime detail page, and defaults to today when absent.
-export function AiringPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const weekParam = searchParams.get('week')
-  const referenceDate = isIsoDate(weekParam) ? weekParam : todayIso()
+// The schedule covers 1 January 1917 through 31 December of next year
+// (AiringWeekRange on the backend); `referenceDate` has already been
+// validated by the AiringPage guard above.
+function AiringPageView({ referenceDate }: { referenceDate: string }) {
+  const [, setSearchParams] = useSearchParams()
 
   const { data: week } = usePageData<AiringWeekDto>(`airing:${referenceDate}`, () => getAiringWeek(referenceDate))
 
@@ -115,21 +164,41 @@ export function AiringPage() {
   const selectedYear = Number(referenceDate.slice(0, 4))
   const selectedMonth = Number(referenceDate.slice(5, 7))
   const currentYear = new Date().getFullYear()
-  const jumpYears: number[] = []
-  for (let year = currentYear + 1; year >= 1960; year--) jumpYears.push(year)
+  const ceiling = ceilingIso(currentYear)
+  const jumpYears = yearsInRange(EARLIEST_YEAR, currentYear + AIRING_YEARS_AHEAD)
+
+  // Arrow bounds (design D7): the previous arrow stops at the range's floor
+  // and the next arrow stops once no later week starts by the ceiling, so a
+  // Sunday reference late in December lands on the final week rather than
+  // past it. Compared as plain ISO strings — safe because every value here
+  // is a zero-padded four-digit-year date.
+  const previousWeekTarget = addDaysIso(referenceDate, -7)
+  const isPreviousDisabled = weekStartIso(referenceDate) <= floorIso
+  const nextWeekTarget = addDaysIso(referenceDate, 7)
+  const isNextDisabled = addDaysIso(weekStartIso(referenceDate), 7) > ceiling
 
   return (
     <div className="airing-page">
       <div className="airing-page__header">
         <h1>Schedule</h1>
         <div className="airing-page__nav">
-          <button type="button" onClick={() => goToWeek(addDaysIso(referenceDate, -7))} aria-label="Previous week">
+          <button
+            type="button"
+            onClick={() => goToWeek(previousWeekTarget < floorIso ? floorIso : previousWeekTarget)}
+            aria-label="Previous week"
+            disabled={isPreviousDisabled}
+          >
             &lsaquo;
           </button>
           <button type="button" onClick={() => goToWeek(todayIso())} disabled={isCurrentWeek}>
             current
           </button>
-          <button type="button" onClick={() => goToWeek(addDaysIso(referenceDate, 7))} aria-label="Next week">
+          <button
+            type="button"
+            onClick={() => goToWeek(nextWeekTarget > ceiling ? ceiling : nextWeekTarget)}
+            aria-label="Next week"
+            disabled={isNextDisabled}
+          >
             &rsaquo;
           </button>
         </div>

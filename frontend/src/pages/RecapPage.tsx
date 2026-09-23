@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { getRecap } from '../api/client.ts'
 import {
   RECAP_SEASONS,
@@ -38,9 +38,19 @@ import {
   seasonPointIndex,
   shiftSeason,
 } from '../utils/anime.ts'
-// The recap shares the Season and Year pages' floor — MyAnimeList's first
-// season archive year — instead of keeping its own.
-import { EARLIEST_YEAR } from '../utils/browseRange.ts'
+// The recap shares the Season and Year pages' floor, addressability rules and
+// range helpers — MyAnimeList's first season archive year through the
+// current season — instead of keeping its own (design D2 of
+// bound-recap-and-airing-range).
+import {
+  currentSeasonTarget,
+  EARLIEST_YEAR,
+  isAddressableSeason,
+  isAddressableYear,
+  isSeasonName,
+  yearsInRange,
+  type SeasonTarget,
+} from '../utils/browseRange.ts'
 import './RecapPage.css'
 
 type RankingBasis = 'mine' | 'mal'
@@ -103,14 +113,6 @@ function isRecapMode(value: string | null): value is RecapMode {
   return value === 'multiYear' || value === 'yearly' || value === 'season'
 }
 
-function isSeasonName(value: string | null): value is RecapSeasonName {
-  return value !== null && (RECAP_SEASONS as readonly string[]).includes(value)
-}
-
-function currentSeasonName(): RecapSeasonName {
-  return RECAP_SEASONS[Math.floor(new Date().getMonth() / 3)]
-}
-
 // The recap's two score-ranking filter selections (design D5): URL
 // parameters, like every other recap control, so a filtered ranking is
 // linkable and survives a reload. Anything outside 1-10 — missing,
@@ -121,13 +123,115 @@ function parseScoreParam(value: string | null): number | null {
   return Number.isInteger(n) && n >= 1 && n <= 10 ? n : null
 }
 
-// Bounds always widen to include whatever's actually selected (mirrors
-// SeasonPage's yearOptions) — a URL-addressed year outside the normal
-// EARLIEST_YEAR-current window (or an as-yet-unreached future one) still
-// has a valid <select> value instead of silently snapping to whichever
-// option happens to be first in the list.
-function yearOptions(low: number, high: number): number[] {
-  return Array.from({ length: high - low + 1 }, (_, i) => high - i)
+function parseIntParam(raw: string | null): number | null {
+  if (raw === null) return null
+  const n = Number(raw)
+  return Number.isInteger(n) ? n : null
+}
+
+type ResolvedRecapUrl = {
+  mode: RecapMode
+  startYear: number
+  endYear: number
+  season: RecapSeasonName
+  // The replacement query string, or null when the URL needs no rewrite —
+  // every present parameter was already valid and in range, and an absent
+  // one simply takes its default (design D3's "absent parameters aren't
+  // written into the URL").
+  replacement: string | null
+}
+
+// The route guard's whole decision (design D3): resolves the period the
+// current URL names, replacing whatever is wrong while leaving whatever is
+// absent alone. Pure — a fixed `current` and `searchParams` always produce
+// the same result — so it can run on every render with no memoisation of its
+// own, unlike the guard's `current`.
+function resolveRecapUrl(searchParams: URLSearchParams, current: SeasonTarget): ResolvedRecapUrl {
+  const params = new URLSearchParams(searchParams)
+  let changed = false
+
+  const modeParam = params.get('mode')
+  let mode: RecapMode
+  if (modeParam === null) {
+    mode = 'yearly'
+  } else if (isRecapMode(modeParam)) {
+    mode = modeParam
+  } else {
+    mode = 'yearly'
+    params.delete('mode')
+    changed = true
+  }
+
+  let startYear: number
+  let endYear: number
+  let season: RecapSeasonName
+
+  if (mode === 'season') {
+    const yearParam = params.get('year')
+    const seasonParam = params.get('season')
+    const parsedYear = parseIntParam(yearParam)
+    const yearMalformed = yearParam !== null && parsedYear === null
+    const seasonMalformed = seasonParam !== null && !isSeasonName(seasonParam)
+    const effectiveYear = parsedYear ?? current.year
+    const effectiveSeason = seasonParam !== null && isSeasonName(seasonParam) ? seasonParam : current.season
+
+    // The pair is replaced together, never one half alone (design D3): a
+    // present-but-malformed year or season forces the replacement even if
+    // the other half reads fine on its own, and so does a combination that
+    // simply falls outside the range, such as a lingering `season=fall`
+    // read against an absent (so current-year) `year`.
+    if (!yearMalformed && !seasonMalformed && isAddressableSeason({ year: effectiveYear, season: effectiveSeason }, current)) {
+      startYear = endYear = effectiveYear
+      season = effectiveSeason
+    } else {
+      startYear = endYear = current.year
+      season = current.season
+      params.set('year', String(current.year))
+      params.set('season', current.season)
+      changed = true
+    }
+  } else if (mode === 'yearly') {
+    const yearParam = params.get('year')
+    const parsedYear = parseIntParam(yearParam)
+    const yearMalformed = yearParam !== null && parsedYear === null
+    const effectiveYear = parsedYear ?? current.year
+
+    if (!yearMalformed && isAddressableYear(effectiveYear, current.year)) {
+      startYear = endYear = effectiveYear
+    } else {
+      startYear = endYear = current.year
+      params.set('year', String(current.year))
+      changed = true
+    }
+    season = current.season
+  } else {
+    // multiYear: each end is resolved on its own — a malformed or
+    // out-of-range end falls back to its own default, not the other end's
+    // (design D3) — and only once both are settled is a still-reversed
+    // range put back in order.
+    const resolveEnd = (raw: string | null, key: 'from' | 'to', fallback: number): number => {
+      const parsed = parseIntParam(raw)
+      const malformed = raw !== null && parsed === null
+      const effective = parsed ?? fallback
+      if (!malformed && isAddressableYear(effective, current.year)) return effective
+      params.set(key, String(fallback))
+      changed = true
+      return fallback
+    }
+
+    startYear = resolveEnd(params.get('from'), 'from', current.year - 1)
+    endYear = resolveEnd(params.get('to'), 'to', current.year)
+
+    if (startYear > endYear) {
+      ;[startYear, endYear] = [endYear, startYear]
+      params.set('from', String(startYear))
+      params.set('to', String(endYear))
+      changed = true
+    }
+    season = current.season
+  }
+
+  return { mode, startYear, endYear, season, replacement: changed ? params.toString() : null }
 }
 
 // The my-list handoff (design.md decision 9): recap params carried under a
@@ -163,14 +267,59 @@ function myListScopeSearch(
   return params.toString()
 }
 
-// Recap page: three period modes switched in place via URL search params
-// (design.md decision 8), matching SeasonPage/TopAnimePage's
+// Route guard (design D1): resolves the URL's period (resolveRecapUrl, design
+// D3) before anything else mounts, and renders either a history-replacing
+// redirect to the resolved URL or the page body with the validated period as
+// props. Unlike the Season/Year guards there is nothing to wait for — the
+// recap's ceiling is the current season, a pure calendar value — so this
+// never renders null and never makes a request. `current` is memoised per
+// mount so the guard and RecapPageView's own controls can't disagree about
+// "now" within one visit (task 3.8). RecapPageView is rendered unkeyed, at
+// this fixed position, so stepping a period changes only its props rather
+// than remounting it — its recapDisplayRef, open overlay and restorable state
+// are what hold the page steady during a step.
+export function RecapPage() {
+  const [searchParams] = useSearchParams()
+  const current = useMemo(currentSeasonTarget, [])
+  const resolved = resolveRecapUrl(searchParams, current)
+
+  if (resolved.replacement !== null) {
+    return <Navigate to={`/recap?${resolved.replacement}`} replace />
+  }
+
+  return (
+    <RecapPageView
+      mode={resolved.mode}
+      startYear={resolved.startYear}
+      endYear={resolved.endYear}
+      season={resolved.season}
+      current={current}
+    />
+  )
+}
+
+// Recap page body: three period modes switched in place via URL search
+// params (design.md decision 8), matching SeasonPage/TopAnimePage's
 // parameterised-in-the-URL convention. The server returns the whole included
 // set; ranking basis and media-type narrowing are applied locally (design.md
-// decision 1).
-export function RecapPage() {
+// decision 1). `mode`/`startYear`/`endYear`/`season`/`current` arrive already
+// validated by the RecapPage guard above (design D1); `filter`, `basis`,
+// `type` and the score parameters carry no addressability rule of their own,
+// so they're still read from the URL directly here.
+function RecapPageView({
+  mode,
+  startYear,
+  endYear,
+  season,
+  current,
+}: {
+  mode: RecapMode
+  startYear: number
+  endYear: number
+  season: RecapSeasonName
+  current: SeasonTarget
+}) {
   const [searchParams, setSearchParams] = useSearchParams()
-  const currentYear = useMemo(() => new Date().getFullYear(), [])
   // Only one ranking overlay can be open at a time, so a single slot (title +
   // rows already described) serves the season, year, and both time-watched
   // rankings alike.
@@ -189,29 +338,12 @@ export function RecapPage() {
   const [boardOpen, setBoardOpen] = useRestorableState<boolean>('scoreBoard', false)
   const { hidden } = useScoreVisibility()
 
-  const modeParam = searchParams.get('mode')
-  const mode: RecapMode = isRecapMode(modeParam) ? modeParam : 'yearly'
-
-  const fromParam = Number(searchParams.get('from'))
-  const toParam = Number(searchParams.get('to'))
-  const yearParam = Number(searchParams.get('year'))
-  const seasonParam = searchParams.get('season')
   const filterParam = searchParams.get('filter')
   const basisParam = searchParams.get('basis')
   const typeParam = searchParams.get('type')
   const seasonScoreParam = searchParams.get('seasonScore')
   const yearScoreParam = searchParams.get('yearScore')
 
-  const startYear =
-    mode === 'multiYear'
-      ? Number.isInteger(fromParam) && fromParam > 0
-        ? fromParam
-        : currentYear - 1
-      : Number.isInteger(yearParam) && yearParam > 0
-        ? yearParam
-        : currentYear
-  const endYear = mode === 'multiYear' ? (Number.isInteger(toParam) && toParam > 0 ? toParam : currentYear) : startYear
-  const season: RecapSeasonName = isSeasonName(seasonParam) ? seasonParam : currentSeasonName()
   const filter: RecapTimeFilter = filterParam === 'aired' ? 'aired' : 'watched'
   const basis: RankingBasis = basisParam === 'mal' ? 'mal' : 'mine'
   const typeFilter = typeParam ?? 'all'
@@ -365,16 +497,22 @@ export function RecapPage() {
     )
   }
 
-  // Period stepper arrows (design.md decision 7): bounded by the recap's own
-  // widened year range — the same [min(EARLIEST_YEAR, selected),
-  // max(currentYear, selected)] range yearOptions() computes — so an arrow
-  // disables exactly when the select it sits beside has nothing further to
-  // offer. Season and yearly modes only; a multi-year range has no single
-  // step.
+  // Period stepper arrows (design.md decision 7 / design D4 of
+  // bound-recap-and-airing-range): bounded by the recap's own addressable
+  // range — EARLIEST_YEAR through the current year/season — never by the
+  // viewed period, so an arrow disables exactly when the select it sits
+  // beside has nothing further to offer, and no dropdown is ever sized by a
+  // URL value (the crash `yearOptions` used to invite). Season and yearly
+  // modes only; a multi-year range has no single step.
   function renderPeriodControls() {
-    const years = yearOptions(Math.min(EARLIEST_YEAR, startYear, endYear), Math.max(currentYear, startYear, endYear))
-    const lowYear = Math.min(EARLIEST_YEAR, startYear)
-    const highYear = Math.max(currentYear, startYear)
+    const years = yearsInRange(EARLIEST_YEAR, current.year)
+    // Within the current year, cut the season list to the current season —
+    // no need to also keep the selected season the way SeasonPage does,
+    // because the guard already guarantees it's in range (design D4).
+    const seasonOptions =
+      startYear === current.year
+        ? RECAP_SEASONS.filter((s) => RECAP_SEASONS.indexOf(s) <= RECAP_SEASONS.indexOf(current.season))
+        : RECAP_SEASONS
 
     return (
       <div className="recap-page__period-controls">
@@ -382,7 +520,13 @@ export function RecapPage() {
           <>
             <select
               value={startYear}
-              onChange={(e) => updateParams({ from: e.target.value }, { keepScroll: true })}
+              onChange={(e) => {
+                // Choosing a From later than To collapses the range to that
+                // single year, in one call (design D4/task 3.7).
+                const nextFrom = Number(e.target.value)
+                if (nextFrom > endYear) updateParams({ from: String(nextFrom), to: String(nextFrom) }, { keepScroll: true })
+                else updateParams({ from: String(nextFrom) }, { keepScroll: true })
+              }}
               aria-label="From year"
             >
               {years.map((y) => (
@@ -394,7 +538,11 @@ export function RecapPage() {
             <span className="recap-page__period-sep">&ndash;</span>
             <select
               value={endYear}
-              onChange={(e) => updateParams({ to: e.target.value }, { keepScroll: true })}
+              onChange={(e) => {
+                const nextTo = Number(e.target.value)
+                if (nextTo < startYear) updateParams({ from: String(nextTo), to: String(nextTo) }, { keepScroll: true })
+                else updateParams({ to: String(nextTo) }, { keepScroll: true })
+              }}
               aria-label="To year"
             >
               {years.map((y) => (
@@ -411,7 +559,7 @@ export function RecapPage() {
               type="button"
               onClick={() => updateParams({ year: String(startYear - 1) }, { keepScroll: true })}
               aria-label="Previous year"
-              disabled={startYear <= lowYear}
+              disabled={startYear <= EARLIEST_YEAR}
             >
               &lsaquo;
             </button>
@@ -430,7 +578,7 @@ export function RecapPage() {
               type="button"
               onClick={() => updateParams({ year: String(startYear + 1) }, { keepScroll: true })}
               aria-label="Next year"
-              disabled={startYear >= highYear}
+              disabled={startYear >= current.year}
             >
               &rsaquo;
             </button>
@@ -445,7 +593,7 @@ export function RecapPage() {
                 updateParams({ year: String(next.year), season: next.season }, { keepScroll: true })
               }}
               aria-label="Previous season"
-              disabled={seasonPointIndex(startYear, season) <= seasonPointIndex(lowYear, 'winter')}
+              disabled={seasonPointIndex(startYear, season) <= seasonPointIndex(EARLIEST_YEAR, 'winter')}
             >
               &lsaquo;
             </button>
@@ -454,7 +602,7 @@ export function RecapPage() {
               onChange={(e) => updateParams({ season: e.target.value }, { keepScroll: true })}
               aria-label="Season"
             >
-              {RECAP_SEASONS.map((s) => (
+              {seasonOptions.map((s) => (
                 <option key={s} value={s}>
                   {seasonLabel(s)}
                 </option>
@@ -462,7 +610,18 @@ export function RecapPage() {
             </select>
             <select
               value={startYear}
-              onChange={(e) => updateParams({ year: e.target.value }, { keepScroll: true })}
+              onChange={(e) => {
+                const nextYear = Number(e.target.value)
+                // Choosing the current year while a later season is
+                // selected moves the season back to the current one, since
+                // this dropdown only changes the year half of the target
+                // (design D4, mirrors SeasonPage's own year select).
+                const nextSeason =
+                  nextYear === current.year && RECAP_SEASONS.indexOf(season) > RECAP_SEASONS.indexOf(current.season)
+                    ? current.season
+                    : season
+                updateParams({ year: String(nextYear), season: nextSeason }, { keepScroll: true })
+              }}
               aria-label="Year"
             >
               {years.map((y) => (
@@ -478,7 +637,7 @@ export function RecapPage() {
                 updateParams({ year: String(next.year), season: next.season }, { keepScroll: true })
               }}
               aria-label="Next season"
-              disabled={seasonPointIndex(startYear, season) >= seasonPointIndex(highYear, 'fall')}
+              disabled={seasonPointIndex(startYear, season) >= seasonPointIndex(current.year, current.season)}
             >
               &rsaquo;
             </button>

@@ -22,7 +22,7 @@ public class RecapControllerTests
     public async Task Get_UnknownModeIsRejectedWithoutReachingTheService()
     {
         var service = new RecordingRecapService();
-        var controller = new RecapController(service, new RecordingAvailabilityService());
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
 
         var result = await controller.Get("decade", null, null, null, null, RecapTimeFilter.Watched, CancellationToken.None);
 
@@ -34,7 +34,7 @@ public class RecapControllerTests
     public async Task Get_UnknownSeasonNameIsRejectedWithoutReachingTheService()
     {
         var service = new RecordingRecapService();
-        var controller = new RecapController(service, new RecordingAvailabilityService());
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
 
         var result = await controller.Get(RecapMode.Season, null, null, 2022, "monsoon", RecapTimeFilter.Watched, CancellationToken.None);
 
@@ -46,7 +46,7 @@ public class RecapControllerTests
     public async Task Get_UnknownFilterIsRejectedWithoutReachingTheService()
     {
         var service = new RecordingRecapService();
-        var controller = new RecapController(service, new RecordingAvailabilityService());
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
 
         var result = await controller.Get(RecapMode.Yearly, null, null, 2022, null, "someday", CancellationToken.None);
 
@@ -58,7 +58,7 @@ public class RecapControllerTests
     public async Task Get_MissingRequiredParametersForTheModeIsRejected()
     {
         var service = new RecordingRecapService();
-        var controller = new RecapController(service, new RecordingAvailabilityService());
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
 
         var result = await controller.Get(RecapMode.MultiYear, null, 2020, null, null, RecapTimeFilter.Watched, CancellationToken.None);
 
@@ -66,11 +66,136 @@ public class RecapControllerTests
         Assert.Empty(service.Requests);
     }
 
+    // RecapRange (design D6, tasks.md 1.6): the recap's own winter-1917-to-
+    // current-season range, refused the same way an unknown mode or season
+    // name is — before the service is ever called.
+    [Fact]
+    public async Task Get_YearlyBeforeTheArchiveIsRejectedWithoutReachingTheService()
+    {
+        var service = new RecordingRecapService();
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
+
+        var result = await controller.Get(RecapMode.Yearly, null, null, 1916, null, RecapTimeFilter.Watched, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(service.Requests);
+    }
+
+    [Fact]
+    public async Task Get_YearlyPastTheCurrentYearIsRejectedWithoutReachingTheService()
+    {
+        var service = new RecordingRecapService();
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
+
+        var result = await controller.Get(RecapMode.Yearly, null, null, DateTime.UtcNow.Year + 2, null, RecapTimeFilter.Watched, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(service.Requests);
+    }
+
+    [Fact]
+    public async Task Get_YearlyBeyondTheCalendarIsRejectedRatherThanFailing()
+    {
+        var service = new RecordingRecapService();
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
+
+        var result = await controller.Get(RecapMode.Yearly, null, null, 99999, null, RecapTimeFilter.Watched, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(service.Requests);
+    }
+
+    [Fact]
+    public async Task Get_SeasonBeforeTheArchiveIsRejectedWithoutReachingTheService()
+    {
+        var service = new RecordingRecapService();
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
+
+        var result = await controller.Get(RecapMode.Season, null, null, 1916, "fall", RecapTimeFilter.Watched, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(service.Requests);
+    }
+
+    [Fact]
+    public async Task Get_SeasonPastTheCurrentOneIsRejectedWithoutReachingTheService()
+    {
+        var service = new RecordingRecapService();
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
+
+        var result = await controller.Get(RecapMode.Season, null, null, DateTime.UtcNow.Year + 2, "winter", RecapTimeFilter.Watched, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(service.Requests);
+    }
+
+    [Fact]
+    public async Task Get_MultiYearWithAnEndBeyondTheCalendarIsRejectedWithoutReachingTheService()
+    {
+        var service = new RecordingRecapService();
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
+
+        var result = await controller.Get(RecapMode.MultiYear, 1, 9999, null, null, RecapTimeFilter.Watched, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(service.Requests);
+    }
+
+    [Fact]
+    public async Task Get_MultiYearWithANegativeEndIsRejectedWithoutReachingTheService()
+    {
+        var service = new RecordingRecapService();
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
+
+        var result = await controller.Get(RecapMode.MultiYear, -5, 2020, null, null, RecapTimeFilter.Watched, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(service.Requests);
+    }
+
+    [Fact]
+    public async Task Get_YearlyAtTheArchiveFloorIsAccepted()
+    {
+        var service = new RecordingRecapService();
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
+
+        var result = await controller.Get(RecapMode.Yearly, null, null, 1917, null, RecapTimeFilter.Watched, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Single(service.Requests);
+    }
+
+    [Fact]
+    public async Task Get_SeasonAtTheArchiveFloorIsAccepted()
+    {
+        var service = new RecordingRecapService();
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
+
+        var result = await controller.Get(RecapMode.Season, null, null, 1917, "winter", RecapTimeFilter.Watched, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Single(service.Requests);
+    }
+
+    [Fact]
+    public async Task Get_MultiYearReversedRangeReachesTheServiceInOrder()
+    {
+        var service = new RecordingRecapService();
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
+
+        var result = await controller.Get(RecapMode.MultiYear, 2024, 2020, null, null, RecapTimeFilter.Watched, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        var request = Assert.Single(service.Requests);
+        Assert.Equal(2020, request.Period.StartYear);
+        Assert.Equal(2024, request.Period.EndYear);
+    }
+
     [Fact]
     public async Task Get_ValidYearlyRequestReturnsTheDto()
     {
         var service = new RecordingRecapService();
-        var controller = new RecapController(service, new RecordingAvailabilityService());
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
 
         var result = await controller.Get(RecapMode.Yearly, null, null, 2022, null, RecapTimeFilter.Aired, CancellationToken.None);
 
@@ -85,7 +210,7 @@ public class RecapControllerTests
     public async Task Get_EmptyPeriodReturnsAWellFormedEmptyResponseRatherThanAnError()
     {
         var service = new RecordingRecapService();
-        var controller = new RecapController(service, new RecordingAvailabilityService());
+        var controller = new RecapController(service, new RecordingAvailabilityService(), new FakeBroadcastLocalTimeConverter());
 
         var result = await controller.Get(RecapMode.Yearly, null, null, 1999, null, RecapTimeFilter.Watched, CancellationToken.None);
 
@@ -106,7 +231,8 @@ public class RecapControllerTests
         var repository = new FakeUserAnimeEntryRepository([WatchedEntry(1, new DateOnly(2021, 4, 15), 12)]);
         var controller = new RecapController(
             new RecapService(repository, new FakeActivityLogRepository(), new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter()),
-            new RecordingAvailabilityService());
+            new RecordingAvailabilityService(),
+            new FakeBroadcastLocalTimeConverter());
 
         var result = await controller.Get(RecapMode.MultiYear, 2020, 2022, null, null, RecapTimeFilter.Aired, CancellationToken.None);
 
@@ -122,7 +248,8 @@ public class RecapControllerTests
         var repository = new FakeUserAnimeEntryRepository([WatchedEntry(1, new DateOnly(2021, 4, 15), 12)]);
         var controller = new RecapController(
             new RecapService(repository, new FakeActivityLogRepository(), new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter()),
-            new RecordingAvailabilityService());
+            new RecordingAvailabilityService(),
+            new FakeBroadcastLocalTimeConverter());
 
         var result = await controller.Get(RecapMode.Season, null, null, 2021, "spring", RecapTimeFilter.Aired, CancellationToken.None);
 
@@ -138,7 +265,8 @@ public class RecapControllerTests
         var repository = new FakeUserAnimeEntryRepository([WatchedEntry(1, new DateOnly(2021, 4, 15), 12)]);
         var controller = new RecapController(
             new RecapService(repository, new FakeActivityLogRepository(), new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter()),
-            new RecordingAvailabilityService());
+            new RecordingAvailabilityService(),
+            new FakeBroadcastLocalTimeConverter());
 
         var result = await controller.Get(RecapMode.MultiYear, 2020, 2022, null, null, RecapTimeFilter.Watched, CancellationToken.None);
 
@@ -177,7 +305,7 @@ public class RecapControllerTests
     public async Task GetAvailability_ReturnsTheServiceResult()
     {
         var availabilityService = new RecordingAvailabilityService();
-        var controller = new RecapController(new RecordingRecapService(), availabilityService);
+        var controller = new RecapController(new RecordingRecapService(), availabilityService, new FakeBroadcastLocalTimeConverter());
 
         var result = await controller.GetAvailability(CancellationToken.None);
 

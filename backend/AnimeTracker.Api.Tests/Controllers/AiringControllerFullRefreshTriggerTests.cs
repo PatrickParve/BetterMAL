@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Controllers;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Jobs;
+using AnimeTracker.Api.Services.Scheduling;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AnimeTracker.Api.Tests.Controllers;
@@ -15,7 +16,7 @@ public class AiringControllerFullRefreshTriggerTests
     {
         var trigger = new AiringFullRefreshTrigger();
         var progress = new AiringFullRefreshProgress();
-        var controller = new AiringController(new UnusedAiringScheduleService(), trigger, progress);
+        var controller = new AiringController(new UnusedAiringScheduleService(), trigger, progress, new FakeBroadcastLocalTimeConverter());
 
         Assert.Equal(JobPhase.NotStarted, progress.Snapshot.Phase);
 
@@ -33,7 +34,7 @@ public class AiringControllerFullRefreshTriggerTests
     {
         var trigger = new AiringFullRefreshTrigger();
         var progress = new AiringFullRefreshProgress();
-        var controller = new AiringController(new UnusedAiringScheduleService(), trigger, progress);
+        var controller = new AiringController(new UnusedAiringScheduleService(), trigger, progress, new FakeBroadcastLocalTimeConverter());
 
         controller.TriggerFullRefresh();
         controller.TriggerFullRefresh();
@@ -49,5 +50,17 @@ public class AiringControllerFullRefreshTriggerTests
     {
         public Task<AiringWeekDto> GetWeekAsync(DateOnly? weekReferenceDate, CancellationToken ct = default) =>
             throw new NotImplementedException();
+    }
+
+    // A small fake: only GetLocalDate is exercised by AiringController, but
+    // the interface still needs every member implemented.
+    private sealed class FakeBroadcastLocalTimeConverter : IBroadcastLocalTimeConverter
+    {
+        public DateOnly GetStartOfWeek(DateOnly referenceDate) => referenceDate;
+        public DateOnly GetLocalDate(DateTimeOffset instantUtc) => DateOnly.FromDateTime(instantUtc.UtcDateTime);
+        public TimeOnly GetLocalTime(DateTimeOffset instantUtc) => TimeOnly.FromDateTime(instantUtc.UtcDateTime);
+        public DateTimeOffset LocalMidnightUtc(DateOnly localDate) => new(localDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        public (DayOfWeek LocalDayOfWeek, TimeOnly LocalTime) ConvertBroadcastSlot(DayOfWeek jstDayOfWeek, TimeOnly jstTime, DateTimeOffset referenceUtc) =>
+            (jstDayOfWeek, jstTime);
     }
 }

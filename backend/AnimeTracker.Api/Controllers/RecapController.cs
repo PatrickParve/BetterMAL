@@ -1,10 +1,14 @@
 using AnimeTracker.Api.Services.Recap;
+using AnimeTracker.Api.Services.Scheduling;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AnimeTracker.Api.Controllers;
 
 [ApiController]
-public class RecapController(IRecapService recapService, IRecapAvailabilityService availabilityService) : ControllerBase
+public class RecapController(
+    IRecapService recapService,
+    IRecapAvailabilityService availabilityService,
+    IBroadcastLocalTimeConverter localTimeConverter) : ControllerBase
 {
     private static readonly HashSet<string> ValidSeasons = ["winter", "spring", "summer", "fall"];
 
@@ -13,7 +17,10 @@ public class RecapController(IRecapService recapService, IRecapAvailabilityServi
     /// which of `from`/`to` (multi-year), `year` (yearly), or `year`+`season`
     /// (season) are required; `filter` is honoured for multi-year/yearly and
     /// ignored for season (see `RecapDto.Filter`, which always echoes what
-    /// was actually used).</summary>
+    /// was actually used). After the mode/filter/season-name/missing-parameter
+    /// checks below, a period outside winter 1917 through the current season
+    /// (<see cref="RecapRange"/>) is refused with a 400 before the recap is
+    /// computed.</summary>
     [HttpGet("api/recap")]
     public async Task<IActionResult> Get(
         [FromQuery] string? mode,
@@ -29,18 +36,24 @@ public class RecapController(IRecapService recapService, IRecapAvailabilityServi
         if (!RecapTimeFilter.IsSupported(filter))
             return BadRequest(new { error = $"Unknown time filter '{filter}'." });
 
+        var range = RecapRange.For(localTimeConverter.GetLocalDate(DateTimeOffset.UtcNow));
+
         RecapPeriod period;
         switch (mode)
         {
             case RecapMode.MultiYear:
                 if (from is not { } fromYear || to is not { } toYear)
                     return BadRequest(new { error = "Multi-year recap requires 'from' and 'to'." });
+                if (!range.ContainsYear(fromYear) || !range.ContainsYear(toYear))
+                    return BadRequest(new { error = $"{fromYear}–{toYear} is outside the recap's range ({range.EarliestYear} to {range.LatestYear})." });
                 period = RecapPeriod.MultiYear(fromYear, toYear);
                 break;
 
             case RecapMode.Yearly:
                 if (year is not { } yearlyYear)
                     return BadRequest(new { error = "Yearly recap requires 'year'." });
+                if (!range.ContainsYear(yearlyYear))
+                    return BadRequest(new { error = $"{yearlyYear} is outside the recap's range ({range.EarliestYear} to {range.LatestYear})." });
                 period = RecapPeriod.Yearly(yearlyYear);
                 break;
 
@@ -49,6 +62,8 @@ public class RecapController(IRecapService recapService, IRecapAvailabilityServi
                     return BadRequest(new { error = "Season recap requires 'year'." });
                 if (season is null || !ValidSeasons.Contains(season))
                     return BadRequest(new { error = $"Unknown season '{season}'." });
+                if (!range.ContainsSeason(seasonYear, season))
+                    return BadRequest(new { error = $"{season} {seasonYear} is outside the recap's range (winter {range.EarliestYear} to {range.LatestSeason} {range.LatestYear})." });
                 period = RecapPeriod.OfSeason(seasonYear, season);
                 break;
         }
