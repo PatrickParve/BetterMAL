@@ -3,6 +3,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Artwork;
@@ -15,7 +16,8 @@ namespace AnimeTracker.Api.Services.Artwork;
 // Adopt* methods are the one exception to "now": adopting another device's
 // choice (device-transfer) stores the file's own time, since adopting a
 // choice is not making one (design.md D6).
-public class ArtworkSelectionService(AnimeTrackerDbContext db, IAnimeSearchIndex searchIndex) : IArtworkSelectionService
+public class ArtworkSelectionService(
+    AnimeTrackerDbContext db, IAnimeSearchIndex searchIndex, ITmdbArtworkService tmdbArtwork) : IArtworkSelectionService
 {
     public async Task<string?> SetAnimePictureAsync(int animeId, string pictureUrl, CancellationToken ct = default)
     {
@@ -141,11 +143,22 @@ public class ArtworkSelectionService(AnimeTrackerDbContext db, IAnimeSearchIndex
         if (anime.UserEntry is null)
             throw new ArtworkSelectionRejectedException($"Anime {animeId} is not in my list.");
 
-        if (!AnimePicture.Options(anime).Contains(pictureUrl))
+        if (!await IsAnimeOptionAsync(anime, pictureUrl, ct))
             throw new ArtworkSelectionRejectedException($"'{pictureUrl}' is not one of anime {animeId}'s pictures.");
 
         return anime;
     }
+
+    /// <summary>The anime's option set (design.md D13): its MyAnimeList
+    /// options, the TMDB images of the sets it draws from as cached on this
+    /// device, and its current choice, whichever source that came from. The
+    /// TMDB half is read from the cache alone, never fetched, so a choice can
+    /// only be made from what the picker could show. Only a TMDB-shaped URL can
+    /// be in a TMDB set, so a MAL one never costs the extra read.</summary>
+    private async Task<bool> IsAnimeOptionAsync(AnimeMetadata anime, string pictureUrl, CancellationToken ct) =>
+        AnimePicture.Options(anime).Contains(pictureUrl)
+        || anime.SelectedPictureUrl == pictureUrl
+        || (TmdbImageUrl.IsTmdbImage(pictureUrl) && (await tmdbArtwork.GetAnimeOptionUrlsAsync(anime.Id, ct)).Contains(pictureUrl));
 
     private async Task<Models.Series> ValidateSeriesTitleAsync(int seriesId, string title, CancellationToken ct)
     {
@@ -166,10 +179,16 @@ public class ArtworkSelectionService(AnimeTrackerDbContext db, IAnimeSearchIndex
 
         var mainLineMembers = await MainLineMembersAsync(seriesId, ct);
         var options = SeriesPicturePool.Build(mainLineMembers);
+        // The current choice is accepted whichever source it came from, so one
+        // that is a TMDB image survives the set dropping it (design.md D9).
         if (series.SelectedPictureUrl is { } current && !options.Contains(current))
-            options.Add(current); // a stored choice is never re-validated away (design.md D9)
+            options.Add(current);
 
-        if (!options.Contains(pictureUrl))
+        // The MAL pool and the current choice, plus the franchise's cached TMDB
+        // images (D13); as for an anime, only a TMDB-shaped URL needs the read.
+        var accepted = options.Contains(pictureUrl)
+            || (TmdbImageUrl.IsTmdbImage(pictureUrl) && (await tmdbArtwork.GetSeriesOptionUrlsAsync(seriesId, ct)).Contains(pictureUrl));
+        if (!accepted)
             throw new ArtworkSelectionRejectedException($"'{pictureUrl}' is not one of series {seriesId}'s pictures.");
 
         return series;

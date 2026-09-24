@@ -6,6 +6,7 @@ using AnimeTracker.Api.Services.Airing.AniList;
 using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Detail;
 using AnimeTracker.Api.Services.Entries;
+using AnimeTracker.Api.Services.IdMapping;
 using AnimeTracker.Api.Services.Import;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Jobs;
@@ -23,6 +24,7 @@ using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Season;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Sync;
+using AnimeTracker.Api.Services.Tmdb;
 using AnimeTracker.Api.Services.Transfer;
 using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
@@ -54,6 +56,10 @@ builder.Services.AddScoped<IEpisodeAiringRepository, EpisodeAiringRepository>();
 
 // --- MAL API integration ---
 builder.Services.Configure<MalOptions>(builder.Configuration.GetSection(MalOptions.SectionName));
+
+// Optional: with no key, TMDB access stays off and the rest of the app is
+// unaffected (spec `tmdb-artwork`).
+builder.Services.Configure<TmdbOptions>(builder.Configuration.GetSection(TmdbOptions.SectionName));
 
 builder.Services.AddSingleton<MalRequestPacer>();
 builder.Services.AddSingleton<MalSearchCache>();
@@ -141,6 +147,43 @@ builder.Services.AddScoped<SeriesListService>();
 
 // --- Main dashboard ---
 builder.Services.AddScoped<IMainDashboardService, MainDashboardService>();
+
+// --- External id mapping (MAL -> TMDB/IMDb) ---
+// Synced weekly as a step of the airing tick (EpisodeScheduleRefreshBackgroundService),
+// in a scope of its own; a plain named client, since it talks to GitHub, not an API.
+builder.Services.AddHttpClient(AnimeIdMappingSyncService.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(2);
+});
+builder.Services.AddScoped<IAnimeIdMappingSyncService, AnimeIdMappingSyncService>();
+
+// The hand-edited custom mapping (design.md D19): read on top of the synced
+// mapping by everything that reads the mapping, never written into it. The file
+// is custom/id-mapping.json, looked for in the working directory and the two
+// folders above it (backend/custom from the project folder, /app/custom in the
+// image) unless IdMapping:CustomFile (IdMapping__CustomFile) says otherwise, and
+// is re-read whenever it changes.
+builder.Services.AddSingleton<ICustomIdMappings>(services => new CustomIdMappings(
+    CustomIdMappings.CandidatePaths(builder.Configuration["IdMapping:CustomFile"], Directory.GetCurrentDirectory()),
+    services.GetRequiredService<ILogger<CustomIdMappings>>()));
+builder.Services.AddScoped<IAnimeIdMappingResolver, AnimeIdMappingResolver>();
+
+// --- TMDB images (spec `tmdb-artwork`) ---
+// The v3 key travels in the query string, so nothing may log a request URI
+// (design.md D4). IHttpClientFactory's own request logging prints URIs but,
+// since .NET 9, redacts query strings; System.Net.Http.DisableUriRedaction
+// must stay off.
+builder.Services.AddHttpClient<ITmdbClient, TmdbClient>(client =>
+{
+    client.BaseAddress = new Uri("https://api.themoviedb.org/3/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
+builder.Services.AddScoped<ITmdbArtworkService, TmdbArtworkService>();
+
+// TMDB's terms cap how long its data may be cached (design.md D20): sets not
+// refetched for 150 days are deleted, as a step of the airing tick like the
+// mapping sync above, in a scope of its own.
+builder.Services.AddScoped<ITmdbCachePurgeService, TmdbCachePurgeService>();
 
 // --- Airing schedule ---
 builder.Services.AddScoped<IAiringScheduleService, AiringScheduleService>();
@@ -250,6 +293,11 @@ using (var startupScope = app.Services.CreateScope())
     // timer can push a pending row (design.md D2).
     var startupHold = startupScope.ServiceProvider.GetRequiredService<IStartupPendingSyncHold>();
     await startupHold.ApplyAsync();
+
+    // Read the custom mapping once now, so that its "loaded" line and any
+    // warning about an entry appear at start-up rather than at the first page
+    // that happens to read the mapping.
+    _ = startupScope.ServiceProvider.GetRequiredService<ICustomIdMappings>().Current;
 }
 
 app.Run();

@@ -880,9 +880,62 @@ export type SeriesStatsByPickDto = {
   stats: SeriesStatsDto
 }
 
+// Mirrors backend Services/Tmdb/TmdbPictureDtos.cs (tmdb-artwork, design D11).
+// Enums arrive by name; a group is never empty and neither is a scope, so
+// whatever is present is worth showing. url is the full `original` URL — also
+// exactly what choosing it stores as the picture (design D9) — and
+// width/height are TMDB's own, so a backdrop can reserve its landscape
+// footprint before it decodes. language is 'none' for an image with no
+// language; within a group posters come before backdrops.
+export type TmdbImageKind = 'Poster' | 'Backdrop'
+export type TmdbLanguage = 'none' | 'ja' | 'en'
+export type TmdbScope = 'Series' | 'Season' | 'Movie'
+
+export type TmdbPictureDto = {
+  url: string
+  kind: TmdbImageKind
+  width: number
+  height: number
+}
+
+export type TmdbLanguageGroupDto = {
+  language: TmdbLanguage
+  pictures: TmdbPictureDto[]
+}
+
+// seasonNumber is TMDB's own season number (set for a Season scope only) and
+// can differ from MAL's split, so the picker names it as TMDB numbers it.
+export type TmdbScopeDto = {
+  scope: TmdbScope
+  seasonNumber: number | null
+  languages: TmdbLanguageGroupDto[]
+}
+
+// configured is whether a TMDB API key is set. Cached images are sent with or
+// without one, so it is the only thing that tells the picker's "TMDB has no
+// match" note (TMDB on, nothing mapped) apart from "TMDB is off", which the
+// picker says nothing about. hasMapping is whether the anime's mapping names a
+// TMDB id at all. On a series both this and pendingCount describe the whole
+// franchise (pendingCount: how many of its sets are due; 0 without a key).
+export type AnimeTmdbPicturesDto = {
+  configured: boolean
+  hasMapping: boolean
+  scopes: TmdbScopeDto[]
+}
+
+export type SeriesTmdbPicturesDto = {
+  configured: boolean
+  hasMapping: boolean
+  languages: TmdbLanguageGroupDto[]
+  pendingCount: number
+}
+
 export type SeriesDto = {
   seriesId: number
   rootAniListId: number | null
+  // The root's own mapped IMDb ids, [] when it has none (no fallback to
+  // another member) — the IMDb link needs no TMDB key.
+  imdbIds: string[]
   title: string
   englishTitle: string | null
   pictureUrl: string | null
@@ -909,6 +962,10 @@ export type SeriesDto = {
   pictureOptions: string[]
   titleOptions: string[]
   picturesPendingCount: number
+  // The franchise's cached TMDB pictures for the picker, grouped by language
+  // only. Cache only: the series page's own follow-up request fetches what is
+  // due (refreshSeriesTmdbPictures).
+  tmdb: SeriesTmdbPicturesDto
 }
 
 // getSeries resolves to this rather than throwing on a 404 — "not part of a
@@ -1004,12 +1061,22 @@ export type AnimeDetailDto = {
   season: string | null
   nextEpisode: NextEpisodeEtaDto | null
   aniListId: number | null
+  // Mapped IMDb ids in the mapping's order, [] when there are none. Sent for
+  // every anime, in my list or not: the IMDb link needs no TMDB key.
+  imdbIds: string[]
   relatedAnime: RelatedAnimeDto[]
   entry: UserAnimeEntryDto | null
   inSeries: boolean
   // True when this is a my-list anime that has never had a picture set
   // fetched — the client's cue to call refreshAnimePictures (design D4b).
   picturesFetchPending: boolean
+  // The anime's cached TMDB pictures for the picker, grouped by scope and
+  // language; null unless the anime is in my list. Cache only.
+  tmdb: AnimeTmdbPicturesDto | null
+  // The TMDB twin of picturesFetchPending: true only when a key is
+  // configured, the anime is in my list and one of its TMDB sets is due — the
+  // client's cue to call refreshAnimeTmdbPictures. Never true without a key.
+  tmdbFetchPending: boolean
   // True when a visit-triggered live fetch was attempted and failed — the
   // rest of this record is served from cache, not confirmed fresh.
   refreshFailed: boolean

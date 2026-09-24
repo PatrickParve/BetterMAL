@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Artwork;
+using AnimeTracker.Api.Services.Tmdb;
 
 namespace AnimeTracker.Api.Tests.Services.Artwork;
 
@@ -69,5 +70,41 @@ public class SeriesPicturePoolTests
         var pool = SeriesPicturePool.Build([member]);
 
         Assert.Contains("https://cdn.myanimelist.net/images/anime/5/5-chosen.jpg", pool);
+    }
+
+    [Fact]
+    public void Build_AMembersTmdbChoiceNeverEntersThePool()
+    {
+        // A member's displayed picture is its chosen one, and here that is a
+        // TMDB image. The pool is the MyAnimeList list, so it must stay out
+        // (design.md D13), while the member's own MAL pictures still count.
+        var tmdbChoice = TmdbImageUrl.Original("/abc123.jpg");
+        var member = Member(
+            animeId: 7,
+            pictureUrl: tmdbChoice,
+            malPictureUrl: "https://cdn.myanimelist.net/images/anime/7/7-main.jpg",
+            pictureUrls: ["https://cdn.myanimelist.net/images/anime/7/7-main.jpg", "https://cdn.myanimelist.net/images/anime/7/7-alt.jpg"],
+            selectedPictureUrl: tmdbChoice);
+
+        var pool = SeriesPicturePool.Build([member]);
+
+        Assert.DoesNotContain(tmdbChoice, pool);
+        Assert.Equal(
+            ["https://cdn.myanimelist.net/images/anime/7/7-main.jpg", "https://cdn.myanimelist.net/images/anime/7/7-alt.jpg"],
+            pool);
+    }
+
+    [Fact]
+    public void Build_ATmdbChoiceOnOneMemberDoesNotDisturbAnotherMembersPictures()
+    {
+        var chosen = Member(1, TmdbImageUrl.Original("/abc123.jpg"), "https://cdn.myanimelist.net/images/anime/1/1a.jpg", null,
+            selectedPictureUrl: TmdbImageUrl.Original("/abc123.jpg"));
+        var other = Member(2, "https://cdn.myanimelist.net/images/anime/2/2b.jpg", "https://cdn.myanimelist.net/images/anime/2/2b.jpg", null);
+
+        var pool = SeriesPicturePool.Build([chosen, other]);
+
+        Assert.Equal(
+            ["https://cdn.myanimelist.net/images/anime/1/1a.jpg", "https://cdn.myanimelist.net/images/anime/2/2b.jpg"],
+            pool);
     }
 }

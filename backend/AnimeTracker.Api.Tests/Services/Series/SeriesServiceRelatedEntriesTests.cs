@@ -6,6 +6,8 @@ using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Tests.Services.IdMapping;
+using AnimeTracker.Api.Tests.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -48,7 +50,9 @@ public class SeriesServiceRelatedEntriesTests
             new SeriesGraphBuilder(db, new NoOpRefreshService(), new RelationResolver(db), NullLogger<SeriesGraphBuilder>.Instance),
             new RefreshGate(),
             new FakeEpisodeScheduleService(),
-            new NoOpAnimeRankingService());
+            new NoOpAnimeRankingService(),
+            TmdbTestData.ArtworkService(db, new FakeTmdbClient(), apiKey: ""),
+            TestIdMappings.Resolver(db));
 
     [Fact]
     public async Task ARelatedEntryWithNoCachedRowAppearsWithoutMarkingTheSeriesPartial()

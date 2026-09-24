@@ -1,0 +1,44 @@
+.tmdb-attribution {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.tmdb-attribution__logo-link {
+  display: inline-flex;
+  flex: 0 0 auto;
+  /* Removes the inline-image descender gap, so the logo sits centred against
+     the notice beside it. */
+  line-height: 0;
+}
+
+/* TMDB's logo is a wide wordmark with a viewBox and no fixed size, so a height
+   alone sizes it at its own proportions (about 7.7 : 1). Its gradient reads on
+   both the light and the dark theme, so one file serves both. */
+.tmdb-attribution__logo {
+  display: block;
+  height: 20px;
+  width: auto;
+}
+
+.tmdb-attribution__notice {
+  flex: 1 1 260px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.tmdb-attribution--compact {
+  gap: 6px 10px;
+}
+
+.tmdb-attribution--compact .tmdb-attribution__logo {
+  height: 13px;
+}
+
+.tmdb-attribution--compact .tmdb-attribution__notice {
+  flex-basis: 220px;
+  font-size: 12px;
+}

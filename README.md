@@ -49,6 +49,58 @@ app credentials:
 The app runs without these, but the MAL connect/import/sync flow will fail
 until they're set.
 
+## Optional: a TMDB API key (better pictures)
+
+MyAnimeList only publishes its own pictures, which are fairly small. With a
+free [TMDB](https://www.themoviedb.org/) API key, the **Choose picture** picker
+on an anime's or a series' page also offers TMDB's full-resolution posters and
+backdrops — alongside MAL's own, in labelled sections — and any of them can be
+picked as the picture.
+
+1. Create a free account at https://www.themoviedb.org/ and open
+   **Settings → API** (https://www.themoviedb.org/settings/api).
+2. Request an API key for personal, non-commercial use, and copy the **API Key**
+   — the short v3 key, not the long "API Read Access Token".
+3. Set it as `TMDB_API_KEY` in your `.env` (next step), then restart the backend.
+
+It's entirely optional. Leave it empty and the app runs exactly as it does
+without it, making no TMDB request at all. **IMDb links** on the anime and
+series pages work either way: they come from a separate community-maintained
+id mapping the backend downloads once a week, which needs no key.
+
+TMDB's terms allow free use for non-commercial projects, and each installation
+needs its own key — this app isn't meant to be shared with one baked in. In
+return TMDB requires its logo and a notice to be shown in the app. The picker
+shows them wherever it offers TMDB images, and the **Credits** group at the
+bottom of the Settings page always does:
+
+<img src="frontend/assets/TMDB_Logo.svg" alt="The Movie Database (TMDB)" height="20">
+
+*This application uses TMDB and the TMDB APIs but is not endorsed, certified, or
+otherwise approved by TMDB.*
+
+TMDB's terms also limit how long what it sends may be kept, so the app deletes a
+cached list of pictures once its last fetch is more than about five months old,
+and fetches it again the next time a page needs it. A list you open is refreshed
+after 30 days, so only lists nobody opened get that old. A picture you have
+**picked** is not part of that list: it is stored on the anime or series itself,
+so it stays, and keeps showing everywhere, whatever happens to the list it came
+from.
+
+## Fixing a missing or wrong TMDB or IMDb id
+
+The ids come from a community-maintained mapping the backend downloads once a
+week, and it has gaps: a brand-new show may have no TMDB or IMDb id yet, and a few
+entries name the wrong TMDB season. `backend/custom/id-mapping.json` is where
+you fix that. The app reads it on top of the downloaded mapping. Run natively, an
+edit applies within seconds; with Docker the folder is copied into the backend
+image, so apply an edit with `docker compose up -d --build`.
+
+By default an entry only fills a gap, and gives way as soon as the downloaded
+mapping has the ids. With `"override": true` it wins even where the source has a
+(wrong) value. [`backend/custom/README.md`](backend/custom/README.md) has the
+format and how to find the ids.
+
 ## 2. Configure environment variables
 
 Copy the example file and fill in your values:
@@ -61,6 +113,9 @@ cp .env.example .env
 # --- MyAnimeList API ---
 MAL_CLIENT_ID=            # from myanimelist.net/apiconfig
 MAL_CLIENT_SECRET=
+
+# --- TMDB (optional) ---
+TMDB_API_KEY=             # v3 API key from themoviedb.org → Settings → API; leave empty to run without TMDB
 
 # --- Ports exposed on localhost ---
 BACKEND_PORT=5050         # must match the redirect URI registered with MAL above
@@ -159,8 +214,8 @@ docker compose up -d postgres
 
 Then run the backend. It applies migrations automatically on startup and
 listens on port 5050, or `BACKEND_PORT` from `.env`. Run this way, it reads
-the same repo-root `.env` Docker Compose reads, so the MAL credentials and
-the Postgres settings apply with no extra setup, connecting to the
+the same repo-root `.env` Docker Compose reads, so the MAL credentials, the
+optional TMDB key and the Postgres settings apply with no extra setup, connecting to the
 `postgres` container on `localhost:<POSTGRES_PORT>`. It looks for `.env` two
 levels up from where it's started, so run it from `backend/AnimeTracker.Api`
 as shown below — without one, it falls back to
@@ -195,6 +250,7 @@ MAL and keeps it synced from then on.
 | ---------------------- | ------------------------------------------------------------------------- | -------------- |
 | `MAL_CLIENT_ID`        | MyAnimeList API app Client ID                                            | *(required)*   |
 | `MAL_CLIENT_SECRET`    | MyAnimeList API app Client Secret                                        | *(required)*   |
+| `TMDB_API_KEY`         | TMDB v3 API key — enables TMDB pictures in the picker (optional)         | *(optional)*   |
 | `BACKEND_PORT`         | Host port for the backend API; also the OAuth redirect port              | `5050`         |
 | `FRONTEND_PORT`        | Host port for the frontend (Docker only)                                 | `5173`         |
 | `POSTGRES_DB`          | Postgres database name                                                   | `animetracker` |
@@ -216,3 +272,12 @@ frontend/   React + TypeScript app (Vite)
   machine. It is not intended to be deployed publicly as-is.
 - MAL enforces no fixed rate limit but throttles bursts; the app paces and
   caches requests to stay well under any practical threshold.
+- The optional TMDB integration only calls TMDB when a page needs a set of
+  pictures it hasn't cached yet (then again after 30 days, or when you press
+  **Refresh data**), never as a background sweep. A cached list of pictures that
+  has gone about five months without a refresh is deleted (TMDB's terms limit how
+  long its data may be kept) and fetched again if a page needs it; a picture you
+  picked is not affected. TMDB's images are shown straight from its own CDN at
+  full resolution, so the picker keeps each group of them closed until you open
+  it. This application uses TMDB and the TMDB APIs but is not endorsed,
+  certified, or otherwise approved by TMDB.

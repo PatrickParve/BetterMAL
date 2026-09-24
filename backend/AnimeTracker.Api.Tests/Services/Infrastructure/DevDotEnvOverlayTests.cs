@@ -177,6 +177,39 @@ public class DevDotEnvOverlayTests
     }
 
     [Fact]
+    public void ATmdbApiKeyMapsToTheTmdbOption()
+    {
+        var env = FullEnvExample();
+        env["TMDB_API_KEY"] = "tmdb-key";
+
+        var result = DevDotEnvOverlay.ToConfiguration(env);
+
+        Assert.Equal("tmdb-key", result["Tmdb:ApiKey"]);
+    }
+
+    [Fact]
+    public void AnEmptyTmdbApiKeyGivesNoKey()
+    {
+        var env = FullEnvExample();
+        env["TMDB_API_KEY"] = "";
+
+        var result = DevDotEnvOverlay.ToConfiguration(env);
+
+        Assert.False(result.ContainsKey("Tmdb:ApiKey"));
+    }
+
+    [Fact]
+    public void AnAbsentTmdbApiKeyGivesNoKey()
+    {
+        var env = FullEnvExample();
+        Assert.False(env.ContainsKey("TMDB_API_KEY"));
+
+        var result = DevDotEnvOverlay.ToConfiguration(env);
+
+        Assert.False(result.ContainsKey("Tmdb:ApiKey"));
+    }
+
+    [Fact]
     public void AnEmptyBackendPortGivesNoKey()
     {
         var env = FullEnvExample();

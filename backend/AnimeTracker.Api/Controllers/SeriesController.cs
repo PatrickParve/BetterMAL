@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Services.Tmdb;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AnimeTracker.Api.Controllers;
@@ -14,6 +15,7 @@ public class SeriesController(
     SeriesBulkBuildProgress bulkBuildProgress,
     IArtworkSelectionService artworkSelectionService,
     IPictureRefreshService pictureRefreshService,
+    ITmdbArtworkService tmdbArtwork,
     IAnimeMetadataRepository metadataRepository) : ControllerBase
 {
     /// <summary>The Series page's whole-list read (add-series-browser
@@ -141,6 +143,27 @@ public class SeriesController(
         var remaining = await pictureRefreshService.RefreshSeriesMainLineAsync(
             seriesId.Value, PictureRefreshService.SeriesPictureFetchBudget, ct);
         return Ok(new { remaining });
+    }
+
+    /// <summary>Bounded TMDB follow-up fetch (design.md D10, D11) — fetches up
+    /// to <see cref="TmdbArtworkService.SeriesFetchBudget"/> of the due TMDB
+    /// sets of the series containing <paramref name="animeId"/>, then returns
+    /// the series' TMDB pictures with how many sets are still due
+    /// (<c>PendingCount</c>), which a later visit's follow-up continues with.
+    /// Not limited to my list: a series' picture can be chosen for any series.
+    /// The count is read back from the cache rather than taken from the
+    /// fetch, so a set whose fetch failed is still counted as due. TMDB
+    /// trouble never fails the action, and with no key configured nothing is
+    /// fetched and nothing reads as due.</summary>
+    [HttpPost("api/series/by-anime/{animeId:int}/tmdb-pictures/refresh")]
+    public async Task<IActionResult> RefreshTmdbPictures(int animeId, CancellationToken ct)
+    {
+        var seriesId = await seriesService.FindSeriesIdAsync(animeId, ct);
+        if (seriesId is null)
+            return NotFound();
+
+        await tmdbArtwork.RefreshSeriesAsync(seriesId.Value, TmdbArtworkService.SeriesFetchBudget, force: false, ct);
+        return Ok(await tmdbArtwork.GetSeriesPicturesAsync(seriesId.Value, ct));
     }
 
     /// <summary>Kicks off the settings page's manual "build all series from my

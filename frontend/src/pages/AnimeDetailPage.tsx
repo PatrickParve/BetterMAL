@@ -5,6 +5,7 @@ import {
   getAnimeDetail,
   refreshAnime,
   refreshAnimePictures,
+  refreshAnimeTmdbPictures,
   resetAnimePicture,
   setAnimePicture,
   updateEntry,
@@ -15,6 +16,11 @@ import type {
   NextEpisodeEtaDto,
 } from "../api/types.ts";
 import { PicturePickerOverlay } from "../components/PicturePickerOverlay.tsx";
+import {
+  animeTmdbSections,
+  malSections,
+  pickerOptionCount,
+} from "../components/picturePickerSections.ts";
 import { ProgressBar } from "../components/ProgressBar.tsx";
 import { RelatedAnimeOverlay } from "../components/RelatedAnimeOverlay.tsx";
 import { RevealControl } from "../components/RevealControl.tsx";
@@ -29,13 +35,16 @@ import { useActionFailure } from "../context/ActionFailureContext.tsx";
 import { useScoreVisibility } from "../context/ScoreVisibilityContext.tsx";
 import { useLandscapePicture } from "../hooks/useLandscapePicture.ts";
 import { usePageData } from "../hooks/usePageData.ts";
+import { usePickerOpenGroups } from "../hooks/usePickerOpenGroups.ts";
 import { useScoreReveal } from "../hooks/useScoreReveal.ts";
 import {
   dedupePictureOptions,
   episodeCeiling,
   formatRuntime,
   hasAiredEpisodes,
+  imdbLinks,
   isScoreRevealableStatus,
+  isTmdbImageUrl,
   mediaTypeLabel,
   pickDisplayTitle,
   SERIES_TRAVERSAL_RELATIONS,
@@ -140,9 +149,13 @@ function formatTotalTime(seconds: number | null, totalEpisodes: number | null): 
 // photo as main_picture's .webp while also listing it as .jpg in `pictures`,
 // which would otherwise show as two tiles for one picture), MAL order
 // preserved — so the choice MAL has dropped stays visible and replaceable
-// (design D9) even before pictureUrls itself has ever loaded.
+// (design D9) even before pictureUrls itself has ever loaded. A TMDB choice is
+// left out (design D13): it must never surface under the MyAnimeList heading,
+// and shows under its own TMDB group instead — or, once TMDB has dropped it,
+// as the overlay's "Current picture".
 function animePictureOptions(detail: AnimeDetailDto): string[] {
-  return dedupePictureOptions(detail.pictureUrls ?? [], [detail.malPictureUrl, detail.selectedPictureUrl]);
+  const chosen = isTmdbImageUrl(detail.selectedPictureUrl) ? null : detail.selectedPictureUrl;
+  return dedupePictureOptions(detail.pictureUrls ?? [], [detail.malPictureUrl, chosen]);
 }
 
 // MAL's rank is the community score sorted descending, so it follows the
@@ -192,6 +205,7 @@ export function AnimeDetailPage() {
   const [actionPending, setActionPending] = useState(false);
   const [showRelatedOverlay, setShowRelatedOverlay] = useState(false);
   const [showPicturePicker, setShowPicturePicker] = useState(false);
+  const { openGroups, seedOpenGroups, toggleGroup } = usePickerOpenGroups(animeId);
   const { openEditor } = useEntryEditor();
   const increment = useEpisodeIncrement();
   const setEpisodesWatched = useSetEpisodesWatched();
@@ -220,6 +234,37 @@ export function AnimeDetailPage() {
         // Leave picturesFetchPending as the server last reported it — a
         // later visit's read re-evaluates and retries.
       });
+  }, [detail, setDetail]);
+
+  // Visit-triggered TMDB fetch (tmdb-artwork) — the twin of the backfill
+  // above: the page has already rendered from cache, and when the server says a
+  // set is due one follow-up request fetches it and merges only the TMDB
+  // fields in, so it can't roll back what the picture backfill just merged.
+  // The same ref guard makes it once per anime even under StrictMode's
+  // double-mount, and also stops a set whose fetch keeps failing (a rejected
+  // key, TMDB down) from being retried within this visit.
+  //
+  // `tmdbSettledFor` is what the picker's "Fetching…" note follows: the note
+  // is true only while that one request is in flight. Following the flag
+  // instead would show it forever, because a failed fetch leaves the flag set
+  // for the next visit to retry.
+  const tmdbRefreshRequestedForRef = useRef<number | null>(null);
+  const [tmdbSettledFor, setTmdbSettledFor] = useState<number | null>(null);
+  useEffect(() => {
+    if (!detail || !detail.tmdbFetchPending) return;
+    if (tmdbRefreshRequestedForRef.current === detail.animeId) return;
+    tmdbRefreshRequestedForRef.current = detail.animeId;
+    refreshAnimeTmdbPictures(detail.animeId)
+      .then(({ tmdb, tmdbFetchPending }) => {
+        setDetail((prev) =>
+          prev && prev.animeId === detail.animeId ? { ...prev, tmdb, tmdbFetchPending } : prev,
+        );
+      })
+      .catch(() => {
+        // Leave tmdbFetchPending as the server last reported it — a later
+        // visit's read re-evaluates and retries.
+      })
+      .finally(() => setTmdbSettledFor(detail.animeId));
   }, [detail, setDetail]);
 
   async function handleRefresh() {
@@ -438,8 +483,28 @@ export function AnimeDetailPage() {
     detail.entry?.status === "Completed" ||
     detail.entry?.status === "Dropped" ||
     detail.entry?.status === "Rewatching";
-  const pictureOptions = animePictureOptions(detail);
-  const showPicturePickerButton = detail.entry != null && pictureOptions.length > 1;
+  // The picker's sections: MyAnimeList, then one per TMDB scope (design D12).
+  // The control counts every option across them, so a lone MAL picture plus
+  // TMDB images still offers a choice, and appears when a TMDB follow-up
+  // brings the count above one.
+  const tmdbSections = animeTmdbSections(detail.tmdb);
+  const pickerSections = [...malSections(animePictureOptions(detail)), ...tmdbSections];
+  const showPicturePickerButton = detail.entry != null && pickerOptionCount(pickerSections, detail.pictureUrl) > 1;
+  const pickerNotes: string[] = [];
+  // "Fetching…" only while the follow-up request is in flight; once it has
+  // settled with a set still due (a failed fetch) the note says a later visit
+  // retries instead, rather than claiming a fetch that isn't running.
+  if (detail.tmdbFetchPending) {
+    pickerNotes.push(
+      tmdbSettledFor !== detail.animeId
+        ? "Fetching TMDB pictures — more may appear."
+        : "More TMDB pictures may appear on a later visit.",
+    );
+  }
+  // "TMDB has no match" is said only while TMDB is on (a key is configured),
+  // since without one the picker says nothing about TMDB. `tmdb` is non-null
+  // for any my-list anime, key or not, so it is `configured` that says so.
+  if (detail.tmdb?.configured && !detail.tmdb.hasMapping) pickerNotes.push("TMDB has no match for this anime.");
   const hasSynopsis = Boolean(detail.synopsis && detail.synopsis.trim().length > 0);
   const hasBackground = Boolean(detail.background && detail.background.trim().length > 0);
 
@@ -540,11 +605,15 @@ export function AnimeDetailPage() {
       {showPicturePicker && (
         <PicturePickerOverlay
           title="Choose picture"
-          options={pictureOptions}
+          sections={pickerSections}
+          openGroups={openGroups}
+          onToggleGroup={toggleGroup}
           current={detail.pictureUrl}
           onPick={handlePickAnimePicture}
           onClose={() => setShowPicturePicker(false)}
           onClear={detail.selectedPictureUrl != null ? handleClearAnimePicture : undefined}
+          notes={pickerNotes}
+          showTmdbAttribution={tmdbSections.length > 0}
         />
       )}
 
@@ -628,7 +697,12 @@ export function AnimeDetailPage() {
               <button
                 type="button"
                 className="anime-detail-page__action"
-                onClick={() => setShowPicturePicker(true)}
+                onClick={() => {
+                  // Seeds which groups start open the first time only, so
+                  // reopening keeps what was last open (design D12).
+                  seedOpenGroups(pickerSections, detail.pictureUrl);
+                  setShowPicturePicker(true);
+                }}
               >
                 Choose picture
               </button>
@@ -768,6 +842,17 @@ export function AnimeDetailPage() {
                 >
                   SeriesGraph
                 </a>
+                {imdbLinks(detail.imdbIds).map(({ href, label }) => (
+                  <a
+                    key={href}
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="anime-detail-page__related-link"
+                  >
+                    {label}
+                  </a>
+                ))}
               </div>
             </dl>
           </section>

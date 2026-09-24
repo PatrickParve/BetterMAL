@@ -10,7 +10,9 @@ public interface IArtworkSelectionService
     /// <see cref="Metadata.AnimeMetadataNotFoundException"/> for an unknown
     /// anime id, and <see cref="ArtworkSelectionRejectedException"/> when the
     /// anime has no <c>UserAnimeEntry</c> or <paramref name="pictureUrl"/> is
-    /// outside <see cref="AnimePicture.Options"/>. Setting MAL's own main
+    /// outside the anime's option set: <see cref="AnimePicture.Options"/>, the
+    /// TMDB images of the sets the anime draws from (cache only), or its
+    /// current choice (design.md D13). Setting MAL's own main
     /// picture is accepted and clears the override (design.md D2). Returns
     /// the resulting displayed picture.</summary>
     Task<string?> SetAnimePictureAsync(int animeId, string pictureUrl, CancellationToken ct = default);
@@ -57,8 +59,9 @@ public interface IArtworkSelectionService
     /// <summary>Sets a series' chosen picture. Throws
     /// <c>SeriesIdNotFoundException</c> for an unknown series id, and
     /// <see cref="ArtworkSelectionRejectedException"/> when <paramref name="pictureUrl"/>
-    /// is outside <see cref="SeriesPicturePool"/>'s pool (plus the series'
-    /// current selection). Returns the resulting picture.</summary>
+    /// is outside <see cref="SeriesPicturePool"/>'s pool, the franchise's
+    /// cached TMDB images and the series' current selection (design.md D13).
+    /// Returns the resulting picture.</summary>
     Task<string?> SetSeriesPictureAsync(int seriesId, string pictureUrl, CancellationToken ct = default);
 
     /// <summary>Clears a series' chosen picture, reverting display to its

@@ -7,11 +7,18 @@ using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Profile;
 using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Services.IdMapping;
+using AnimeTracker.Api.Services.Tmdb;
 using AnimeTracker.Api.Services.Transfer;
 using AnimeTracker.Api.Tests.Services.Search;
+using AnimeTracker.Api.Tests.Services.IdMapping;
+using AnimeTracker.Api.Tests.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using static AnimeTracker.Api.Tests.Services.Tmdb.FakeTmdbClient;
+using static AnimeTracker.Api.Tests.Services.Tmdb.TmdbTestData;
 
 namespace AnimeTracker.Api.Tests.Services.Transfer;
 
@@ -41,14 +48,30 @@ public class TransferImportRunnerTests
         services.AddScoped<IArtworkSelectionService, ArtworkSelectionService>();
         services.AddScoped<ITopAnimeSelectionRepository, TopAnimeSelectionRepository>();
         services.AddSingleton<IAnimeSearchIndex>(new FakeAnimeSearchIndex());
+        // What ArtworkSelectionService needs to check a TMDB choice: the real
+        // TMDB artwork service over the same database, with a fake client.
+        services.AddSingleton<ITmdbClient>(new FakeTmdbClient());
+        services.AddSingleton<RefreshGate>();
+        services.AddSingleton(Options.Create(new TmdbOptions()));
+        services.AddSingleton<ICustomIdMappings>(new FakeCustomIdMappings());
+        services.AddScoped<IAnimeIdMappingResolver, AnimeIdMappingResolver>();
+        services.AddScoped<ITmdbArtworkService, TmdbArtworkService>();
         return services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
     }
 
+    // One TMDB service serves both the runner's own picture checks and its
+    // refreshes, as the scope's single instance does in production. Left
+    // unset it has no key, so it never fetches, whatever the file asks for.
     private static TransferImportRunner CreateRunner(
         AnimeTrackerDbContext db, string dbName,
-        FakeMetadataRefreshService metadata, FakeSeriesService series, FakePictureRefreshService pictures) =>
-        new(db, CreateScopeFactory(dbName), metadata, series,
-            new ArtworkSelectionService(db, new FakeAnimeSearchIndex()), pictures, new TopAnimeSelectionRepository(db), new RefreshGate());
+        FakeMetadataRefreshService metadata, FakeSeriesService series, FakePictureRefreshService pictures,
+        ITmdbArtworkService? tmdb = null)
+    {
+        tmdb ??= new TmdbArtworkService(db, new FakeTmdbClient(), new RefreshGate(), Options.Create(new TmdbOptions()), TestIdMappings.Resolver(db));
+        return new(db, CreateScopeFactory(dbName), metadata, series,
+            new ArtworkSelectionService(db, new FakeAnimeSearchIndex(), tmdb),
+            pictures, tmdb, new TopAnimeSelectionRepository(db), new RefreshGate());
+    }
 
     private static TransferImportProgressTracker NewProgress() => new();
 
@@ -593,6 +616,177 @@ public class TransferImportRunnerTests
         var anime = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
         Assert.Null(anime.SelectedPictureUrl);
         Assert.Equal(newTime, anime.SelectedPictureModifiedAt);
+    }
+
+    // --- design.md D14: a refused TMDB choice is refreshed from TMDB, not MyAnimeList ---
+
+    [Fact]
+    public async Task ATmdbChoiceIsAcceptedOnceItsSetsAreFetchedAndNoMalRequestIsMade()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDb(dbName);
+        AddAnime(db, 1, tvId: 1429, season: 3);
+        await db.SaveChangesAsync();
+        var client = new FakeTmdbClient().Serve(TmdbSetKey.Season(1429, 3), [Image("/s3.jpg", "ja")]);
+        var pictures = new FakePictureRefreshService(db);
+        var chosen = TmdbImageUrl.Original("/s3.jpg");
+        var file = File(animePictures: [new TransferAnimePicture(1, chosen, DateTimeOffset.UtcNow)]);
+        var progress = NewProgress();
+
+        var report = await CreateRunner(db, dbName, new(db), new(db), pictures, ArtworkService(db, client))
+            .RunAsync(file, progress, CancellationToken.None);
+
+        Assert.Empty(report.Failures);
+        var anime = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
+        Assert.Equal(chosen, anime.SelectedPictureUrl);
+        Assert.Equal([TmdbSetKey.Tv(1429), TmdbSetKey.Season(1429, 3)], client.Calls);
+        Assert.Empty(pictures.Calls); // a TMDB choice is never a reason to ask MyAnimeList
+        Assert.Equal((1, 1), (progress.Snapshot.Done, progress.Snapshot.Total)); // the one refresh, counted and finished
+    }
+
+    [Fact]
+    public async Task ATmdbSetFetchedYesterdayIsFetchedAgainBecauseTheRefreshIsForced()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDb(dbName);
+        AddAnime(db, 1, tvId: 1429, season: 3);
+        db.TmdbTvImageSets.Add(TvSet(1429, Fresh, Poster("/tv.jpg", "ja")));
+        db.TmdbSeasonImageSets.Add(SeasonSet(1429, 3, Fresh, Poster("/s3-old.jpg", "ja")));
+        await db.SaveChangesAsync();
+        // TMDB has added a poster since this device last fetched the season.
+        var client = new FakeTmdbClient().Serve(TmdbSetKey.Season(1429, 3), [Image("/s3-old.jpg", "ja"), Image("/s3-new.jpg", "ja")]);
+        var chosen = TmdbImageUrl.Original("/s3-new.jpg");
+        var file = File(animePictures: [new TransferAnimePicture(1, chosen, DateTimeOffset.UtcNow)]);
+
+        var report = await CreateRunner(db, dbName, new(db), new(db), new(db), ArtworkService(db, client))
+            .RunAsync(file, NewProgress(), CancellationToken.None);
+
+        Assert.Empty(report.Failures);
+        Assert.Contains(TmdbSetKey.Season(1429, 3), client.Calls); // not due for 29 more days, fetched all the same
+        var anime = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
+        Assert.Equal(chosen, anime.SelectedPictureUrl);
+    }
+
+    [Fact]
+    public async Task ATmdbChoiceWithNoKeyIsReportedAndNotStored()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDb(dbName);
+        AddAnime(db, 1, tvId: 1429, season: 3);
+        await db.SaveChangesAsync();
+        var client = new FakeTmdbClient().Serve(TmdbSetKey.Season(1429, 3), [Image("/s3.jpg", "ja")]); // would answer, if asked
+        var pictures = new FakePictureRefreshService(db);
+        var file = File(animePictures: [new TransferAnimePicture(1, TmdbImageUrl.Original("/s3.jpg"), DateTimeOffset.UtcNow)]);
+
+        var report = await CreateRunner(db, dbName, new(db), new(db), pictures, ArtworkService(db, client, apiKey: ""))
+            .RunAsync(file, NewProgress(), CancellationToken.None);
+
+        var failure = Assert.Single(report.Failures);
+        Assert.Equal("chosen picture", failure.What);
+        var anime = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
+        Assert.Null(anime.SelectedPictureUrl);
+        Assert.Empty(client.Calls);
+        Assert.Empty(pictures.Calls);
+    }
+
+    [Fact]
+    public async Task AMalChoiceIsStillRefreshedFromMalAndTmdbIsNeverAsked()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDb(dbName);
+        AddAnime(db, 1, tvId: 1429, season: 3).MalPictureUrl = "https://mal/main.jpg";
+        await db.SaveChangesAsync();
+        var client = new FakeTmdbClient(); // a key is configured, so TMDB would be asked if the route were wrong
+        var pictures = new FakePictureRefreshService(db);
+        pictures.PicturesToInstallOnRefresh[1] = ["https://mal/new.jpg"];
+        var file = File(animePictures: [new TransferAnimePicture(1, "https://mal/new.jpg", DateTimeOffset.UtcNow)]);
+
+        var report = await CreateRunner(db, dbName, new(db), new(db), pictures, ArtworkService(db, client))
+            .RunAsync(file, NewProgress(), CancellationToken.None);
+
+        Assert.Empty(report.Failures);
+        Assert.Contains((1, true), pictures.Calls);
+        Assert.Empty(client.Calls);
+        var anime = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
+        Assert.Equal("https://mal/new.jpg", anime.SelectedPictureUrl);
+    }
+
+    [Fact]
+    public async Task ATmdbSeriesChoiceIsAcceptedOnceTheWholeFranchiseIsFetched()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDb(dbName);
+        AddAnime(db, 1, tvId: 1429, season: 1);
+        AddAnime(db, 2, tvId: 1429, season: 2);
+        AddAnime(db, 3, movieIds: [635302]); // a film among the extras
+        AddSeries(db, 1, [1, 2], (3, null, 0));
+        await db.SaveChangesAsync();
+        var client = new FakeTmdbClient().Serve(TmdbSetKey.Movie(635302), [Image("/film.jpg", "ja")]);
+        var pictures = new FakePictureRefreshService(db);
+        var chosen = TmdbImageUrl.Original("/film.jpg");
+        var file = File(series: [new TransferSeries(1, Picture: new TransferSeriesChoice(chosen, DateTimeOffset.UtcNow))]);
+        var progress = NewProgress();
+
+        var report = await CreateRunner(db, dbName, new(db), new(db), pictures, ArtworkService(db, client))
+            .RunAsync(file, progress, CancellationToken.None);
+
+        Assert.Empty(report.Failures);
+        var series = await db.Series.AsNoTracking().SingleAsync(s => s.Id == 1);
+        Assert.Equal(chosen, series.SelectedPictureUrl);
+        Assert.Equal(
+            [TmdbSetKey.Tv(1429), TmdbSetKey.Season(1429, 1), TmdbSetKey.Season(1429, 2), TmdbSetKey.Movie(635302)],
+            client.Calls);
+        Assert.Empty(pictures.Calls); // no main-line member is asked for its MyAnimeList set
+        Assert.Equal((2, 2), (progress.Snapshot.Done, progress.Snapshot.Total)); // resolving the series, then the one refresh
+    }
+
+    [Fact]
+    public async Task AnImportFetchesEverySetOfTheFranchiseNotJustTheSeriesPagesBudget()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDb(dbName);
+        // 25 main-line members with a film of their own each: 25 sets, five more
+        // than a series page fetches in one visit.
+        var members = Enumerable.Range(1, 25).ToArray();
+        foreach (var id in members)
+            AddAnime(db, id, movieIds: [1000 + id]);
+        AddSeries(db, 1, members);
+        await db.SaveChangesAsync();
+        var client = new FakeTmdbClient().Serve(TmdbSetKey.Movie(1025), [Image("/last.jpg", "ja")]); // the 25th set
+        var chosen = TmdbImageUrl.Original("/last.jpg");
+        var file = File(series: [new TransferSeries(1, Picture: new TransferSeriesChoice(chosen, DateTimeOffset.UtcNow))]);
+
+        var report = await CreateRunner(db, dbName, new(db), new(db), new(db), ArtworkService(db, client))
+            .RunAsync(file, NewProgress(), CancellationToken.None);
+
+        Assert.Empty(report.Failures);
+        Assert.Equal(25, client.Calls.Count);
+        var series = await db.Series.AsNoTracking().SingleAsync(s => s.Id == 1);
+        Assert.Equal(chosen, series.SelectedPictureUrl);
+    }
+
+    [Fact]
+    public async Task ATmdbSeriesChoiceWithNoKeyIsReportedAndNotStored()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateDb(dbName);
+        AddAnime(db, 1, movieIds: [635302]);
+        AddSeries(db, 1, [1]);
+        await db.SaveChangesAsync();
+        var client = new FakeTmdbClient().Serve(TmdbSetKey.Movie(635302), [Image("/film.jpg", "ja")]);
+        var pictures = new FakePictureRefreshService(db);
+        var file = File(series: [new TransferSeries(1, Picture: new TransferSeriesChoice(TmdbImageUrl.Original("/film.jpg"), DateTimeOffset.UtcNow))]);
+
+        var report = await CreateRunner(db, dbName, new(db), new(db), pictures, ArtworkService(db, client, apiKey: ""))
+            .RunAsync(file, NewProgress(), CancellationToken.None);
+
+        var failure = Assert.Single(report.Failures);
+        Assert.Equal(TransferImportFailureSubject.Series, failure.Subject);
+        Assert.Equal("series picture", failure.What);
+        var series = await db.Series.AsNoTracking().SingleAsync(s => s.Id == 1);
+        Assert.Null(series.SelectedPictureUrl);
+        Assert.Empty(client.Calls);
+        Assert.Empty(pictures.Calls);
     }
 
     // --- 8.4: Ranking ---

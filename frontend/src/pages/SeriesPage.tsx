@@ -6,6 +6,7 @@ import {
   moveFavouriteAdjacent,
   rebuildSeries,
   refreshSeriesPictures,
+  refreshSeriesTmdbPictures,
   resetSeriesPicture,
   setSeriesPicture,
   setSeriesTitle,
@@ -22,6 +23,7 @@ import type {
 } from '../api/types.ts'
 import { AiringProgressBar } from '../components/AiringProgressBar.tsx'
 import { PicturePickerOverlay } from '../components/PicturePickerOverlay.tsx'
+import { malSections, pickerOptionCount, seriesTmdbSections } from '../components/picturePickerSections.ts'
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { RevealControl } from '../components/RevealControl.tsx'
 import { ScoreChip } from '../components/ScoreChip.tsx'
@@ -36,6 +38,7 @@ import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { isLandscapeRatio, pictureShapeOf, useOrientationPicture } from '../hooks/useLandscapePicture.ts'
 import { usePageData } from '../hooks/usePageData.ts'
+import { usePickerOpenGroups } from '../hooks/usePickerOpenGroups.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { useScoreReveal } from '../hooks/useScoreReveal.ts'
 import { scrollWindowTo } from '../state/navbarReveal.ts'
@@ -43,6 +46,7 @@ import {
   formatEpisodeTotal,
   formatRuntime,
   formatYearSpan,
+  imdbLinks,
   isScoreRevealableStatus,
   MEDIA_TYPE_ORDER,
   mediaTypeLabel,
@@ -443,6 +447,7 @@ export function SeriesPage() {
   const isWholePicture = !isLandscapePicture && pictureShapeOf(pictureRatio) !== 'poster'
   const [showPicturePicker, setShowPicturePicker] = useState(false)
   const [showTitlePicker, setShowTitlePicker] = useState(false)
+  const { openGroups, seedOpenGroups, toggleGroup } = usePickerOpenGroups(animeId)
   // Called unconditionally here, ahead of the loading/not-found guards below,
   // since both are hooks (react/rules-of-hooks) — unlike highestMalSettled
   // (derived from `series`, computed after the guards near highestMalEntries
@@ -453,7 +458,12 @@ export function SeriesPage() {
   // Bounded pool backfill (design D6) — mirrors the anime detail page's
   // picture backfill: fire once per series while members remain unfetched,
   // then merge the server's fresh identity (pictureOptions/titleOptions/
-  // picturesPendingCount) into state without a reload.
+  // picturesPendingCount) into state without a reload. The re-read replaces
+  // the whole series, so it keeps the TMDB fields the page already holds
+  // rather than taking the re-read's: the TMDB follow-up below may have
+  // finished after that re-read started, and its newer pictures must not be
+  // rolled back (design D12; series-page "neither one's result overwrites the
+  // other's").
   const seriesPictureRefreshRequestedForRef = useRef<number | null>(null)
   useEffect(() => {
     if (!data?.found) return
@@ -466,13 +476,47 @@ export function SeriesPage() {
       .then((result) => {
         if (!result.found) return
         setData((prev) =>
-          prev && prev.found && prev.series.seriesId === result.series.seriesId ? { found: true, series: result.series } : prev,
+          prev && prev.found && prev.series.seriesId === result.series.seriesId
+            ? { found: true, series: { ...result.series, tmdb: prev.series.tmdb } }
+            : prev,
         )
       })
       .catch(() => {
         // Leave picturesPendingCount as the server last reported it — a
         // later visit's read re-evaluates and retries.
       })
+  }, [data, animeId, setData])
+
+  // Bounded TMDB follow-up (tmdb-artwork): once per series visit, when the
+  // read reports due sets, one request fetches up to a budget of them and
+  // answers with the franchise's TMDB pictures. Only the `tmdb` field is
+  // merged, and no re-read is made, so this can't roll back what the MAL
+  // backfill above merged. A remainder carries over to the next visit: the
+  // ref guard also stops sets whose fetch keeps failing being retried here.
+  //
+  // `tmdbSettledFor` is what the picker's "Fetching…" note follows, rather than
+  // the pending count, which a failed fetch leaves set for the next visit.
+  const seriesTmdbRefreshRequestedForRef = useRef<number | null>(null)
+  const [tmdbSettledFor, setTmdbSettledFor] = useState<number | null>(null)
+  useEffect(() => {
+    if (!data?.found) return
+    const series = data.series
+    if (series.tmdb.pendingCount <= 0) return
+    if (seriesTmdbRefreshRequestedForRef.current === series.seriesId) return
+    seriesTmdbRefreshRequestedForRef.current = series.seriesId
+    refreshSeriesTmdbPictures(animeId)
+      .then((tmdb) => {
+        setData((prev) =>
+          prev && prev.found && prev.series.seriesId === series.seriesId
+            ? { found: true, series: { ...prev.series, tmdb } }
+            : prev,
+        )
+      })
+      .catch(() => {
+        // Leave the pending count as the server last reported it — a later
+        // visit's read re-evaluates and retries.
+      })
+      .finally(() => setTmdbSettledFor(series.seriesId))
   }, [data, animeId, setData])
 
   // More-section view state: `mineOnly` is the "in my list" filter, **off**
@@ -1022,21 +1066,49 @@ export function SeriesPage() {
     </>
   )
 
+  // The picker's sections: MyAnimeList, then one TMDB section divided by
+  // language alone (design D12). The control counts every option across them,
+  // so a series with one MAL picture and TMDB images still offers a choice, and
+  // appears when the TMDB follow-up brings the count above one. The MAL
+  // options come from the server already free of a TMDB choice (design D13).
+  const tmdbSections = seriesTmdbSections(series.tmdb)
+  const pickerSections = [...malSections(series.pictureOptions), ...tmdbSections]
+  const showPicturePickerButton = pickerOptionCount(pickerSections, series.pictureUrl) > 1
+  const tmdbPendingCount = series.tmdb.pendingCount
+  const pickerNotes: string[] = []
+  if (series.picturesPendingCount > 0) {
+    pickerNotes.push(
+      `${series.picturesPendingCount} member${series.picturesPendingCount === 1 ? '' : 's'} not yet fetched — more pictures may appear on a later visit.`,
+    )
+  }
+  // "Fetching…" only while the follow-up request is in flight; once it has
+  // settled with sets still due (a franchise past the per-visit budget, or a
+  // failed fetch) the note says a later visit continues instead.
+  if (tmdbPendingCount > 0) {
+    pickerNotes.push(
+      tmdbSettledFor !== series.seriesId
+        ? 'Fetching TMDB pictures — more may appear.'
+        : `${tmdbPendingCount} TMDB set${tmdbPendingCount === 1 ? '' : 's'} not yet fetched — more pictures may appear on a later visit.`,
+    )
+  }
+  // "TMDB has no match" is said only while TMDB is on (a key is configured);
+  // without one the picker says nothing about TMDB.
+  if (series.tmdb.configured && !series.tmdb.hasMapping) pickerNotes.push('TMDB has no match for this series.')
+
   return (
     <div className="series-page">
       {showPicturePicker && (
         <PicturePickerOverlay
           title="Choose picture"
-          options={series.pictureOptions}
+          sections={pickerSections}
+          openGroups={openGroups}
+          onToggleGroup={toggleGroup}
           current={series.pictureUrl}
           onPick={handlePickSeriesPicture}
           onClose={() => setShowPicturePicker(false)}
           onClear={series.selectedPictureUrl != null ? handleClearSeriesPicture : undefined}
-          note={
-            series.picturesPendingCount > 0
-              ? `${series.picturesPendingCount} member${series.picturesPendingCount === 1 ? '' : 's'} not yet fetched — more pictures may appear on a later visit.`
-              : undefined
-          }
+          notes={pickerNotes}
+          showTmdbAttribution={tmdbSections.length > 0}
         />
       )}
 
@@ -1101,6 +1173,13 @@ export function SeriesPage() {
             >
               SeriesGraph
             </a>
+            {/* The root's ids only, with no fallback to another member — every
+                external link here targets the root. */}
+            {imdbLinks(series.imdbIds).map(({ href, label }) => (
+              <a key={href} href={href} target="_blank" rel="noreferrer" className="series-page__related-link">
+                {label}
+              </a>
+            ))}
           </div>
 
           {!isLandscapePicture && scoreAndProgress}
@@ -1112,8 +1191,17 @@ export function SeriesPage() {
         <div className="series-page__stats-header">
           <h2>Series stats</h2>
           <div className="series-page__rebuild-row">
-            {series.pictureOptions.length > 1 && (
-              <button type="button" className="series-page__stats-action" onClick={() => setShowPicturePicker(true)}>
+            {showPicturePickerButton && (
+              <button
+                type="button"
+                className="series-page__stats-action"
+                onClick={() => {
+                  // Seeds which groups start open the first time only, so
+                  // reopening keeps what was last open (design D12).
+                  seedOpenGroups(pickerSections, series.pictureUrl)
+                  setShowPicturePicker(true)
+                }}
+              >
                 Choose picture
               </button>
             )}

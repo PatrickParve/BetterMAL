@@ -1,8 +1,10 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Entries;
+using AnimeTracker.Api.Services.IdMapping;
 using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Season;
+using AnimeTracker.Api.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Airing;
@@ -13,7 +15,12 @@ namespace AnimeTracker.Api.Services.Airing;
 /// incomplete data, and a forced pass at a season-quarter boundary. Runs
 /// immediately on start — boot isn't special-cased; the daily pass's
 /// not-already-today condition is what makes a boot-after-being-stopped
-/// refresh happen.</summary>
+/// refresh happen. Each iteration also opens with two housekeeping steps, each
+/// in a scope and so a DbContext of its own: the weekly MAL → TMDB/IMDb
+/// id-mapping sync (design.md D2), then the deletion of cached TMDB image sets
+/// that have outlived what TMDB's terms allow (design.md D20). A failed save in
+/// one can't leave tracked entities behind for the others' saves, and none of
+/// them can stop another.</summary>
 public class EpisodeScheduleRefreshBackgroundService(
     IServiceScopeFactory scopeFactory,
     ILogger<EpisodeScheduleRefreshBackgroundService> logger) : BackgroundService
@@ -27,8 +34,7 @@ public class EpisodeScheduleRefreshBackgroundService(
         {
             try
             {
-                using var scope = scopeFactory.CreateScope();
-                await RunTickAsync(scope.ServiceProvider, stoppingToken);
+                await RunIterationAsync(stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -47,6 +53,66 @@ public class EpisodeScheduleRefreshBackgroundService(
             {
                 break;
             }
+        }
+    }
+
+    /// <summary>One loop iteration: the mapping sync, the TMDB cache purge,
+    /// then the airing tick, each in its own scope. Exposed internally so tests
+    /// can drive a single iteration without the hourly delay
+    /// (`InternalsVisibleTo`).</summary>
+    internal async Task RunIterationAsync(CancellationToken ct)
+    {
+        // First, so the once-ever AniList backfill (potentially tens of
+        // minutes) can't hold up the weekly sync or the purge. The sync itself
+        // is one download and one diff-write; the purge is three reads and,
+        // nearly always, no write.
+        await RunMappingSyncAsync(ct);
+        await RunTmdbCachePurgeAsync(ct);
+
+        using var scope = scopeFactory.CreateScope();
+        await RunTickAsync(scope.ServiceProvider, ct);
+    }
+
+    private async Task RunMappingSyncAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var mappingSync = scope.ServiceProvider.GetRequiredService<IAnimeIdMappingSyncService>();
+            await mappingSync.SyncIfDueAsync(ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // SyncIfDueAsync logs and records its own failures and never
+            // throws them; this is the backstop for anything around it, such
+            // as opening its scope or resolving it. The airing tick must run
+            // whatever happens here.
+            logger.LogError(ex, "Id-mapping sync step failed.");
+        }
+    }
+
+    private async Task RunTmdbCachePurgeAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var purge = scope.ServiceProvider.GetRequiredService<ITmdbCachePurgeService>();
+            await purge.PurgeExpiredAsync(ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Local reads and deletes only, so this fails when the database
+            // does. The airing tick must run whatever happens here; the next
+            // tick runs the purge again.
+            logger.LogError(ex, "TMDB cache purge step failed.");
         }
     }
 

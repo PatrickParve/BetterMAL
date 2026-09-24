@@ -7,9 +7,13 @@ using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Services.Tmdb;
 using AnimeTracker.Api.Services.Updates;
 using AnimeTracker.Api.Tests.Services.Search;
+using AnimeTracker.Api.Tests.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AnimeTracker.Api.Tests.Services.Metadata;
@@ -1032,6 +1036,43 @@ public class MetadataRefreshServiceTests
 
         var anime = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
         Assert.Null(anime.LastRefreshFailedAt);
+    }
+
+    // --- metadata-refresh "Scheduled refreshes never call TMDB" (design.md D15) ---
+
+    // The on-demand action's TMDB refetch lives in MetadataRefreshController,
+    // not here, so that the paths that reach this service in the background
+    // (the tiered refresh, the first visit to a lean row, the resolving fetch
+    // for a new relation) can never put a TMDB call on one. This builds the
+    // service from a container that can supply every TMDB collaborator, so a
+    // TMDB dependency added to its constructor would be injected and, if used,
+    // seen: a mapped my-list anime with due sets, a key configured, and a TMDB
+    // client that records every request.
+    [Fact]
+    public async Task TheTieredAndSingleRefreshPathsNeverAskTmdb()
+    {
+        using var db = CreateDb();
+        TmdbTestData.AddAnime(db, 1, tvId: 1429, season: 3).LastSyncedAt = FullyFetchedLongAgo; // due on every tier
+        await db.SaveChangesAsync();
+        var tmdbClient = new FakeTmdbClient();
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = DetailNode(1) });
+        var provider = new ServiceCollection()
+            .AddSingleton(db)
+            .AddSingleton<IMalClient>(malClient)
+            .AddSingleton<IAnimeMetadataChangeDetector>(new AnimeMetadataChangeDetector(
+                db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), new SeriesBuildTrigger()))
+            .AddSingleton<IAnimeSearchIndex>(new FakeAnimeSearchIndex())
+            .AddSingleton<ILogger<MetadataRefreshService>>(NullLogger<MetadataRefreshService>.Instance)
+            .AddSingleton<ITmdbClient>(tmdbClient)
+            .AddSingleton<ITmdbArtworkService>(TmdbTestData.ArtworkService(db, tmdbClient))
+            .BuildServiceProvider();
+        var service = ActivatorUtilities.CreateInstance<MetadataRefreshService>(provider);
+
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
+        await service.RefreshOneAsync(1);
+
+        Assert.Equal([1, 1], malClient.Calls); // both paths did refresh the anime...
+        Assert.Empty(tmdbClient.Calls); // ...and neither asked TMDB anything
     }
 
     private sealed class FakeMalClient(Dictionary<int, MalAnimeNode> responses, Dictionary<int, Exception>? failures = null) : IMalClient

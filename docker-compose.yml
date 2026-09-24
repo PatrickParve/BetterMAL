@@ -28,6 +28,7 @@ services:
       Mal__ClientId: ${MAL_CLIENT_ID}
       Mal__ClientSecret: ${MAL_CLIENT_SECRET}
       Mal__CallbackPort: ${BACKEND_PORT:-5050}
+      Tmdb__ApiKey: ${TMDB_API_KEY:-}
     ports:
       - "127.0.0.1:${BACKEND_PORT:-5050}:8080"
     depends_on:

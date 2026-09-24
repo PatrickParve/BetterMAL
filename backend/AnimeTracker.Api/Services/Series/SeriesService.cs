@@ -3,9 +3,11 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Entries;
+using AnimeTracker.Api.Services.IdMapping;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Profile;
 using AnimeTracker.Api.Services.Ranking;
+using AnimeTracker.Api.Services.Tmdb;
 using AnimeTracker.Api.Services.Watching;
 using Microsoft.EntityFrameworkCore;
 // Alias needed because this namespace's last segment ("Series") shadows the
@@ -24,7 +26,9 @@ public class SeriesService(
     SeriesGraphBuilder graphBuilder,
     RefreshGate refreshGate,
     IEpisodeScheduleService scheduleService,
-    IAnimeRankingService rankingService) : ISeriesService
+    IAnimeRankingService rankingService,
+    ITmdbArtworkService tmdbArtwork,
+    IAnimeIdMappingResolver idMappings) : ISeriesService
 {
     private static readonly TimeSpan StaleAfter = TimeSpan.FromDays(30);
 
@@ -145,6 +149,16 @@ public class SeriesService(
             .Where(s => s.AnimeId == series.Id)
             .Select(s => (int?)s.AniListId)
             .FirstOrDefaultAsync(ct);
+        // The root's own IMDb ids, like every other external link here
+        // (design.md D16): no fallback to another member when it has none. The
+        // custom mapping counts (design.md D19).
+        var rootImdbIds = (await idMappings.FindAsync(series.Id, ct))?.ImdbIds ?? [];
+        // Cache only: this read never waits on TMDB. What is due is fetched by
+        // the client's follow-up request once the page has rendered (spec
+        // series-page "The series read carries the franchise's TMDB pictures
+        // ..."). The service works out the franchise's keys from the stored
+        // members itself.
+        var tmdb = await tmdbArtwork.GetSeriesPicturesAsync(series.Id, ct);
         var airedEpisodesByAnimeId = await AiredEpisodesByAnimeIdAsync(allAnime, ct);
 
         // The whole-library ranking (polish-... design.md D?), fetched fresh
@@ -156,8 +170,13 @@ public class SeriesService(
         var globalRankByAnimeId = allAnime.ToDictionary(a => a.Id, a => rankingSnapshot.RankOf(a.Id));
 
         var pictureOptions = SeriesPicturePool.Build(mainLineMembers);
-        if (series.SelectedPictureUrl is { } selectedPictureUrl && !pictureOptions.Contains(selectedPictureUrl))
-            pictureOptions.Add(selectedPictureUrl); // a stored choice is never re-validated away (design.md D9)
+        // A stored MAL choice is never re-validated away (design.md D9). A TMDB
+        // one is not part of this MyAnimeList list: the TMDB sections offer it,
+        // or a "Current picture" group does when TMDB no longer lists it (D13).
+        if (series.SelectedPictureUrl is { } selectedPictureUrl
+            && !TmdbImageUrl.IsTmdbImage(selectedPictureUrl)
+            && !pictureOptions.Contains(selectedPictureUrl))
+            pictureOptions.Add(selectedPictureUrl);
         var titleOptions = SeriesTitleRule.OfferedTitles(mainLineMembers);
         var picturesPendingCount = mainLineMembers.Count(m => m.Anime.UserEntry is not null && m.Anime.PicturesSyncedAt is null);
 
@@ -180,6 +199,7 @@ public class SeriesService(
         return new SeriesDto(
             series.Id,
             rootAniListId,
+            rootImdbIds,
             title,
             englishTitle,
             pictureUrl,
@@ -199,7 +219,8 @@ public class SeriesService(
             series.SelectedPictureUrl,
             pictureOptions,
             titleOptions,
-            picturesPendingCount);
+            picturesPendingCount,
+            tmdb);
     }
 
     // --- Version slots (design.md D4/D5/D6, tasks 7.2-7.3) ---
@@ -329,7 +350,7 @@ public class SeriesService(
             .ToList();
     }
 
-    private static RelationGroup ParseRelationGroup(string? relationGroup) =>
+    internal static RelationGroup ParseRelationGroup(string? relationGroup) =>
         relationGroup is not null && Enum.TryParse<RelationGroup>(relationGroup, out var parsed) ? parsed : RelationGroup.Other;
 
     private sealed record RelatedEntryCandidate(AnimeMetadata Anime, RelationGroup Group, string RelationType);

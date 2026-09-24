@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Tmdb;
 
 namespace AnimeTracker.Api.Services.Artwork;
 
@@ -27,7 +28,11 @@ public static class AnimePicture
     /// means. The current selection is always
     /// included even when MAL has since dropped it, so a choice MAL no
     /// longer lists stays visible and replaceable rather than merely broken
-    /// (design.md D9 / spec "A stored choice is never re-validated away").</summary>
+    /// (design.md D9 / spec "A stored choice is never re-validated away").
+    /// A selection that is a TMDB image is the one exception: this is the
+    /// MyAnimeList list, and a TMDB choice must not surface under that
+    /// heading. The picker's TMDB sections offer it, or, when TMDB no longer
+    /// lists it, its own "Current picture" group does (design.md D13).</summary>
     public static IReadOnlyList<string> Options(AnimeMetadata anime)
     {
         var options = new List<string>();
@@ -50,7 +55,8 @@ public static class AnimePicture
             foreach (var url in anime.PictureUrls)
                 Upsert(url, preferOverExisting: false);
         Upsert(anime.MalPictureUrl, preferOverExisting: true);
-        Upsert(anime.SelectedPictureUrl, preferOverExisting: true);
+        if (!TmdbImageUrl.IsTmdbImage(anime.SelectedPictureUrl))
+            Upsert(anime.SelectedPictureUrl, preferOverExisting: true);
 
         return options;
     }

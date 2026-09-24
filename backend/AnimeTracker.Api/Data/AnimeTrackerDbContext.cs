@@ -29,6 +29,14 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<AniListRelation> AniListRelations => Set<AniListRelation>();
     public DbSet<RelationDiscovery> RelationDiscoveries => Set<RelationDiscovery>();
     public DbSet<AnimeUpdate> AnimeUpdates => Set<AnimeUpdate>();
+    public DbSet<AnimeIdMapping> AnimeIdMappings => Set<AnimeIdMapping>();
+    public DbSet<AnimeIdMappingSyncState> AnimeIdMappingSyncStates => Set<AnimeIdMappingSyncState>();
+    public DbSet<TmdbTvImageSet> TmdbTvImageSets => Set<TmdbTvImageSet>();
+    public DbSet<TmdbTvImage> TmdbTvImages => Set<TmdbTvImage>();
+    public DbSet<TmdbSeasonImageSet> TmdbSeasonImageSets => Set<TmdbSeasonImageSet>();
+    public DbSet<TmdbSeasonImage> TmdbSeasonImages => Set<TmdbSeasonImage>();
+    public DbSet<TmdbMovieImageSet> TmdbMovieImageSets => Set<TmdbMovieImageSet>();
+    public DbSet<TmdbMovieImage> TmdbMovieImages => Set<TmdbMovieImage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -228,6 +236,68 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
             // own, since null is already the correct "not an alternative"
             // value for pre-existing rows.
             entity.Property(e => e.MembershipKind).HasDefaultValue("Core");
+        });
+
+        modelBuilder.Entity<AnimeIdMapping>(entity =>
+        {
+            // The MAL id, supplied by the sync — not DB-generated. Deliberately
+            // no FK to AnimeMetadata (see the entity's comment). The array
+            // columns (integer[], text[]) come from the List<int>/List<string>
+            // properties, as PictureUrls and Genres do.
+            entity.HasKey(e => e.AnimeId);
+            entity.Property(e => e.AnimeId).ValueGeneratedNever();
+        });
+
+        // The three TMDB image caches share one shape: a fetch-log set row and
+        // image rows that cascade-delete with it (design.md D5). The set ids are
+        // TMDB's own, so never DB-generated; Kind is stored as its name, as
+        // RelationGroup is. Image rows share their columns through a plain base
+        // class that is not in the model, so each table gets them as its own.
+        modelBuilder.Entity<TmdbTvImageSet>(entity =>
+        {
+            entity.HasKey(e => e.TvId);
+            entity.Property(e => e.TvId).ValueGeneratedNever();
+            entity.HasMany(e => e.Images)
+                .WithOne()
+                .HasForeignKey(e => e.TvId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TmdbTvImage>(entity =>
+        {
+            entity.HasKey(e => new { e.TvId, e.FilePath });
+            entity.Property(e => e.Kind).HasConversion<string>();
+        });
+
+        modelBuilder.Entity<TmdbSeasonImageSet>(entity =>
+        {
+            entity.HasKey(e => new { e.TvId, e.SeasonNumber });
+            entity.HasMany(e => e.Images)
+                .WithOne()
+                .HasForeignKey(e => new { e.TvId, e.SeasonNumber })
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TmdbSeasonImage>(entity =>
+        {
+            entity.HasKey(e => new { e.TvId, e.SeasonNumber, e.FilePath });
+            entity.Property(e => e.Kind).HasConversion<string>();
+        });
+
+        modelBuilder.Entity<TmdbMovieImageSet>(entity =>
+        {
+            entity.HasKey(e => e.MovieId);
+            entity.Property(e => e.MovieId).ValueGeneratedNever();
+            entity.HasMany(e => e.Images)
+                .WithOne()
+                .HasForeignKey(e => e.MovieId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TmdbMovieImage>(entity =>
+        {
+            entity.HasKey(e => new { e.MovieId, e.FilePath });
+            entity.Property(e => e.Kind).HasConversion<string>();
         });
     }
 }

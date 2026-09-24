@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Services.Entries;
+using AnimeTracker.Api.Services.Tmdb;
 
 namespace AnimeTracker.Api.Services.Series;
 
@@ -169,6 +170,12 @@ public record SeriesStatsByPickDto(List<int> BranchHeadAnimeIds, SeriesStatsDto 
 /// when a sync row exists for it, read the same way
 /// <c>AnimeDetailService</c> reads it for a single anime (design.md decision
 /// 6) — null falls back to an AniList title search client-side.
+/// <c>ImdbIds</c> are the root's own mapped IMDb ids (external-id-mapping), so
+/// the IMDb link targets the same entry every other external link does —
+/// [] when the root has none, with no fallback to another member.
+/// <c>Tmdb</c> is the franchise's cached TMDB pictures for the picker plus how
+/// many of its sets are due (tmdb-artwork, design.md D11): cache only, since
+/// this read never calls TMDB — the client's follow-up request fetches them.
 /// <c>Slots</c>/<c>StatsByPick</c> are the main line's version slots and the
 /// per-combination stats they admit (rebuild-series-by-story-component
 /// design.md D4/D6) — both empty-list/single-entry respectively when the
@@ -181,6 +188,7 @@ public record SeriesDto(
     // same field.
     int SeriesId,
     int? RootAniListId,
+    List<string> ImdbIds,
     string Title,
     string? EnglishTitle,
     string? PictureUrl,
@@ -213,4 +221,10 @@ public record SeriesDto(
     string? SelectedPictureUrl,
     List<string> PictureOptions,
     List<string> TitleOptions,
-    int PicturesPendingCount);
+    int PicturesPendingCount,
+    // The picker's TMDB inputs (artwork-selection, tmdb-artwork): the
+    // franchise's images grouped by language only, whether any member has a
+    // TMDB mapping (what the "TMDB has no match" note reads), and PendingCount,
+    // how many of its sets are due — 0 while no API key is configured. Its
+    // MyAnimeList twin is PicturesPendingCount above.
+    SeriesTmdbPicturesDto Tmdb);

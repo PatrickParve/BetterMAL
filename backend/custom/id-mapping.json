@@ -1,0 +1,30 @@
+[
+  {
+    "mal_id": 60568,
+    "themoviedb_id": { "tv": 280564 },
+    "season": { "tmdb": 1 },
+    "imdb_id": ["tt38754770"],
+    "note": "False Memory (2026). The source lists this MAL id (AniDB 19175) with no TMDB or IMDb id."
+  },
+  {
+    "mal_id": 11741,
+    "themoviedb_id": { "tv": 45845 },
+    "season": { "tmdb": 2 },
+    "override": true,
+    "note": "Fate/Zero Season 2. The source says TMDB season 1 (with an episode offset); TMDB now has a separate season 2."
+  },
+  {
+    "mal_id": 28701,
+    "themoviedb_id": { "tv": 61415 },
+    "season": { "tmdb": 2 },
+    "override": true,
+    "note": "Fate/stay night [Unlimited Blade Works] Season 2. The source says TMDB season 1; TMDB now has a separate season 2."
+  },
+  {
+    "mal_id": 37799,
+    "themoviedb_id": { "tv": 61374 },
+    "season": { "tmdb": 4 },
+    "override": true,
+    "note": "Tokyo Ghoul:re 2nd Season. The source says TMDB season 3; TMDB splits :re into seasons 3 and 4."
+  }
+]

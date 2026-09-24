@@ -4,6 +4,7 @@ import type {
   AnimeDetailDto,
   AnimeRankingResponseDto,
   AnimeSearchResult,
+  AnimeTmdbPicturesDto,
   AnimeUpdateDto,
   AppStatusDto,
   AppStatusSeenRequest,
@@ -29,6 +30,7 @@ import type {
   SeriesDto,
   SeriesListDto,
   SeriesLookupResult,
+  SeriesTmdbPicturesDto,
   TimeSpentSeriesSectionDto,
   TopAnimeItemDto,
   TopAnimeMediaType,
@@ -417,6 +419,19 @@ export function refreshAnimePictures(
   )
 }
 
+// One-anime TMDB follow-up fetch (tmdb-artwork): fetches the anime's due TMDB
+// sets, then answers with its TMDB pictures and whether any set is still due.
+// `tmdb` is null for an anime not in my list, and TMDB trouble never fails the
+// call — a set that couldn't be fetched just stays due, which the flag says.
+export function refreshAnimeTmdbPictures(
+  animeId: number,
+): Promise<{ tmdb: AnimeTmdbPicturesDto | null; tmdbFetchPending: boolean }> {
+  return fetchJson<{ tmdb: AnimeTmdbPicturesDto | null; tmdbFetchPending: boolean }>(
+    `/api/anime/${animeId}/tmdb-pictures/refresh`,
+    { method: 'POST' },
+  )
+}
+
 // 404 ("this anime isn't part of a series") resolves to { found: false }
 // rather than throwing, so the page can tell that apart from a transport
 // failure — which still rejects, same as every other fetchJson call.
@@ -488,6 +503,14 @@ export function resetSeriesPicture(seriesId: number): Promise<{ pictureUrl: stri
 // sets, and reports how many eligible members still remain unfetched.
 export function refreshSeriesPictures(animeId: number): Promise<{ remaining: number }> {
   return fetchJson<{ remaining: number }>(`/api/series/by-anime/${animeId}/pictures/refresh`, { method: 'POST' })
+}
+
+// Bounded TMDB follow-up fetch (tmdb-artwork): fetches up to 20 of the series'
+// due TMDB sets and answers with the series' TMDB pictures — the object
+// itself, not wrapped — whose pendingCount is how many sets a later visit
+// still has to fetch.
+export function refreshSeriesTmdbPictures(animeId: number): Promise<SeriesTmdbPicturesDto> {
+  return fetchJson<SeriesTmdbPicturesDto>(`/api/series/by-anime/${animeId}/tmdb-pictures/refresh`, { method: 'POST' })
 }
 
 // Runs in the background and starts once (background-jobs "A job is started

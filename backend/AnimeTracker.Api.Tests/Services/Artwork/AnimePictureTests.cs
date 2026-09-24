@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Artwork;
+using AnimeTracker.Api.Services.Tmdb;
 
 namespace AnimeTracker.Api.Tests.Services.Artwork;
 
@@ -89,5 +90,43 @@ public class AnimePictureTests
         var options = AnimePicture.Options(anime);
 
         Assert.Contains(anime.SelectedPictureUrl, options);
+    }
+
+    [Fact]
+    public void Options_ATmdbChoiceNeverLandsInTheMalOptions()
+    {
+        // The choice is a TMDB image: the picker's TMDB sections offer it, so it
+        // must not also surface under the MyAnimeList heading (design.md D13).
+        var tmdbChoice = TmdbImageUrl.Original("/abc123.jpg");
+        var anime = Anime(
+            pictureUrl: tmdbChoice,
+            malPictureUrl: "https://cdn.myanimelist.net/images/anime/9/9-main.jpg",
+            pictureUrls: ["https://cdn.myanimelist.net/images/anime/9/9-main.jpg", "https://cdn.myanimelist.net/images/anime/9/9-alt.jpg"],
+            selectedPictureUrl: tmdbChoice);
+
+        var options = AnimePicture.Options(anime);
+
+        Assert.DoesNotContain(tmdbChoice, options);
+        Assert.Equal(
+            ["https://cdn.myanimelist.net/images/anime/9/9-main.jpg", "https://cdn.myanimelist.net/images/anime/9/9-alt.jpg"],
+            options); // MAL's own set, in MAL's order, untouched by the choice
+    }
+
+    [Fact]
+    public void Options_AMalChoiceIsStillUpsertedWhileATmdbChoiceIsSkipped()
+    {
+        // The guard is on the source of the choice, not on choosing at all: a MAL
+        // choice keeps its identity-authoritative upsert.
+        var malChoice = "https://cdn.myanimelist.net/images/anime/9/9-chosen.webp";
+        var anime = Anime(
+            pictureUrl: malChoice,
+            malPictureUrl: "https://cdn.myanimelist.net/images/anime/9/9-main.jpg",
+            pictureUrls: ["https://cdn.myanimelist.net/images/anime/9/9-chosen.jpg"],
+            selectedPictureUrl: malChoice);
+
+        var options = AnimePicture.Options(anime);
+
+        Assert.Contains(malChoice, options);
+        Assert.DoesNotContain("https://cdn.myanimelist.net/images/anime/9/9-chosen.jpg", options); // the .webp literal took the slot
     }
 }

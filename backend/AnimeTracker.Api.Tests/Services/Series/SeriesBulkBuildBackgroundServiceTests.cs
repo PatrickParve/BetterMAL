@@ -3,6 +3,7 @@ using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -316,7 +317,7 @@ public class SeriesBulkBuildBackgroundServiceTests
             throw new NotImplementedException();
 
         private static SeriesDto EmptySeriesDto(int animeId) => new(
-            animeId, null, "Series", null, null, "Finished", null, null,
+            animeId, null, [], "Series", null, null, "Finished", null, null,
             DateTimeOffset.UtcNow, false, false,
             new SeriesScoresDto(
                 new SeriesAverageDto(null, 0, 0), new SeriesAverageDto(null, 0, 0),
@@ -324,7 +325,8 @@ public class SeriesBulkBuildBackgroundServiceTests
             new SeriesStatsDto(0, 0, false, 0, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, null, null, null, [], [], [], [], []),
             [], [],
             [], [],
-            null, null, [], [], 0);
+            null, null, [], [], 0,
+            new SeriesTmdbPicturesDto(false, false, [], 0));
     }
 
     private sealed class FakeUserAnimeEntryRepository(List<UserAnimeEntry> entries) : IUserAnimeEntryRepository

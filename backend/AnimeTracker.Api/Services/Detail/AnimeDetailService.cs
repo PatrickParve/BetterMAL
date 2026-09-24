@@ -4,9 +4,11 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Entries;
+using AnimeTracker.Api.Services.IdMapping;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Relations;
+using AnimeTracker.Api.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Detail;
@@ -24,6 +26,8 @@ public class AnimeDetailService(
     IRelationResolver relationResolver,
     AnimeTrackerDbContext db,
     RefreshGate refreshGate,
+    ITmdbArtworkService tmdbArtwork,
+    IAnimeIdMappingResolver idMappings,
     ILogger<AnimeDetailService> logger) : IAnimeDetailService
 {
     public async Task<AnimeDetailDto> GetDetailAsync(int animeId, CancellationToken ct = default)
@@ -105,7 +109,22 @@ public class AnimeDetailService(
         // pictures").
         var picturesFetchPending = anime.UserEntry is not null && anime.PicturesSyncedAt is null;
 
-        return AnimeDetailDto.FromEntity(anime, episodesAired, nextEpisode, aniListId, relatedMetadataByAnimeId, inSeries, refreshFailed, relations, picturesFetchPending);
+        // TMDB (spec anime-detail "The detail response carries the anime's
+        // TMDB pictures ..."). Everything here is a cache read: the page never
+        // waits on TMDB, and a set that is due is fetched by the client's one
+        // follow-up request once the page has rendered, on the flag below. Only
+        // an anime in my list gets pictures or a flag, since only such an
+        // anime has a picture to choose (tmdb-artwork), and the entry is
+        // already in hand. The IMDb ids come from the id mapping, custom
+        // entries included (design.md D19), and need neither my list nor a key.
+        var imdbIds = (await idMappings.FindAsync(animeId, ct))?.ImdbIds ?? [];
+        var inMyList = anime.UserEntry is not null;
+        var tmdb = inMyList ? await tmdbArtwork.GetAnimePicturesAsync(animeId, ct) : null;
+        var tmdbFetchPending = inMyList && await tmdbArtwork.IsAnimeFetchDueAsync(animeId, ct);
+
+        return AnimeDetailDto.FromEntity(
+            anime, episodesAired, nextEpisode, aniListId, relatedMetadataByAnimeId, inSeries, refreshFailed, relations,
+            picturesFetchPending, tmdb, tmdbFetchPending, imdbIds);
     }
 
     private static bool NeedsFullDetailFetch(AnimeMetadata? anime) =>

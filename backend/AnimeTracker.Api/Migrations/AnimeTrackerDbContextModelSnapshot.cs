@@ -132,6 +132,49 @@ namespace AnimeTracker.Api.Migrations
                     b.ToTable("AnimeAiringSyncs");
                 });
 
+            modelBuilder.Entity("AnimeTracker.Api.Models.AnimeIdMapping", b =>
+                {
+                    b.Property<int>("AnimeId")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<string>>("ImdbIds")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.PrimitiveCollection<List<int>>("TmdbMovieIds")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.Property<int?>("TmdbSeasonNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TmdbTvId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("AnimeId");
+
+                    b.ToTable("AnimeIdMappings");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.AnimeIdMappingSyncState", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AnimeIdMappingSyncStates");
+                });
+
             modelBuilder.Entity("AnimeTracker.Api.Models.AnimeMetadata", b =>
                 {
                     b.Property<int>("Id")
@@ -647,6 +690,138 @@ namespace AnimeTracker.Api.Migrations
                     b.ToTable("SeriesMembers");
                 });
 
+            modelBuilder.Entity("AnimeTracker.Api.Models.TmdbMovieImage", b =>
+                {
+                    b.Property<int>("MovieId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FilePath")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Language")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MovieId", "FilePath");
+
+                    b.ToTable("TmdbMovieImages");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.TmdbMovieImageSet", b =>
+                {
+                    b.Property<int>("MovieId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("FetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("MovieId");
+
+                    b.ToTable("TmdbMovieImageSets");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.TmdbSeasonImage", b =>
+                {
+                    b.Property<int>("TvId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SeasonNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FilePath")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Language")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("integer");
+
+                    b.HasKey("TvId", "SeasonNumber", "FilePath");
+
+                    b.ToTable("TmdbSeasonImages");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.TmdbSeasonImageSet", b =>
+                {
+                    b.Property<int>("TvId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SeasonNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("FetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("TvId", "SeasonNumber");
+
+                    b.ToTable("TmdbSeasonImageSets");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.TmdbTvImage", b =>
+                {
+                    b.Property<int>("TvId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FilePath")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Language")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("integer");
+
+                    b.HasKey("TvId", "FilePath");
+
+                    b.ToTable("TmdbTvImages");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.TmdbTvImageSet", b =>
+                {
+                    b.Property<int>("TvId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("FetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("TvId");
+
+                    b.ToTable("TmdbTvImageSets");
+                });
+
             modelBuilder.Entity("AnimeTracker.Api.Models.TopAnimeFetchLog", b =>
                 {
                     b.Property<string>("RankingType")
@@ -856,6 +1031,33 @@ namespace AnimeTracker.Api.Migrations
                     b.Navigation("Anime");
                 });
 
+            modelBuilder.Entity("AnimeTracker.Api.Models.TmdbMovieImage", b =>
+                {
+                    b.HasOne("AnimeTracker.Api.Models.TmdbMovieImageSet", null)
+                        .WithMany("Images")
+                        .HasForeignKey("MovieId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.TmdbSeasonImage", b =>
+                {
+                    b.HasOne("AnimeTracker.Api.Models.TmdbSeasonImageSet", null)
+                        .WithMany("Images")
+                        .HasForeignKey("TvId", "SeasonNumber")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.TmdbTvImage", b =>
+                {
+                    b.HasOne("AnimeTracker.Api.Models.TmdbTvImageSet", null)
+                        .WithMany("Images")
+                        .HasForeignKey("TvId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AnimeTracker.Api.Models.TopAnimeRankingEntry", b =>
                 {
                     b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", "Anime")
@@ -904,6 +1106,21 @@ namespace AnimeTracker.Api.Migrations
             modelBuilder.Entity("AnimeTracker.Api.Models.Series", b =>
                 {
                     b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.TmdbMovieImageSet", b =>
+                {
+                    b.Navigation("Images");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.TmdbSeasonImageSet", b =>
+                {
+                    b.Navigation("Images");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.TmdbTvImageSet", b =>
+                {
+                    b.Navigation("Images");
                 });
 #pragma warning restore 612, 618
         }

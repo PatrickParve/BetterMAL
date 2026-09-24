@@ -7,8 +7,13 @@ using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Relations;
+using AnimeTracker.Api.Services.IdMapping;
+using AnimeTracker.Api.Services.Tmdb;
+using AnimeTracker.Api.Tests.Services.IdMapping;
+using AnimeTracker.Api.Tests.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using static AnimeTracker.Api.Tests.Services.Tmdb.TmdbTestData;
 
 namespace AnimeTracker.Api.Tests.Services.Detail;
 
@@ -28,7 +33,12 @@ public class AnimeDetailServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    private static AnimeDetailService CreateService(AnimeTrackerDbContext db, FakeMetadataRefreshService refreshService) =>
+    // The TMDB service defaults to one with no key, which makes no request and
+    // reports nothing due — so the tests below that are not about TMDB never
+    // see it. The ones that are pass their own, over the same db.
+    private static AnimeDetailService CreateService(
+        AnimeTrackerDbContext db, FakeMetadataRefreshService refreshService, ITmdbArtworkService? tmdb = null,
+        ICustomIdMappings? custom = null) =>
         new(
             new AnimeMetadataRepository(db),
             refreshService,
@@ -37,6 +47,8 @@ public class AnimeDetailServiceTests
             new RelationResolver(db),
             db,
             new RefreshGate(),
+            tmdb ?? ArtworkService(db, new FakeTmdbClient(), apiKey: "", custom: custom),
+            TestIdMappings.Resolver(db, custom),
             NullLogger<AnimeDetailService>.Instance);
 
     private static AnimeMetadata Anime(
@@ -335,6 +347,154 @@ public class AnimeDetailServiceTests
         var detail = await CreateService(db, refresh).GetDetailAsync(1);
 
         Assert.Equal("https://mal/chosen.jpg", detail.SelectedPictureUrl);
+    }
+
+    // --- 7.4: ImdbIds, Tmdb, TmdbFetchPending (anime-detail "The detail response
+    // carries the anime's TMDB pictures and asks for a TMDB fetch when one is
+    // due") ---
+
+    // Anime 1: mapped to TV 1429 season 3, with a fresh detail so a read never
+    // live-fetches it from MAL.
+    private static void AddMappedAnime(AnimeTrackerDbContext db, bool inMyList = true, string[]? imdbIds = null) =>
+        AddAnime(db, 1, inMyList, tvId: 1429, season: 3, imdbIds: imdbIds).LastSyncedAt = DateTimeOffset.UtcNow;
+
+    [Fact]
+    public async Task GetDetailAsync_MyListAnimeWithADueSeasonSet_FlagsTmdbFetchPendingAndNeverCallsTmdb()
+    {
+        using var db = CreateDb();
+        AddMappedAnime(db);
+        db.TmdbTvImageSets.Add(TvSet(1429, Fresh, Poster("/tv.jpg", "ja"))); // season 3 was never fetched
+        await db.SaveChangesAsync();
+        var tmdbClient = new FakeTmdbClient();
+
+        var detail = await CreateService(db, new FakeMetadataRefreshService(db), ArtworkService(db, tmdbClient)).GetDetailAsync(1);
+
+        Assert.True(detail.TmdbFetchPending);
+        Assert.Empty(tmdbClient.Calls); // the read serves the cache; the follow-up request does the fetching
+        var tmdb = Assert.IsType<AnimeTmdbPicturesDto>(detail.Tmdb);
+        Assert.True(tmdb.HasMapping);
+        Assert.Equal(TmdbScope.Series, Assert.Single(tmdb.Scopes).Scope);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_MyListAnimeWithFreshSets_CarriesTheirImagesAndNoFlag()
+    {
+        using var db = CreateDb();
+        AddMappedAnime(db);
+        db.TmdbTvImageSets.Add(TvSet(1429, Fresh, Poster("/tv.jpg", "ja")));
+        db.TmdbSeasonImageSets.Add(SeasonSet(1429, 3, Fresh, Poster("/s3.jpg", "en")));
+        await db.SaveChangesAsync();
+        var tmdbClient = new FakeTmdbClient();
+
+        var detail = await CreateService(db, new FakeMetadataRefreshService(db), ArtworkService(db, tmdbClient)).GetDetailAsync(1);
+
+        Assert.False(detail.TmdbFetchPending);
+        var tmdb = Assert.IsType<AnimeTmdbPicturesDto>(detail.Tmdb);
+        Assert.Equal([TmdbScope.Series, TmdbScope.Season], tmdb.Scopes.Select(scope => scope.Scope));
+        var season = tmdb.Scopes[1];
+        Assert.Equal(3, season.SeasonNumber);
+        var english = Assert.Single(season.Languages);
+        Assert.Equal("en", english.Language);
+        Assert.Equal($"{ImageBase}/s3.jpg", Assert.Single(english.Pictures).Url);
+        Assert.Empty(tmdbClient.Calls);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_AnimeNotInMyList_CarriesImdbIdsButNoTmdbAndNoFlag()
+    {
+        using var db = CreateDb();
+        AddMappedAnime(db, inMyList: false, imdbIds: ["tt2560140", "tt9999999"]);
+        db.TmdbTvImageSets.Add(TvSet(1429, Fresh, Poster("/tv.jpg", "ja"))); // cached, and season 3 still to fetch — neither is offered
+        await db.SaveChangesAsync();
+
+        var detail = await CreateService(db, new FakeMetadataRefreshService(db), ArtworkService(db, new FakeTmdbClient())).GetDetailAsync(1);
+
+        Assert.Equal(["tt2560140", "tt9999999"], detail.ImdbIds); // in the mapping's order, list or no list
+        Assert.Null(detail.Tmdb);
+        Assert.False(detail.TmdbFetchPending);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_WithNoKey_HasNoFlagButStillOffersImagesCachedEarlier()
+    {
+        using var db = CreateDb();
+        AddMappedAnime(db);
+        db.TmdbTvImageSets.Add(TvSet(1429, Fresh, Poster("/tv.jpg", "ja"))); // season 3 never fetched: due, were there a key
+        await db.SaveChangesAsync();
+        var tmdbClient = new FakeTmdbClient();
+
+        var detail = await CreateService(db, new FakeMetadataRefreshService(db), ArtworkService(db, tmdbClient, apiKey: "")).GetDetailAsync(1);
+
+        Assert.False(detail.TmdbFetchPending);
+        var tmdb = Assert.IsType<AnimeTmdbPicturesDto>(detail.Tmdb);
+        Assert.Equal(TmdbScope.Series, Assert.Single(tmdb.Scopes).Scope);
+        Assert.Empty(tmdbClient.Calls);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_AnimeWithNoMapping_HasNoImdbIdsAndNoTmdbMatch()
+    {
+        using var db = CreateDb();
+        AddAnime(db, 1, withMapping: false).LastSyncedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+
+        var detail = await CreateService(db, new FakeMetadataRefreshService(db), ArtworkService(db, new FakeTmdbClient())).GetDetailAsync(1);
+
+        Assert.Empty(detail.ImdbIds); // an empty list, not null
+        var tmdb = Assert.IsType<AnimeTmdbPicturesDto>(detail.Tmdb); // in my list, so asked: no match is the answer
+        Assert.False(tmdb.HasMapping);
+        Assert.Empty(tmdb.Scopes);
+        Assert.False(detail.TmdbFetchPending);
+    }
+
+    // --- The custom id mapping (design.md D19): the detail read sees the merged view ---
+
+    [Fact]
+    public async Task GetDetailAsync_AnimeTheSourceDoesNotMap_TakesItsImdbIdsAndTmdbMatchFromTheCustomMapping()
+    {
+        using var db = CreateDb();
+        AddAnime(db, 1, withMapping: false).LastSyncedAt = DateTimeOffset.UtcNow;
+        db.TmdbTvImageSets.Add(TvSet(280564, Fresh, Poster("/tv.jpg", "ja")));
+        db.TmdbSeasonImageSets.Add(SeasonSet(280564, 1, Fresh, Poster("/season.jpg", "en")));
+        await db.SaveChangesAsync();
+        var custom = new FakeCustomIdMappings(FakeCustomIdMappings.Fill(1, tv: 280564, season: 1, imdb: ["tt38754770"]));
+
+        var detail = await CreateService(db, new FakeMetadataRefreshService(db), ArtworkService(db, new FakeTmdbClient(), custom: custom), custom)
+            .GetDetailAsync(1);
+
+        Assert.Equal(["tt38754770"], detail.ImdbIds);
+        var tmdb = Assert.IsType<AnimeTmdbPicturesDto>(detail.Tmdb);
+        Assert.True(tmdb.HasMapping); // not "TMDB has no match"
+        Assert.Equal([TmdbScope.Series, TmdbScope.Season], tmdb.Scopes.Select(scope => scope.Scope));
+        Assert.False(detail.TmdbFetchPending); // both sets are cached and fresh
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_AnimeNotInMyList_StillCarriesTheCustomImdbIds()
+    {
+        // The IMDb link needs neither my list nor a key, and neither does a custom entry for it.
+        using var db = CreateDb();
+        AddAnime(db, 1, inMyList: false, withMapping: false).LastSyncedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+        var custom = new FakeCustomIdMappings(FakeCustomIdMappings.Fill(1, imdb: ["tt38754770"]));
+
+        var detail = await CreateService(db, new FakeMetadataRefreshService(db), custom: custom).GetDetailAsync(1);
+
+        Assert.Equal(["tt38754770"], detail.ImdbIds);
+        Assert.Null(detail.Tmdb);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_ADefaultCustomEntryYieldsToTheSourcesImdbIds()
+    {
+        using var db = CreateDb();
+        AddMappedAnime(db, imdbIds: ["tt2560140"]);
+        await db.SaveChangesAsync();
+        var custom = new FakeCustomIdMappings(FakeCustomIdMappings.Fill(1, imdb: ["tt0000099"]));
+
+        var detail = await CreateService(db, new FakeMetadataRefreshService(db), custom: custom).GetDetailAsync(1);
+
+        Assert.Equal(["tt2560140"], detail.ImdbIds); // the source has caught up: its ids apply
     }
 
     private sealed class FakeMetadataRefreshService(AnimeTrackerDbContext db, bool throwOnRefresh = false, bool setsPicturesSyncedAt = false) : IMetadataRefreshService

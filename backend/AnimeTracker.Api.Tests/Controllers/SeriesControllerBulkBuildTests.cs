@@ -7,6 +7,7 @@ using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Tests.Services.Tmdb;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -26,7 +27,7 @@ public class SeriesControllerBulkBuildTests
         var listService = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService(), new UnusedAnimeRankingService());
         return new SeriesController(
             new UnusedSeriesService(), listService, trigger, tracker, new UnusedArtworkSelectionService(),
-            new UnusedPictureRefreshService(), new UnusedAnimeMetadataRepository());
+            new UnusedPictureRefreshService(), new FakeTmdbArtworkService(), new UnusedAnimeMetadataRepository());
     }
 
     [Fact]

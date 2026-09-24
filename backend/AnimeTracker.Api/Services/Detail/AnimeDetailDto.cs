@@ -3,6 +3,7 @@ using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Season;
+using AnimeTracker.Api.Services.Tmdb;
 
 namespace AnimeTracker.Api.Services.Detail;
 
@@ -27,6 +28,18 @@ public record AnimeDetailDto(
     // has never been fetched, so the client should call the one-anime
     // backfill endpoint (design.md D4b).
     bool PicturesFetchPending,
+    // Feeds the picker's TMDB sections (tmdb-artwork): this anime's cached
+    // TMDB pictures grouped by scope and language, plus whether its mapping
+    // names any TMDB id at all (what the "TMDB has no match" note reads).
+    // Null unless the anime is in my list — only such an anime has a picture
+    // to choose. Cache only: this read never calls TMDB.
+    AnimeTmdbPicturesDto? Tmdb,
+    // Handshake flag, the TMDB twin of PicturesFetchPending: true only when a
+    // key is configured, the anime is in my list and at least one of its sets
+    // is due (never fetched, or last fetched over 30 days ago), so the client
+    // should call the one-anime TMDB refresh endpoint. Never true without a
+    // key, so a key-less install makes no follow-up request at all.
+    bool TmdbFetchPending,
     double? MalScore,
     int? Rank,
     int? PopularityRank,
@@ -47,6 +60,10 @@ public record AnimeDetailDto(
     string? Season,
     NextEpisodeEtaDto? NextEpisode,
     int? AniListId,
+    // The IMDb ids of this anime's id mapping (external-id-mapping), in the
+    // mapping's order: [] for an anime with no mapping or none valid. Sent for
+    // every anime, in my list or not, because the IMDb link needs no TMDB key.
+    List<string> ImdbIds,
     List<RelatedAnimeDto> RelatedAnime,
     UserAnimeEntryDto? Entry,
     // True when a Series row already lists this anime as a member — a plain
@@ -81,7 +98,10 @@ public record AnimeDetailDto(
         bool inSeries,
         bool refreshFailed,
         RelationResolution relations,
-        bool picturesFetchPending)
+        bool picturesFetchPending,
+        AnimeTmdbPicturesDto? tmdb,
+        bool tmdbFetchPending,
+        List<string> imdbIds)
     {
         (int Year, string Season)? season = anime.AiredFrom is { } airedFrom
             ? SeasonCalendar.GetSeasonFor(airedFrom)
@@ -96,6 +116,8 @@ public record AnimeDetailDto(
             anime.SelectedPictureUrl,
             anime.PictureUrls,
             picturesFetchPending,
+            tmdb,
+            tmdbFetchPending,
             anime.MalScore,
             anime.Rank,
             anime.PopularityRank,
@@ -116,6 +138,7 @@ public record AnimeDetailDto(
             season?.Season,
             nextEpisode,
             aniListId,
+            imdbIds,
             anime.RelatedAnime.Select(r => RelatedAnimeDto.FromEntity(r, relatedMetadataByAnimeId)).ToList(),
             anime.UserEntry is null ? null : UserAnimeEntryDto.FromEntity(anime.UserEntry),
             inSeries,

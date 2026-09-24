@@ -68,6 +68,7 @@ public static class DevDotEnvOverlay
 
         SetIfNonEmpty(result, "Mal:ClientId", env.GetValueOrDefault("MAL_CLIENT_ID"));
         SetIfNonEmpty(result, "Mal:ClientSecret", env.GetValueOrDefault("MAL_CLIENT_SECRET"));
+        SetIfNonEmpty(result, "Tmdb:ApiKey", env.GetValueOrDefault("TMDB_API_KEY"));
 
         var backendPort = env.GetValueOrDefault("BACKEND_PORT");
         if (!string.IsNullOrEmpty(backendPort))

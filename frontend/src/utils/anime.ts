@@ -4,6 +4,7 @@ import {
   type SeriesListItemDto,
   type SeriesProgressBadge,
   type SeriesStatus,
+  type TmdbLanguage,
   type WatchStatus,
 } from '../api/types.ts'
 import { type FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
@@ -684,4 +685,33 @@ export function dedupePictureOptions(pictureUrls: (string | null | undefined)[],
   for (const url of canonical) upsert(url, true)
 
   return options
+}
+
+// Mirrors backend Services/Tmdb/TmdbImageUrl.IsTmdbImage (design D6) — the one
+// test for "is this a TMDB picture". A chosen TMDB image is stored as its full
+// URL (design D9), so this is how a stored choice is told from a MAL one: a
+// TMDB choice must never surface under the MyAnimeList heading (design D13).
+const TMDB_IMAGE_URL_PREFIX = 'https://image.tmdb.org/'
+
+export function isTmdbImageUrl(url: string | null | undefined): boolean {
+  return url != null && url.startsWith(TMDB_IMAGE_URL_PREFIX)
+}
+
+// One IMDb link per mapped id (anime-detail "External MyAnimeList link from
+// id", series-page "Series external links"): a lone id is labelled "IMDb",
+// several are numbered in the mapping's order. No id gives no link at all —
+// unlike AniList there is no search fallback.
+export function imdbLinks(ids: string[]): { href: string; label: string }[] {
+  return ids.map((id, index) => ({
+    href: `https://www.imdb.com/title/${encodeURIComponent(id)}/`,
+    label: ids.length === 1 ? 'IMDb' : `IMDb ${index + 1}`,
+  }))
+}
+
+// The picker's language group headings, in the order the backend sends them
+// (none, then ja, then en).
+export const TMDB_LANGUAGE_LABELS: Record<TmdbLanguage, string> = {
+  none: 'No language',
+  ja: 'Japanese',
+  en: 'English',
 }

@@ -21,6 +21,17 @@ without you:
   refreshes for anime on your list on a staleness schedule (currently-airing
   shows refresh daily, recently-finished every few days, older shows weekly to
   monthly), capped so it never hammers the MAL API.
+- **Id mapping and TMDB pictures.** Once a week the app downloads a
+  community-maintained table that maps MAL ids to TMDB and IMDb ids. It needs no
+  key, it's what puts an **IMDb** link on the anime and series pages, and it has
+  no control on this page: if a download fails, the previous mapping simply stays
+  in use and the failure is only in the backend log. With the optional
+  `TMDB_API_KEY` set (see the README), pictures also come from TMDB: an anime on
+  your list, or a series, fetches its TMDB pictures the first time you open its
+  page and again after 30 days. A list of pictures nobody has opened for about
+  five months is deleted again, since TMDB's terms limit how long its data may
+  be kept, and fetched anew if a page needs it; a picture you picked stays.
+  Without a key nothing is fetched, and IMDb links work anyway.
 
 The five actions below are the manual overrides for those automatic flows. The
 Settings page also has a **Content** section with a **Hide NSFW** checkbox —
@@ -129,3 +140,22 @@ anime on a staleness schedule and, on its routine passes, mostly updates just
 the score. This button is the "refresh *this one* fully, *right now*" escape
 hatch. It's a single cheap API call scoped to the one anime you pick, so it's
 safe to use freely.
+
+**TMDB pictures too.** The same action — it's also the **Refresh data** button on
+an anime's page — refetches that anime's TMDB pictures whatever their age, when
+the anime is on your list, has a TMDB match and a `TMDB_API_KEY` is set. That is
+how to pick up posters TMDB added since its last fetch, which otherwise wait for
+the 30-day refresh. A TMDB failure never fails the refresh: the pictures already
+cached stay as they were.
+
+---
+
+## Credits
+
+The last group on the page, below **Account**. It holds no controls: it carries
+TMDB's logo and the notice its API terms of use require, so the app credits TMDB
+whether or not you have a `TMDB_API_KEY` set. The picture picker shows the same
+logo and notice wherever it offers TMDB images.
+
+*This application uses TMDB and the TMDB APIs but is not endorsed, certified, or
+otherwise approved by TMDB.*

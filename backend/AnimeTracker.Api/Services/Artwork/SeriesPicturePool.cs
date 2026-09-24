@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Tmdb;
 
 namespace AnimeTracker.Api.Services.Artwork;
 
@@ -6,7 +7,9 @@ namespace AnimeTracker.Api.Services.Artwork;
 /// main-line member's artwork, deduplicated by <see cref="PictureIdentity"/>,
 /// in main-line order and then MAL's own order within each member. Extras
 /// contribute nothing — the series' picture describes the franchise's main
-/// line.</summary>
+/// line. This is the MyAnimeList list only: the franchise's TMDB images are
+/// a separate part of the series' picker (<see cref="Tmdb.ITmdbArtworkService"/>),
+/// and none of them is ever added here (design.md D13).</summary>
 public static class SeriesPicturePool
 {
     /// <summary>Builds the pool from <paramref name="mainLineMembers"/> (given
@@ -18,7 +21,12 @@ public static class SeriesPicturePool
     /// series' own current selection when it isn't already covered, so a
     /// choice the pool no longer includes (its source member left, or MAL
     /// dropped it) stays visible and replaceable rather than merely broken
-    /// (design.md D9 / spec "A stored choice is never re-validated away").</summary>
+    /// (design.md D9 / spec "A stored choice is never re-validated away").
+    /// A member's displayed picture is its chosen one, and that can be a TMDB
+    /// image; such a picture is skipped here, so a member's TMDB choice never
+    /// surfaces under the series' MyAnimeList heading (design.md D13). The
+    /// member's MAL picture, which the choice does not replace, is still
+    /// added.</summary>
     public static List<string> Build(IEnumerable<SeriesMember> mainLineMembers)
     {
         var options = new List<string>();
@@ -47,7 +55,8 @@ public static class SeriesPicturePool
         foreach (var member in mainLineMembers)
         {
             var anime = member.Anime;
-            Upsert(anime.PictureUrl, preferOverExisting: true);
+            if (!TmdbImageUrl.IsTmdbImage(anime.PictureUrl))
+                Upsert(anime.PictureUrl, preferOverExisting: true);
             Upsert(anime.MalPictureUrl, preferOverExisting: true);
             if (anime.PictureUrls is not null)
                 foreach (var url in anime.PictureUrls)

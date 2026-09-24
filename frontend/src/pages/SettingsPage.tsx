@@ -35,6 +35,7 @@ import type {
 } from '../api/types.ts'
 import { JobProgressTrack } from '../components/JobProgressTrack.tsx'
 import { RowPicture } from '../components/RowPicture.tsx'
+import { TmdbAttribution } from '../components/TmdbAttribution.tsx'
 import { unseenOutcomes, useAppStatus } from '../context/AppStatusContext.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
@@ -1149,6 +1150,17 @@ export function SettingsPage() {
         <a className="settings-box__link" href="/api/mal-auth/start">
           Re-authorize with MAL
         </a>
+      </SettingsGroup>
+
+      {/* Holds no control, so it follows Account, which stays the last group
+          of controls (settings-page "Settings are organised into named
+          groups"). TMDB's API terms require its logo and notice to be shown
+          prominently in the app, and this page is the app's only
+          about/credits-style surface; the picture picker shows the same
+          attribution wherever it offers TMDB images. Always shown, key or not:
+          it names a service the app supports, not one it has called. */}
+      <SettingsGroup title="Credits" hint="The services whose data and pictures this app uses.">
+        <TmdbAttribution />
       </SettingsGroup>
     </div>
   )

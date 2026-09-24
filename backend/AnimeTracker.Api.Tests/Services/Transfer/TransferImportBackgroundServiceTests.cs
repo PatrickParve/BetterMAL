@@ -5,6 +5,7 @@ using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Transfer;
+using AnimeTracker.Api.Tests.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -104,6 +105,7 @@ public class TransferImportBackgroundServiceTests
                 new UnusedSeriesService(),
                 new UnusedArtworkSelectionService(),
                 new UnusedPictureRefreshService(),
+                new FakeTmdbArtworkService(),
                 new TopAnimeSelectionRepository(db),
                 new RefreshGate());
         }

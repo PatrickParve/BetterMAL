@@ -6,6 +6,7 @@ using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Transfer;
@@ -25,9 +26,9 @@ internal sealed record PreparedImport(
 internal readonly record struct DraftFailure(TransferImportFailureSubject Subject, int Id, string What, string Reason);
 
 /// <summary>Prepares an import — fetching from MyAnimeList whatever the file
-/// needs that this device lacks — then applies it in one transaction
-/// (design.md D4). <see cref="TransferImportBackgroundService"/>'s scoped
-/// dependency.</summary>
+/// needs that this device lacks, and from TMDB the pictures a refused TMDB
+/// choice names — then applies it in one transaction (design.md D4, D14).
+/// <see cref="TransferImportBackgroundService"/>'s scoped dependency.</summary>
 public class TransferImportRunner(
     AnimeTrackerDbContext db,
     IServiceScopeFactory scopeFactory,
@@ -35,6 +36,7 @@ public class TransferImportRunner(
     ISeriesService seriesService,
     IArtworkSelectionService artworkSelectionService,
     IPictureRefreshService pictureRefreshService,
+    ITmdbArtworkService tmdbArtwork,
     ITopAnimeSelectionRepository topAnimeSelectionRepository,
     RefreshGate refreshGate)
 {
@@ -129,6 +131,12 @@ public class TransferImportRunner(
         }
 
         // 6.4: pre-check picture-setting candidates; retry once after a refresh.
+        // A refused choice is refreshed from the source its URL names (design.md
+        // D14): a TMDB image refetches the TMDB sets the anime or series draws
+        // from, anything else refetches MyAnimeList's picture sets. The retry
+        // itself is Apply's own check, which reads what the refresh stored.
+        // With no TMDB key configured the TMDB refresh is a no-op, so the choice
+        // stays refused and Apply reports it like any other.
         foreach (var picture in file.AnimePictures)
         {
             if (picture.SelectedPictureUrl is not { } url) continue; // a clear needs no check
@@ -138,6 +146,12 @@ public class TransferImportRunner(
             try
             {
                 await artworkSelectionService.CheckAnimePictureAsync(picture.AnimeId, url, ct);
+            }
+            catch (ArtworkSelectionRejectedException) when (TmdbImageUrl.IsTmdbImage(url))
+            {
+                progress.AddToTotal(1);
+                await tmdbArtwork.RefreshAnimeAsync(picture.AnimeId, force: true, ct);
+                progress.ReportProgress(++done);
             }
             catch (ArtworkSelectionRejectedException)
             {
@@ -155,6 +169,15 @@ public class TransferImportRunner(
             try
             {
                 await artworkSelectionService.CheckSeriesPictureAsync(localSeriesId, url, ct);
+            }
+            catch (ArtworkSelectionRejectedException) when (TmdbImageUrl.IsTmdbImage(url))
+            {
+                // Every set the series draws from, whatever its age, and past
+                // the per-visit budget of a series page: an import is not a
+                // page visit, and a set left unfetched is a choice refused.
+                progress.AddToTotal(1);
+                await tmdbArtwork.RefreshSeriesAsync(localSeriesId, int.MaxValue, force: true, ct);
+                progress.ReportProgress(++done);
             }
             catch (ArtworkSelectionRejectedException)
             {
