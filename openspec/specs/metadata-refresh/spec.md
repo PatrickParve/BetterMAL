@@ -292,9 +292,16 @@ The system SHALL NOT select a reduced field set for the purpose of making a refr
 - **THEN** their requests are spread across the window under the pacer rather than issued back-to-back
 
 ### Requirement: On-demand single-anime refresh
-The system SHALL offer an on-demand refresh action for a single anime that, at the moment it is requested, performs one MyAnimeList API call for that one anime and additionally re-fetches that one anime's airing data from AniList. Neither call SHALL touch any other anime.
+The system SHALL offer an on-demand refresh action for a single anime. At the moment it is requested, the action SHALL:
+- make one MyAnimeList API call for that one anime
+- re-fetch that one anime's airing data from AniList
+- refetch the TMDB sets the anime draws from (`tmdb-artwork`), whatever their age, when the anime is in my list, has a TMDB mapping, and TMDB access is configured
 
-When the MyAnimeList call succeeds but the AniList fetch fails, the action SHALL still report success, update the cached record and sync timestamps, and log the AniList failure.
+None of these calls SHALL modify any other anime's cached record or airing data. A TMDB set is shared by every anime that maps to it, so its refreshed images are offered to all of those anime.
+
+The TMDB refetch SHALL belong to this on-demand action only. The scheduled tiered refresh, the first visit to a lean-only row, and the resolving fetch for a newly discovered relation SHALL NOT call TMDB.
+
+When the MyAnimeList call succeeds but the AniList fetch or a TMDB fetch fails, the action SHALL still report success and update the cached record and sync timestamps. It SHALL leave as it was whatever the failed fetch would have replaced, and SHALL log the failure.
 
 #### Scenario: Refreshing one anime on demand
 - **WHEN** the user triggers refresh on a single anime's detail page
@@ -307,6 +314,18 @@ When the MyAnimeList call succeeds but the AniList fetch fails, the action SHALL
 #### Scenario: AniList unavailable during an on-demand refresh
 - **WHEN** the user triggers refresh, the MyAnimeList call succeeds, and the AniList fetch fails
 - **THEN** the action reports success with updated metadata, the anime's stored airing rows are left unchanged, and the AniList failure is logged
+
+#### Scenario: TMDB sets are refetched on demand
+- **WHEN** the user triggers refresh on a mapped anime in my list while TMDB access is configured
+- **THEN** the TMDB sets that anime draws from are fetched again, even when they are less than 30 days old
+
+#### Scenario: TMDB unavailable during an on-demand refresh
+- **WHEN** the user triggers refresh, the MyAnimeList call succeeds, and a TMDB fetch fails
+- **THEN** the action reports success, the anime's cached TMDB images are left unchanged, and the TMDB failure is logged
+
+#### Scenario: Scheduled refreshes never call TMDB
+- **WHEN** the scheduled tiered refresh refreshes a mapped anime in my list
+- **THEN** no TMDB request is made
 
 ### Requirement: Lean, visit-triggered refresh for browsed anime
 The system SHALL refresh Season-page listings on visit per the `season-browser` capability's own age-based cadence, and SHALL refresh Top-Anime-page listings by re-fetching only when the user visits a Top Anime ranking list on a local calendar day after that listing's last fetch — both requesting only lean listing fields (title, picture, episode count, type, MAL score, rank/popularity) rather than full anime details. A season, or a ranking list, never visited SHALL never be proactively fetched.
