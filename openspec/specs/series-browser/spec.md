@@ -81,11 +81,13 @@ Each listed series SHALL be shown as a card in a grid, in the same card and grid
 - the MAL average and my average across the **main line**, each rendered to two decimals, matching the series page's `MAL · main series` and `Mine · main series` chips in both computation and appearance;
 - the series' status pill, one of `Airing`, `Ongoing`, or `Finished`, computed by the precedence the `series-page` capability defines and carrying the same three distinct colours the series page uses;
 - my progress badge — one of `Completed`, `Caught up`, `N behind`, `Dropped`, or `Unwatched`, or no badge, by the precedence the next requirement defines, carrying the same colours the series page uses for those states;
-- the series' year span, rendered as `2013 – 2023`, or as the single year when every entry aired in one year;
+- the series' year span, rendered as `2013 – 2023`, or as the single year when every main-line entry aired in one year;
 - the main-line episode total; and
 - the count of entries in the series.
 
 The episode total SHALL be the **main-line** total, computed exactly as the series page's main-series episode total is: a member with a known episode count contributes it in full, a member without contributes its known aired-so-far count instead, and any unknown SHALL mark the figure as a lower bound (`62+ ep`) rather than presenting it as exact. A total of zero that is itself marked unknown SHALL read as unknown rather than as `0+ ep`.
+
+The year span SHALL be the one the series page's header shows, computed by the same rule the `series-page` capability's "Series page header" requirement defines. It SHALL cover the **main line only**, every alternative version included, and no extra or related entry SHALL stretch it. A card and the page it opens SHALL therefore always show the same years. Where no main-line entry has a known start date, the card SHALL show the same no-year placeholder the page does. The span's first year is the first-aired date the Newest and Oldest sorts order by, so those sorts order a series by when its main series began.
 
 The entry count SHALL cover **every** member, extras included — the same figure the series badge shows for a series in search results — so the two figures deliberately describe different member sets and each is labelled for the set it covers.
 
@@ -94,8 +96,16 @@ The status pill and the progress badge SHALL each render at a consistent, unifor
 The whole card SHALL link to that series' page, targeting the series' root anime id.
 
 #### Scenario: A card carries every figure
-- **WHEN** the Series page renders a card for a franchise of four main-line seasons and three extras spanning 2013 to 2023
+- **WHEN** the Series page renders a card for a franchise of four main-line seasons spanning 2013 to 2023 and three extras
 - **THEN** the card shows the series' resolved picture, the series' resolved title, a MAL and a my average, a status pill, the year span "2013 – 2023", the main-line episode total, and an entry count of 7
+
+#### Scenario: An extra outside the main series does not stretch the card's span
+- **WHEN** a series' main line aired from 2013 to 2019 and one of its extras aired in 2023
+- **THEN** its card's year span reads "2013 – 2019", the same span the series page's header shows
+
+#### Scenario: Newest orders by the main series' start
+- **WHEN** one series' main line began in 2010 with a pilot extra from 2006, and another series' main line began in 2008
+- **THEN** sorting by Newest puts the 2010 series before the 2008 one, since the pilot does not count toward its first year
 
 #### Scenario: A card shows a chosen title and picture
 - **WHEN** a series has been given a chosen title and a chosen picture
@@ -106,7 +116,7 @@ The whole card SHALL link to that series' page, targeting the series' root anime
 - **THEN** its card shows the root entry's title and displayed picture exactly as before
 
 #### Scenario: A single-year series shows one year
-- **WHEN** every entry of a series aired in 2019
+- **WHEN** every main-line entry of a series aired in 2019
 - **THEN** the card's year span reads "2019" rather than "2019 – 2019"
 
 #### Scenario: An unknown episode count is marked as a lower bound

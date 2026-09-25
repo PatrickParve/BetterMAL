@@ -261,6 +261,8 @@ An anime whose picture is portrait — its intrinsic height greater than or equa
 
 The picture SHALL keep the width the poster box already has and take whatever height its own proportions give it at that width. A picture whose proportions are taller than the poster box's SHALL therefore be rendered taller than the box rather than centre-cropped to it, and a picture whose proportions are shorter SHALL be rendered shorter rather than cropped to fill it. No maximum height SHALL be imposed: an unusually tall poster SHALL be shown whole.
 
+This holds for every portrait picture, whichever source it comes from and however close it is to the poster box's proportions. A picture SHALL NOT be classified as "close enough" to the box and then cropped to it, as the smaller poster boxes elsewhere in the app do (`artwork-presentation`'s poster/upright split). On this page every portrait picture is drawn at its own proportions.
+
 Everything beside the picture SHALL be unaffected: the page's two-column body, the score, info, and synopsis boxes to its right, and the width of the column the picture sits in SHALL all be exactly as they are today. Only the picture's own height, and the position of the progress controls stacked beneath it in the same column, SHALL follow from the artwork.
 
 Because a picture's proportions are not known until the image itself has loaded, the page SHALL reserve the existing portrait poster box's height until then, so the column does not collapse and then expand as the artwork arrives. The page SHALL NOT request, store, or wait on any additional data to make this decision.
@@ -274,6 +276,14 @@ The placeholder shown when an anime has no picture at all SHALL keep the existin
 #### Scenario: An ordinary poster is unchanged in width
 - **WHEN** I open the detail page of an anime whose poster is close to the poster box's proportions
 - **THEN** it is drawn at the same width it always has been, with its own height, and looks as it did before
+
+#### Scenario: A 2:3 poster is shown whole
+- **WHEN** I open the detail page of an anime whose displayed picture is a 2:3 poster, such as a TMDB poster
+- **THEN** the whole poster is shown at 2:3, at the poster box's width and slightly taller than the box, with nothing cut off at its top or bottom
+
+#### Scenario: A poster wider in proportion than the box is shown whole
+- **WHEN** I open the detail page of an anime whose poster is slightly wider in proportion than the poster box, such as a 0.74 picture
+- **THEN** the whole poster is shown at the box's width and its own, slightly shorter height, with nothing cut off at its sides
 
 #### Scenario: A shorter poster is not stretched or cropped
 - **WHEN** I open the detail page of an anime whose poster is shorter in proportion than the poster box

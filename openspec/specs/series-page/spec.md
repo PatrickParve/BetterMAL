@@ -457,7 +457,9 @@ When the component derived for an anime contains only that anime, the system SHA
 - **THEN** it returns that anime's own series, holding it and the telling it is an alternative of
 
 ### Requirement: Series page header
-The series page SHALL show the root entry's picture, the series title, a status pill, and the year span of the series (e.g. `2013 – 2023`, or the single year when every entry aired in one year).
+The series page SHALL show the root entry's picture, the series title, a status pill, and the year span of the series' **main series** (e.g. `2013 – 2023`, or the single year when every main-series entry aired in one year).
+
+The year span SHALL be computed over the **main line only**. It SHALL run from the earliest main-line entry's start year to the latest main-line entry's finish year. An entry's start date is the date it began airing, or the announced date it begins for an entry not yet aired. An entry with no known finish date, because it is still airing or has not aired yet, SHALL use its start year as its finish year, as the span does today. Extras, related entries and every other entry shown in More SHALL NOT count toward it, whether they aired before the main series began or after it ended. Every main-line entry SHALL count, every alternative version in a version slot included, so the span describes the franchise's main series and does not change when the picked route does. The span describes the main series as a whole, like the score averages, and does not describe the picked route. An entry with no known start date SHALL NOT count. When no main-line entry has a known start date, the header SHALL show the page's existing no-year placeholder rather than falling back to the extras' years.
 
 The header SHALL be the page's hero rather than a thumbnail strip: the picture SHALL be rendered large enough to read as the page's subject, and the title, status pill, personal badge, year span, external links, score averages, and main-line progress SHALL all sit inside that one block, so the series' summary is read in one place instead of down a column of separate panels.
 
@@ -534,8 +536,32 @@ A main line consisting of a single still-running entry — a long-running show t
 - **THEN** the header's progress bar shows broadcast progress behind my watched progress and the readout states the aired-episode figure, exactly as it does for an "Ongoing" series
 
 #### Scenario: Year span
-- **WHEN** a series' earliest entry aired in 2013 and its latest in 2023
+- **WHEN** a series' earliest main-line entry began airing in 2013 and its latest main-line entry finished airing in 2023
 - **THEN** the header shows "2013 – 2023"
+
+#### Scenario: A later extra does not stretch the span
+- **WHEN** a series' main line aired from 2013 to 2019 and a film shown in its More section aired in 2023
+- **THEN** the header shows "2013 – 2019", not "2013 – 2023"
+
+#### Scenario: An earlier extra does not stretch the span
+- **WHEN** a series' main line began airing in 2015 and a pilot OVA shown in its More section aired in 2012
+- **THEN** the header's span begins at 2015, not 2012
+
+#### Scenario: A single-year main series shows one year
+- **WHEN** every main-line entry of a series aired in 2019 and one of its OVAs aired in 2021
+- **THEN** the header shows "2019" rather than "2019 – 2021"
+
+#### Scenario: The span holds still across a route switch
+- **WHEN** a series' main line holds two alternative versions of its first season, from 2003 and 2009, and I switch the picked version
+- **THEN** the header's year span is the same before and after the switch, covering both versions
+
+#### Scenario: A still-airing main-line entry ends the span at its start year
+- **WHEN** a series' latest main-line entry began airing in 2025 and has not finished
+- **THEN** the header's span ends at 2025
+
+#### Scenario: No dated main-line entry
+- **WHEN** no main-line entry of a series has a known start date, although one of its extras does
+- **THEN** the header shows the page's no-year placeholder rather than the extra's year
 
 #### Scenario: Completed series is badged
 - **WHEN** I have marked every main-line entry of a fully finished series as Completed
@@ -919,6 +945,8 @@ Where a series' main line holds one or more version slots, the page's figures SH
 
 The **score averages** — MAL's and mine, across the main line and across all entries, as "Series score averages" defines — SHALL be computed over **every** main-line entry, every alternative included, whatever is picked. They SHALL NOT change when the picker does, so the figure that describes the franchise stays stable.
 
+The header's **year span** SHALL likewise cover every main-line entry, every alternative included, per "Series page header", and SHALL NOT change when the picker does. So SHALL the browser card's year span, which is the same figure.
+
 Every other main-line figure "Series stats" defines — the main-line episode total, the main-line runtime total, episodes aired, my watched episodes and watched time, my rewatched time, entries completed, the lower-bound marker on an unknown episode count, whether the main line is settled by me, and the longest gap — SHALL be computed over the **trunk plus the picked alternatives and their branches**, so that time left describes the route I chose rather than counting every retelling of the same story.
 
 Those figures SHALL be delivered with the series for each admissible combination of picks, so switching a picker changes them without a further request. The number of combinations SHALL be capped; beyond the cap, slots after the first SHALL keep their default alternative's figures while the picker still changes which entries are shown.
@@ -932,6 +960,10 @@ A series whose main line has no version slot SHALL be unaffected: every figure c
 #### Scenario: Averages hold still across a switch
 - **WHEN** I switch between two routes of a series
 - **THEN** the MAL and my score averages are unchanged
+
+#### Scenario: The year span holds still across a switch
+- **WHEN** I switch between two routes of a series whose alternatives aired in different years
+- **THEN** the header's year span is unchanged, and still covers every alternative
 
 #### Scenario: Totals follow the route
 - **WHEN** I switch from a four-entry route to a three-entry route
@@ -1487,9 +1519,15 @@ The "in my list" control and the expand/collapse-all control SHALL NOT scroll th
 - **THEN** every group updates and the page's scroll position is unchanged
 
 ### Requirement: Every picture is shown whole on the series page
-An entry's picture SHALL be shown whole wherever the series page renders it, whatever its shape: the page header's picture, a main-line timeline card's picture, and a More tile's picture. The shapes are those the `artwork-presentation` capability defines: a **poster**, an **upright** picture, and a **wide** picture (square or landscape). Only a poster SHALL be cropped to fill its box, and only as it is today.
+An entry's picture SHALL be shown whole wherever the series page renders it, whatever its shape: the page header's picture, a main-line timeline card's picture, and a More tile's picture. The shapes are those the `artwork-presentation` capability defines: a **poster**, an **upright** picture, and a **wide** picture (square or landscape). Only a poster on a timeline card or a More tile SHALL be cropped to fill its box, and only as it is today. The page header SHALL crop no picture of any shape.
 
-In the page header, a poster SHALL keep its existing box. An upright or square picture SHALL keep the width the header's portrait picture has and take whatever height its own proportions give it at that width, so a square picture is drawn square and nothing is cut off. A landscape picture, wider than it is tall, SHALL keep the header's existing landscape treatment. In every case the title, status pill, personal badge, year span, links, score averages and progress SHALL keep their existing positions relative to the picture.
+In the page header, every picture that is not landscape SHALL keep the width the header's portrait picture has and take whatever height its own proportions give it at that width. This covers a poster, an upright picture and a square picture alike. Nothing SHALL be cut off: a 2:3 poster SHALL be drawn at 2:3 rather than trimmed to the header's portrait box, a narrower or wider poster likewise at its own proportions, and a square picture square. No maximum height SHALL be imposed on it.
+
+A landscape picture, strictly wider than it is tall, SHALL keep the header's existing landscape treatment. It SHALL be drawn whole and wider than the portrait width, with the score averages and progress placed beneath the picture rather than beside it. A square picture is not landscape under this test, and SHALL keep the portrait layout with the score averages and progress beside it.
+
+In every case the title, status pill, personal badge, year span, links, score averages and progress SHALL keep their existing positions relative to the picture. Only the picture's own height, and so the height of the header block, SHALL follow from its proportions.
+
+Until the header picture has loaded, the header SHALL reserve the existing portrait box's size, so the header does not collapse and then expand as the picture arrives.
 
 On a timeline card and on a More tile, the card's picture area SHALL keep the height it has for a poster, so every card in a row still lines its picture, title and footer up with its neighbours'. A wide picture SHALL be fitted whole inside that area rather than cropped to fill it, and the card carrying it SHALL be wider than its poster neighbours so the fitted picture is shown at a useful size rather than reduced to a sliver of the card's height:
 
@@ -1502,13 +1540,25 @@ A card's extra width SHALL be a consequence of its artwork's shape alone. It SHA
 
 Wherever this capability refers to a landscape timeline card, a landscape More tile, or landscape artwork on either, it SHALL mean one carrying a wide picture in this sense, square pictures included.
 
-A poster, and the placeholder shown when an entry has no picture, SHALL keep their existing boxes and their existing card widths unchanged.
+On a timeline card and on a More tile, a poster SHALL keep its existing box and its existing card width unchanged. The placeholder shown when an entry has no picture SHALL keep its existing box everywhere, the page header included, since it has no proportions to adopt.
 
 Because a picture's shape is not known until the image itself has loaded, the page SHALL render the existing poster boxes until then, and adopt a picture's treatment once its shape is known. The page SHALL NOT request, store, or wait on any additional data to make this decision.
 
 #### Scenario: A landscape header picture is not cropped
 - **WHEN** I open a series whose root entry's picture is wider than it is tall
-- **THEN** the header shows that whole picture at its own proportions, and the title, pill, badge, year span, links, averages, and progress beside it are positioned exactly as on any other series page
+- **THEN** the header shows that whole picture at its own proportions, wider than the portrait width, with the title, pill, badge, year span and links beside it and the score averages and progress beneath it, exactly as a landscape header is laid out today
+
+#### Scenario: A 2:3 header poster is not trimmed
+- **WHEN** I open a series whose picture is a 2:3 poster, such as a TMDB poster
+- **THEN** the header shows the whole poster at 2:3, at the header's portrait width and slightly taller than the portrait box, with nothing cut off at its top or bottom, and the score averages and progress stay beside it
+
+#### Scenario: A wider-than-usual header poster is not trimmed
+- **WHEN** I open a series whose picture is a poster slightly wider in proportion than the header's portrait box, such as a 0.74 picture
+- **THEN** the header shows the whole poster at the portrait width and at its own, slightly shorter height, with nothing cut off at its sides
+
+#### Scenario: The header holds its size while the picture loads
+- **WHEN** I open a series page and its header picture has not finished loading
+- **THEN** the header reserves the portrait box's usual size, and adopts the picture's own height once it has loaded
 
 #### Scenario: A square header picture is drawn square
 - **WHEN** I open a series whose picture is exactly as wide as it is tall
@@ -1542,9 +1592,9 @@ Because a picture's shape is not known until the image itself has loaded, the pa
 - **WHEN** a series has one entry that ran a single cour and another that ran for several years, both with poster pictures
 - **THEN** both cards render at the same width, and the only cards that differ in width anywhere on the page are those whose own artwork is wide
 
-#### Scenario: Poster artwork is untouched
+#### Scenario: Poster cards and tiles are untouched
 - **WHEN** I open a series in which every picture is a poster
-- **THEN** the header picture, every timeline card, and every More tile render exactly as they do today
+- **THEN** every timeline card and every More tile renders exactly as it does today, and only the header picture is drawn at its own proportions
 
 ### Requirement: Series timeline ribbon
 The series page SHALL present the main line as one chronological list of cards, one per entry, in watch order — including an entry with no air date yet, such as an announced but unscheduled next season, shown inline in its correct sequence position rather than set apart from the dated entries around it. This section SHALL be the page's only presentation of the main line — there SHALL NOT be a separate, non-chronological list of main-line entries elsewhere on the page.
