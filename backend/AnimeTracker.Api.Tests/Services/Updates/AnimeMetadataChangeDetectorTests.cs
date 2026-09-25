@@ -114,6 +114,58 @@ public class AnimeMetadataChangeDetectorTests
         Assert.Empty(await db.RelationDiscoveries.ToListAsync());
     }
 
+    // fix-announcements-lost-to-series-build D1, D3: a discovery records
+    // whether its far end had ever been fully fetched when the edge appeared,
+    // read from committed data. "No row at all" and "a lean row" are both
+    // never-fully-fetched; only a row with LastSyncedAt set is not.
+    private static async Task<RelationDiscovery> RecordANewSequelEdgeAsync(AnimeMetadata? farEnd)
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60) };
+        db.AnimeMetadata.Add(anime);
+        if (farEnd is not null)
+            db.AnimeMetadata.Add(farEnd);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        await db.SaveChangesAsync();
+
+        var detector = CreateDetector(db, new SeriesBuildTrigger());
+        var before = detector.Snapshot(anime);
+
+        anime.RelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel", Title = "Anime 2" });
+        anime.LastSyncedAt = DateTimeOffset.UtcNow;
+
+        await detector.RecordAsync(anime, before, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync();
+
+        return Assert.Single(await db.RelationDiscoveries.AsNoTracking().ToListAsync());
+    }
+
+    [Fact]
+    public async Task ANewEdgeToAnAnimeWithNoCachedRowRecordsItAsNeverFullyFetched()
+    {
+        var discovery = await RecordANewSequelEdgeAsync(farEnd: null);
+
+        Assert.False(discovery.RelatedAnimeHadFullDetail);
+    }
+
+    [Fact]
+    public async Task ANewEdgeToAnAnimeWithALeanRowRecordsItAsNeverFullyFetched()
+    {
+        var discovery = await RecordANewSequelEdgeAsync(
+            new AnimeMetadata { Id = 2, Title = "Anime 2", LastSyncedAt = default });
+
+        Assert.False(discovery.RelatedAnimeHadFullDetail);
+    }
+
+    [Fact]
+    public async Task ANewEdgeToAnAnimeWithAFullDetailRowRecordsItAsAlreadyFullyFetched()
+    {
+        var discovery = await RecordANewSequelEdgeAsync(
+            new AnimeMetadata { Id = 2, Title = "Anime 2", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-30) });
+
+        Assert.True(discovery.RelatedAnimeHadFullDetail);
+    }
+
     // record-both-ends-of-a-schedule-move design.md D2: both ends of a
     // schedule move are in hand at the moment RecordFieldUpdates compares
     // before against anime, so it passes the just-written value as the

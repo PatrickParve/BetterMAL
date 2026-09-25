@@ -16,7 +16,17 @@ namespace AnimeTracker.Api.Models;
 /// considered for an announcement
 /// (IAnnouncementResolutionService) — null means still pending; every
 /// pre-existing row was backfilled as processed when this column was added
-/// (design.md D7), so the feature does not open with a wall of backdated news.</summary>
+/// (design.md D7), so the feature does not open with a wall of backdated news.
+///
+/// <para>RelatedAnimeHadFullDetail is whether RelatedAnimeId had ever had a
+/// full-detail fetch at the moment this row was written (fix-announcements-lost-
+/// to-series-build D1, D2); <c>false</c> includes "had no cached row at all".
+/// It is stored, not derived at resolution time, because the series rebuild
+/// the same detection queues fetches the far end within seconds, and every
+/// later reading of its <c>LastSyncedAt</c> reports that fetch instead of the
+/// past. <c>null</c> means the row predates this column: the resolver falls
+/// back to reading the anime's current <c>LastSyncedAt</c>, exactly as it did
+/// before the column existed.</para></summary>
 public class RelationDiscovery
 {
     public long Id { get; set; }
@@ -26,4 +36,5 @@ public class RelationDiscovery
     public string RelationType { get; set; } = "";
     public DateTimeOffset DiscoveredAt { get; set; }
     public DateTimeOffset? ProcessedAt { get; set; }
+    public bool? RelatedAnimeHadFullDetail { get; set; }
 }

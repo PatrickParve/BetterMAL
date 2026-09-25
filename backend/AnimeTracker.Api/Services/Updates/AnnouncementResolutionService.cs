@@ -45,66 +45,89 @@ public class AnnouncementResolutionService(
             var animeId = group.Key;
             var anime = await db.AnimeMetadata.AsNoTracking().FirstOrDefaultAsync(a => a.Id == animeId, ct);
 
-            // design.md D5: captured before any resolving fetch below, and in
-            // this order, because that fetch stamps LastSyncedAt — asked
-            // afterwards, "had we ever fully fetched this?" is unanswerable
-            // and every anime looks already-known, the same trap
-            // AnimeMetadataSnapshot.HadFullDetail already exists to avoid on
-            // the metadata-write path. hasEntry ignores status: a Dropped
-            // entry still proves the anime isn't a new show.
-            var hadFullDetail = anime is not null && anime.LastSyncedAt != default;
+            // fix-announcements-lost-to-series-build D1, D6: whether the anime
+            // was never fully fetched is read from what each discovery
+            // recorded when its edge appeared, and is not derivable here at
+            // all. The series rebuild that the same detection queues fetches
+            // a far end the system has no row for within seconds — ten
+            // minutes before this pass — and stamps LastSyncedAt, so reading
+            // that field now reports the rebuild, not the past. A discovery
+            // recorded before the column existed (null) has no verdict to
+            // read and falls back to today's check of the current record.
+            // Any row saying "new" is enough (D6): a later edge to the same
+            // anime that was not news does not undo one that was, and
+            // AnimeUpdateRecorder's once-per-anime dedupe prevents a
+            // duplicate card.
+            var needsFetch = anime is null || anime.LastSyncedAt == default;
+            var neverFullyFetched = group.Any(d => d.RelatedAnimeHadFullDetail == false
+                || (d.RelatedAnimeHadFullDetail is null && needsFetch));
+
+            // design.md D5, kept read-time: my list is only ever changed by
+            // me, never by the system's own background work, and an anime I
+            // have added since the discovery is one I already know about.
+            // hasEntry ignores status: a Dropped entry still proves the
+            // anime isn't a new show.
             var hasEntry = await db.UserAnimeEntries.AsNoTracking().AnyAsync(e => e.AnimeId == animeId, ct);
 
-            if (hadFullDetail || hasEntry)
+            if (!neverFullyFetched || hasEntry)
             {
-                // Already fully fetched, or already a list entry in any
-                // status: not an announcement candidate. Mark it resolved
-                // and spend no MAL call.
+                // Already fully fetched when the edge appeared, or already a
+                // list entry in any status: not an announcement candidate.
+                // Mark it resolved and spend no MAL call.
                 foreach (var discovery in group)
                     discovery.ProcessedAt = now;
                 continue;
             }
 
-            // Announceable: the row is absent or lean, so it always needs a
-            // fetch for the airing gate below to have a status to read.
-            // Previously the fetch ran only when the row was entirely
-            // absent, so a lean row's null AiringStatus silently failed that
-            // gate forever.
-            try
+            // Announceable. The airing gate below needs a status to read, so
+            // an absent or lean row (no airing status) is fetched first; a
+            // lean row's null AiringStatus would otherwise fail that gate
+            // forever. Where the row already carries full detail — usually
+            // because the series rebuild cached the anime moments after the
+            // discovery (fix-announcements-lost-to-series-build D7) — there
+            // is nothing to fetch, so the common announcement costs no MAL
+            // call, and none of the failure paths below can apply to it.
+            if (needsFetch)
             {
-                tally.RecordAttempt();
-                await metadataRefresh.RefreshOneAsync(animeId, ct);
-                tally.RecordSuccess();
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // An if chain, not a switch: a `break` inside a switch's arm
-                // would only leave the switch, not this foreach.
-                var kind = MalCallFailure.Classify(ex);
-                if (kind == MalCallFailureKind.NotFound)
+                try
                 {
-                    foreach (var discovery in group)
-                        discovery.ProcessedAt = now;
-                    logger.LogWarning(ex, "MAL has no anime {AnimeId}; its discovery is resolved without an announcement.", animeId);
+                    tally.RecordAttempt();
+                    await metadataRefresh.RefreshOneAsync(animeId, ct);
+                    tally.RecordSuccess();
                 }
-                else if (kind == MalCallFailureKind.Outage)
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
-                    logger.LogWarning(ex, "MAL appears unavailable while resolving anime {AnimeId}; ending this pass.", animeId);
-                    tally.RecordUnavailable(animeId);
-                    break;
+                    throw;
                 }
-                else
+                catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Failed to resolve newly-related anime {AnimeId}; will retry next pass.", animeId);
+                    // An if chain, not a switch: a `break` inside a switch's arm
+                    // would only leave the switch, not this foreach.
+                    var kind = MalCallFailure.Classify(ex);
+                    if (kind == MalCallFailureKind.NotFound)
+                    {
+                        foreach (var discovery in group)
+                            discovery.ProcessedAt = now;
+                        logger.LogWarning(ex, "MAL has no anime {AnimeId}; its discovery is resolved without an announcement.", animeId);
+                    }
+                    else if (kind == MalCallFailureKind.Outage)
+                    {
+                        logger.LogWarning(ex, "MAL appears unavailable while resolving anime {AnimeId}; ending this pass.", animeId);
+                        tally.RecordUnavailable(animeId);
+                        break;
+                    }
+                    else
+                    {
+                        logger.LogWarning(ex, "Failed to resolve newly-related anime {AnimeId}; will retry next pass.", animeId);
+                    }
+                    continue; // leave this group's discoveries unprocessed, unless the NotFound branch above just resolved them
                 }
-                continue; // leave this group's discoveries unprocessed, unless the NotFound branch above just resolved them
+
+                anime = await db.AnimeMetadata.AsNoTracking().FirstOrDefaultAsync(a => a.Id == animeId, ct);
             }
 
-            anime = await db.AnimeMetadata.AsNoTracking().FirstOrDefaultAsync(a => a.Id == animeId, ct);
+            // Only reachable as null after a fetch, since needsFetch is false
+            // exactly when a row was already there to read.
             if (anime is null)
             {
                 logger.LogWarning("Anime {AnimeId} still has no cached record after a successful resolution fetch; will retry next pass.", animeId);

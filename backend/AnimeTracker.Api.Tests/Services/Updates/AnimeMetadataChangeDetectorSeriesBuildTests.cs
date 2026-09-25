@@ -140,6 +140,57 @@ public class AnimeMetadataChangeDetectorSeriesBuildTests
         Assert.Equal(1, await trigger.WaitAsync(cts.Token));
     }
 
+    // fix-announcements-lost-to-series-build D1, D4: the regression test for
+    // the lost announcement. The rebuild this same detection enqueues fetches
+    // the far end within seconds and stamps LastSyncedAt, so the verdict a
+    // discovery records must already have been read by the time Enqueue runs.
+    // The fake plays that rebuild through a second context on the same
+    // database — committed state, as the real one produces — and the test
+    // fails if the enqueue is ever moved ahead of the discovery writes.
+    [Fact]
+    public async Task TheVerdictIsCapturedBeforeTheRebuildItEnqueuesFetchesTheFarEnd()
+    {
+        var options = new DbContextOptionsBuilder<AnimeTrackerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        using var db = new AnimeTrackerDbContext(options);
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60) };
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        await db.SaveChangesAsync();
+
+        var trigger = new FetchesFarEndOnEnqueueTrigger(options, farEndId: 2);
+        var detector = new AnimeMetadataChangeDetector(db, CreateRecorder(db), trigger);
+        var before = detector.Snapshot(anime);
+
+        anime.RelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel", Title = "Anime 2" });
+        anime.LastSyncedAt = DateTimeOffset.UtcNow;
+
+        await detector.RecordAsync(anime, before, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync();
+
+        Assert.Equal([1], trigger.Enqueued);
+        var farEnd = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 2);
+        Assert.NotEqual(default, farEnd.LastSyncedAt); // the rebuild did fetch it, so a read after the enqueue would say "known"
+        var discovery = Assert.Single(await db.RelationDiscoveries.AsNoTracking().ToListAsync());
+        Assert.False(discovery.RelatedAnimeHadFullDetail);
+    }
+
+    private sealed class FetchesFarEndOnEnqueueTrigger(DbContextOptions<AnimeTrackerDbContext> options, int farEndId) : ISeriesBuildTrigger
+    {
+        public List<int> Enqueued { get; } = [];
+
+        public void Enqueue(int animeId)
+        {
+            Enqueued.Add(animeId);
+            using var rebuildDb = new AnimeTrackerDbContext(options);
+            rebuildDb.AnimeMetadata.Add(new AnimeMetadata { Id = farEndId, Title = $"Anime {farEndId}", LastSyncedAt = DateTimeOffset.UtcNow });
+            rebuildDb.SaveChanges();
+        }
+
+        public Task<int> WaitAsync(CancellationToken ct) => throw new NotImplementedException();
+    }
+
     private sealed class FakeMalClient(Dictionary<int, MalAnimeNode> responses) : IMalClient
     {
         public Task<MalAnimeNode> GetAnimeDetailsAsync(int animeId, IReadOnlyCollection<string>? fields = null, CancellationToken ct = default) =>

@@ -12,6 +12,15 @@ namespace AnimeTracker.Api.Tests.Services.Updates;
 // IAnnouncementResolutionService (anime-updates spec, tasks 3.1-3.5): resolves
 // newly-discovered relation edges into cached anime and, where warranted, an
 // Announced update, marking every considered discovery as processed.
+//
+// fix-announcements-lost-to-series-build: whether the anime was never fully
+// fetched is read from the verdict each discovery recorded
+// (RelatedAnimeHadFullDetail), not from the cached row now. Discovery() below
+// leaves the verdict null unless a test passes one, and a null verdict is the
+// pre-column fallback (design D2): the resolver reads the anime's current
+// LastSyncedAt exactly as it did before the column existed. So the tests
+// that don't pass a verdict are the fallback's coverage, and they are meant
+// to stay that way; the recorded-verdict paths are the tests that do.
 public class AnnouncementResolutionServiceTests
 {
     private static AnimeTrackerDbContext CreateDb() =>
@@ -22,12 +31,14 @@ public class AnnouncementResolutionServiceTests
     private static AnnouncementResolutionService CreateService(AnimeTrackerDbContext db, IMetadataRefreshService metadataRefresh) =>
         new(db, metadataRefresh, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), NullLogger<AnnouncementResolutionService>.Instance);
 
-    private static RelationDiscovery Discovery(int ownerAnimeId, int relatedAnimeId, DateTimeOffset discoveredAt) => new()
+    private static RelationDiscovery Discovery(
+        int ownerAnimeId, int relatedAnimeId, DateTimeOffset discoveredAt, bool? relatedAnimeHadFullDetail = null) => new()
     {
         AnimeId = ownerAnimeId,
         RelatedAnimeId = relatedAnimeId,
         RelationType = "sequel",
         DiscoveredAt = discoveredAt,
+        RelatedAnimeHadFullDetail = relatedAnimeHadFullDetail,
     };
 
     [Fact]
@@ -141,9 +152,10 @@ public class AnnouncementResolutionServiceTests
         using var db = CreateDb();
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Owner" });
         // Already cached and already carries an Announced update from an
-        // earlier resolution pass. LastSyncedAt set: design.md D5's
-        // hadFullDetail gate reads this, not merely whether a row exists, to
-        // decide the anime needs no resolving fetch.
+        // earlier resolution pass. LastSyncedAt set: the discovery below has
+        // no recorded verdict (null), so the pre-column fallback reads this,
+        // not merely whether a row exists, to decide the anime is already
+        // known and needs no resolving fetch.
         db.AnimeMetadata.Add(new AnimeMetadata { Id = 6, Title = "Already Announced", AiringStatus = "not_yet_aired", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-30) });
         db.AnimeUpdates.Add(new AnimeUpdate { AnimeId = 6, DetectedAt = DateTimeOffset.UtcNow.AddDays(-1), Kinds = AnimeUpdateKinds.Announced });
         // A later, lagging discovery naming the same anime.
@@ -163,9 +175,10 @@ public class AnnouncementResolutionServiceTests
         Assert.NotNull(discovery.ProcessedAt);
     }
 
-    // design.md D5 (scope-updates-to-my-list tasks 6.6): hadFullDetail is
-    // captured before any resolving fetch, so an anime already fully fetched
-    // is recognised as not-announceable without spending a MAL call at all —
+    // design.md D5 (scope-updates-to-my-list tasks 6.6), now the null-verdict
+    // fallback: a discovery recorded before the verdict column existed reads
+    // the anime's current record, so an anime already fully fetched is
+    // recognised as not-announceable without spending a MAL call at all —
     // distinct from AnAlreadyAnnouncedAnimeIsNotAnnouncedTwice above, which
     // covers the same anime naming an update it already carries.
     [Fact]
@@ -244,6 +257,160 @@ public class AnnouncementResolutionServiceTests
         Assert.Equal(1, tally.Attempts);
         var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
         Assert.Equal(9, update.AnimeId);
+    }
+
+    // --- fix-announcements-lost-to-series-build: the recorded verdict ---
+
+    // Tasks 3.3, the bug itself (D1, D7): the series rebuild fetched the new
+    // far end seconds after the discovery, so by resolution time its row
+    // carries full detail. The verdict says it was new when the edge appeared,
+    // so it still announces — from the row already in hand, with no MAL call.
+    [Fact]
+    public async Task AnAnnouncementSurvivesTheSeriesRebuildFetchingTheAnimeFirst()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Owner" });
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 2, Title = "Sequel", AiringStatus = "not_yet_aired", LastSyncedAt = DateTimeOffset.UtcNow.AddSeconds(-2),
+        });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        db.AnimeRelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 2, RelatedAnimeId = 1, RelationType = "sequel" });
+        db.RelationDiscoveries.Add(Discovery(1, 2, DateTimeOffset.UtcNow.AddMinutes(-10), relatedAnimeHadFullDetail: false));
+        await db.SaveChangesAsync();
+
+        var metadataRefresh = new FakeMetadataRefreshService(db, new()); // empty: any call would throw
+        var service = CreateService(db, metadataRefresh);
+        var tally = new MalCallTally();
+
+        await service.ResolveAsync(10, skipAnimeId: null, tally);
+
+        Assert.Equal(0, tally.Attempts);
+        Assert.Empty(metadataRefresh.Calls);
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal(2, update.AnimeId);
+        Assert.Equal(AnimeUpdateKinds.Announced, update.Kinds);
+        var discovery = await db.RelationDiscoveries.AsNoTracking().SingleAsync();
+        Assert.NotNull(discovery.ProcessedAt);
+    }
+
+    // Tasks 3.4, the converse: a recorded "already known" is final whatever
+    // the cached row looks like now. An absent row would have made the old
+    // read-time check announce it after a fetch; the verdict spends no call.
+    [Fact]
+    public async Task ADiscoveryRecordedAsAlreadyFullyFetchedRecordsNothingAndSpendsNoCall()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Owner" });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        db.RelationDiscoveries.Add(Discovery(1, 2, DateTimeOffset.UtcNow, relatedAnimeHadFullDetail: true));
+        await db.SaveChangesAsync();
+
+        var metadataRefresh = new FakeMetadataRefreshService(db, new()); // empty: any call would throw
+        var service = CreateService(db, metadataRefresh);
+        var tally = new MalCallTally();
+
+        await service.ResolveAsync(10, skipAnimeId: null, tally);
+
+        Assert.Equal(0, tally.Attempts);
+        Assert.Empty(metadataRefresh.Calls);
+        Assert.Empty(await db.AnimeUpdates.ToListAsync());
+        var discovery = await db.RelationDiscoveries.AsNoTracking().SingleAsync();
+        Assert.NotNull(discovery.ProcessedAt);
+    }
+
+    // The rebuild does not always reach a far end (its visit budget is
+    // eight). A discovery recorded as new whose anime still has no row is
+    // fetched as before: the verdict decides whether it may announce, the
+    // row decides whether a call is needed.
+    [Fact]
+    public async Task ADiscoveryRecordedAsNewWithNoCachedRowIsStillFetched()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Owner" });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        db.AnimeRelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 2, RelatedAnimeId = 1, RelationType = "sequel" });
+        db.RelationDiscoveries.Add(Discovery(1, 2, DateTimeOffset.UtcNow, relatedAnimeHadFullDetail: false));
+        await db.SaveChangesAsync();
+
+        var metadataRefresh = new FakeMetadataRefreshService(db, new()
+        {
+            [2] = new AnimeMetadata { Id = 2, Title = "Sequel", AiringStatus = "not_yet_aired", LastSyncedAt = DateTimeOffset.UtcNow },
+        });
+        var service = CreateService(db, metadataRefresh);
+        var tally = new MalCallTally();
+
+        await service.ResolveAsync(10, skipAnimeId: null, tally);
+
+        Assert.Equal(1, tally.Attempts);
+        Assert.Equal([2], metadataRefresh.Calls);
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal(2, update.AnimeId);
+    }
+
+    // Tasks 3.5 (D6): any pending discovery saying "new" is enough. The older
+    // row here says "known", so reading the group by its first row, or
+    // requiring every row to say "new", would suppress the announcement; the
+    // once-per-anime limit keeps two announceable rows to one card.
+    [Fact]
+    public async Task MixedVerdictsForOneAnimeStillProduceOneAnnouncement()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Owner A" });
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 3, Title = "Owner B" });
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 2, Title = "Sequel", AiringStatus = "not_yet_aired", LastSyncedAt = DateTimeOffset.UtcNow.AddMinutes(-9),
+        });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        db.AnimeRelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 2, RelatedAnimeId = 1, RelationType = "sequel" });
+        var now = DateTimeOffset.UtcNow;
+        db.RelationDiscoveries.Add(Discovery(3, 2, now.AddMinutes(-20), relatedAnimeHadFullDetail: true));
+        db.RelationDiscoveries.Add(Discovery(1, 2, now.AddMinutes(-10), relatedAnimeHadFullDetail: false));
+        await db.SaveChangesAsync();
+
+        var metadataRefresh = new FakeMetadataRefreshService(db, new()); // empty: any call would throw
+        var service = CreateService(db, metadataRefresh);
+        var tally = new MalCallTally();
+
+        await service.ResolveAsync(10, skipAnimeId: null, tally);
+
+        Assert.Equal(0, tally.Attempts);
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal(2, update.AnimeId);
+        Assert.All(await db.RelationDiscoveries.AsNoTracking().ToListAsync(), d => Assert.NotNull(d.ProcessedAt));
+    }
+
+    // Tasks 3.6 (D5): the list-entry half of the gate stays a read-time
+    // check. The discovery says the anime was new, but I have added it since,
+    // so there is no news to deliver — and no false card for the recorder's
+    // own "announcement for an anime I already hold" rule to delete.
+    [Fact]
+    public async Task ADiscoveryRecordedAsNewForAnAnimeIHaveSinceAddedRecordsNothing()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Owner" });
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 2, Title = "Sequel", AiringStatus = "not_yet_aired", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-3),
+        });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 2, Status = WatchStatus.PlanToWatch });
+        db.AnimeRelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 2, RelatedAnimeId = 1, RelationType = "sequel" });
+        db.RelationDiscoveries.Add(Discovery(1, 2, DateTimeOffset.UtcNow.AddDays(-3), relatedAnimeHadFullDetail: false));
+        await db.SaveChangesAsync();
+
+        var metadataRefresh = new FakeMetadataRefreshService(db, new()); // empty: any call would throw
+        var service = CreateService(db, metadataRefresh);
+        var tally = new MalCallTally();
+
+        await service.ResolveAsync(10, skipAnimeId: null, tally);
+
+        Assert.Equal(0, tally.Attempts);
+        Assert.Empty(metadataRefresh.Calls);
+        Assert.Empty(await db.AnimeUpdates.ToListAsync());
+        var discovery = await db.RelationDiscoveries.AsNoTracking().SingleAsync();
+        Assert.NotNull(discovery.ProcessedAt);
     }
 
     // --- 4.5: outage/not-found accounting for resolution (design D3, D6) ---

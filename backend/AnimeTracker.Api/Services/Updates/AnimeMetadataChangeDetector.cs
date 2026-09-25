@@ -78,7 +78,12 @@ public interface IAnimeMetadataChangeDetector
     /// entry of the user's: a first full-detail fetch's whole relation set
     /// arriving at once is the system finally looking, not news, and an
     /// announcement can only ever originate one step from the user's own
-    /// list, not one step from an anime merely linked to it.</para></summary>
+    /// list, not one step from an anime merely linked to it.</para>
+    ///
+    /// <para>Each discovery records whether its newly-related anime had ever
+    /// been fully fetched, read from committed data before the series rebuild
+    /// queued here can fetch that anime
+    /// (<see cref="RelationDiscovery.RelatedAnimeHadFullDetail"/>).</para></summary>
     Task RecordAsync(AnimeMetadata anime, AnimeMetadataSnapshot before, DateTimeOffset now, CancellationToken ct = default);
 }
 
@@ -133,7 +138,7 @@ public class AnimeMetadataChangeDetector(
         // one step off an anime that only qualifies through IAnimeUpdateRelevance
         // itself — see that method's own comment.
         if (newEdges.Count > 0 && before.HadFullDetail && await IsOwnNonDroppedEntryAsync(anime.Id, ct))
-            RecordDiscoveries(anime.Id, newEdges, now);
+            await RecordDiscoveries(anime.Id, newEdges, now, ct);
 
         await RecordFieldUpdates(anime, before, now, ct);
 
@@ -147,6 +152,14 @@ public class AnimeMetadataChangeDetector(
         // non-blocking, and ISeriesBuildTrigger already dedupes against an id
         // already queued, so one refresh pass discovering several edges on
         // the same anime still enqueues it once.
+        //
+        // fix-announcements-lost-to-series-build D4: this call's position
+        // *after* the discovery writes above is load-bearing. The rebuild it
+        // queues is what fetches a newly-related anime the system has no row
+        // for, within seconds, and RecordDiscoveries has to have read that
+        // anime's fetched-or-not state before that can happen — afterwards
+        // the fetch is indistinguishable from the anime always having been
+        // known. Do not move it above RecordDiscoveries.
         if (newEdges.Count > 0)
             seriesBuildTrigger.Enqueue(anime.Id);
     }
@@ -173,10 +186,29 @@ public class AnimeMetadataChangeDetector(
     }
 
     /// <summary>Writes one <see cref="RelationDiscovery"/> per edge in
-    /// <paramref name="newEdges"/>. The caller alone decides whether this runs
-    /// (design.md D4) — this method applies no gate of its own.</summary>
-    private void RecordDiscoveries(int animeId, List<(int RelatedAnimeId, string RelationType)> newEdges, DateTimeOffset now)
+    /// <paramref name="newEdges"/>, each carrying whether its far end had ever
+    /// been fully fetched at this moment
+    /// (<see cref="RelationDiscovery.RelatedAnimeHadFullDetail"/>). The caller
+    /// alone decides whether this runs (design.md D4) — this method applies no
+    /// gate of its own, but it must run before the series rebuild is enqueued
+    /// (fix-announcements-lost-to-series-build D3, D4).</summary>
+    private async Task RecordDiscoveries(
+        int animeId, List<(int RelatedAnimeId, string RelationType)> newEdges, DateTimeOffset now, CancellationToken ct)
     {
+        // One batched read over the distinct far ends, not a lookup per edge.
+        // A projection and not a tracked entity read, on purpose:
+        // RefreshStaleBatchAsync refreshes up to twenty anime against one
+        // context and saves once at the end, so a tracked read could hand back
+        // a far end whose ApplyTo has already stamped LastSyncedAt in memory
+        // and report full detail for an anime the database has never seen
+        // fetched. Projecting reads the committed row — the same "before this
+        // unit of work" basis AnimeMetadataSnapshot takes for the owner.
+        var farEndIds = newEdges.Select(e => e.RelatedAnimeId).Distinct().ToList();
+        var lastSyncedAt = await db.AnimeMetadata.AsNoTracking()
+            .Where(a => farEndIds.Contains(a.Id))
+            .Select(a => new { a.Id, a.LastSyncedAt })
+            .ToDictionaryAsync(a => a.Id, a => a.LastSyncedAt, ct);
+
         foreach (var edge in newEdges)
         {
             db.RelationDiscoveries.Add(new RelationDiscovery
@@ -185,6 +217,8 @@ public class AnimeMetadataChangeDetector(
                 RelatedAnimeId = edge.RelatedAnimeId,
                 RelationType = edge.RelationType,
                 DiscoveredAt = now,
+                // No row at all is as never-fully-fetched as a lean one.
+                RelatedAnimeHadFullDetail = lastSyncedAt.TryGetValue(edge.RelatedAnimeId, out var syncedAt) && syncedAt != default,
             });
         }
     }
