@@ -39,7 +39,7 @@ import { useActionFailure } from '../context/ActionFailureContext.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { useDisplayPicture } from '../hooks/useDisplayPicture.ts'
-import { isLandscapeRatio, pictureShapeOf, useOrientationPicture } from '../hooks/useLandscapePicture.ts'
+import { useLandscapePicture } from '../hooks/useLandscapePicture.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { usePickerOpenGroups } from '../hooks/usePickerOpenGroups.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
@@ -444,9 +444,11 @@ export function SeriesPage() {
   const [rebuildCount, setRebuildCount] = useState<number | null>(null)
   const { openEditor } = useEntryEditor()
   const reportFailure = useActionFailure()
-  // One ref, two facts (uncrop-artwork-everywhere design D7): strict
-  // landscape keeps the header's own landscape layout, while an upright or
-  // square picture is drawn whole at the portrait width instead of cropped.
+  // One fact: is the picture strictly landscape (polish-series-header-and-
+  // completion-prompt design D3). Strict landscape keeps the header's own
+  // landscape layout, with the scores under the picture. Every other picture,
+  // poster, upright or square, is drawn whole at the portrait width and at its
+  // own height, so nothing is cropped; the CSS needs no class to say so.
   //
   // The header picture downloads at the hero width, with the original as the
   // fallback (tmdb-artwork, design D9). The ratio is read off the displayed
@@ -456,9 +458,7 @@ export function SeriesPage() {
     data?.found ? data.series.pictureUrl : null,
     'hero',
   )
-  const [pictureRef, pictureRatio] = useOrientationPicture(pictureSrc)
-  const isLandscapePicture = isLandscapeRatio(pictureRatio)
-  const isWholePicture = !isLandscapePicture && pictureShapeOf(pictureRatio) !== 'poster'
+  const [pictureRef, isLandscapePicture] = useLandscapePicture(pictureSrc)
   const [showPicturePicker, setShowPicturePicker] = useState(false)
   const [showTitlePicker, setShowTitlePicker] = useState(false)
   const { openGroups, seedOpenGroups, toggleGroup } = usePickerOpenGroups(animeId)
@@ -1144,9 +1144,7 @@ export function SeriesPage() {
             src={pictureSrc}
             alt=""
             onError={onPictureError}
-            className={`series-page__picture${
-              isLandscapePicture ? ' series-page__picture--landscape' : isWholePicture ? ' series-page__picture--whole' : ''
-            }`}
+            className={`series-page__picture${isLandscapePicture ? ' series-page__picture--landscape' : ''}`}
           />
         ) : (
           <div className="series-page__picture series-page__picture--placeholder" aria-hidden="true" />

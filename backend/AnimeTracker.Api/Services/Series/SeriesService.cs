@@ -144,7 +144,7 @@ public class SeriesService(
         var root = allAnime.First(a => a.Id == series.Id);
         var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
             series.SelectedTitle, series.SelectedPictureUrl, root.Title, root.EnglishTitle, root.MalPictureUrl);
-        var (firstYear, lastYear) = YearSpan(allAnime);
+        var (firstYear, lastYear) = SeriesYearSpan.Of(mainLineMembers.Select(m => (m.Anime.AiredFrom, m.Anime.AiredTo)));
         var rootAniListId = await db.AnimeAiringSyncs.AsNoTracking()
             .Where(s => s.AnimeId == series.Id)
             .Select(s => (int?)s.AniListId)
@@ -576,20 +576,6 @@ public class SeriesService(
         SeriesStatusRules.Compute(
             mainLineMembers.Select(a => a.AiringStatus),
             members.Select(a => a.AiringStatus));
-
-    // The last year is the latest entry's *end* year (AiredTo), not the start
-    // year of whichever entry started airing most recently — a multi-cour or
-    // still-running entry's AiredFrom.Year understates how far the franchise
-    // actually runs. Falls back to AiredFrom when AiredTo isn't known yet
-    // (currently airing or not yet aired).
-    private static (int? First, int? Last) YearSpan(List<AnimeMetadata> members)
-    {
-        var aired = members.Where(a => a.AiredFrom is not null).ToList();
-        if (aired.Count == 0) return (null, null);
-        var firstYear = aired.Min(a => a.AiredFrom!.Value.Year);
-        var lastYear = aired.Max(a => (a.AiredTo ?? a.AiredFrom!.Value).Year);
-        return (firstYear, lastYear);
-    }
 
     // --- Score averages (3.2) ---
 

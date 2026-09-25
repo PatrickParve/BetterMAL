@@ -1,29 +1,91 @@
+/* The prompt's layout (list-editing, "The completion prompt is laid out around a
+   large, whole picture"): the picture on the left, the text beside it, and the
+   actions in a row of their own under both. The picture takes one of two fixed
+   widths, decided by the landscape test alone, and its own height there. It is
+   never sized per picture, so the text column only ever has two widths to
+   fit. */
 .completion-score {
-  display: flex;
-  gap: 16px;
+  --completion-picture-w: 170px;
+  display: grid;
+  grid-template-columns: var(--completion-picture-w) minmax(0, 1fr);
+  column-gap: 20px;
+  row-gap: 20px;
 }
 
+.completion-score--landscape {
+  --completion-picture-w: 250px;
+}
+
+/* The picture's own box, whole: full width of its column and its own height.
+   `auto` lets a loaded image's ratio win; 170/240 only holds a portrait box
+   until it has one, so the prompt doesn't collapse and re-expand as the
+   picture arrives. A <div> has no intrinsic ratio, so the same declaration
+   gives the placeholder that box outright. */
 .completion-score__picture {
-  --row-picture-w: 96px;
-  --row-picture-h: 136px;
-  border-radius: 6px;
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto 170 / 240;
+}
+
+/* The box around the <img>, carrying the placeholder surface the picture fades
+   in over: an <img> can't fade over its own background, since its opacity
+   takes the background with it (RowPicture.css, the same recipe).
+   overflow: hidden clips the <img> to the radius. align-self: start keeps it
+   at the picture's height instead of stretching to the row's. */
+.completion-score__picture-frame {
+  display: block;
+  align-self: start;
+  background: var(--code-bg);
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 .completion-score__picture--placeholder {
+  box-sizing: border-box;
+  align-self: start;
+  background: var(--code-bg);
   border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+/* Invisible until it has loaded, so it is never drawn part-way as it downloads
+   and the frame's surface shows; a picture that fails stays that way. Held
+   (already in the browser's cache, or arrived within PICTURE_FADE_DELAY_MS,
+   see useLandscapePicture.ts) matches nothing here and shows at once: only a
+   visibly slow picture fades. */
+.completion-score__picture-frame--pending > .completion-score__picture {
+  opacity: 0;
+}
+
+.completion-score__picture-frame--loaded > .completion-score__picture {
+  animation: completion-score-picture-fade-in 180ms ease-out;
+}
+
+@keyframes completion-score-picture-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .completion-score__picture-frame--loaded > .completion-score__picture {
+    animation: none;
+  }
 }
 
 .completion-score__body {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  align-self: start;
   min-width: 0;
-  flex: 1 1 auto;
 }
 
 .completion-score__title {
   margin: 0;
   font-size: 20px;
+  font-weight: 600;
 }
 
 .completion-score__hint {
@@ -40,7 +102,8 @@
   color: var(--text);
 }
 
-.completion-score__field select {
+.completion-score__select {
+  width: 100%;
   font: inherit;
   padding: 8px 10px;
   border-radius: 6px;
@@ -49,17 +112,35 @@
   color: var(--text-h);
 }
 
+/* "Mine" role (score-presentation): a score I've picked looks like the score
+   it sets, same recipe as .entry-editor__score-select--mine. "No score" keeps
+   the neutral styling above, since there is no score to colour. */
+.completion-score__select.completion-score__select--mine {
+  border-color: var(--mine-border);
+  background: var(--mine-bg);
+  color: var(--mine);
+}
+
 .completion-score__error {
   color: #e5484d;
   font-size: 14px;
   margin: 0;
 }
 
+/* The prompt's footer: spans both columns, set off by a rule so the actions
+   read as the prompt's own and not as part of the text column. Cancel sits at
+   the start, Save and rank and Save at the end, Save always last so it holds
+   its place when a score change withdraws Save and rank. flex-wrap moves a
+   whole button down on a row too narrow for all three; a label never wraps
+   inside its button. */
 .completion-score__buttons {
+  grid-column: 1 / -1;
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }
 
 .completion-score__buttons button {
@@ -70,6 +151,11 @@
   background: var(--bg);
   color: var(--text-h);
   cursor: pointer;
+  white-space: nowrap;
+}
+
+.completion-score__cancel {
+  margin-right: auto;
 }
 
 /* Cancel's outlined hover. .completion-score__save and
@@ -79,7 +165,11 @@
   border-color: var(--accent-border);
 }
 
-.completion-score__save {
+/* Save is the solid primary (design D7). Qualified with the button type, like
+   the hover rules below: a bare `.completion-score__save` (0,1,0) loses to
+   `.completion-score__buttons button` (0,1,1) above, and Save then rested as
+   the same plain outlined button as Cancel. */
+.completion-score__buttons button.completion-score__save {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
@@ -95,7 +185,8 @@
   border-color: var(--accent-hover);
 }
 
-.completion-score__save-and-rank {
+/* Outlined accent, qualified for the same reason as Save above. */
+.completion-score__buttons button.completion-score__save-and-rank {
   border-color: var(--accent-border);
   color: var(--accent);
 }
@@ -108,4 +199,22 @@
 .completion-score__buttons button.completion-score__save-and-rank:hover:not(:disabled) {
   background: var(--accent-bg);
   border-color: var(--accent);
+}
+
+/* Too narrow for the picture and the text side by side: at 600px the prompt's
+   content is 504px, which leaves the text 234px beside a landscape picture,
+   the narrowest that still reads well. The picture moves above the text,
+   centred, with the landscape width capped to the space there is. The box is
+   sized here, since a centred grid item would otherwise shrink to fit its
+   own content. */
+@media (max-width: 600px) {
+  .completion-score {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .completion-score__picture-frame,
+  .completion-score__picture--placeholder {
+    justify-self: center;
+    width: min(var(--completion-picture-w), 100%);
+  }
 }

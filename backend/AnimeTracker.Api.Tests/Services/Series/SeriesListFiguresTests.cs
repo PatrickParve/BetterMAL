@@ -120,7 +120,7 @@ public class SeriesListFiguresTests
     }
 
     [Fact]
-    public async Task YearSpan_SpansEveryMemberIncludingExtras()
+    public async Task YearSpan_CoversTheMainLineOnly()
     {
         using var db = CreateDb();
         db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
@@ -135,7 +135,68 @@ public class SeriesListFiguresTests
         var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
 
         Assert.Equal(2013, listed.FirstYear);
-        Assert.Equal(2023, listed.LastYear); // extra's AiredTo, later than the main-line member's
+        Assert.Equal(2013, listed.LastYear); // the later extra's 2022-2023 does not stretch it
+    }
+
+    [Fact]
+    public async Task YearSpan_AnExtraThatAiredBeforeTheMainLineDoesNotLowerTheFirstYear()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, "finished_airing", airedFrom: new DateOnly(2013, 4, 1), airedTo: new DateOnly(2013, 9, 1));
+        AddAnime(db, 101, "finished_airing", airedFrom: new DateOnly(2011, 2, 1), airedTo: new DateOnly(2011, 2, 1)); // a pilot OVA
+        AddMember(db, 100, 100, isMainLine: true, order: 0);
+        AddMember(db, 100, 101, isMainLine: false, order: 0);
+        AddEntry(db, 100, WatchStatus.Completed);
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
+
+        Assert.Equal(2013, listed.FirstYear);
+        Assert.Equal(2013, listed.LastYear);
+    }
+
+    [Fact]
+    public async Task YearSpan_EveryMainLineAlternativeCounts()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, "finished_airing", airedFrom: new DateOnly(2013, 4, 1), airedTo: new DateOnly(2013, 9, 1)); // trunk
+        // A version slot: 101 and 102 are alternatives to each other. The span
+        // covers both, so it does not move with the picked route.
+        AddAnime(db, 101, "finished_airing", airedFrom: new DateOnly(2014, 4, 1), airedTo: new DateOnly(2015, 3, 1));
+        AddAnime(db, 102, "finished_airing", airedFrom: new DateOnly(2018, 4, 1), airedTo: new DateOnly(2019, 3, 1));
+        AddMember(db, 100, 100, isMainLine: true, order: 0);
+        AddMember(db, 100, 101, isMainLine: true, order: 1, versionSlotKey: 101, branchHeadAnimeId: 101);
+        AddMember(db, 100, 102, isMainLine: true, order: 2, versionSlotKey: 101, branchHeadAnimeId: 102);
+        AddEntry(db, 100, WatchStatus.Completed);
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
+
+        Assert.Equal(2013, listed.FirstYear);
+        Assert.Equal(2019, listed.LastYear); // 102 is the non-default alternative, and still counts
+    }
+
+    [Fact]
+    public async Task YearSpan_ASeriesWhoseOnlyDatedMemberIsAnExtraHasNoSpan()
+    {
+        using var db = CreateDb();
+        db.Series.Add(new SeriesModel { Id = 100, BuiltAt = DateTimeOffset.UtcNow });
+        AddAnime(db, 100, "not_yet_aired"); // the main line has no start date yet
+        AddAnime(db, 101, "finished_airing", airedFrom: new DateOnly(2022, 1, 1), airedTo: new DateOnly(2023, 3, 1)); // extra
+        AddMember(db, 100, 100, isMainLine: true, order: 0);
+        AddMember(db, 100, 101, isMainLine: false, order: 0);
+        AddEntry(db, 100, WatchStatus.PlanToWatch);
+        await db.SaveChangesAsync();
+
+        var index = await new SeriesRankingLookup(db).LoadAsync();
+        var listed = Assert.Single(index.ListedSeries([], AnimeRankingSnapshot.Empty));
+
+        Assert.Null(listed.FirstYear); // no fallback to the extra's years
+        Assert.Null(listed.LastYear);
     }
 
     [Fact]

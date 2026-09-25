@@ -165,7 +165,7 @@ public sealed class SeriesRankingIndex
                 mainLine.Select(m => (m.AiringStatus, m.EntryStatus)));
             var malRevealed = mainLineSettledByMe && !mainLineAiring;
 
-            var (firstYear, lastYear) = ListedSeriesYearSpan(members);
+            var (firstYear, lastYear) = SeriesYearSpan.Of(mainLine.Select(m => (m.AiredFrom, m.AiredTo)));
 
             // The card's episode/progress figures use the default
             // combination of alternatives (rebuild-series-by-story-component
@@ -272,18 +272,6 @@ public sealed class SeriesRankingIndex
             ? null
             : new UserAnimeEntry { AnimeId = m.AnimeId, EpisodesWatched = m.EpisodesWatched ?? 0, Status = m.EntryStatus.Value },
     };
-
-    // Mirrors SeriesService.YearSpan, over every member rather than main-line
-    // only (design.md D7/task 2.7) — the card's year span matches the series
-    // page's.
-    private static (int? First, int? Last) ListedSeriesYearSpan(List<SeriesRankingMemberProjection> members)
-    {
-        var aired = members.Where(m => m.AiredFrom is not null).ToList();
-        if (aired.Count == 0) return (null, null);
-        var firstYear = aired.Min(m => m.AiredFrom!.Value.Year);
-        var lastYear = aired.Max(m => (m.AiredTo ?? m.AiredFrom!.Value).Year);
-        return (firstYear, lastYear);
-    }
 
     // Mirrors SeriesService.BuildStats' episode-total fallback (design.md
     // D7): a known TotalEpisodes contributes in full; an unknown one

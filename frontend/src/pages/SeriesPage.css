@@ -32,10 +32,18 @@
   row-gap: 12px;
 }
 
+/* Every picture that isn't landscape — a poster, an upright picture, a square
+   one — keeps the portrait width and takes its own height there, so it is
+   drawn whole and nothing is cropped: a 2:3 TMDB poster at 2:3, a square one
+   square (the detail page's .anime-detail-page__picture technique). The
+   `auto` keyword lets a loaded image's intrinsic ratio win; 140/198 only holds
+   the box until it has one, so the header doesn't collapse and re-expand as
+   the picture arrives. The placeholder <div> has no intrinsic ratio, so the
+   same declaration gives it that box outright. */
 .series-page__picture {
   width: clamp(140px, 20vw, 200px);
-  aspect-ratio: 140 / 198;
-  object-fit: cover;
+  height: auto;
+  aspect-ratio: auto 140 / 198;
   border-radius: 12px;
   background: var(--code-bg);
   flex: 0 0 auto;
@@ -43,17 +51,6 @@
 
 .series-page__picture--placeholder {
   border: 1px solid var(--border);
-}
-
-/* An upright or square picture keeps the portrait width and takes its own
-   height there, so it's drawn whole — a square one square — rather than
-   cropped to 140/198 (the detail page's .anime-detail-page__picture
-   technique). The `auto` keyword lets a loaded image's intrinsic ratio win;
-   140/198 only holds the box until it has one. A poster never gets this
-   class, so it keeps the cropped box above. */
-.series-page__picture--whole {
-  height: auto;
-  aspect-ratio: auto 140 / 198;
 }
 
 /* Landscape art takes its own natural height instead of being cropped to

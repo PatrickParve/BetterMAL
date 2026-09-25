@@ -52,9 +52,9 @@ const POSTER_MAX_RATIO = 3 / 4
 // resets with `src` alongside the ratio, and a failed picture stays
 // `pending`: a failed <img> is `complete` too, but with no height.
 //
-// Exported for a host that needs both the shape and strict landscape from
-// one <img> (the series header, design D7) — one callback ref, rather than
-// two attached to the same node. Those hosts ignore `arrival`.
+// Exported for a host that needs both strict landscape and `arrival` from one
+// <img> (the completion prompt, polish-series-header-and-completion-prompt
+// design D6) — one callback ref, rather than two attached to the same node.
 export function useOrientationPicture(
   src: string | null | undefined,
 ): [LandscapePictureRef, number | null, PictureArrival] {
