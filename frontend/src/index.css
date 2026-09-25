@@ -540,3 +540,16 @@ select:not(:disabled):hover {
   color: var(--text-h);
   border-color: var(--accent-border);
 }
+
+/* Content held from the previous period while the next one loads (useHeldData;
+   page-load-states, "Stepping to another period keeps the current content
+   until the next arrives"). Applied only once the load has outlasted the
+   loading-indicator delay, so a fast step shows nothing different. Dimmed and
+   inert like the Top anime page's own muted list, so it isn't mistaken for the
+   period now named in the header, whose controls sit outside it and stay
+   usable. */
+.held-content--muted {
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}

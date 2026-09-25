@@ -1,4 +1,5 @@
 import { useId } from 'react'
+import { useDisplayPicture } from '../hooks/useDisplayPicture.ts'
 import { Modal } from './Modal.tsx'
 import {
   CURRENT_GROUP_KEY,
@@ -49,10 +50,12 @@ type PicturePickerOverlayProps = {
 //
 // Every group opens and closes under its own heading, and a closed group
 // renders no <img> at all — never a hidden one, since a browser still
-// downloads a display:none image. TMDB's `original` images are heavy, so what
-// stays closed is never fetched. Opening a group only mounts its images, and
-// those come straight from the image CDN: no request to the backend or to the
-// TMDB API is involved.
+// downloads a display:none image. A group can hold a hundred TMDB images, so
+// what stays closed is never fetched. Opening a group only mounts its images,
+// and those come straight from the image CDN: no request to the backend or to
+// the TMDB API is involved. An option is downloaded at the tile width rather
+// than as the `original` file (tmdb-artwork, design D9), but it is still the
+// `original` URL that picking stores and that marks the current picture.
 export function PicturePickerOverlay({
   title,
   sections,
@@ -232,6 +235,10 @@ function PickerOptionButton({
   selected: boolean
   onPick: (url: string) => void
 }) {
+  // Only what is downloaded is fitted: `option.url`, the picture's identity,
+  // still goes to onPick and is what `selected` was compared on.
+  const { displaySrc, onError } = useDisplayPicture(option.url, 'tile')
+
   return (
     <button
       type="button"
@@ -245,15 +252,17 @@ function PickerOptionButton({
     >
       {/* width/height are set only when TMDB gave them: the browser derives
           the image's aspect ratio from them, so a backdrop reserves its
-          landscape footprint before it decodes. Lazy and async because an
-          opened group can still hold a hundred `original` images. */}
+          landscape footprint before it decodes; a fitted rendition keeps the
+          original's proportions, so they still hold. Lazy and async because
+          an opened group can still hold a hundred images. */}
       <img
-        src={option.url}
+        src={displaySrc}
         alt=""
         width={option.width}
         height={option.height}
         loading="lazy"
         decoding="async"
+        onError={onError}
         className="picture-picker-overlay__image"
       />
       {selected && <span className="picture-picker-overlay__badge">Current</span>}

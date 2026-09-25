@@ -83,6 +83,21 @@
   opacity: 0.75;
 }
 
+.airing-page__loading {
+  padding: 48px 0;
+  text-align: center;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+/* These two carry their own opacity, and as page rules they'd win over the
+   shared .held-content--muted one, so a held week's label and empty message
+   are dimmed here. */
+.airing-page__empty.held-content--muted,
+.airing-page__range.held-content--muted {
+  opacity: 0.5;
+}
+
 .airing-page__grid {
   display: flex;
   gap: 12px;

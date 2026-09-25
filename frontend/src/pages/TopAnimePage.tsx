@@ -2,6 +2,8 @@ import { useEffect, useReducer, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ApiError, getTopAnime, refreshTopAnime, updateEntry } from '../api/client.ts'
 import { TOP_ANIME_RANKING_TYPES, type TopAnimeItemDto, type TopAnimeRankingType } from '../api/types.ts'
+import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
+import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { Pagination } from '../components/Pagination.tsx'
 import { PosterPicture } from '../components/PosterPicture.tsx'
 import { RowPicture } from '../components/RowPicture.tsx'
@@ -9,6 +11,7 @@ import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { useActionFailure } from '../context/ActionFailureContext.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
+import { useReconnectRetry } from '../hooks/useReconnectRetry.ts'
 import { isScoreRevealableStatus, pickDisplayTitle } from '../utils/anime.ts'
 import './TopAnimePage.css'
 
@@ -38,6 +41,11 @@ function isRankingType(value: string | null): value is TopAnimeRankingType {
 // rides along with a type's first load only — reusing an already-cached type
 // makes no request of any kind — so a list is refreshed at most once per
 // session however often it's re-selected (design D3).
+//
+// A load that fails is not remembered: its in-flight entry is dropped along
+// with a success's, so selecting the list again, Try again, or the server
+// coming back requests it afresh instead of every caller getting the same
+// rejected promise for the rest of the session.
 const cachedItemsByType = new Map<TopAnimeRankingType, TopAnimeItemDto[]>()
 const inFlightLoadByType = new Map<TopAnimeRankingType, Promise<TopAnimeItemDto[]>>()
 
@@ -84,7 +92,7 @@ function refreshInBackground(type: TopAnimeRankingType) {
 // The most recently displayed list, tracked at module scope (not component
 // state) so that even across an unmount/remount — leaving Top Anime and
 // coming back to a list not yet cached — the page has something to show
-// muted while the new list loads, rather than blanking to "Loading…".
+// muted while the new list loads, rather than blanking to a loading line.
 let lastShownType: TopAnimeRankingType | null = null
 
 function loadTopAnimeOnce(type: TopAnimeRankingType): Promise<TopAnimeItemDto[]> {
@@ -92,12 +100,18 @@ function loadTopAnimeOnce(type: TopAnimeRankingType): Promise<TopAnimeItemDto[]>
   if (cached) return Promise.resolve(cached)
   let inFlight = inFlightLoadByType.get(type)
   if (!inFlight) {
-    inFlight = getTopAnime(type).then((result) => {
-      cachedItemsByType.set(type, result)
-      inFlightLoadByType.delete(type)
-      refreshInBackground(type)
-      return result
-    })
+    inFlight = getTopAnime(type).then(
+      (result) => {
+        cachedItemsByType.set(type, result)
+        inFlightLoadByType.delete(type)
+        refreshInBackground(type)
+        return result
+      },
+      (error: unknown) => {
+        inFlightLoadByType.delete(type)
+        throw error
+      },
+    )
     inFlightLoadByType.set(type, inFlight)
   }
   return inFlight
@@ -156,10 +170,45 @@ export function TopAnimePage() {
   // uncached list's fetch is in flight.
   const [fallback, setFallback] = useState<Display | null>(() => initialFallback(selectedType))
   const cachedForSelected = cachedItemsByType.get(selectedType)
+
+  // The list whose first load failed, if it is the one selected. It is
+  // dropped the moment another list is selected, adjusted during render like
+  // usePageData's key change so returning to the list never paints its old
+  // failure for a frame before the new load starts.
+  const [failedType, setFailedType] = useState<TopAnimeRankingType | null>(null)
+  const [renderedType, setRenderedType] = useState(selectedType)
+  if (selectedType !== renderedType) {
+    setRenderedType(selectedType)
+    setFailedType(null)
+  }
+  const failed = failedType === selectedType && !cachedForSelected
+
   const display: Display | null = cachedForSelected ? { type: selectedType, items: cachedForSelected } : fallback
-  const loading = display === null
+  const loading = display === null && !failed
   const muted = display !== null && display.type !== selectedType
-  const items = display?.items ?? []
+  // A failed list is not the list the highlighted button names, so the
+  // previous one held muted gives way to the failure state rather than
+  // staying under it.
+  const items = failed ? [] : (display?.items ?? [])
+
+  // Bumped by Try again and by the reconnect retry to run the load effect
+  // below again for the same list.
+  const [loadAttempt, setLoadAttempt] = useState(0)
+  function runLoadAgain() {
+    setFailedType(null)
+    setLoadAttempt((n) => n + 1)
+  }
+  const rearmReconnectRetry = useReconnectRetry(failed, runLoadAgain)
+  function retry() {
+    rearmReconnectRetry()
+    runLoadAgain()
+  }
+  // A list opened afresh earns one automatic retry again (useReconnectRetry).
+  // Not on `loadAttempt`: the automatic retry failing must stay failed until
+  // Try again, or a server that keeps failing would be retried forever.
+  useEffect(() => {
+    rearmReconnectRetry()
+  }, [selectedType, rearmReconnectRetry])
 
   useEffect(() => {
     if (cachedForSelected) {
@@ -168,18 +217,23 @@ export function TopAnimePage() {
     }
 
     // Not cached yet — leave whatever is currently on screen (the previous
-    // list, muted) in place rather than blanking to "Loading…", per D7.
+    // list, muted) in place rather than blanking to a loading line, per D7.
     let cancelled = false
-    loadTopAnimeOnce(selectedType).then((result) => {
-      if (cancelled) return
-      lastShownType = selectedType
-      setFallback({ type: selectedType, items: result })
-    })
+    loadTopAnimeOnce(selectedType).then(
+      (result) => {
+        if (cancelled) return
+        lastShownType = selectedType
+        setFallback({ type: selectedType, items: result })
+      },
+      () => {
+        if (!cancelled) setFailedType(selectedType)
+      },
+    )
 
     return () => {
       cancelled = true
     }
-  }, [selectedType, cachedForSelected])
+  }, [selectedType, cachedForSelected, loadAttempt])
 
   // Keeps every cached list in sync with optimistic updates from Add/Edit —
   // an anime added from one list must also flip to "Edit" in every other
@@ -324,8 +378,10 @@ export function TopAnimePage() {
         )}
       </div>
 
-      {loading ? (
-        <p className="top-anime-page__loading">Loading…</p>
+      {failed ? (
+        <LoadFailedNotice what="this ranking" onRetry={retry} />
+      ) : loading ? (
+        <LoadingNotice className="top-anime-page__loading" />
       ) : items.length === 0 ? (
         <p className="top-anime-page__empty">No ranking data yet.</p>
       ) : (

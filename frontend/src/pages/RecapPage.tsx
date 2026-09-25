@@ -29,6 +29,8 @@ import { ScoreDistribution } from '../components/ScoreDistribution.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
+import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
+import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import {
   formatRuntime,
@@ -356,7 +358,7 @@ function RecapPageView({
         ? `recap:yearly:${startYear}:${filter}`
         : `recap:season:${startYear}:${season}`
 
-  const { data: recap, loading } = usePageData<RecapDto>(recapKey, () =>
+  const { data: recap, loading, failed, retry } = usePageData<RecapDto>(recapKey, () =>
     getRecap({ mode, startYear, endYear, season, filter }),
   )
 
@@ -400,8 +402,13 @@ function RecapPageView({
     ((filter === 'watched' && recap.watchedCount === 0 && recap.airedCount > 0) ||
       (filter === 'aired' && recap.airedCount === 0 && recap.watchedCount > 0))
 
+  // A read that failed drops the held period, as on the Season, Year and
+  // Airing pages: it is not the period now named in the header, and the
+  // failure state (page-load-states) is what says so. It also keeps that old
+  // period from reappearing, unmuted, while Try again is in flight.
   const recapDisplayRef = useRef<RecapDto | null>(null)
   if (recapMatchesSelection && !pendingFilterFallback) recapDisplayRef.current = recap
+  else if (failed) recapDisplayRef.current = null
   const displayedRecap = recapMatchesSelection && !pendingFilterFallback ? recap : recapDisplayRef.current
 
   const scoreGroups = useMemo(() => (displayedRecap ? scoreGroupsOf(displayedRecap.items) : []), [displayedRecap])
@@ -861,7 +868,7 @@ function RecapPageView({
         <Link to={`/anime/${item.animeId}`} className="recap-podium__link">
           <span className="recap-podium__badge">{rank}</span>
           <div className="recap-podium__picture-frame">
-            <PosterPicture src={item.pictureUrl} className="recap-podium__picture" noFill />
+            <PosterPicture src={item.pictureUrl} className="recap-podium__picture" noFill tier="hero" />
           </div>
           <span className="recap-podium__title" title={displayTitle}>
             {displayTitle}
@@ -1147,7 +1154,8 @@ function RecapPageView({
         </div>
       </div>
 
-      {loading && !displayedRecap && <p className="recap-page__loading">Loading&hellip;</p>}
+      <LoadingNotice active={loading && !displayedRecap} className="recap-page__loading" />
+      {failed && !displayedRecap && <LoadFailedNotice what="this recap" onRetry={retry} />}
 
       {displayedRecap && displayedRecap.items.length === 0 && (
         <div className="recap-page__empty">

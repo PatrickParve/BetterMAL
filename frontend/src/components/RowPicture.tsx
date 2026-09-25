@@ -1,4 +1,6 @@
+import { useDisplayPicture } from '../hooks/useDisplayPicture.ts'
 import { usePictureShape } from '../hooks/useLandscapePicture.ts'
+import type { PictureTier } from '../utils/anime.ts'
 import './RowPicture.css'
 
 type RowPictureProps = {
@@ -6,6 +8,8 @@ type RowPictureProps = {
   className: string
   title?: string
   placeholderClassName?: string
+  /** Which TMDB width the picture downloads at (design D9). `row` fits every slot up to about 140px tall; pass `tile` for a taller one, whose wide picture reaches 190px or more. */
+  tier?: Extract<PictureTier, 'row' | 'tile'>
 }
 
 // artwork-presentation: the one place a row or thumbnail's picture is drawn.
@@ -26,8 +30,19 @@ type RowPictureProps = {
 // a poster slot loses a fifth of its width. RowPicture.css already handles
 // any ratio — width follows the slot's height up to its 16/9 cap — so an
 // upright picture simply lands a little wider than a poster.
-export function RowPicture({ src, className, title, placeholderClassName }: RowPictureProps) {
-  const [shapeRef, shape] = usePictureShape(src)
+//
+// A TMDB picture downloads at the row width, `w342`, rather than as the
+// `original` file (tmdb-artwork, design D9); `src` stays its identity, and a
+// failed download retries the original. The two tallest slots, whose wide
+// pictures are drawn up to about 240px across, ask for `tile`. A picture that
+// is slow to arrive also fades in (artwork-presentation, design D10). An <img>
+// can't fade over its own background, since its opacity takes the background
+// with it, so the <img> sits in a `row-picture-frame` that carries the host's
+// class, its box and the placeholder background. The host only ever sets --row-picture-* and a radius
+// on that class, both of which the frame and the <img> inside it share.
+export function RowPicture({ src, className, title, placeholderClassName, tier = 'row' }: RowPictureProps) {
+  const { displaySrc, onError } = useDisplayPicture(src, tier)
+  const [shapeRef, shape, arrival] = usePictureShape(displaySrc)
 
   if (!src) {
     return (
@@ -39,13 +54,16 @@ export function RowPicture({ src, className, title, placeholderClassName }: RowP
   }
 
   return (
-    <img
-      ref={shapeRef}
-      src={src}
-      alt=""
-      title={title}
-      loading="lazy"
-      className={'row-picture' + (shape !== 'poster' ? ' row-picture--wide' : '') + ' ' + className}
-    />
+    <span className={`row-picture-frame row-picture-frame--${arrival} ${className}`}>
+      <img
+        ref={shapeRef}
+        src={displaySrc}
+        alt=""
+        title={title}
+        loading="lazy"
+        onError={onError}
+        className={'row-picture' + (shape !== 'poster' ? ' row-picture--wide' : '')}
+      />
+    </span>
   )
 }

@@ -1,18 +1,40 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 import { getMalAuthStatus } from './api/client.ts'
+import { HEALTH_POLL_INTERVAL_MS } from './api/connectionStatus.ts'
 import type { MalAuthStatus } from './api/types.ts'
 import { AppShell } from './AppShell.tsx'
+import { LoadingNotice } from './components/LoadingNotice.tsx'
 
 function App() {
   const [status, setStatus] = useState<MalAuthStatus | null>(null)
   const [statusError, setStatusError] = useState(false)
 
-  useEffect(() => {
+  // The first read. A success clears statusError, so the same function serves the
+  // first load, the retry below and Try again: whichever one lands first continues
+  // the app exactly as a first load that had succeeded (connection-status,
+  // "First-load failure keeps its full-page message"). Concurrent calls are one
+  // GET, since fetchRaw joins identical in-flight requests (api/client.ts).
+  const readStatus = useCallback(() => {
     getMalAuthStatus()
-      .then(setStatus)
+      .then((next) => {
+        setStatus(next)
+        setStatusError(false)
+      })
       .catch(() => setStatusError(true))
   }, [])
+
+  useEffect(() => {
+    readStatus()
+  }, [readStatus])
+
+  // While the full-page message is showing there is no shell, and so no health poll,
+  // to notice the backend coming back (design D8). Re-read at the poll's own interval.
+  useEffect(() => {
+    if (!statusError) return
+    const interval = setInterval(readStatus, HEALTH_POLL_INTERVAL_MS)
+    return () => clearInterval(interval)
+  }, [statusError, readStatus])
 
   // Authorizing leaves this tab, or happens in another one, and the OAuth callback page
   // doesn't redirect back, so re-read the connection state whenever the connect screen is
@@ -54,7 +76,10 @@ function App() {
       <section id="center">
         <div className="hero">
           <h1>Can't reach the backend</h1>
-          <p>Make sure the backend service is running, then reload this page.</p>
+          <p>Make sure the backend service is running — retrying, and this page will continue by itself once it's back.</p>
+          <button type="button" className="counter" onClick={readStatus}>
+            Try again
+          </button>
         </div>
       </section>
     )
@@ -64,7 +89,7 @@ function App() {
     return (
       <section id="center">
         <div className="hero">
-          <p>Loading…</p>
+          <LoadingNotice />
         </div>
       </section>
     )

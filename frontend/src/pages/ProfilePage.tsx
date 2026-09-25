@@ -40,6 +40,8 @@ import { UnresolvedEpisodesOverlay } from '../components/UnresolvedEpisodesOverl
 import { useAnimeRank } from '../context/AnimeRankContext.tsx'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
+import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
+import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { useRestorableScroll } from '../hooks/useRestorableScroll.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { formatRewatchTime, formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
@@ -378,7 +380,7 @@ function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
 // history, top-anime tie-break selection) — everything computed server-side
 // from cached Postgres data.
 export function ProfilePage() {
-  const { data: profile, loading } = usePageData<ProfileDto>('profile', getProfile)
+  const { data: profile, failed, retry } = usePageData<ProfileDto>('profile', getProfile)
   const { openRanking } = useAnimeRank()
 
   // Each media-type tab is its own resource key, not just a view control on
@@ -392,6 +394,8 @@ export function ProfilePage() {
   const {
     data: topAnime,
     loading: topAnimeLoading,
+    failed: topAnimeFailed,
+    retry: retryTopAnime,
     reload: reloadTopAnime,
   } = usePageData<TopAnimeSectionDto>(`top-anime:${mediaType}`, () => getTopAnimeSection(mediaType))
 
@@ -408,10 +412,12 @@ export function ProfilePage() {
   const rewatchedMediaType = isScopeOffered(storedRewatchedMediaType, profile?.scopeOptions.rewatched)
     ? storedRewatchedMediaType
     : 'all'
-  const { data: rewatched, loading: rewatchedLoading } = usePageData<RewatchedSectionDto>(
-    `rewatched:${rewatchedMediaType}`,
-    () => getRewatchedSection(rewatchedMediaType),
-  )
+  const {
+    data: rewatched,
+    loading: rewatchedLoading,
+    failed: rewatchedFailed,
+    retry: retryRewatched,
+  } = usePageData<RewatchedSectionDto>(`rewatched:${rewatchedMediaType}`, () => getRewatchedSection(rewatchedMediaType))
 
   // The view control for "Most rewatched" (design.md D10): a superset of
   // rewatchedMediaType that also selects Series. Selecting a media-type tab
@@ -429,7 +435,12 @@ export function ProfilePage() {
   // Its own usePageData key (design.md D10), toggled between the real key
   // and an inert one so the fetch — and the SeriesMembers join behind it —
   // only actually runs while Series is selected, not on every profile visit.
-  const { data: rewatchedSeries, loading: rewatchedSeriesLoading } = usePageData<RewatchedSeriesSectionDto>(
+  const {
+    data: rewatchedSeries,
+    loading: rewatchedSeriesLoading,
+    failed: rewatchedSeriesFailed,
+    retry: retryRewatchedSeries,
+  } = usePageData<RewatchedSeriesSectionDto>(
     rewatchedScope === 'series' ? 'rewatched-series' : 'rewatched-series:idle',
     () => (rewatchedScope === 'series' ? getRewatchedSeriesSection() : Promise.resolve({ items: [] })),
   )
@@ -440,28 +451,37 @@ export function ProfilePage() {
   // collapsing and popping back open. Keeping the last-loaded section on
   // screen until the new one arrives keeps the strip's height (and the tabs
   // around it) stable across the switch instead of visibly jumping.
+  //
+  // A section whose read failed drops what it held: the held strip belongs to
+  // another tab, so it must not sit under the failure state, nor reappear
+  // while Try again is in flight (page-load-states).
   const topAnimeDisplayRef = useRef<TopAnimeSectionDto | null>(null)
   if (topAnime) topAnimeDisplayRef.current = topAnime
+  else if (topAnimeFailed) topAnimeDisplayRef.current = null
   const displayedTopAnime = topAnime ?? topAnimeDisplayRef.current
 
   const rewatchedDisplayRef = useRef<RewatchedSectionDto | null>(null)
   if (rewatched) rewatchedDisplayRef.current = rewatched
+  else if (rewatchedFailed) rewatchedDisplayRef.current = null
   const displayedRewatched = rewatched ?? rewatchedDisplayRef.current
 
   // Mirrors rewatchedDisplayRef above, so switching into and out of Series
   // doesn't collapse the strip either (design.md D10).
   const rewatchedSeriesDisplayRef = useRef<RewatchedSeriesSectionDto | null>(null)
   if (rewatchedSeries) rewatchedSeriesDisplayRef.current = rewatchedSeries
+  else if (rewatchedSeriesFailed) rewatchedSeriesDisplayRef.current = null
   const displayedRewatchedSeries = rewatchedSeries ?? rewatchedSeriesDisplayRef.current
 
   // Loaded once — the basis toggle re-sorts/re-filters this same array
   // client-side rather than refetching (design.md decision 4), so there's no
   // need for the "hold the last section on screen" workaround the other two
   // strips use to avoid collapsing on a filter change.
-  const { data: topSeries, loading: topSeriesLoading } = usePageData<TopSeriesSectionDto>(
-    'top-series',
-    getTopSeriesSection,
-  )
+  const {
+    data: topSeries,
+    loading: topSeriesLoading,
+    failed: topSeriesFailed,
+    retry: retryTopSeries,
+  } = usePageData<TopSeriesSectionDto>('top-series', getTopSeriesSection)
   const [topSeriesBasis, setTopSeriesBasis] = useRestorableState<TopSeriesBasis>('topSeriesBasis', 'mine')
   const [topSeriesMultiOnly, setTopSeriesMultiOnly] = useRestorableState<boolean>('topSeriesMultiOnly', false)
   const rankedTopSeries = topSeries ? rankTopSeries(topSeries.items, topSeriesBasis) : []
@@ -471,10 +491,12 @@ export function ProfilePage() {
   // rewatched-series — there's no idle variant to key off of: this resource
   // key never changes, and the section is always rendered, so it always
   // loads.
-  const { data: timeSpentSeries, loading: timeSpentSeriesLoading } = usePageData<TimeSpentSeriesSectionDto>(
-    'time-spent-series',
-    getTimeSpentSeriesSection,
-  )
+  const {
+    data: timeSpentSeries,
+    loading: timeSpentSeriesLoading,
+    failed: timeSpentSeriesFailed,
+    retry: retryTimeSpentSeries,
+  } = usePageData<TimeSpentSeriesSectionDto>('time-spent-series', getTimeSpentSeriesSection)
 
   // The favourites score filter (design.md decision D7): each ranking holds
   // its own selection, restored on back-navigation and defaulting to All on
@@ -519,13 +541,11 @@ export function ProfilePage() {
   const topSeriesStripScroll = useStripScroll('top-series')
   const timeSpentStripScroll = useStripScroll('time-spent-series')
 
-  if (loading) {
-    return <p className="profile-page__loading">Loading…</p>
-  }
-
-  if (!profile) {
-    return <p className="profile-page__empty">Couldn't load profile data.</p>
-  }
+  // The whole page waits on the profile read. Nothing is drawn for the
+  // loading-indicator delay, and a failed read says so with Try again rather
+  // than leaving a blank page or a bare line.
+  if (failed) return <LoadFailedNotice what="your profile" onRetry={retry} />
+  if (!profile) return <LoadingNotice className="profile-page__loading" />
 
   // Design D2: a type is offered when it holds at least one entry the
   // section would list — exactly what ProfileDto.scopeOptions computes
@@ -662,7 +682,9 @@ export function ProfilePage() {
           </div>
         )}
 
-        {!displayedTopAnime && topAnimeLoading ? null : !displayedTopAnime || displayedTopAnime.items.length === 0 ? (
+        {topAnimeFailed ? (
+          <LoadFailedNotice compact what="top anime" onRetry={retryTopAnime} />
+        ) : !displayedTopAnime && topAnimeLoading ? null : !displayedTopAnime || displayedTopAnime.items.length === 0 ? (
           // The only reachable case is mediaType === 'all': any other
           // offered media type holds at least one entry by construction
           // (design.md D2), so it can never land here empty.
@@ -687,6 +709,7 @@ export function ProfilePage() {
                   src={item.pictureUrl}
                   alt={pickDisplayTitle(item.title, item.englishTitle)}
                   className="top-anime-strip__picture"
+                  tier="tile"
                   draggable={false}
                 />
                 <span className="top-anime-strip__score">{item.myScore}</span>
@@ -730,7 +753,9 @@ export function ProfilePage() {
           ))}
         </div>
 
-        {!topSeries && topSeriesLoading ? null : !topSeries || topSeries.items.length === 0 ? (
+        {topSeriesFailed ? (
+          <LoadFailedNotice compact what="top series" onRetry={retryTopSeries} />
+        ) : !topSeries && topSeriesLoading ? null : !topSeries || topSeries.items.length === 0 ? (
           <p className="profile-page__section-empty">
             Series are still being discovered from your list. Use{' '}
             <Link to="/settings">"Build all series from my list"</Link> on the Settings page to fill this in now.
@@ -766,6 +791,7 @@ export function ProfilePage() {
                   src={item.pictureUrl}
                   alt={pickDisplayTitle(item.title, item.englishTitle)}
                   className="top-series-strip__picture"
+                  tier="tile"
                   draggable={false}
                 />
                 <span className="top-series-strip__chips">
@@ -807,7 +833,9 @@ export function ProfilePage() {
         </div>
 
         {rewatchedScope === 'series' ? (
-          !displayedRewatchedSeries && rewatchedSeriesLoading ? null : !displayedRewatchedSeries ||
+          rewatchedSeriesFailed ? (
+            <LoadFailedNotice compact what="most rewatched series" onRetry={retryRewatchedSeries} />
+          ) : !displayedRewatchedSeries && rewatchedSeriesLoading ? null : !displayedRewatchedSeries ||
             displayedRewatchedSeries.items.length === 0 ? (
             <p className="profile-page__section-empty">{REWATCHED_EMPTY_MESSAGES.series}</p>
           ) : (
@@ -832,6 +860,7 @@ export function ProfilePage() {
                     src={item.pictureUrl}
                     alt={pickDisplayTitle(item.title, item.englishTitle)}
                     className="rewatched-strip__picture"
+                    tier="tile"
                     draggable={false}
                   />
                   <span className="rewatched-strip__count rewatched-strip__count--time">
@@ -841,6 +870,8 @@ export function ProfilePage() {
               ))}
             </div>
           )
+        ) : rewatchedFailed ? (
+          <LoadFailedNotice compact what="most rewatched anime" onRetry={retryRewatched} />
         ) : !displayedRewatched && rewatchedLoading ? null : !displayedRewatched || displayedRewatched.items.length === 0 ? (
           // The only reachable case is rewatchedMediaType === 'all': any
           // other offered media type holds a rewatch by construction
@@ -868,6 +899,7 @@ export function ProfilePage() {
                   src={item.pictureUrl}
                   alt={pickDisplayTitle(item.title, item.englishTitle)}
                   className="rewatched-strip__picture"
+                  tier="tile"
                   draggable={false}
                 />
                 <span className="rewatched-strip__count">{item.rewatchCount}</span>
@@ -885,7 +917,9 @@ export function ProfilePage() {
             "hold the last section on screen" ref either — the note on the
             Top series load applies here too, since this resource key never
             changes and so the strip can't collapse and re-open under it. */}
-        {!timeSpentSeries && timeSpentSeriesLoading ? null : !timeSpentSeries || timeSpentSeries.items.length === 0 ? (
+        {timeSpentSeriesFailed ? (
+          <LoadFailedNotice compact what="time spent by series" onRetry={retryTimeSpentSeries} />
+        ) : !timeSpentSeries && timeSpentSeriesLoading ? null : !timeSpentSeries || timeSpentSeries.items.length === 0 ? (
           <p className="profile-page__section-empty">
             No series have any of their main series watched yet. If yours haven't been built, use{' '}
             <Link to="/settings">"Build all series from my list"</Link> on the Settings page.
@@ -912,6 +946,7 @@ export function ProfilePage() {
                   src={item.pictureUrl}
                   alt={pickDisplayTitle(item.title, item.englishTitle)}
                   className="time-spent-strip__picture"
+                  tier="tile"
                   draggable={false}
                 />
                 <span className="time-spent-strip__count">{formatRewatchTime(item.watchedSeconds)}</span>

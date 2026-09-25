@@ -2,13 +2,21 @@ import { useCallback } from 'react'
 import { getDashboard } from '../api/client.ts'
 import type { MainDashboardDto } from '../api/types.ts'
 import { usePageData } from '../hooks/usePageData.ts'
+import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
+import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { CurrentlyWatchingCarousel } from '../components/CurrentlyWatchingCarousel.tsx'
 import { AiringTodayList } from '../components/AiringTodayList.tsx'
 import { CurrentSeasonSection } from '../components/CurrentSeasonSection.tsx'
 import './HomePage.css'
 
 export function HomePage() {
-  const { data: dashboard, setData: setDashboard, reload } = usePageData<MainDashboardDto>('dashboard', getDashboard)
+  const {
+    data: dashboard,
+    failed,
+    retry,
+    setData: setDashboard,
+    reload,
+  } = usePageData<MainDashboardDto>('dashboard', getDashboard)
 
   // The same anime can appear in both "Currently watching" and "Followed
   // shows airing" (a current-season title I'm also watching), so an
@@ -30,7 +38,15 @@ export function HomePage() {
     )
   }, [setDashboard])
 
-  if (!dashboard) return null
+  // Never a blank page below the navbar: a read still in flight is the
+  // (delayed) loading notice, and one that failed says so with Try again.
+  if (!dashboard) {
+    return failed ? (
+      <LoadFailedNotice what="the dashboard" onRetry={retry} />
+    ) : (
+      <LoadingNotice className="home-page__loading" />
+    )
+  }
 
   return (
     <div className="home-page">

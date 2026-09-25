@@ -83,7 +83,7 @@ export function CompletionScoreOverlay({
   return (
     <Modal onClose={() => onClose(null)} labelledBy="completion-score-title">
       <div className="completion-score">
-        <RowPicture src={pictureUrl} className="completion-score__picture" />
+        <RowPicture src={pictureUrl} className="completion-score__picture" tier="tile" />
         <div className="completion-score__body">
           <h2 id="completion-score-title" className="completion-score__title">
             {animeTitle}

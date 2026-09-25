@@ -4,10 +4,13 @@ import { getSearchPage } from '../api/client.ts'
 import type { AnimeBrowseItemDto, SeriesSearchResultDto } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
 import { FilterMultiSelect } from '../components/FilterMultiSelect.tsx'
+import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
+import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { SeriesBadge } from '../components/SeriesBadge.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useCompleteLastRow } from '../hooks/useCompleteLastRow.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
+import { useScrollReveal } from '../hooks/useScrollReveal.ts'
 import { MEDIA_TYPE_FILTER_OPTIONS, mediaTypeFilterOptions } from '../utils/anime.ts'
 import './SearchPage.css'
 
@@ -47,7 +50,7 @@ function isSortKey(value: string | null): value is SortKey {
 // Full search results page: fetches the whole (≤60) candidate set once per
 // (query, sort) — the search endpoint has no cache behind it, so paging would
 // re-run the live MAL search per chunk — and reveals it in chunks of
-// CHUNK_SIZE via an IntersectionObserver sentinel, the same continuous-scroll
+// CHUNK_SIZE via useScrollReveal's sentinel, the same continuous-scroll
 // pattern as the season page. Query/sort live in the URL so back-navigation
 // from an anime detail page restores exactly where the user left off,
 // including how much of the result set had been revealed.
@@ -68,7 +71,7 @@ export function SearchPage() {
   // snapshot, so restoring one restores its results regardless of which sort
   // was active when it was left (D5). A sort change within the same query is
   // handled below via `reload`, not a second key.
-  const { data, loading, reload } = usePageData<SearchReadState>(`search:${q}`, () =>
+  const { data, loading, failed, retry, reload } = usePageData<SearchReadState>(`search:${q}`, () =>
     q.length === 0
       ? Promise.resolve({ items: [], totalCount: 0, series: [], malSearchFailed: false })
       : getSearchPage(q, { sort, offset: 0, limit: CANDIDATE_LIMIT }).then((result) => ({
@@ -129,18 +132,7 @@ export function SearchPage() {
 
   // Reveal more of the already-loaded array once the sentinel enters view —
   // no network call, everything for this (query, sort) is already in memory.
-  useEffect(() => {
-    const node = sentinelRef.current
-    if (!node) return
-
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting) {
-        setVisibleCount((prev) => Math.min(prev + CHUNK_SIZE, filteredItems.length))
-      }
-    })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [filteredItems, setVisibleCount])
+  useScrollReveal(sentinelRef, filteredItems.length, CHUNK_SIZE, setVisibleCount)
 
   const visibleItems = filteredItems.slice(0, visibleCount)
   // Tops the reveal up so its last row is never left with a lone card
@@ -183,9 +175,14 @@ export function SearchPage() {
         </p>
       )}
 
+      {/* Empty and no-match messages come only from a settled read: a read
+          still in flight shows nothing here (the loading notice below), and a
+          read that failed is a failure, not "No anime found." */}
       {q.length === 0 ? (
         <p className="search-page__empty">Enter a search term to begin.</p>
-      ) : items.length === 0 && series.length === 0 && !loading ? (
+      ) : failed ? (
+        <LoadFailedNotice what="the search results" onRetry={retry} />
+      ) : data === null ? null : items.length === 0 && series.length === 0 ? (
         // A failed-search empty result is explained by the notice above
         // instead of the ordinary "not found" message, so it reads as
         // "nothing stored here matches" rather than "this does not exist".
@@ -232,7 +229,7 @@ export function SearchPage() {
       )}
 
       <div ref={sentinelRef} className="search-page__sentinel" />
-      {loading && <p className="search-page__loading">Loading…</p>}
+      <LoadingNotice active={loading} className="search-page__loading" />
     </div>
   )
 }

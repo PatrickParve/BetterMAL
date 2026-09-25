@@ -22,6 +22,8 @@ import type {
   UserAnimeEntryDto,
 } from '../api/types.ts'
 import { AiringProgressBar } from '../components/AiringProgressBar.tsx'
+import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
+import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { PicturePickerOverlay } from '../components/PicturePickerOverlay.tsx'
 import { malSections, pickerOptionCount, seriesTmdbSections } from '../components/picturePickerSections.ts'
 import { ProgressBar } from '../components/ProgressBar.tsx'
@@ -36,6 +38,7 @@ import { SeriesTitlePickerOverlay } from '../components/SeriesTitlePickerOverlay
 import { useActionFailure } from '../context/ActionFailureContext.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
+import { useDisplayPicture } from '../hooks/useDisplayPicture.ts'
 import { isLandscapeRatio, pictureShapeOf, useOrientationPicture } from '../hooks/useLandscapePicture.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { usePickerOpenGroups } from '../hooks/usePickerOpenGroups.ts'
@@ -434,7 +437,9 @@ function ProgressReadout({
 export function SeriesPage() {
   const { animeId: animeIdParam } = useParams()
   const animeId = Number(animeIdParam)
-  const { data, loading, setData } = usePageData<SeriesLookupResult>(`series:${animeId}`, () => getSeries(animeId))
+  const { data, failed, retry, setData } = usePageData<SeriesLookupResult>(`series:${animeId}`, () =>
+    getSeries(animeId),
+  )
   const [rebuilding, setRebuilding] = useState(false)
   const [rebuildCount, setRebuildCount] = useState<number | null>(null)
   const { openEditor } = useEntryEditor()
@@ -442,7 +447,16 @@ export function SeriesPage() {
   // One ref, two facts (uncrop-artwork-everywhere design D7): strict
   // landscape keeps the header's own landscape layout, while an upright or
   // square picture is drawn whole at the portrait width instead of cropped.
-  const [pictureRef, pictureRatio] = useOrientationPicture(data?.found ? data.series.pictureUrl : null)
+  //
+  // The header picture downloads at the hero width, with the original as the
+  // fallback (tmdb-artwork, design D9). The ratio is read off the displayed
+  // <img>: a rendition keeps the original's proportions, and a fallback swap
+  // re-attaches the ref so it is read again.
+  const { displaySrc: pictureSrc, onError: onPictureError } = useDisplayPicture(
+    data?.found ? data.series.pictureUrl : null,
+    'hero',
+  )
+  const [pictureRef, pictureRatio] = useOrientationPicture(pictureSrc)
   const isLandscapePicture = isLandscapeRatio(pictureRatio)
   const isWholePicture = !isLandscapePicture && pictureShapeOf(pictureRatio) !== 'poster'
   const [showPicturePicker, setShowPicturePicker] = useState(false)
@@ -785,12 +799,14 @@ export function SeriesPage() {
     return <p className="series-page__empty">Series not found.</p>
   }
 
-  if (loading) {
-    return <p className="series-page__loading">Loading…</p>
+  // A 404 is `found: false` below, not a failed read: only a transport or
+  // server failure is one.
+  if (failed) {
+    return <LoadFailedNotice what="this series" onRetry={retry} />
   }
 
   if (!data) {
-    return <p className="series-page__empty">Couldn't load this series.</p>
+    return <LoadingNotice className="series-page__loading" />
   }
 
   if (!data.found) {
@@ -1125,8 +1141,9 @@ export function SeriesPage() {
         {series.pictureUrl ? (
           <img
             ref={pictureRef}
-            src={series.pictureUrl}
+            src={pictureSrc}
             alt=""
+            onError={onPictureError}
             className={`series-page__picture${
               isLandscapePicture ? ' series-page__picture--landscape' : isWholePicture ? ' series-page__picture--whole' : ''
             }`}

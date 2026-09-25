@@ -697,6 +697,30 @@ export function isTmdbImageUrl(url: string | null | undefined): boolean {
   return url != null && url.startsWith(TMDB_IMAGE_URL_PREFIX)
 }
 
+// The size a surface draws a picture at (tmdb-artwork, "A TMDB picture is
+// downloaded at a size fitted to where it is drawn"; design D9). One tier per
+// kind of surface rather than one width per picture: a row slot, a small tile
+// (a profile strip, a picker option), a grid card or poster box, and a page
+// header or podium.
+export type PictureTier = 'row' | 'tile' | 'card' | 'hero'
+
+// The smallest TMDB width at least twice the widest CSS width the tier's
+// surfaces draw, so a picture stays sharp on a 2x screen. The widths were
+// measured per surface at 2,400, 1,024 and 390 px viewports (design D9).
+const TMDB_TIER_WIDTH: Record<PictureTier, string> = { row: 'w342', tile: 'w500', card: 'w780', hero: 'w1280' }
+const TMDB_ORIGINAL_URL_PREFIX = 'https://image.tmdb.org/t/p/original/'
+
+// What an <img> downloads for a picture. A chosen TMDB image is stored, sent by
+// the API and compared by its `original` URL (tmdb-artwork D6/D9): that URL
+// stays the picture's identity everywhere, and this changes only the address
+// the browser fetches from. Any other URL, MAL's included, comes back as it was.
+// A surface that can't load the fitted rendition falls back to the URL it was
+// given (useDisplayPicture), so TMDB dropping a width never leaves a picture missing.
+export function displayPictureUrl(url: string, tier: PictureTier): string {
+  if (!url.startsWith(TMDB_ORIGINAL_URL_PREFIX)) return url
+  return `https://image.tmdb.org/t/p/${TMDB_TIER_WIDTH[tier]}/${url.slice(TMDB_ORIGINAL_URL_PREFIX.length)}`
+}
+
 // One IMDb link per mapped id (anime-detail "External MyAnimeList link from
 // id", series-page "Series external links"): a lone id is labelled "IMDb",
 // several are numbered in the mapping's order. No id gives no link at all —

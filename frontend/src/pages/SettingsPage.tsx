@@ -34,6 +34,8 @@ import type {
   WeeklyCheckDto,
 } from '../api/types.ts'
 import { JobProgressTrack } from '../components/JobProgressTrack.tsx'
+import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
+import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { RowPicture } from '../components/RowPicture.tsx'
 import { TmdbAttribution } from '../components/TmdbAttribution.tsx'
 import { unseenOutcomes, useAppStatus } from '../context/AppStatusContext.tsx'
@@ -341,7 +343,13 @@ export function SettingsPage() {
   const [importDragOver, setImportDragOver] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
 
-  const { status: appStatus, applyJob, applyWeeklyOutcomeSeen } = useAppStatus()
+  const {
+    status: appStatus,
+    failed: appStatusFailed,
+    retry: retryAppStatus,
+    applyJob,
+    applyWeeklyOutcomeSeen,
+  } = useAppStatus()
 
   const { alwaysShowCompletedScores, toggleAlwaysShowCompletedScores } = useScoreVisibility()
   const { hideHentai, toggleHideHentai } = useContentFilter()
@@ -714,9 +722,10 @@ export function SettingsPage() {
     return failure.subject === 'Series' ? `Series ${failure.id}` : `Anime ${failure.id}`
   }
 
-  if (loading || !appStatus) {
-    return <p className="settings-page__loading">Loading…</p>
-  }
+  // The status read failing with nothing held is a failure, not a page that
+  // is still loading (page-load-states).
+  if (appStatusFailed) return <LoadFailedNotice what="settings" onRetry={retryAppStatus} />
+  if (loading || !appStatus) return <LoadingNotice className="settings-page__loading" />
 
   const jobs = appStatus.jobs
 

@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { getSeriesList } from '../api/client.ts'
 import type { SeriesListItemDto } from '../api/types.ts'
+import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
+import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { SeriesCard } from '../components/SeriesCard.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useCompleteLastRow } from '../hooks/useCompleteLastRow.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
+import { useScrollReveal } from '../hooks/useScrollReveal.ts'
 import {
   filterSeries,
   SERIES_PROGRESS_FILTER_OPTIONS,
@@ -16,11 +19,6 @@ import {
   sortSeries,
 } from '../utils/anime.ts'
 import './SeriesBrowserPage.css'
-
-interface SeriesBrowserReadState {
-  items: SeriesListItemDto[]
-  loadFailed: boolean
-}
 
 const SORT_OPTIONS: { value: SeriesSortKey; label: string }[] = [
   { value: 'myScore', label: 'My average' },
@@ -52,7 +50,7 @@ function parseListParam<T extends string>(value: string | null, options: { value
 
 // The Series page: every stored series with a member in my list, as cards in
 // the Season/Search grid form. The whole eligible set is fetched once
-// (design.md D1) and revealed incrementally through an IntersectionObserver
+// (design.md D1) and revealed incrementally through useScrollReveal's
 // sentinel over the already-loaded array — no network paging — mirroring
 // SearchPage's own whole-candidate-set-then-reveal pattern. Sort and the two
 // filter groups live in the URL so a shared link and back-navigation land on
@@ -67,13 +65,12 @@ export function SeriesBrowserPage() {
   const statusFilter = parseListParam<SeriesStatusFilterValue>(searchParams.get('status'), SERIES_STATUS_FILTER_OPTIONS)
   const multiOnly = searchParams.get('multi') === '1'
 
-  const { data, loading } = usePageData<SeriesBrowserReadState>('series-browser', () =>
-    getSeriesList()
-      .then((result) => ({ items: result.items, loadFailed: false }))
-      .catch(() => ({ items: [], loadFailed: true })),
+  // A failed read is usePageData's `failed`, never data: the list it holds is
+  // always a real one, so an empty list can only mean nothing is stored.
+  const { data, failed, retry } = usePageData<SeriesListItemDto[]>('series-browser', () =>
+    getSeriesList().then((result) => result.items),
   )
-  const items = data?.items ?? []
-  const loadFailed = data?.loadFailed ?? false
+  const items = data ?? []
 
   const [visibleCount, setVisibleCount] = useRestorableState('visibleCount', PAGE_SIZE)
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -118,18 +115,7 @@ export function SeriesBrowserPage() {
   // Reveal more of the already-loaded, already-filtered-and-sorted array
   // once the sentinel enters view — no network call, everything is already
   // in memory.
-  useEffect(() => {
-    const node = sentinelRef.current
-    if (!node) return
-
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting) {
-        setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, sortedItems.length))
-      }
-    })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [sortedItems, setVisibleCount])
+  useScrollReveal(sentinelRef, sortedItems.length, PAGE_SIZE, setVisibleCount)
 
   const visibleItems = sortedItems.slice(0, visibleCount)
   // Tops the reveal up so its last row is never left with a lone card
@@ -137,19 +123,23 @@ export function SeriesBrowserPage() {
   const gridRef = useCompleteLastRow(sortedItems, visibleCount, setVisibleCount)
 
   // The page's terminal states: the grid whenever there's anything to show;
-  // otherwise a loading indicator while the read is in flight; otherwise,
-  // once loaded, either "no series match the filters" (something is stored
-  // but the current filters exclude all of it) or "still being discovered"
-  // (nothing is stored at all) — or "couldn't be loaded" on failure.
-  // Different facts get different messages (spec "The Series page states
-  // which empty situation it is in").
-  const terminalState: 'grid' | 'loading' | 'loadFailed' | 'filtersEmpty' | 'empty' =
-    visibleItems.length > 0
+  // otherwise "couldn't be loaded" when the read failed; otherwise a loading
+  // indicator until the read has settled; otherwise, once loaded, either "no
+  // series match the filters" (something is stored but the current filters
+  // exclude all of it) or "still being discovered" (nothing is stored at
+  // all). Different facts get different messages (spec "The Series page
+  // states which empty situation it is in"). Every one is decided from the
+  // whole filtered list (`sortedItems`), never from `visibleItems`: the
+  // reveal has drawn nothing yet in the frame the list arrives, and reading
+  // that as "the filters exclude everything" flashed "No series match the
+  // selected filters" on a page with no filter set.
+  const terminalState: 'grid' | 'loadFailed' | 'loading' | 'filtersEmpty' | 'empty' =
+    sortedItems.length > 0
       ? 'grid'
-      : loading
-        ? 'loading'
-        : loadFailed
-          ? 'loadFailed'
+      : failed
+        ? 'loadFailed'
+        : data === null
+          ? 'loading'
           : items.length > 0
             ? 'filtersEmpty'
             : 'empty'
@@ -239,14 +229,10 @@ export function SeriesBrowserPage() {
           <Link to="/settings">"Build all series from my list"</Link> on the Settings page to fill this in now.
         </p>
       )}
-      {terminalState === 'loadFailed' && (
-        <p className="series-browser-page__empty">
-          The series list couldn't be loaded — it'll be retried next time you open it.
-        </p>
-      )}
+      {terminalState === 'loadFailed' && <LoadFailedNotice what="the series list" onRetry={retry} />}
 
       <div ref={sentinelRef} className="series-browser-page__sentinel" />
-      {terminalState === 'loading' && <p className="series-browser-page__loading">Loading…</p>}
+      <LoadingNotice active={terminalState === 'loading'} className="series-browser-page__loading" />
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { LoadingNotice } from './LoadingNotice.tsx'
 import { Modal } from './Modal.tsx'
 import { RowPicture } from './RowPicture.tsx'
 import { getRanking, putTopAnimeOrder } from '../api/client.ts'
@@ -516,7 +517,7 @@ export function AnimeRankOverlay(props: AnimeRankOverlayProps) {
           {mode === 'all' && scores.length === 0 && !loadingTier ? (
             <p className="anime-rank__empty">Nothing hand-orderable yet for {mediaTypeLabel}.</p>
           ) : loadingTier && visibleTiers.length === 0 ? (
-            <p className="anime-rank__loading">Loading…</p>
+            <LoadingNotice className="anime-rank__loading" />
           ) : (
             visibleTiers.map((tier) => {
                 const tierIndex = tiers.indexOf(tier)

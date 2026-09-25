@@ -4,11 +4,16 @@ import { getYearPage, refreshYear } from '../api/client.ts'
 import type { AnimeBrowseItemDto } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
 import { FilterMultiSelect } from '../components/FilterMultiSelect.tsx'
+import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
+import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
+import { useDelayedFlag } from '../hooks/useDelayedFlag.ts'
+import { useHeldData } from '../hooks/useHeldData.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useCompleteLastRow } from '../hooks/useCompleteLastRow.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
+import { useScrollReveal } from '../hooks/useScrollReveal.ts'
 import { useOnDemandProbe, useSeasonBounds } from '../hooks/useSeasonBounds.ts'
 import { MEDIA_TYPE_FILTER_OPTIONS, mediaTypeFilterOptions } from '../utils/anime.ts'
 import { EARLIEST_YEAR, currentSeasonTarget, isAddressableYear, probeTarget, yearsInRange } from '../utils/browseRange.ts'
@@ -17,10 +22,12 @@ import './YearPage.css'
 // Year page: every anime MAL classifies under any of the selected year's four
 // seasons, combined into one grid (add-year-browser design D1 — the union is
 // resolved server-side, not merged here). Its effect structure deliberately
-// mirrors SeasonPage's: the two-effect split (cache-first whole-listing read
-// vs. debounced MAL refresh), the four-way terminal state, and the guard/view
-// split (design D2 of bound-browse-range-and-sorting) were each worked out on
-// the season page and reproduced here rather than reinvented, sharing
+// mirrors SeasonPage's: the read-then-refresh order (the cache-first
+// whole-listing read, then the debounced MAL refresh, requested only once that
+// read has landed so its outcome is judged against what the read found), the
+// terminal state, the held listing across a step, and the guard/view split
+// (design D2 of bound-browse-range-and-sorting) were each worked out on the
+// season page and reproduced here rather than reinvented, sharing
 // utils/browseRange.ts and hooks/useSeasonBounds.ts with it so the two pages'
 // horizons can never drift apart. Sort, the type filter, and the in-my-list
 // filter never trigger a read — they act on the already-loaded listing in
@@ -35,6 +42,10 @@ interface YearReadState {
 }
 
 type SortKey = 'popularity' | 'malScore' | 'alphabetical' | 'myScore'
+
+// What the visit's refresh is doing for one year: still running, or one of
+// the four outcomes the endpoint reports.
+type RefreshStatus = 'running' | 'fetched' | 'notListed' | 'skipped' | 'failed'
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'popularity', label: 'Popularity' },
@@ -146,7 +157,12 @@ function YearPageView({ year }: { year: number }) {
   // restored with its own whole listing regardless of which sort or filter
   // was active when it was left.
   const yearKey = `year:${year}:${hideHentai}`
-  const { data: yearData, setData: setYearData } = usePageData<YearReadState>(yearKey, () =>
+  const {
+    data: yearData,
+    failed: readFailed,
+    retry: retryRead,
+    setData: setYearData,
+  } = usePageData<YearReadState>(yearKey, () =>
     getYearPage(year, { hideHentai }).then((page) => ({
       items: page.items,
       totalCount: page.totalCount,
@@ -154,25 +170,41 @@ function YearPageView({ year }: { year: number }) {
       hasListing: page.hasListing,
     })),
   )
-  const items = yearData?.items ?? []
+  // What the grid and the controls derived from it draw: this year's listing,
+  // or the previous year's while this one loads. The terminal state below
+  // still decides from `yearData`, this year's own read.
+  const { shown: shownYear, stale } = useHeldData(yearData, readFailed)
+  const holdingMuted = useDelayedFlag(stale)
+  const items = shownYear?.items ?? []
   const lastFetchedAt = yearData?.lastFetchedAt ?? null
   const hasListing = yearData?.hasListing ?? false
+  const readSettled = yearData !== null
 
-  const [refreshing, setRefreshing] = useState(false)
-  // The refresh outcome for the year currently being viewed, reset the
-  // moment the year changes (below) so one year's outcome can never decide
-  // another year's terminal-state render. Null until a refresh attempt for
-  // this year has settled.
-  const [refreshOutcome, setRefreshOutcome] = useState<'fetched' | 'notListed' | 'skipped' | 'failed' | null>(null)
+  // Which year a refresh status belongs to travels with it, so one year's
+  // status can never decide another year's terminal-state render, and nothing
+  // has to reset it when the year changes: a status for a year other than the
+  // one viewed simply reads as null.
+  const [refresh, setRefresh] = useState<{ year: number; status: RefreshStatus } | null>(null)
+  const refreshStatus = refresh?.year === year ? refresh.status : null
+  const refreshing = refreshStatus === 'running'
+  // The refresh settling within the delay leaves no trace on screen.
+  const showUpdating = useDelayedFlag(refreshing)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
-  // Read by the debounced refresh effect so it re-reads with whatever
-  // hideHentai is current when it actually runs, not whatever was current
-  // when it was scheduled.
+  // Read by the refresh effect so it re-reads with whatever hideHentai is
+  // current when it actually runs, not whatever was current when it was
+  // scheduled, and applies the listing through the current year's setter.
   const hideHentaiRef = useRef(hideHentai)
   hideHentaiRef.current = hideHentai
+  const setYearDataRef = useRef(setYearData)
+  setYearDataRef.current = setYearData
   const lastFetchedAtRef = useRef(lastFetchedAt)
   lastFetchedAtRef.current = lastFetchedAt
+  const viewedYearRef = useRef(year)
+  viewedYearRef.current = year
+  // The year a refresh was last requested for, so it is requested once per
+  // visit however often the effect below re-runs.
+  const refreshedYearRef = useRef<number | null>(null)
 
   // Filtered by the in-my-list and type controls, then sorted by the
   // server-computed sortOrder for the active sort — an integer compare on a
@@ -201,21 +233,36 @@ function YearPageView({ year }: { year: number }) {
 
   const firstUnwatchedIndex = sort === 'myScore' ? displayed.findIndex((item) => item.myScore === null) : -1
 
-  // The page's terminal states, in the season page's own order: the grid
-  // takes priority whenever there's anything to show; otherwise a
-  // cached-but-empty year reports why (no listing vs. filtered out);
-  // otherwise the year has never been cached, so it's either still loading
-  // or its first fetch has settled and produced nothing.
-  const terminalState: 'grid' | 'filtersEmpty' | 'notListed' | 'loading' | 'loadFailed' =
+  // The page's terminal states, in the season page's own order (design D4 of
+  // smooth-page-loading). The grid takes priority whenever there's anything to
+  // show. A failed read of this year's own listing comes next, then the read
+  // not yet having settled: no message about emptiness or about the refresh is
+  // ever drawn while the read that would decide it is in flight. Once it has
+  // settled, a cached-but-empty year reports why (no listing vs. filtered
+  // out); otherwise the year has never been cached, so it's either waiting on
+  // its first fetch from MAL or that fetch has settled and produced nothing.
+  const refreshSettled = refreshStatus !== null && refreshStatus !== 'running'
+  const terminalState:
+    | 'grid'
+    | 'readFailed'
+    | 'loading'
+    | 'filtersEmpty'
+    | 'notListed'
+    | 'fetching'
+    | 'fetchFailed' =
     displayed.length > 0
       ? 'grid'
-      : lastFetchedAt !== null && hasListing
-        ? 'filtersEmpty'
-        : lastFetchedAt !== null
-          ? 'notListed'
-          : refreshOutcome === null
-            ? 'loading'
-            : 'loadFailed'
+      : readFailed
+        ? 'readFailed'
+        : !readSettled
+          ? 'loading'
+          : lastFetchedAt !== null
+            ? hasListing
+              ? 'filtersEmpty'
+              : 'notListed'
+            : !refreshSettled
+              ? 'fetching'
+              : 'fetchFailed'
 
   // Built from the addressable range's own two ends alone (design D1) — the
   // guard above has already confirmed `year` sits inside it, so no widening
@@ -262,13 +309,6 @@ function YearPageView({ year }: { year: number }) {
     })
   }
 
-  // The outcome from a stale year must never decide this year's render —
-  // reset the instant the year changes, ahead of the debounced refresh
-  // effect below settling for whichever year is landed on.
-  useEffect(() => {
-    setRefreshOutcome(null)
-  }, [yearKey])
-
   // Visit-triggered background refresh: keyed on the year alone (via the
   // debounced value below) so sort/filter changes never cause a MAL fetch.
   // Debounced so arrow-stepping through years only refreshes the one settled
@@ -276,20 +316,31 @@ function YearPageView({ year }: { year: number }) {
   // useDebouncedValue seeds its state with the initial value.
   const debouncedYear = useDebouncedValue(year, REFRESH_DEBOUNCE_MS)
 
+  // Requested once the page's own read of the year has landed — see the
+  // header. A restore seeds `yearData`, so it is requested at once; a read
+  // that failed requests nothing, and the retry that succeeds requests it
+  // then. Nothing here is cancelled when the year changes: a status is
+  // recorded against the year it was requested for (above), and a listing is
+  // applied only while that year is the one viewed.
   useEffect(() => {
-    const targetYear = debouncedYear
+    if (!readSettled || debouncedYear !== year) return
+    if (refreshedYearRef.current === year) return
+    refreshedYearRef.current = year
 
-    let cancelled = false
-    setRefreshing(true)
+    const requested = year
+    setRefresh({ year: requested, status: 'running' })
 
-    refreshYear(targetYear)
+    // A refresh for a year since left must not overwrite the status of the
+    // year now being refreshed.
+    function settle(status: RefreshStatus) {
+      setRefresh((prev) => (prev === null || prev.year === requested ? { year: requested, status } : prev))
+    }
+
+    refreshYear(requested)
       .then((result) => {
-        if (cancelled) return undefined
-        setRefreshOutcome(result.outcome)
-
         // Re-read on fetched/notListed (new data, or the fact settled). On
-        // skipped (already fetched today by someone else) only when this tab
-        // has nothing cached itself — the cross-tab race where another tab's
+        // skipped (already fetched today by someone else) only when the read
+        // above found nothing cached — the cross-tab race where another tab's
         // fetch landed between this tab's own cache read and its refresh
         // call. Never on failed: the cached page, if any, is left exactly as
         // it is. Since the whole listing is read at once, this re-read can
@@ -299,49 +350,38 @@ function YearPageView({ year }: { year: number }) {
           result.outcome === 'fetched' ||
           result.outcome === 'notListed' ||
           (result.outcome === 'skipped' && lastFetchedAtRef.current === null)
-        if (!shouldReread) return undefined
+        if (!shouldReread) {
+          settle(result.outcome)
+          return undefined
+        }
 
-        return getYearPage(targetYear, { hideHentai: hideHentaiRef.current }).then((page) => {
-          if (cancelled) return
-          setYearData({
-            items: page.items,
-            totalCount: page.totalCount,
-            lastFetchedAt: page.lastFetchedAt,
-            hasListing: page.hasListing,
-          })
+        return getYearPage(requested, { hideHentai: hideHentaiRef.current }).then((page) => {
+          if (viewedYearRef.current === requested) {
+            setYearDataRef.current({
+              items: page.items,
+              totalCount: page.totalCount,
+              lastFetchedAt: page.lastFetchedAt,
+              hasListing: page.hasListing,
+            })
+          }
+          // After the listing is in, so the terminal state never passes
+          // through "not listed" or "couldn't be fetched" mid-sequence.
+          settle(result.outcome)
         })
       })
       .catch(() => {
         // A failed refresh leaves the cached page exactly as it is — no
-        // error is surfaced, the indicator just clears below.
-        if (!cancelled) setRefreshOutcome('failed')
+        // error is surfaced, the indicator just clears.
+        settle('failed')
       })
-      .finally(() => {
-        if (!cancelled) setRefreshing(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [debouncedYear])
+  }, [readSettled, debouncedYear, year])
 
   // Reveal more of the already-loaded, already-filtered-and-sorted listing
   // once the sentinel enters view — no network call. The reveal is
   // load-bearing rather than decorative: the whole year is already loaded,
   // and slicing to visibleCount is what keeps a 1,200-card year from
   // rendering (and painting every poster) in one go.
-  useEffect(() => {
-    const node = sentinelRef.current
-    if (!node) return
-
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting) {
-        setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, displayed.length))
-      }
-    })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [displayed, setVisibleCount])
+  useScrollReveal(sentinelRef, displayed.length, PAGE_SIZE, setVisibleCount)
 
   return (
     <div className="year-page">
@@ -360,7 +400,7 @@ function YearPageView({ year }: { year: number }) {
             </button>
             <span className="year-page__label-wrap">
               <span className="year-page__label">{year}</span>
-              {refreshing && <span className="year-page__updating">Updating…</span>}
+              {showUpdating && <span className="year-page__updating">Updating…</span>}
             </span>
             <button
               type="button"
@@ -415,7 +455,7 @@ function YearPageView({ year }: { year: number }) {
       </div>
 
       {terminalState === 'grid' && (
-        <div ref={gridRef} className="year-page__grid">
+        <div ref={gridRef} className={holdingMuted ? 'year-page__grid held-content--muted' : 'year-page__grid'}>
           {visibleItems.map((item, index) => (
             <Fragment key={item.animeId}>
               {index === firstUnwatchedIndex && index > 0 && <div className="year-page__divider">Unwatched</div>}
@@ -432,14 +472,24 @@ function YearPageView({ year }: { year: number }) {
           ))}
         </div>
       )}
+      {terminalState === 'readFailed' && <LoadFailedNotice what="this year" onRetry={retryRead} />}
       {terminalState === 'filtersEmpty' && <p className="year-page__empty">No anime match the current filters.</p>}
       {terminalState === 'notListed' && <p className="year-page__empty">MyAnimeList hasn't listed this year yet.</p>}
-      {terminalState === 'loadFailed' && (
-        <p className="year-page__empty">This year couldn't be loaded — it'll be retried next time you open it.</p>
+      {terminalState === 'fetchFailed' && (
+        <p className="year-page__empty">
+          This year couldn't be fetched from MyAnimeList — it'll be retried next time you open it.
+        </p>
       )}
 
       <div ref={sentinelRef} className="year-page__sentinel" />
-      {terminalState === 'loading' && <p className="year-page__loading">Loading…</p>}
+      {/* One notice across both waits, so the delay isn't restarted when the
+          read lands and the page moves on to waiting for MAL: only the words change. */}
+      <LoadingNotice
+        active={terminalState === 'loading' || terminalState === 'fetching'}
+        className="year-page__loading"
+      >
+        {terminalState === 'fetching' ? 'Fetching this year from MyAnimeList…' : 'Loading…'}
+      </LoadingNotice>
     </div>
   )
 }

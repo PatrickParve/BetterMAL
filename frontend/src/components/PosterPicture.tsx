@@ -1,4 +1,6 @@
+import { useDisplayPicture } from '../hooks/useDisplayPicture.ts'
 import { usePictureShape } from '../hooks/useLandscapePicture.ts'
+import type { PictureTier } from '../utils/anime.ts'
 import './PosterPicture.css'
 
 type PosterPictureProps = {
@@ -13,6 +15,8 @@ type PosterPictureProps = {
   whole?: boolean
   /** Mount no blurred fill for any shape: an upright or wide picture is drawn whole and centred on whatever is behind the box. */
   noFill?: boolean
+  /** Which TMDB width the picture downloads at (design D9). `card` fits a grid card or poster box; pass `tile` for a host that draws it at most about 250px wide, or `hero` for one that draws it wider than a card. */
+  tier?: Exclude<PictureTier, 'row'>
 }
 
 // artwork-presentation: the one place a card, tile or poster box draws its
@@ -39,25 +43,39 @@ type PosterPictureProps = {
 // picture sits whole and centred on the card itself. Where the fill is
 // mounted it's only after the art has loaded and been classified, so it's
 // served from the same cache entry — it never costs a second request.
-export function PosterPicture({ src, className, placeholderClassName, alt = '', draggable, loading, whole, noFill }: PosterPictureProps) {
-  const [shapeRef, shape] = usePictureShape(src)
+//
+// A TMDB picture downloads at the width its `tier` names rather than as the
+// `original` file (tmdb-artwork, design D9). The art and the fill use the same
+// `displaySrc`, so the fill still costs no second request, and `src` stays
+// the picture's identity; a failed fitted download retries the original.
+// The picture also fades in over the box's own background as it arrives
+// (artwork-presentation, design D10): `poster-picture--pending` holds it
+// invisible until it has loaded, `--loaded` fades it in with any fill when it
+// was slow, and `--held`, a picture the browser already had or that arrived
+// within PICTURE_FADE_DELAY_MS, shows at once.
+export function PosterPicture({ src, className, placeholderClassName, alt = '', draggable, loading, whole, noFill, tier = 'card' }: PosterPictureProps) {
+  const { displaySrc, onError } = useDisplayPicture(src, tier)
+  const [shapeRef, shape, arrival] = usePictureShape(displaySrc)
 
   if (!src) {
     return <div aria-hidden="true" className={placeholderClassName ?? `${className} ${className}--placeholder`} />
   }
 
   return (
-    <span className={`poster-picture poster-picture--${shape}${whole ? ' poster-picture--whole' : ''} ${className}`}>
+    <span
+      className={`poster-picture poster-picture--${shape} poster-picture--${arrival}${whole ? ' poster-picture--whole' : ''} ${className}`}
+    >
       {!whole && !noFill && shape !== 'poster' && (
-        <img className="poster-picture__fill" src={src} alt="" aria-hidden="true" draggable={false} />
+        <img className="poster-picture__fill" src={displaySrc} alt="" aria-hidden="true" draggable={false} />
       )}
       <img
         ref={shapeRef}
         className="poster-picture__art"
-        src={src}
+        src={displaySrc}
         alt={alt}
         draggable={draggable}
         loading={loading}
+        onError={onError}
       />
     </span>
   )

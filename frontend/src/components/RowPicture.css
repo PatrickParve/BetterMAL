@@ -37,3 +37,44 @@
    next to. */
 .row-picture--placeholder {
 }
+
+/* The box around a row's <img>, carrying the host's class (which sets the
+   --row-picture-* box and often a radius) and the placeholder background the
+   picture fades in over (artwork-presentation, design D10). The height is
+   explicit so a row that stretches its children can't stretch this, as it
+   never stretched the <img>; the width shrinks to the <img>'s, so a wide
+   picture's frame is its capped width. overflow: hidden clips the <img> to
+   the host's radius. */
+.row-picture-frame {
+  display: block;
+  flex: 0 0 auto;
+  width: fit-content;
+  height: var(--row-picture-h);
+  overflow: hidden;
+  background: var(--code-bg);
+}
+
+/* Invisible until it has loaded, so it is never drawn part-way as it downloads
+   and the frame's background shows; a picture that fails stays that way. Held
+   (already in the browser's cache when drawn, or arrived within
+   PICTURE_FADE_DELAY_MS, see useLandscapePicture.ts) matches nothing here and
+   shows at once: only a visibly slow picture fades. */
+.row-picture-frame--pending > .row-picture {
+  opacity: 0;
+}
+
+.row-picture-frame--loaded > .row-picture {
+  animation: row-picture-fade-in 180ms ease-out;
+}
+
+@keyframes row-picture-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row-picture-frame--loaded > .row-picture {
+    animation: none;
+  }
+}

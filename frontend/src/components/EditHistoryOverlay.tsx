@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { LoadingNotice } from './LoadingNotice.tsx'
 import { Modal } from './Modal.tsx'
 import { RowPicture } from './RowPicture.tsx'
 import { TruncatedTitle } from './TruncatedTitle.tsx'
@@ -113,7 +114,7 @@ export function EditHistoryOverlay({ onClose }: EditHistoryOverlayProps) {
         </div>
 
         {loading ? (
-          <p className="edit-history__empty">Loading…</p>
+          <LoadingNotice className="edit-history__empty" />
         ) : history.length === 0 ? (
           <p className="edit-history__empty">No activity yet.</p>
         ) : filteredHistory.length === 0 ? (

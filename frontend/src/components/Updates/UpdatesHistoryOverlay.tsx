@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { LoadingNotice } from '../LoadingNotice.tsx'
 import { Modal } from '../Modal.tsx'
 import { UpdateCard } from './UpdateCard.tsx'
 import { useUpdateLook } from './useUpdateLook.ts'
@@ -138,7 +139,7 @@ export function UpdatesHistoryOverlay({ onClose }: UpdatesHistoryOverlayProps) {
         </div>
 
         {loading ? (
-          <p className="updates-history__empty">Loading…</p>
+          <LoadingNotice className="updates-history__empty" />
         ) : history.length === 0 ? (
           <p className="updates-history__empty">No updates recorded yet.</p>
         ) : filteredHistory.length === 0 ? (

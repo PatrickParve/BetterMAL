@@ -1,10 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { getAppStatus } from '../api/client.ts'
 import type { AppStatusDto, AppStatusJobsDto, JobStatusDto } from '../api/types.ts'
+import { useReconnectRetry } from '../hooks/useReconnectRetry.ts'
 
 type AppStatusContextValue = {
   status: AppStatusDto | null
+  // A read failed and there is no status to show yet (page-load-states), so
+  // the Settings page can say so instead of loading for ever. Never set once a
+  // status is held: a later failed poll just keeps what is there.
+  failed: boolean
   refresh: () => Promise<void>
+  // Try again: re-runs the read, and allows one more automatic retry when the
+  // server next becomes reachable.
+  retry: () => void
   applyJob: <K extends keyof AppStatusJobsDto>(key: K, dto: AppStatusJobsDto[K]) => void
   applyWeeklyOutcomeSeen: () => void
 }
@@ -19,6 +27,7 @@ const AppStatusContext = createContext<AppStatusContextValue | null>(null)
 // of the two disagreeing for up to a second.
 export function AppStatusProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AppStatusDto | null>(null)
+  const [failed, setFailed] = useState(false)
   const statusRef = useRef<AppStatusDto | null>(null)
 
   const refresh = useCallback(async () => {
@@ -26,14 +35,31 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
       const next = await getAppStatus()
       statusRef.current = next
       setStatus(next)
+      setFailed(false)
     } catch {
       // Leave whatever was already there; the next poll or refresh retries.
+      // With nothing there yet, that is a failure the Settings page reports.
+      if (statusRef.current === null) setFailed(true)
     }
   }, [])
 
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // Reads again at once when the server becomes reachable, rather than
+  // leaving Settings on its failure state until the next 10-second tick. The
+  // shared once-per-failure rule (design.md D2/D8 of smooth-page-loading)
+  // applies here too, though the poll below keeps trying regardless.
+  const retryRead = useCallback(() => {
+    setFailed(false)
+    void refresh()
+  }, [refresh])
+  const rearmReconnectRetry = useReconnectRetry(failed, retryRead)
+  const retry = useCallback(() => {
+    rearmReconnectRetry()
+    retryRead()
+  }, [rearmReconnectRetry, retryRead])
 
   // Polls every second while any job is running, and every 10 seconds
   // otherwise, and only while the tab is visible (design.md D7, unchanged
@@ -100,8 +126,8 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ status, refresh, applyJob, applyWeeklyOutcomeSeen }),
-    [status, refresh, applyJob, applyWeeklyOutcomeSeen],
+    () => ({ status, failed, refresh, retry, applyJob, applyWeeklyOutcomeSeen }),
+    [status, failed, refresh, retry, applyJob, applyWeeklyOutcomeSeen],
   )
 
   return <AppStatusContext.Provider value={value}>{children}</AppStatusContext.Provider>

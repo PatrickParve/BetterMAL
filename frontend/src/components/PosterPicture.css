@@ -56,3 +56,38 @@
   opacity: var(--poster-fill-opacity);
   pointer-events: none;
 }
+
+/* The picture fades in as it arrives (artwork-presentation, design D10). While
+   it is pending the art is invisible, so it is never drawn part-way as it
+   downloads and the wrapper's own background (or the host's) shows as the
+   placeholder; a picture that fails stays pending, so that is what remains.
+   A picture the browser already held, or that arrived within
+   PICTURE_FADE_DELAY_MS (useLandscapePicture.ts), carries `--held` and matches
+   none of this, so it is drawn at once: only a visibly slow picture fades. A keyframe animation rather than a
+   transition: the fill mounts only after the art has loaded and been
+   classified, already at its final state, so it has no earlier value to
+   transition from, and one rule fades the art and the fill together. With no
+   `to` frame the fade ends at each element's own opacity, which is the
+   fill's var(--poster-fill-opacity). Nothing about the box changes, so a grid
+   of posters still does not move as its pictures arrive. */
+.poster-picture--pending > .poster-picture__art {
+  opacity: 0;
+}
+
+.poster-picture--loaded > .poster-picture__art,
+.poster-picture--loaded > .poster-picture__fill {
+  animation: poster-picture-fade-in 180ms ease-out;
+}
+
+@keyframes poster-picture-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poster-picture--loaded > .poster-picture__art,
+  .poster-picture--loaded > .poster-picture__fill {
+    animation: none;
+  }
+}

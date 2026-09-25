@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { SeriesEntryDto } from '../api/types.ts'
+import { useDisplayPicture } from '../hooks/useDisplayPicture.ts'
 import { isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_CLASS, STATUS_LABELS } from '../utils/anime.ts'
 import { ScoreValue } from './ScoreValue.tsx'
 import './SeriesEntryRow.css'
@@ -33,6 +34,10 @@ export function watchedFigureLabel(entry: SeriesEntryDto): string | null {
 // outside the <Link> so it never triggers navigation, and the hover
 // highlight matches the my-list/top-anime row treatment.
 export function SeriesEntryRow({ entry, onEdit }: SeriesEntryRowProps) {
+  // A TMDB picture downloads at the row width, with the original as the fallback
+  // (tmdb-artwork, design D9). This row keeps its own <img> rather than RowPicture
+  // because it crops every shape to its poster slot.
+  const { displaySrc, onError } = useDisplayPicture(entry.pictureUrl, 'row')
   const displayTitle = pickDisplayTitle(entry.title, entry.englishTitle)
   const year = entry.airedFrom ? entry.airedFrom.slice(0, 4) : null
   const statusClass = entry.entry ? ` series-entry-row--${STATUS_CLASS[entry.entry.status]}` : ''
@@ -43,7 +48,7 @@ export function SeriesEntryRow({ entry, onEdit }: SeriesEntryRowProps) {
     <li className={`series-entry-row${statusClass}`}>
       <Link to={`/anime/${entry.animeId}`} className="series-entry-row__link">
         {entry.pictureUrl ? (
-          <img src={entry.pictureUrl} alt="" className="series-entry-row__picture" />
+          <img src={displaySrc} alt="" className="series-entry-row__picture" onError={onError} />
         ) : (
           <div className="series-entry-row__picture series-entry-row__picture--placeholder" aria-hidden="true" />
         )}

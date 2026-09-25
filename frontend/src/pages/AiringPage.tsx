@@ -2,7 +2,11 @@ import { useMemo } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { getAiringWeek } from '../api/client.ts'
 import type { AiringSlotDto, AiringWeekDto } from '../api/types.ts'
+import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
+import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { PosterPicture } from '../components/PosterPicture.tsx'
+import { useDelayedFlag } from '../hooks/useDelayedFlag.ts'
+import { useHeldData } from '../hooks/useHeldData.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
 import { EARLIEST_YEAR, yearsInRange } from '../utils/browseRange.ts'
@@ -126,10 +130,22 @@ export function AiringPage() {
 // The schedule covers 1 January 1917 through 31 December of next year
 // (AiringWeekRange on the backend); `referenceDate` has already been
 // validated by the AiringPage guard above.
+//
+// Stepping to another week keeps the previous week's schedule on screen
+// (useHeldData) until the new one lands, muted once the load outlasts the
+// loading-indicator delay, so a step never collapses the page to a header.
+// The range label is part of what is held; the controls always name the week
+// stepped to.
 function AiringPageView({ referenceDate }: { referenceDate: string }) {
   const [, setSearchParams] = useSearchParams()
 
-  const { data: week } = usePageData<AiringWeekDto>(`airing:${referenceDate}`, () => getAiringWeek(referenceDate))
+  const {
+    data: weekData,
+    failed,
+    retry,
+  } = usePageData<AiringWeekDto>(`airing:${referenceDate}`, () => getAiringWeek(referenceDate))
+  const { shown: week, stale } = useHeldData(weekData, failed)
+  const holdingMuted = useDelayedFlag(stale)
 
   // Replaces rather than pushes (polish-rewatch-more-and-filters design.md
   // D7): stepping through weeks must never grow the history stack, so one
@@ -227,14 +243,25 @@ function AiringPageView({ referenceDate }: { referenceDate: string }) {
             ))}
           </select>
         </div>
-        {week && <span className="airing-page__range">{formatWeekRange(week.weekStart, week.weekEnd)}</span>}
+        {week && (
+          <span className={holdingMuted ? 'airing-page__range held-content--muted' : 'airing-page__range'}>
+            {formatWeekRange(week.weekStart, week.weekEnd)}
+          </span>
+        )}
       </div>
 
+      {/* "Nothing airing this week." only for a week that loaded: a read that
+          failed is a failure, and one still in flight shows the (delayed)
+          loading notice, never an empty schedule. */}
+      {!week && failed && <LoadFailedNotice what="this week's schedule" onRetry={retry} />}
+      {!week && !failed && <LoadingNotice className="airing-page__loading" />}
       {week &&
         (isEmptyWeek ? (
-          <p className="airing-page__empty">Nothing airing this week.</p>
+          <p className={holdingMuted ? 'airing-page__empty held-content--muted' : 'airing-page__empty'}>
+            Nothing airing this week.
+          </p>
         ) : (
-          <div className="airing-page__grid">
+          <div className={holdingMuted ? 'airing-page__grid held-content--muted' : 'airing-page__grid'}>
             {week.days.map((day) => {
               const isToday = day.localDate === today
               return (

@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ApiError, getMyList, getRecap, updateEntry } from '../api/client.ts'
 import { RECAP_SEASONS, type IncrementTarget, type MyListItemDto, type RecapDto, type RecapMode, type RecapSeasonName, type RecapTimeFilter, type UserAnimeEntryDto, type WatchStatus } from '../api/types.ts'
 import type { FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
+import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
+import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { MyListControls, type ScoreFilter } from '../components/MyListControls.tsx'
 import { MyListRow } from '../components/MyListRow.tsx'
 import { RecapPickerOverlay } from '../components/RecapPickerOverlay.tsx'
@@ -12,6 +14,7 @@ import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useEpisodeIncrement, useSetEpisodesWatched } from '../context/CompletionPromptContext.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
+import { useScrollReveal } from '../hooks/useScrollReveal.ts'
 import {
   AIRING_STATUS_LABELS,
   composeComparator,
@@ -179,7 +182,7 @@ type Derivation =
 // two-level sort (primary + tiebreaker) compose over the whole page instead
 // of per status group.
 export function MyListPage() {
-  const { data, loading, setData: setItems } = usePageData<MyListItemDto[]>('my-list', getMyList)
+  const { data, loading, failed, retry, setData: setItems } = usePageData<MyListItemDto[]>('my-list', getMyList)
   const items = data ?? []
 
   // Recap scope and focus (design.md decision 1/2/9/10, tasks.md 5.1-5.2,
@@ -273,7 +276,12 @@ export function MyListPage() {
         : `recap:season:${recapStartYear}:${recapSeason}`
     : 'no-recap-scope'
 
-  const { data: recapScopeData, loading: recapScopeLoading } = usePageData<RecapDto | null>(recapScopeKey, () =>
+  const {
+    data: recapScopeData,
+    loading: recapScopeLoading,
+    failed: recapScopeFailed,
+    retry: retryRecapScope,
+  } = usePageData<RecapDto | null>(recapScopeKey, () =>
     hasRecapScope
       ? getRecap({ mode: recapMode, startYear: recapStartYear, endYear: recapEndYear, season: recapSeason, filter: recapFilter })
       : Promise.resolve(null),
@@ -605,19 +613,9 @@ export function MyListPage() {
 
   // Reveal the next page of an array that is already filtered, sorted and in
   // memory once the sentinel comes into view — no network call and no control
-  // to press (SeriesBrowserPage.tsx's observer).
-  useEffect(() => {
-    const node = sentinelRef.current
-    if (!node) return
-
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting) {
-        setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, derived.shown))
-      }
-    })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [derived, setVisibleCount])
+  // to press. The shared observer only ever adds to the count; the reset to
+  // the first page on a view change stays the render-time check above.
+  useScrollReveal(sentinelRef, derived.shown, PAGE_SIZE, setVisibleCount)
 
   // The page's one budget, spent group by group (design.md D1/D2): each group
   // draws what the remainder allows and passes the rest on, so the cap is on
@@ -701,7 +699,19 @@ export function MyListPage() {
   }
 
   function renderBody() {
-    if (loading || (hasRecapScope && recapScopeLoading)) return <p className="my-list-page__loading">Loading…</p>
+    // A read that failed is a failure, never "Nothing here yet": with nothing
+    // loaded `derived.total` is 0 either way, so these come first
+    // (page-load-states). The recap scope's own read is a second read whose
+    // failure leaves the scoped list unknown, and its Try again re-runs only
+    // that read.
+    if (failed) return <LoadFailedNotice what="your list" onRetry={retry} />
+    if (hasRecapScope && recapScopeFailed) {
+      return <LoadFailedNotice what="this recap period's list" onRetry={retryRecapScope} />
+    }
+
+    if (loading || (hasRecapScope && recapScopeLoading)) {
+      return <LoadingNotice className="my-list-page__loading" />
+    }
 
     if (derived.total === 0) {
       return (

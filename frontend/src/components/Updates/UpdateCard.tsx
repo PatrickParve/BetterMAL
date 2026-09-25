@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { AnimeUpdateDto } from '../../api/types.ts'
+import { useDisplayPicture } from '../../hooks/useDisplayPicture.ts'
 import { pickDisplayTitle, formatTimestamp } from '../../utils/anime.ts'
 import { TruncatedTitle } from '../TruncatedTitle.tsx'
 import { buildNewsLines, buildFactLines } from './updateText.ts'
@@ -20,6 +21,10 @@ type UpdateCardProps = {
 // the title to one line, the history shows it in full plus when it was
 // detected.
 export function UpdateCard({ item, variant, onNavigate, isNew = false }: UpdateCardProps) {
+  // A TMDB picture downloads at the row width, with the original as the fallback
+  // (tmdb-artwork, design D9). The card's own <img> caps at 170px, inside what
+  // that width covers at twice the size.
+  const { displaySrc, onError } = useDisplayPicture(item.pictureUrl, 'row')
   const title = pickDisplayTitle(item.title, item.englishTitle)
   const newsLines = buildNewsLines(item)
   const factLines = buildFactLines(item)
@@ -37,7 +42,7 @@ export function UpdateCard({ item, variant, onNavigate, isNew = false }: UpdateC
   return (
     <Link to={`/anime/${item.animeId}`} className={'update-card' + (isNew ? ' update-card--new' : '')} onClick={onNavigate}>
       {item.pictureUrl ? (
-        <img src={item.pictureUrl} alt="" className="update-card__picture" />
+        <img src={displaySrc} alt="" className="update-card__picture" onError={onError} />
       ) : (
         <span className="update-card__picture update-card__picture--placeholder" aria-hidden="true" />
       )}

@@ -15,6 +15,8 @@ import type {
   IncrementTarget,
   NextEpisodeEtaDto,
 } from "../api/types.ts";
+import { LoadFailedNotice } from "../components/LoadFailedNotice.tsx";
+import { LoadingNotice } from "../components/LoadingNotice.tsx";
 import { PicturePickerOverlay } from "../components/PicturePickerOverlay.tsx";
 import {
   animeTmdbSections,
@@ -33,6 +35,7 @@ import {
 } from "../context/CompletionPromptContext.tsx";
 import { useActionFailure } from "../context/ActionFailureContext.tsx";
 import { useScoreVisibility } from "../context/ScoreVisibilityContext.tsx";
+import { useDisplayPicture } from "../hooks/useDisplayPicture.ts";
 import { useLandscapePicture } from "../hooks/useLandscapePicture.ts";
 import { usePageData } from "../hooks/usePageData.ts";
 import { usePickerOpenGroups } from "../hooks/usePickerOpenGroups.ts";
@@ -195,7 +198,8 @@ export function AnimeDetailPage() {
   const animeId = Number(id);
   const {
     data: detail,
-    loading,
+    failed,
+    retry,
     setData: setDetail,
     reload,
   } = usePageData<AnimeDetailDto>(`anime:${animeId}`, () => getAnimeDetail(animeId));
@@ -210,7 +214,12 @@ export function AnimeDetailPage() {
   const increment = useEpisodeIncrement();
   const setEpisodesWatched = useSetEpisodesWatched();
   const reportFailure = useActionFailure();
-  const [pictureRef, isLandscapePicture] = useLandscapePicture(detail?.pictureUrl);
+  // The header picture downloads at the hero width, with the original as the
+  // fallback (tmdb-artwork, design D9). The landscape check reads the displayed
+  // <img>: a rendition keeps the original's proportions, and a fallback swap
+  // re-attaches the ref so it is read again.
+  const { displaySrc: pictureSrc, onError: onPictureError } = useDisplayPicture(detail?.pictureUrl, "hero");
+  const [pictureRef, isLandscapePicture] = useLandscapePicture(pictureSrc);
 
   // Visit-triggered picture backfill (design D4b) — mirrors the anime's own
   // TTL detail fetch: fire once per anime, as soon as the server says it has
@@ -447,14 +456,12 @@ export function AnimeDetailPage() {
     return <p className="anime-detail-page__empty">Anime not found.</p>;
   }
 
-  if (loading) {
-    return <p className="anime-detail-page__loading">Loading…</p>;
+  if (failed) {
+    return <LoadFailedNotice what="this anime" onRetry={retry} />;
   }
 
   if (!detail) {
-    return (
-      <p className="anime-detail-page__empty">Couldn't load this anime.</p>
-    );
+    return <LoadingNotice className="anime-detail-page__loading" />;
   }
 
   // Server-resolved ranked pick (relation-confidence spec) rather than the
@@ -622,8 +629,9 @@ export function AnimeDetailPage() {
           {detail.pictureUrl ? (
             <img
               ref={pictureRef}
-              src={detail.pictureUrl}
+              src={pictureSrc}
               alt=""
+              onError={onPictureError}
               className={`anime-detail-page__picture${isLandscapePicture ? " anime-detail-page__picture--landscape" : ""}`}
             />
           ) : (

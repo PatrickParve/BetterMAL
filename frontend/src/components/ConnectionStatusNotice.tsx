@@ -1,14 +1,13 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { getHealth } from '../api/client.ts'
-import { getSnapshot, subscribe } from '../api/connectionStatus.ts'
+import { getSnapshot, HEALTH_POLL_INTERVAL_MS, subscribe } from '../api/connectionStatus.ts'
 import './ConnectionStatusNotice.css'
-
-const HEALTH_POLL_INTERVAL_MS = 5000
 
 // Mounted once in AppShell, outside <Routes>, so it survives navigation and
 // covers every page after the shell has mounted. The pre-shell "can't reach
 // the backend" hero in App.tsx handles the one request this can't: the very
-// first getMalAuthStatus() call, before there's a shell to show a bar over.
+// first getMalAuthStatus() call, before there's a shell to show a bar over. It
+// retries at the same HEALTH_POLL_INTERVAL_MS.
 export function ConnectionStatusNotice() {
   const reachable = useSyncExternalStore(subscribe, getSnapshot)
   const [dismissed, setDismissed] = useState(false)

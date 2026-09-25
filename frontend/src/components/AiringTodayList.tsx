@@ -25,7 +25,7 @@ export function AiringTodayList({ items }: AiringTodayListProps) {
           {items.map((item) => (
             <li key={item.animeId}>
               <Link to={`/anime/${item.animeId}`} className="airing-today__row">
-                <RowPicture src={item.pictureUrl} className="airing-today__thumb" />
+                <RowPicture src={item.pictureUrl} className="airing-today__thumb" tier="tile" />
                 <span className="airing-today__text">
                   <span className="airing-today__meta">
                     {item.localTime}

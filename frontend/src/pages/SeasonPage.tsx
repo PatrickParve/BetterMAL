@@ -5,11 +5,16 @@ import type { AnimeBrowseItemDto } from '../api/types.ts'
 import { RECAP_SEASONS, type RecapSeasonName } from '../api/types.ts'
 import { AnimeCard, AnimeCardMeta } from '../components/AnimeCard.tsx'
 import { FilterMultiSelect } from '../components/FilterMultiSelect.tsx'
+import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
+import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
 import { useDebouncedValue } from '../hooks/useDebouncedValue.ts'
+import { useDelayedFlag } from '../hooks/useDelayedFlag.ts'
+import { useHeldData } from '../hooks/useHeldData.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useCompleteLastRow } from '../hooks/useCompleteLastRow.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
+import { useScrollReveal } from '../hooks/useScrollReveal.ts'
 import { useOnDemandProbe, useSeasonBounds } from '../hooks/useSeasonBounds.ts'
 import { MEDIA_TYPE_FILTER_OPTIONS, mediaTypeFilterOptions, seasonPointIndex, shiftSeason } from '../utils/anime.ts'
 import {
@@ -31,6 +36,10 @@ interface SeasonReadState {
 }
 
 type SortKey = 'popularity' | 'malScore' | 'alphabetical' | 'myScore'
+
+// What the visit's refresh is doing for one season: still running, or one of
+// the four outcomes the endpoint reports.
+type RefreshStatus = 'running' | 'fetched' | 'notListed' | 'skipped' | 'failed'
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'popularity', label: 'Popularity' },
@@ -139,20 +148,28 @@ export function SeasonPage() {
 }
 
 // Season page body: all anime airing in the selected season (not just my
-// list), with a sort/filter control and a client-side reveal via an
-// IntersectionObserver sentinel below the grid. `year`/`season` arrive
-// already validated by the SeasonPage guard above (design D2); sort/type/
-// inMyList still live in the URL directly, read here since they carry no
+// list), with a sort/filter control and a client-side reveal via
+// useScrollReveal's sentinel below the grid. `year`/`season` arrive already
+// validated by the SeasonPage guard above (design D2); sort/type/inMyList
+// still live in the URL directly, read here since they carry no
 // addressability rule of their own.
 //
-// Reads and refreshes are two separate effects: reading from cache is
-// instant and runs once per season/hideHentai combination (usePageData's own
-// key, which loads the season's whole listing in one read — design D1),
-// while the MAL refresh is debounced and keyed on season alone. Sort, the
-// type filter, and the in-my-list filter never trigger a read at all — they
-// act on the already-loaded listing in place, and the ordering itself is a
-// per-item key the server computed rather than a rule reimplemented here
-// (design D2, D3 of add-season-browser).
+// The cache read and the MAL refresh are separate, and the refresh follows
+// the read: reading from cache is instant and runs once per season/hideHentai
+// combination (usePageData's own key, which loads the season's whole listing
+// in one read — design D1), and the visit's refresh is requested only once
+// that read has landed, debounced and keyed on season alone, so its outcome
+// is always judged against what the read found. A refresh skipped as already
+// fresh answers before the listing read would have, and read first it used
+// to decide the page while the read was still in flight (a "couldn't be
+// loaded" flash, and a second read of the whole listing). Sort, the type
+// filter, and the in-my-list filter never trigger a read at all — they act on
+// the already-loaded listing in place, and the ordering itself is a per-item
+// key the server computed rather than a rule reimplemented here (design D2,
+// D3 of add-season-browser).
+//
+// Stepping to another season keeps the previous grid on screen (useHeldData)
+// until the new listing lands, so nothing collapses to empty in between.
 function SeasonPageView({ year, season }: { year: number; season: RecapSeasonName }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const { ceiling } = useSeasonBounds()
@@ -175,7 +192,12 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
   // snapshot, so restoring one restores its own whole listing regardless of
   // which sort or filter was active when it was left.
   const seasonKey = `season:${year}/${season}:${hideHentai}`
-  const { data: seasonData, setData: setSeasonData } = usePageData<SeasonReadState>(seasonKey, () =>
+  const {
+    data: seasonData,
+    failed: readFailed,
+    retry: retryRead,
+    setData: setSeasonData,
+  } = usePageData<SeasonReadState>(seasonKey, () =>
     getSeasonPage(year, season, { hideHentai }).then((page) => ({
       items: page.items,
       totalCount: page.totalCount,
@@ -183,25 +205,42 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
       hasListing: page.hasListing,
     })),
   )
-  const items = seasonData?.items ?? []
+  // What the grid and the controls derived from it draw: this season's
+  // listing, or the previous season's while this one loads. The terminal
+  // state below still decides from `seasonData`, this season's own read.
+  const { shown: shownSeason, stale } = useHeldData(seasonData, readFailed)
+  const holdingMuted = useDelayedFlag(stale)
+  const items = shownSeason?.items ?? []
   const lastFetchedAt = seasonData?.lastFetchedAt ?? null
   const hasListing = seasonData?.hasListing ?? false
+  const readSettled = seasonData !== null
 
-  const [refreshing, setRefreshing] = useState(false)
-  // The refresh outcome for the season currently being viewed, reset the
-  // moment the season changes (below) so one season's outcome can never
-  // decide another season's terminal-state render (task 8.1). Null until a
-  // refresh attempt for this season has settled.
-  const [refreshOutcome, setRefreshOutcome] = useState<'fetched' | 'notListed' | 'skipped' | 'failed' | null>(null)
+  // Which season a refresh status belongs to travels with it, so one season's
+  // status can never decide another season's terminal-state render, and
+  // nothing has to reset it when the season changes: a status for a season
+  // other than the one viewed simply reads as null.
+  const seasonId = `${year}/${season}`
+  const [refresh, setRefresh] = useState<{ season: string; status: RefreshStatus } | null>(null)
+  const refreshStatus = refresh?.season === seasonId ? refresh.status : null
+  const refreshing = refreshStatus === 'running'
+  // The refresh settling within the delay leaves no trace on screen.
+  const showUpdating = useDelayedFlag(refreshing)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
-  // Read by the debounced refresh effect so it re-reads with whatever
-  // hideHentai is current when it actually runs, not whatever was current
-  // when it was scheduled.
+  // Read by the refresh effect so it re-reads with whatever hideHentai is
+  // current when it actually runs, not whatever was current when it was
+  // scheduled, and applies the listing through the current season's setter.
   const hideHentaiRef = useRef(hideHentai)
   hideHentaiRef.current = hideHentai
+  const setSeasonDataRef = useRef(setSeasonData)
+  setSeasonDataRef.current = setSeasonData
   const lastFetchedAtRef = useRef(lastFetchedAt)
   lastFetchedAtRef.current = lastFetchedAt
+  const viewedSeasonRef = useRef(seasonId)
+  viewedSeasonRef.current = seasonId
+  // The season a refresh was last requested for, so it is requested once per
+  // visit however often the effect below re-runs.
+  const refreshedSeasonRef = useRef<string | null>(null)
 
   // Filtered by the in-my-list and type controls, then sorted by the
   // server-computed sortOrder for the active sort — an integer compare on a
@@ -230,21 +269,37 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
 
   const firstUnwatchedIndex = sort === 'myScore' ? displayed.findIndex((item) => item.myScore === null) : -1
 
-  // The page's terminal states, in the order design.md decision 5 specifies
-  // (task 8.3): the grid takes priority whenever there's anything to show;
-  // otherwise a cached-but-empty season reports why (no listing vs. filtered
-  // out); otherwise the season has never been cached, so it's either still
-  // loading or its first fetch has settled and produced nothing.
-  const terminalState: 'grid' | 'filtersEmpty' | 'notListed' | 'loading' | 'loadFailed' =
+  // The page's terminal states, in the order design D4 of smooth-page-loading
+  // specifies. The grid takes priority whenever there's anything to show. A
+  // failed read of this season's own listing comes next, then the read not
+  // yet having settled: no message about emptiness or about the refresh is
+  // ever drawn while the read that would decide it is in flight. Once it has
+  // settled, a cached-but-empty season reports why (no listing vs. filtered
+  // out); otherwise the season has never been cached, so it's either waiting
+  // on its first fetch from MAL or that fetch has settled and produced
+  // nothing.
+  const refreshSettled = refreshStatus !== null && refreshStatus !== 'running'
+  const terminalState:
+    | 'grid'
+    | 'readFailed'
+    | 'loading'
+    | 'filtersEmpty'
+    | 'notListed'
+    | 'fetching'
+    | 'fetchFailed' =
     displayed.length > 0
       ? 'grid'
-      : lastFetchedAt !== null && hasListing
-        ? 'filtersEmpty'
-        : lastFetchedAt !== null
-          ? 'notListed'
-          : refreshOutcome === null
-            ? 'loading'
-            : 'loadFailed'
+      : readFailed
+        ? 'readFailed'
+        : !readSettled
+          ? 'loading'
+          : lastFetchedAt !== null
+            ? hasListing
+              ? 'filtersEmpty'
+              : 'notListed'
+            : !refreshSettled
+              ? 'fetching'
+              : 'fetchFailed'
 
   // Built from the addressable range's own two ends alone (design D1) — the
   // guard above has already confirmed `year`/`season` sit inside it, so no
@@ -301,88 +356,82 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
     })
   }
 
-  // The outcome from a stale season must never decide this season's render
-  // (task 8.1) — reset the instant the season changes, ahead of the debounced
-  // refresh effect below settling for whichever season is landed on.
-  useEffect(() => {
-    setRefreshOutcome(null)
-  }, [seasonKey])
-
   // Visit-triggered background refresh: keyed on season alone (via the
   // debounced key below) so sort/filter changes never cause a MAL fetch.
   // Debounced so arrow-stepping through seasons only refreshes the one
   // settled on; the very first render's value is applied immediately since
   // useDebouncedValue seeds its state with the initial value.
-  const debouncedSeasonKey = useDebouncedValue(`${year}/${season}`, REFRESH_DEBOUNCE_MS)
+  const debouncedSeasonId = useDebouncedValue(seasonId, REFRESH_DEBOUNCE_MS)
 
+  // Requested once the page's own read of the season has landed — see the
+  // header. A restore seeds `seasonData`, so it is requested at once; a read
+  // that failed requests nothing, and the retry that succeeds requests it
+  // then. Nothing here is cancelled when the season changes: a status is
+  // recorded against the season it was requested for (above), and a listing
+  // is applied only while that season is the one viewed.
   useEffect(() => {
-    const [yearPart, seasonPart] = debouncedSeasonKey.split('/')
-    const targetYear = Number(yearPart)
-    const targetSeason = seasonPart as RecapSeasonName
+    if (!readSettled || debouncedSeasonId !== seasonId) return
+    if (refreshedSeasonRef.current === seasonId) return
+    refreshedSeasonRef.current = seasonId
 
-    let cancelled = false
-    setRefreshing(true)
+    const requested = seasonId
+    setRefresh({ season: requested, status: 'running' })
 
-    refreshSeason(targetYear, targetSeason)
+    // A refresh for a season since left must not overwrite the status of
+    // the season now being refreshed.
+    function settle(status: RefreshStatus) {
+      setRefresh((prev) => (prev === null || prev.season === requested ? { season: requested, status } : prev))
+    }
+
+    refreshSeason(year, season)
       .then((result) => {
-        if (cancelled) return undefined
-        setRefreshOutcome(result.outcome)
-
-        // Re-read on fetched/notListed (new data, or the fact settled).
-        // On skipped (already fetched today by someone else) only when this
-        // tab has nothing cached itself — the cross-tab race where another
+        // Re-read on fetched/notListed (new data, or the fact settled). On
+        // skipped (already fetched today by someone else) only when the read
+        // above found nothing cached — the cross-tab race where another
         // tab's fetch landed between this tab's own cache read and its
         // refresh call. Never on failed: the cached page, if any, is left
-        // exactly as it is (design.md decision 5). Since the whole listing
-        // is read at once, this re-read can never leave the grid showing
-        // fewer anime than it was showing (design D1).
+        // exactly as it is (design.md decision 5). Since the whole listing is
+        // read at once, this re-read can never leave the grid showing fewer
+        // anime than it was showing (design D1).
         const shouldReread =
           result.outcome === 'fetched' ||
           result.outcome === 'notListed' ||
           (result.outcome === 'skipped' && lastFetchedAtRef.current === null)
-        if (!shouldReread) return undefined
+        if (!shouldReread) {
+          settle(result.outcome)
+          return undefined
+        }
 
-        return getSeasonPage(targetYear, targetSeason, { hideHentai: hideHentaiRef.current }).then((page) => {
-          if (cancelled) return
-          setSeasonData({
-            items: page.items,
-            totalCount: page.totalCount,
-            lastFetchedAt: page.lastFetchedAt,
-            hasListing: page.hasListing,
-          })
+        return getSeasonPage(year, season, { hideHentai: hideHentaiRef.current }).then((page) => {
+          if (viewedSeasonRef.current === requested) {
+            setSeasonDataRef.current({
+              items: page.items,
+              totalCount: page.totalCount,
+              lastFetchedAt: page.lastFetchedAt,
+              hasListing: page.hasListing,
+            })
+          }
+          // After the listing is in, so the terminal state never passes
+          // through "not listed" or "couldn't be fetched" mid-sequence.
+          settle(result.outcome)
         })
       })
       .catch(() => {
         // A failed refresh leaves the cached page exactly as it is — no
-        // error is surfaced, the indicator just clears below.
-        if (!cancelled) setRefreshOutcome('failed')
+        // error is surfaced, the indicator just clears.
+        settle('failed')
       })
-      .finally(() => {
-        if (!cancelled) setRefreshing(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [debouncedSeasonKey])
+    // `year`/`season` are read at the moment the effect runs, which is when
+    // `debouncedSeasonId === seasonId`, so they are the season requested.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readSettled, debouncedSeasonId, seasonId])
 
   // Reveal more of the already-loaded, already-filtered-and-sorted listing
   // once the sentinel enters view — no network call. The reveal is
   // load-bearing rather than decorative: the whole season is already loaded,
   // and slicing to visibleCount is what keeps a several-hundred-card season
   // from rendering (and painting every poster) in one go.
-  useEffect(() => {
-    const node = sentinelRef.current
-    if (!node) return
-
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting) {
-        setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, displayed.length))
-      }
-    })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [displayed, setVisibleCount])
+  useScrollReveal(sentinelRef, displayed.length, PAGE_SIZE, setVisibleCount)
 
   return (
     <div className="season-page">
@@ -403,7 +452,7 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
               <span className="season-page__label">
                 {seasonLabel(season)} {year}
               </span>
-              {refreshing && <span className="season-page__updating">Updating…</span>}
+              {showUpdating && <span className="season-page__updating">Updating…</span>}
             </span>
             <button
               type="button"
@@ -481,7 +530,7 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
       </div>
 
       {terminalState === 'grid' && (
-        <div ref={gridRef} className="season-page__grid">
+        <div ref={gridRef} className={holdingMuted ? 'season-page__grid held-content--muted' : 'season-page__grid'}>
           {visibleItems.map((item, index) => (
             <Fragment key={item.animeId}>
               {index === firstUnwatchedIndex && index > 0 && <div className="season-page__divider">Unwatched</div>}
@@ -498,16 +547,26 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
           ))}
         </div>
       )}
+      {terminalState === 'readFailed' && <LoadFailedNotice what="this season" onRetry={retryRead} />}
       {terminalState === 'filtersEmpty' && <p className="season-page__empty">No anime match the current filters.</p>}
       {terminalState === 'notListed' && (
         <p className="season-page__empty">MyAnimeList hasn't listed this season yet.</p>
       )}
-      {terminalState === 'loadFailed' && (
-        <p className="season-page__empty">This season couldn't be loaded — it'll be retried next time you open it.</p>
+      {terminalState === 'fetchFailed' && (
+        <p className="season-page__empty">
+          This season couldn't be fetched from MyAnimeList — it'll be retried next time you open it.
+        </p>
       )}
 
       <div ref={sentinelRef} className="season-page__sentinel" />
-      {terminalState === 'loading' && <p className="season-page__loading">Loading…</p>}
+      {/* One notice across both waits, so the delay isn't restarted when the
+          read lands and the page moves on to waiting for MAL: only the words change. */}
+      <LoadingNotice
+        active={terminalState === 'loading' || terminalState === 'fetching'}
+        className="season-page__loading"
+      >
+        {terminalState === 'fetching' ? 'Fetching this season from MyAnimeList…' : 'Loading…'}
+      </LoadingNotice>
     </div>
   )
 }

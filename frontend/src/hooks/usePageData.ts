@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { usePageState } from '../state/PageStateContext.tsx'
+import { useReconnectRetry } from './useReconnectRetry.ts'
 
 export interface UsePageDataResult<T> {
   data: T | null
   loading: boolean
+  // A fresh load (not a silent refresh) rejected and there is no data from
+  // it to show. Pages render this as a failure state rather than as
+  // emptiness (page-load-states).
+  failed: boolean
   setData: Dispatch<SetStateAction<T | null>>
   reload: () => Promise<void>
+  // Re-runs the read with its normal loading presentation. What Try again
+  // calls.
+  retry: () => void
 }
 
 // One call per resource a page loads. `key` names the resource within the
@@ -19,6 +27,15 @@ export interface UsePageDataResult<T> {
 // silently in the background, replacing the data on success and leaving it
 // alone on failure. Otherwise this is a fresh load: `loading` is true until
 // `load` resolves.
+//
+// A fresh load that rejects sets `failed`, so a page can tell "the read
+// failed" from "the read found nothing" instead of presenting a failure as
+// emptiness. `failed` clears when a fresh load starts for the key or any load
+// succeeds, and never comes from a silent reload (a restore's background
+// refresh, `reload()`), which leaves the data it has. `retry()` runs a fresh
+// load, and the first time the backend becomes reachable again after a
+// failure the hook runs one by itself (useReconnectRetry); that retry
+// failing too waits for `retry()`, so a failing endpoint can't be looped on.
 export function usePageData<T>(key: string, load: () => Promise<T>): UsePageDataResult<T> {
   const { isRestore, snapshot } = usePageState()
 
@@ -54,6 +71,7 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
   const [renderedKey, setRenderedKey] = useState(key)
   const [data, setDataState] = useState<T | null>(seededValue)
   const [loading, setLoading] = useState(() => !isSeeded)
+  const [failed, setFailed] = useState(false)
 
   // `key` can change without the component remounting — e.g. navigating from
   // one anime's detail page to another's keeps the same AnimeDetailPage
@@ -63,6 +81,7 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
     setRenderedKey(key)
     setDataState(seededValue())
     setLoading(!isSeeded)
+    setFailed(false)
   }
 
   const setData = useCallback<Dispatch<SetStateAction<T | null>>>(
@@ -83,6 +102,7 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
       if (showLoading) {
         loadingGenerationRef.current = generation
         setLoading(true)
+        setFailed(false)
       }
       return loadRef
         .current()
@@ -91,10 +111,13 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
           loadedKeyRef.current = key
           snapshot.data.set(key, result)
           setDataState(result)
+          setFailed(false)
         })
         .catch(() => {
-          // Restored (or previously loaded) data stays on screen; a fresh
-          // load with nothing to show simply stays empty.
+          // Restored (or previously loaded) data stays on screen. A fresh
+          // load that failed says so, unless a newer load has taken over —
+          // that one decides.
+          if (showLoading && generationRef.current === generation) setFailed(true)
         })
         .finally(() => {
           // Only the call currently holding the loading flag clears it — see
@@ -110,6 +133,16 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
 
   const reload = useCallback(() => runLoad(false), [runLoad])
 
+  // Data on screen is never failed, whatever a failed load left behind.
+  const failedNow = failed && data === null
+  const rearmReconnectRetry = useReconnectRetry(failedNow, () => {
+    void runLoad(true)
+  })
+  const retry = useCallback(() => {
+    rearmReconnectRetry()
+    void runLoad(true)
+  }, [rearmReconnectRetry, runLoad])
+
   useEffect(() => {
     // A URL change that leaves this resource's key untouched (e.g. a filter
     // toggled via setSearchParams) still creates a new history entry, and
@@ -123,6 +156,9 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
       snapshot.data.set(key, data)
       return
     }
+    // A load opened afresh (a new key, or a new history entry for a page that
+    // has nothing) earns one automatic retry again.
+    rearmReconnectRetry()
     runLoad(!isSeeded)
     // Re-runs only when the resource key or restore context changes, not on
     // every render — `loadRef` carries the latest closure regardless. `data`
@@ -132,5 +168,5 @@ export function usePageData<T>(key: string, load: () => Promise<T>): UsePageData
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, isRestore, snapshot])
 
-  return { data, loading, setData, reload }
+  return { data, loading, failed: failedNow, setData, reload, retry }
 }
