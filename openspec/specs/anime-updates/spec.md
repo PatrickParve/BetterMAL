@@ -385,12 +385,24 @@ An anime's **first** full-detail fetch SHALL record no discoveries at all. Its w
 
 A new anime appearing in the relation set of an anime that is *not* my own entry SHALL record no discovery, so an announcement can only ever originate one relation step from my list.
 
-The comparison that finds newly-appeared edges SHALL still run for every anime whose relation set is written, whatever this requirement records: its other consumer — the background series rebuild that carries a new member onto the series page without waiting for a visit — SHALL be unaffected by these rules.
+Recording a discovery SHALL capture, on the discovery itself, whether the **newly-related** anime had ever been fully fetched at that moment — the fact the announcement gate is judged on later. It SHALL be read from committed data, before the discovery's own unit of work is saved and before anything the recording triggers can fetch that anime, and SHALL treat an anime with no cached row at all as never fully fetched. This is the only moment at which the question can be answered about the past: afterwards, any fetch of that anime by any part of the system leaves it indistinguishable from an anime that was always known.
+
+The comparison that finds newly-appeared edges SHALL still run for every anime whose relation set is written, whatever this requirement records: its other consumer — the background series rebuild that carries a new member onto the series page without waiting for a visit — SHALL be unaffected by these rules. That rebuild fetches members the system has no row for, so it SHALL NOT be queued for an anime before that anime's discoveries have captured their verdict.
 
 #### Scenario: A new sequel on my own show is a discovery
 
 - **WHEN** a refresh of an anime I have on Plan to watch, already fully fetched, adds a relation edge to an anime the system has never fetched
-- **THEN** a discovery is recorded for that edge
+- **THEN** a discovery is recorded for that edge, carrying the verdict that the newly-related anime had never been fully fetched
+
+#### Scenario: A discovery records what was true before the rebuild ran
+
+- **WHEN** that same refresh queues the series rebuild that goes on to fetch the newly-related anime seconds later
+- **THEN** the discovery's recorded verdict still says the anime had never been fully fetched
+
+#### Scenario: A new edge to an anime already known records that it was known
+
+- **WHEN** a refresh of one of my entries adds a relation edge to an anime the system had fully fetched weeks earlier
+- **THEN** a discovery is recorded for that edge, carrying the verdict that the newly-related anime had already been fully fetched
 
 #### Scenario: A first full fetch discovers nothing
 
@@ -414,9 +426,14 @@ The comparison that finds newly-appeared edges SHALL still run for every anime w
 
 ### Requirement: An announcement is recorded only for an anime that has not finished airing
 
-An announcement SHALL be recorded only for an anime the system had **never fully fetched** and holds **no list entry** of mine for, of any status. Both conditions SHALL be established *before* the resolver fetches the anime, since that fetch would otherwise leave every anime looking already-known. An anime the system had already fully fetched, or that I already track, SHALL record nothing however newly the relation edge naming it appeared.
+An announcement SHALL be recorded only for an anime the system had **never fully fetched** and holds **no list entry** of mine for, of any status. An anime the system had already fully fetched, or that I already track, SHALL record nothing however newly the relation edge naming it appeared.
 
-Before recording an announcement, the system SHALL additionally establish the newly-related anime's airing status by fetching it, and SHALL record the announcement only when that status is *not yet aired* or *currently airing*. A newly-related anime that has finished airing SHALL record nothing.
+The two conditions SHALL be established at different moments, because they can be falsified by different things:
+
+- **Never fully fetched** SHALL be read from the verdict the discovery recorded when the edge appeared, and SHALL NOT be re-derived from the anime's cached record at resolution time. Between a discovery and its resolution the system fetches anime for its own reasons — the series rebuild the same detection queues, a visit to the anime's own page, an import — and any such fetch makes an anime that was genuinely new indistinguishable from one that was always known. A discovery recorded before this verdict was captured SHALL fall back to reading the anime's cached record, as it does today.
+- **Holds no list entry of mine** SHALL be established at resolution time, from my list as it stands then. Only I can add an anime to my list, so this condition is not falsified by the system's own work, and an anime I have added in the meantime is one I already know about. An announcement recorded for an anime that holds a list entry of mine at that moment would in any case be a false announcement by "Announcements about my own entries are not news".
+
+Before recording an announcement, the system SHALL additionally establish the newly-related anime's airing status, and SHALL record the announcement only when that status is *not yet aired* or *currently airing*. A newly-related anime that has finished airing SHALL record nothing.
 
 Both gates SHALL be evaluated once, when the announcement is recorded, and SHALL NOT be re-evaluated afterwards: an anime announced before it aired keeps its announcement once it starts airing.
 
@@ -424,18 +441,28 @@ MAL adds missing relation edges to long-finished anime routinely; such an edge i
 
 #### Scenario: A newly-announced sequel is recorded
 
-- **WHEN** a discovery on one of my entries names an anime that has never been fully fetched, holds no list entry of mine, and has not yet aired
+- **WHEN** a discovery on one of my entries names an anime that had never been fully fetched when the edge appeared, holds no list entry of mine, and has not yet aired
 - **THEN** an announcement update is recorded for it
+
+#### Scenario: A rebuild fetching the anime first does not suppress the announcement
+
+- **WHEN** the series rebuild triggered by that same new edge fetches the newly-related anime before the discovery is resolved
+- **THEN** the announcement update is still recorded, because the gate reads the verdict the discovery captured, not the record the rebuild wrote
 
 #### Scenario: An anime already fully fetched is not announced
 
-- **WHEN** a discovery names an anime the system had already fully fetched before the discovery was processed
+- **WHEN** a discovery names an anime the system had already fully fetched when the edge appeared
 - **THEN** no announcement update is recorded, and the discovery is marked processed
 
 #### Scenario: An anime on my own list is not announced
 
 - **WHEN** a discovery names an anime I have been watching for weeks
 - **THEN** no announcement update is recorded for it
+
+#### Scenario: An anime I add before the discovery is resolved is not announced
+
+- **WHEN** a discovery names an anime that was new to the system when the edge appeared, and I add it to my list before the discovery is resolved
+- **THEN** no announcement update is recorded for it, and the discovery is marked processed
 
 #### Scenario: A newly-linked old anime is not announced
 
@@ -451,12 +478,14 @@ MAL adds missing relation edges to long-finished anime routinely; such an edge i
 
 The system SHALL mark each recorded relation discovery as processed once it has been considered for an announcement. Processing one SHALL:
 
-- establish, before any fetch, whether the newly-related anime had ever been fully fetched and whether I hold a list entry for it;
-- where neither is true, ensure it has a cached record — fetching it from MyAnimeList where it has none, or where its only row is a lean listing one carrying no airing status — and apply the airing-status gate above;
+- read whether the newly-related anime had ever been fully fetched from the verdict the discovery recorded, falling back to the anime's cached record only for a discovery recorded before that verdict was captured, and establish whether I hold a list entry for it;
+- where neither is true, ensure it has a cached record carrying an airing status — fetching it from MyAnimeList where it has none, or where its only row is a lean listing one carrying no airing status, and spending no call where its cached record already carries full detail — and apply the airing-status gate above;
 - where either is true, record nothing and spend no MyAnimeList call; and
 - mark the discovery processed whether or not an announcement resulted.
 
-A processing attempt that fails to obtain the anime's record SHALL leave the discovery unprocessed, so the next pass retries it, except when MyAnimeList answers that it has no such anime. That discovery SHALL be marked processed and SHALL announce nothing, since an anime MyAnimeList has deleted can never produce news and retrying it would cost a call on every pass forever. Processing SHALL be idempotent: a discovery already processed SHALL never be considered again.
+Where several discoveries name the same newly-related anime, the anime SHALL be treated as never fully fetched when **any** of them recorded it so. A discovery that was genuinely news does not stop being news because a later edge to the same anime was not, and the once-per-anime limit on announcements already prevents a duplicate card.
+
+A processing attempt that fails to obtain the anime's record SHALL leave the discovery unprocessed, so the next pass retries it, except when MyAnimeList answers that it has no such anime. That discovery SHALL be marked processed and SHALL announce nothing, since an anime MyAnimeList has deleted can never produce news and retrying it would cost a call on every pass forever. A discovery resolved without a MyAnimeList call SHALL be subject to none of these failure paths, and SHALL NOT end the pass. Processing SHALL be idempotent: a discovery already processed SHALL never be considered again.
 
 Where more than one discovery names the same newly-related anime, the system SHALL record one announcement for it, not one per discovery.
 
@@ -472,10 +501,20 @@ Discoveries recorded before this capability existed SHALL be marked processed an
 - **WHEN** a discovery names an anime whose only cached row came from a season listing and carries no airing status
 - **THEN** that anime is fetched once so the airing-status gate has something to read
 
+#### Scenario: An announceable anime already cached in full spends no call
+
+- **WHEN** a discovery recorded its anime as never fully fetched, and something has since cached that anime's full detail
+- **THEN** the airing-status gate is applied to the cached record, no MyAnimeList call is made, and the announcement is recorded if the gate passes
+
 #### Scenario: A discovery that cannot announce spends no call
 
-- **WHEN** a discovery names an anime the system had already fully fetched
+- **WHEN** a discovery recorded its anime as already fully fetched
 - **THEN** no MyAnimeList call is made for it and the discovery is marked processed
+
+#### Scenario: Mixed verdicts for one anime still announce
+
+- **WHEN** two unprocessed discoveries name the same anime, one recorded when it was new to the system and one recorded after it had been fetched
+- **THEN** one announcement update is recorded for it
 
 #### Scenario: A failed resolution is retried
 
