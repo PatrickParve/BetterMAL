@@ -149,6 +149,10 @@ Because a year's four seasons start three months apart, they can fall in **diffe
 
 The refresh SHALL be triggered only by a change of the selected year, never by a change of sort or filter, never by a timer or schedule, and never by a user-facing refresh control. Stepping quickly through years with the arrows SHALL refresh only the year settled on.
 
+The visit's refresh SHALL be requested once the page's own read of the year's cached listings has settled successfully, and its outcome SHALL be judged against what that read found, exactly as the `season-browser` capability requires of a season. A skipped refresh SHALL lead to a further read only when the settled read found nothing cached for any of the year's seasons; otherwise the year's listing SHALL be read once per visit. No refresh SHALL be requested for a visit whose read has not succeeded. A read that comes back from a back/forward restore snapshot has already settled, so its refresh SHALL be requested at once.
+
+The passive updating indicator SHALL follow the `page-load-states` capability, appearing only once a refresh has been running for that capability's delay.
+
 A failed refresh SHALL leave the cached listing and the displayed page intact and SHALL NOT be surfaced as a page error.
 
 #### Scenario: A future year does not ask about seasons MAL cannot have opened
@@ -163,12 +167,16 @@ A failed refresh SHALL leave the cached listing and the displayed page intact an
 - **WHEN** I open a year whose seasons already have cached listings
 - **THEN** the cached anime are displayed immediately without waiting for any MAL request
 
+#### Scenario: A year already fresh opens without an error flash
+- **WHEN** I open a year whose seasons all have cached listings and are all within their intervals, so its refresh is skipped almost at once
+- **THEN** the page goes from its header straight to the grid, never showing a "could not be loaded", "not listed" or "no anime match" message and never showing the updating indicator, and the year's listing is read once
+
 #### Scenario: Background refresh updates the page
 - **WHEN** a year's background refresh finishes with new data
 - **THEN** the displayed results are re-read from the cache and updated in place, preserving my scroll position and the number of pages I had already loaded
 
 #### Scenario: Refresh in progress is visible
-- **WHEN** a background refresh is running for the year I am viewing
+- **WHEN** a background refresh for the year I am viewing has been running for longer than the loading indicator's delay
 - **THEN** the page shows a passive updating indicator, and it disappears when the refresh completes
 
 #### Scenario: Seasons still fresh for their age are not refetched
@@ -242,13 +250,15 @@ The precedence SHALL make each year outcome mean for a year what the correspondi
 - **THEN** the year's outcome is `fetched`, decided by winter alone
 
 ### Requirement: The Year page states which empty situation it is in
-A year with no anime to show SHALL say which of three situations it is in: MAL has no listing for any of its seasons yet, listings exist but nothing matches the current filters, or its first fetch failed and will be retried on the next visit.
+A year with no anime to show SHALL say which of three situations it is in: MAL has no listing for any of its seasons yet, listings exist but nothing matches the current filters, or its first fetch from MyAnimeList failed and will be retried on the next visit. None of the three SHALL be shown until the page's own read of the year's cached listings has settled.
 
-The page SHALL leave its never-cached loading state once a refresh attempt has settled, whatever its outcome, so a year with nothing cached can never be left loading indefinitely. The failure state SHALL be shown only for a year with no cached listing at all — a year that already has cached anime continues to render them with no error.
+The page SHALL leave its never-cached loading state once a refresh attempt has settled, whatever its outcome, so a year with nothing cached can never be left loading indefinitely. While a year with nothing cached waits on its first fetch, its loading state SHALL say that the year is being fetched from MyAnimeList. The MyAnimeList failure state SHALL be shown only for a year with no cached listing at all — a year that already has cached anime continues to render them with no error — and SHALL offer no Try again control, since no control may trigger a refresh.
+
+A failure of the page's own read of the cached listings, for example because the app's server cannot be reached, SHALL be presented as the `page-load-states` capability's failure state, with Try again and the automatic retry when the server is reachable again.
 
 #### Scenario: Empty cache waits for the first refresh
 - **WHEN** I open a year whose seasons have never been cached
-- **THEN** the page shows a loading state until the refresh attempt settles, rather than reporting that no anime were found
+- **THEN** the page shows a loading state saying the year is being fetched from MyAnimeList until the refresh attempt settles, rather than reporting that no anime were found
 
 #### Scenario: A year MAL has not listed
 - **WHEN** I open a year that has never been cached and MAL reports no listing for any of its seasons
@@ -256,7 +266,11 @@ The page SHALL leave its never-cached loading state once a refresh attempt has s
 
 #### Scenario: A year that could not be loaded
 - **WHEN** I open a year that has never been cached and its refresh fails
-- **THEN** the loading state ends and the page says the year could not be loaded and will be retried
+- **THEN** the loading state ends and the page says the year could not be fetched from MyAnimeList and will be retried next time, with no Try again control
+
+#### Scenario: The page's own read fails
+- **WHEN** I open a year while the app's server cannot be reached
+- **THEN** the page shows the failure state with Try again, no refresh is requested, and once the server is reachable again the page reads the year by itself
 
 #### Scenario: A cached year with no matching filters
 - **WHEN** I open a year that has cached listings and my current filters exclude every anime in it
