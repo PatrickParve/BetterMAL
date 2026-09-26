@@ -24,9 +24,11 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
-# Claude Code local state (machine-specific, not shared config)
-.claude/settings.local.json
-.claude/scheduled_tasks.lock
+# Local tooling state and design material: kept on disk, not in the repo
+.claude/
+.agent/
+openspec/
+sketches/
 .mcp.json
 
 # Local notes, not shared
