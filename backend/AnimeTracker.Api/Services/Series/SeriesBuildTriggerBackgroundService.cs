@@ -29,7 +29,9 @@ public class SeriesBuildTriggerBackgroundService(
                 var seriesService = scope.ServiceProvider.GetRequiredService<ISeriesService>();
                 await seriesService.GetSeriesAsync(animeId, stoppingToken);
             }
-            catch (OperationCanceledException)
+            // Only our own shutdown ends the loop; an HttpClient timeout is a
+            // TaskCanceledException too, and fails just this build.
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }

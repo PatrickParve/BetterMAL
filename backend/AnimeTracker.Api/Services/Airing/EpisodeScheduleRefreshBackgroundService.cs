@@ -36,7 +36,10 @@ public class EpisodeScheduleRefreshBackgroundService(
             {
                 await RunIterationAsync(stoppingToken);
             }
-            catch (OperationCanceledException)
+            // Only our own shutdown ends the loop. An HttpClient timeout is a
+            // TaskCanceledException too, and used to end it until the next
+            // restart; it now falls to the failed-tick branch below.
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }

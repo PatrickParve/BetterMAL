@@ -25,7 +25,9 @@ public class RelationAdjudicationBackgroundService(
                 if (lookedUp > 0)
                     logger.LogInformation("Relation adjudication pass looked up {Count} anime on AniList.", lookedUp);
             }
-            catch (OperationCanceledException)
+            // Only our own shutdown ends the loop; an HttpClient timeout is a
+            // TaskCanceledException too, and fails just this pass.
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }

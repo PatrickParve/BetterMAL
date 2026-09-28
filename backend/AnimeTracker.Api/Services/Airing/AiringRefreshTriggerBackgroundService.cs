@@ -29,7 +29,9 @@ public class AiringRefreshTriggerBackgroundService(
                 var refreshService = scope.ServiceProvider.GetRequiredService<IEpisodeScheduleRefreshService>();
                 await refreshService.RefreshOneAsync(animeId, stoppingToken);
             }
-            catch (OperationCanceledException)
+            // Only our own shutdown ends the loop; an HttpClient timeout is a
+            // TaskCanceledException too, and fails just this anime.
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }

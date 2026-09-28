@@ -128,6 +128,29 @@ public class SeriesBulkBuildBackgroundServiceTests
         Assert.Equal("1 of 3 series couldn't be built.", tracker.Snapshot.Error);
     }
 
+    // HttpClient reports its own timeout as a TaskCanceledException while the
+    // run's token is still live — one target's timed-out MAL fetch, not a
+    // shutdown, so it fails that target alone instead of ending the run.
+    [Fact]
+    public async Task ATimedOutTargetIsCountedAsFailedAndTheRunContinues()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var seriesService = new FakeSeriesService();
+        seriesService.OnCall(2, () => throw new TaskCanceledException(
+            "The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.", new TimeoutException()));
+
+        var trigger = new SeriesBulkBuildTrigger();
+        var tracker = new SeriesBulkBuildProgress();
+
+        await RunOnceAsync(db, [Entry(1), Entry(2), Entry(3)], seriesService, trigger, tracker, expectedPhase: JobPhase.Failed);
+
+        Assert.Equal([1, 2, 3], seriesService.CalledFor.OrderBy(id => id));
+        Assert.Equal(3, tracker.Snapshot.Done);
+        Assert.Equal("1 of 3 series couldn't be built.", tracker.Snapshot.Error);
+    }
+
     [Fact]
     public async Task ASeriesNotFoundTargetIsANormalOutcomeNotAnError()
     {

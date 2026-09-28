@@ -41,7 +41,9 @@ public class MetadataRefreshBackgroundService(
             {
                 await RunPassAsync(DateOnly.FromDateTime(DateTime.UtcNow), stoppingToken);
             }
-            catch (OperationCanceledException)
+            // Only our own shutdown ends the loop; an HttpClient timeout is a
+            // TaskCanceledException too, and fails just this pass.
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }

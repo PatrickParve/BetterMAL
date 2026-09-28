@@ -30,7 +30,9 @@ public class TransferImportBackgroundService(
                 var report = await runner.RunAsync(file, progress, stoppingToken);
                 progress.Complete(report);
             }
-            catch (OperationCanceledException)
+            // Only our own shutdown ends the loop; an HttpClient timeout is a
+            // TaskCanceledException too, and fails just this import.
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }

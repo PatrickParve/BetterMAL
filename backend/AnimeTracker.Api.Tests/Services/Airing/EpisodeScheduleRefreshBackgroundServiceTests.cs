@@ -31,7 +31,8 @@ public class EpisodeScheduleRefreshBackgroundServiceTests
     // A null step is not registered at all, so resolving it fails like a missing
     // dependency would; the purge is left out of the tests that are not about it.
     private static ServiceProvider BuildProvider(
-        List<Event> events, Func<AnimeIdMappingSyncOutcome>? mappingSync, Func<int>? tmdbPurge = null)
+        List<Event> events, Func<AnimeIdMappingSyncOutcome>? mappingSync, Func<int>? tmdbPurge = null,
+        Func<Exception>? backfillFailure = null)
     {
         var dbName = Guid.NewGuid().ToString();
         var services = new ServiceCollection();
@@ -50,7 +51,7 @@ public class EpisodeScheduleRefreshBackgroundServiceTests
         }
 
         services.AddScoped<IEpisodeScheduleRefreshService>(sp =>
-            new RecordingRefreshService(sp.GetRequiredService<AnimeTrackerDbContext>(), events));
+            new RecordingRefreshService(sp.GetRequiredService<AnimeTrackerDbContext>(), events, backfillFailure));
         services.AddSingleton<IBroadcastLocalTimeConverter, BroadcastLocalTimeConverter>();
         services.AddScoped<IEpisodeScheduleService, UnusedEpisodeScheduleService>();
         services.AddScoped<IAiringWatchStatusService, NoopAiringWatchStatusService>();
@@ -193,6 +194,38 @@ public class EpisodeScheduleRefreshBackgroundServiceTests
         Assert.Equal(["mapping-sync", "tmdb-purge"], events.Select(e => e.What));
     }
 
+    // An HttpClient timeout is a TaskCanceledException while the stopping token
+    // is still live. The loop used to read any cancellation as a shutdown and
+    // exit, so one AniList timeout ended the hourly airing work until the next
+    // restart; it now counts as a failed tick and the loop waits for the next.
+    [Fact]
+    public async Task ATimeoutDuringATickDoesNotStopTheHourlyLoop()
+    {
+        var events = new List<Event>();
+        using var provider = BuildProvider(
+            events, () => AnimeIdMappingSyncOutcome.Synced,
+            backfillFailure: () => new TaskCanceledException(
+                "The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.", new TimeoutException()));
+        var service = CreateService(provider);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            while (!events.Any(e => e.What == "airing-backfill") && !timeout.IsCancellationRequested)
+                await Task.Delay(10, CancellationToken.None);
+            Assert.Contains("airing-backfill", events.Select(e => e.What));
+
+            // Give an exiting loop time to finish; a live one sits in its hourly delay.
+            await Task.WhenAny(service.ExecuteTask!, Task.Delay(500, CancellationToken.None));
+            Assert.False(service.ExecuteTask!.IsCompleted);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
     // --- Fakes ---
 
     private sealed class FakeMappingSync(AnimeTrackerDbContext db, List<Event> events, Func<AnimeIdMappingSyncOutcome> run)
@@ -214,12 +247,13 @@ public class EpisodeScheduleRefreshBackgroundServiceTests
         }
     }
 
-    private sealed class RecordingRefreshService(AnimeTrackerDbContext db, List<Event> events) : IEpisodeScheduleRefreshService
+    private sealed class RecordingRefreshService(
+        AnimeTrackerDbContext db, List<Event> events, Func<Exception>? backfillFailure) : IEpisodeScheduleRefreshService
     {
         public Task BackfillAsync(CancellationToken ct = default)
         {
             events.Add(new Event("airing-backfill", db.ContextId.InstanceId));
-            return Task.CompletedTask;
+            return backfillFailure is not null ? Task.FromException(backfillFailure()) : Task.CompletedTask;
         }
 
         public Task<List<int>> GetTrackedAnimeIdsAsync(CancellationToken ct = default) => Task.FromResult(new List<int>());

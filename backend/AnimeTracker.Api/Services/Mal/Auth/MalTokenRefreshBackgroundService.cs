@@ -20,7 +20,10 @@ public class MalTokenRefreshBackgroundService(
             {
                 await RefreshIfNeededAsync(stoppingToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            // Filtered on the token, not the exception type: a cancellation
+            // that isn't our own shutdown (an HttpClient timeout) is a failed
+            // check, not something to let escape and fault the service.
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
                 logger.LogError(ex, "MAL background token refresh check failed.");
             }

@@ -262,13 +262,79 @@ public class InitialImportServiceWorkTests
         Assert.Equal(JobPhase.NotStarted, progress.Snapshot.Phase);
     }
 
+    // --- An HttpClient timeout is not a shutdown ---
+    //
+    // HttpClient reports its own timeout as a TaskCanceledException, the same
+    // family a shutdown throws, while the run's token is still live. It used to
+    // escape the per-anime catch, end the run without recording a failure, and
+    // so leave no retry planned: the import sat at "Running" until a restart.
+
+    private static TaskCanceledException HttpClientTimeout() =>
+        new("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.", new TimeoutException());
+
+    [Fact]
+    public async Task ATimedOutFetchCountsAsFailedAndTheRunCarriesOn()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient([Edge(1), Edge(2)]);
+        malClient.FailDetailsFor(1, HttpClientTimeout);
+        var (service, progress) = CreateService(db, malClient);
+
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Equal([1, 2], malClient.DetailsCalledFor);
+        Assert.Equal(2, (await db.UserAnimeEntries.SingleAsync()).AnimeId);
+        Assert.Equal(JobPhase.Failed, progress.Snapshot.Phase);
+        Assert.Equal("1 of 2 anime couldn't be fetched.", progress.Snapshot.Error);
+        Assert.NotNull(progress.Gate.LastReadFailure); // what the retry schedule keys off
+    }
+
+    [Fact]
+    public async Task ATimedOutListReadIsRecordedSoARetryCanBePlanned()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient([]) { ThrowOnListRead = HttpClientTimeout() };
+        var (service, progress) = CreateService(db, malClient);
+
+        await Assert.ThrowsAsync<TaskCanceledException>(() => service.RunAsync(CancellationToken.None));
+
+        Assert.Equal(JobPhase.Failed, progress.Snapshot.Phase);
+        Assert.Equal("MyAnimeList couldn't be reached.", progress.Snapshot.Error);
+        Assert.NotNull(progress.Gate.LastReadFailure);
+    }
+
+    [Fact]
+    public async Task ShuttingDownDuringAFetchStillStopsTheRun()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        using var cts = new CancellationTokenSource();
+        var malClient = new FakeMalClient([Edge(1), Edge(2)]);
+        malClient.FailDetailsFor(1, () =>
+        {
+            cts.Cancel();
+            return new OperationCanceledException(cts.Token);
+        });
+        var (service, _) = CreateService(db, malClient);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.RunAsync(cts.Token));
+
+        Assert.Equal([1], malClient.DetailsCalledFor); // anime 2 is never tried
+    }
+
     private sealed class FakeMalClient(List<MalUserAnimeListEdge> edges) : IMalClient
     {
         public Exception? ThrowOnListRead { get; set; }
         public List<int> DetailsCalledFor { get; } = [];
-        private readonly HashSet<int> _failDetailsFor = [];
+        private readonly Dictionary<int, Func<Exception>> _failDetailsFor = new();
 
-        public void FailDetailsFor(int animeId) => _failDetailsFor.Add(animeId);
+        public void FailDetailsFor(int animeId, Func<Exception>? failure = null) =>
+            _failDetailsFor[animeId] = failure ?? (() => new HttpRequestException("MAL fetch failed"));
 
         public Task<List<MalUserAnimeListEdge>> GetFullUserAnimeListAsync(Action<int>? onPageRead = null, CancellationToken ct = default) =>
             ThrowOnListRead is not null ? throw ThrowOnListRead : Task.FromResult(edges);
@@ -276,8 +342,8 @@ public class InitialImportServiceWorkTests
         public Task<MalAnimeNode> GetAnimeDetailsAsync(int animeId, IReadOnlyCollection<string>? fields = null, CancellationToken ct = default)
         {
             DetailsCalledFor.Add(animeId);
-            if (_failDetailsFor.Contains(animeId))
-                throw new HttpRequestException("MAL fetch failed");
+            if (_failDetailsFor.TryGetValue(animeId, out var failure))
+                throw failure();
             return Task.FromResult(edges.First(e => e.Node.Id == animeId).Node);
         }
 

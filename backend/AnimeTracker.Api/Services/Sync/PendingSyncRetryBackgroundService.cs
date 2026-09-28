@@ -29,7 +29,9 @@ public class PendingSyncRetryBackgroundService(
                 if (result.Pushed > 0)
                     logger.LogInformation("Pending-sync retry pass pushed {Count} entr{Suffix}.", result.Pushed, result.Pushed == 1 ? "y" : "ies");
             }
-            catch (OperationCanceledException)
+            // Only our own shutdown ends the loop; an HttpClient timeout is a
+            // TaskCanceledException too, and fails just this pass.
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }

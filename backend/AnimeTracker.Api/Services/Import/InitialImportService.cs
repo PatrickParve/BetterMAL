@@ -49,7 +49,11 @@ public class InitialImportService(
             existingEntryIds = (await db.UserAnimeEntries.Select(e => e.AnimeId).ToListAsync(ct)).ToHashSet();
             pendingDeletionAnimeIds = (await db.PendingEntryDeletions.Select(d => d.AnimeId).ToListAsync(ct)).ToHashSet();
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // Filtered on the token, not the exception type: HttpClient reports its
+        // own timeout as a TaskCanceledException while ct is still live, and
+        // that is a failed read, not a shutdown. Letting it through unrecorded
+        // left no retry planned (LastReadFailure stayed null).
+        catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             progress.FailBeforeRead(JobFailure.Describe(ex, "MyAnimeList"));
             throw;
@@ -102,7 +106,10 @@ public class InitialImportService(
                 {
                     await ImportOneAsync(animeId, edge.ListStatus, ct);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                // A timed-out fetch (a TaskCanceledException with ct still
+                // live) fails this anime alone, like any other failed fetch;
+                // only our own shutdown ends the run.
+                catch (Exception ex) when (!ct.IsCancellationRequested)
                 {
                     logger.LogError(ex, "Failed to import anime {AnimeId} ({Title}); it will be retried on the next import run.",
                         animeId, edge.Node.Title);

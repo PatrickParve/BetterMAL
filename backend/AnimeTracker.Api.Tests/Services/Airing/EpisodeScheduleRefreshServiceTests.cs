@@ -283,14 +283,71 @@ public class EpisodeScheduleRefreshServiceTests
         Assert.Equal([1, 2], processed);
     }
 
+    // HttpClient reports its own timeout as a TaskCanceledException while the
+    // caller's token is still live. It used to escape the per-anime catch and
+    // end the whole pass (and, through the hourly loop's catch, the loop too).
+    private static TaskCanceledException HttpClientTimeout() =>
+        new("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.", new TimeoutException());
+
+    [Fact]
+    public async Task RefreshManyCountsATimeoutAsFailedAndCarriesOn()
+    {
+        using var db = CreateDb();
+        await SeedAnimeAsync(db, 1, "currently_airing");
+        await SeedAnimeAsync(db, 2, "currently_airing");
+
+        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
+        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([], "RELEASING", null, null) };
+        aniList.ThrowForAniListId[901] = HttpClientTimeout(); // anime 1's cached AniListId (900 + animeId)
+        var service = CreateService(db, aniList, episodeAiringRepository);
+
+        var processed = new List<int>();
+        var result = await service.RefreshManyAsync([1, 2], onProgress: processed.Add);
+
+        Assert.Equal(1, result.Failed);
+        Assert.Equal(1, result.NoData); // anime 2 was still refreshed
+        Assert.Equal([1, 2], processed);
+    }
+
+    [Fact]
+    public async Task ABackfillTimeoutSkipsThatAnimeAndCarriesOn()
+    {
+        using var db = CreateDb();
+        foreach (var animeId in new[] { 1, 2 })
+        {
+            // No AnimeAiringSync row: never fetched, so both are backfill targets.
+            db.AnimeMetadata.Add(new AnimeMetadata { Id = animeId, Title = $"Anime {animeId}", AiringStatus = "finished_airing" });
+            db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = animeId, Status = WatchStatus.Completed });
+        }
+        await db.SaveChangesAsync();
+
+        var aniList = new FakeAniListClient
+        {
+            Lookup = new AniListMediaLookup(902, "FINISHED", null, [], 12),
+            Schedule = new AniListScheduleResult([], "FINISHED", null, 12),
+        };
+        aniList.ThrowForMalId[1] = HttpClientTimeout();
+        var service = CreateService(db, aniList, new FakeEpisodeAiringRepository(db));
+
+        await service.BackfillAsync();
+
+        var fetched = await db.AnimeAiringSyncs.Where(s => s.LastFetchedAt != null).Select(s => s.AnimeId).ToListAsync();
+        Assert.Equal([2], fetched);
+        // Anime 1 is still unfetched, so the backfill is not marked complete
+        // and its next run retries it.
+        Assert.Null((await db.AiringRefreshStates.SingleOrDefaultAsync())?.BackfillCompletedAtUtc);
+    }
+
     private sealed class FakeAniListClient : IAniListClient
     {
         public AniListMediaLookup? Lookup { get; set; }
         public AniListScheduleResult Schedule { get; set; } = new([], null, null, null);
         public Dictionary<int, Exception> ThrowForAniListId { get; } = new();
+        public Dictionary<int, Exception> ThrowForMalId { get; } = new();
 
         public Task<AniListMediaLookup?> LookupByMalIdAsync(int malId, CancellationToken ct = default) =>
-            Lookup is not null ? Task.FromResult<AniListMediaLookup?>(Lookup) : throw new NotImplementedException();
+            ThrowForMalId.TryGetValue(malId, out var ex) ? throw ex
+            : Lookup is not null ? Task.FromResult<AniListMediaLookup?>(Lookup) : throw new NotImplementedException();
 
         public Task<AniListScheduleResult> GetAiringScheduleAsync(int aniListId, CancellationToken ct = default) =>
             ThrowForAniListId.TryGetValue(aniListId, out var ex) ? throw ex : Task.FromResult(Schedule);

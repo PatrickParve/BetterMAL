@@ -56,7 +56,10 @@ public class EpisodeScheduleRefreshService(
                 if (await RefreshOneCoreAsync(animeId, ct) == 0)
                     noData++;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            // Filtered on the token, not the exception type: an HttpClient
+            // timeout is a TaskCanceledException with ct still live, and fails
+            // this anime alone rather than ending the whole pass.
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 logger.LogWarning(ex, "AniList airing refresh failed for anime {AnimeId}.", animeId);
                 failed++;
@@ -121,7 +124,9 @@ public class EpisodeScheduleRefreshService(
                         "Backfill: AniList returned no airing data for anime {AnimeId} ({Title}).",
                         animeId, titleById.GetValueOrDefault(animeId, "unknown"));
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            // Same token filter as RefreshManyAsync: a timeout skips this anime,
+            // which the next backfill run retries.
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 logger.LogWarning(ex, "Backfill fetch failed for anime {AnimeId} ({Title}).", animeId, titleById.GetValueOrDefault(animeId, "unknown"));
             }

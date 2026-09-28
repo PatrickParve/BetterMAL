@@ -93,7 +93,10 @@ public class SeriesBulkBuildBackgroundService(
                     // not a failure, just nothing to store, exactly as a
                     // visit-triggered build behaves for a lone anime (task 5.4).
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                // Filtered on the token, not the exception type: an HttpClient
+                // timeout is a TaskCanceledException with ct still live, and
+                // fails this target alone rather than ending the run.
+                catch (Exception ex) when (!ct.IsCancellationRequested)
                 {
                     logger.LogWarning(ex, "Bulk series build failed for anime {AnimeId}.", animeId);
                     failed++;
