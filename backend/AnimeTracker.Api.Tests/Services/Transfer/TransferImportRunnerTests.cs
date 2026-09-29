@@ -280,6 +280,7 @@ public class TransferImportRunnerTests
         Assert.Equal(1, failure.Id);
         Assert.Contains("edit history", failure.What);
         Assert.Contains("1 record", failure.What);
+        Assert.Equal(TransferImportFailureKind.EditHistory, failure.Kind);
     }
 
     [Fact]
@@ -561,6 +562,7 @@ public class TransferImportRunnerTests
 
         var failure = Assert.Single(report.Failures);
         Assert.Equal("chosen picture", failure.What);
+        Assert.Equal(TransferImportFailureKind.ChosenPicture, failure.Kind);
         var anime = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
         Assert.Null(anime.SelectedPictureUrl);
     }
@@ -578,6 +580,7 @@ public class TransferImportRunnerTests
 
         var failure = Assert.Single(report.Failures);
         Assert.Equal("chosen picture", failure.What);
+        Assert.Equal(TransferImportFailureKind.ChosenPicture, failure.Kind);
         Assert.Contains("not in my list", failure.Reason);
     }
 
@@ -597,6 +600,7 @@ public class TransferImportRunnerTests
         var failure = Assert.Single(report.Failures);
         Assert.Equal(TransferImportFailureSubject.Series, failure.Subject);
         Assert.Equal("series title", failure.What);
+        Assert.Equal(TransferImportFailureKind.SeriesTitle, failure.Kind);
         var series = await db.Series.AsNoTracking().SingleAsync(s => s.Id == 1);
         Assert.Null(series.SelectedTitle);
     }
@@ -685,6 +689,7 @@ public class TransferImportRunnerTests
 
         var failure = Assert.Single(report.Failures);
         Assert.Equal("chosen picture", failure.What);
+        Assert.Equal(TransferImportFailureKind.ChosenPicture, failure.Kind);
         var anime = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
         Assert.Null(anime.SelectedPictureUrl);
         Assert.Empty(client.Calls);
@@ -785,6 +790,7 @@ public class TransferImportRunnerTests
         var failure = Assert.Single(report.Failures);
         Assert.Equal(TransferImportFailureSubject.Series, failure.Subject);
         Assert.Equal("series picture", failure.What);
+        Assert.Equal(TransferImportFailureKind.SeriesPicture, failure.Kind);
         var series = await db.Series.AsNoTracking().SingleAsync(s => s.Id == 1);
         Assert.Null(series.SelectedPictureUrl);
         Assert.Empty(client.Calls);
@@ -882,6 +888,7 @@ public class TransferImportRunnerTests
         Assert.Equal([1], await new TopAnimeSelectionRepository(db).GetOrderedAnimeIdsAsync());
         Assert.Equal(t1, await new TopAnimeSelectionRepository(db).GetModifiedAtAsync());
         var failure = Assert.Single(report.Failures, f => f.What == "ranking");
+        Assert.Equal(TransferImportFailureKind.Ranking, failure.Kind);
         Assert.Equal(999, failure.Id);
     }
 
@@ -932,6 +939,7 @@ public class TransferImportRunnerTests
         Assert.Empty(await db.ActivityLogs.AsNoTracking().ToListAsync());
         var failure = Assert.Single(report.Failures);
         Assert.Contains("edit history", failure.What);
+        Assert.Equal(TransferImportFailureKind.EditHistory, failure.Kind);
         Assert.Contains("MyAnimeList has no anime", failure.Reason);
     }
 
@@ -971,6 +979,7 @@ public class TransferImportRunnerTests
 
         var failure = Assert.Single(report.Failures);
         Assert.Equal(TransferImportFailureSubject.Series, failure.Subject);
+        Assert.Equal(TransferImportFailureKind.SeriesTitle, failure.Kind);
         Assert.Contains("not part of a series", failure.Reason);
     }
 

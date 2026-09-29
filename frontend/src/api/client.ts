@@ -662,3 +662,15 @@ export async function importData(file: File): Promise<TransferImportStatusDto> {
 export function getTransferImportStatus(): Promise<TransferImportStatusDto> {
   return fetchJson<TransferImportStatusDto>('/api/transfer/import/status')
 }
+
+// Closes the ended import's outcome for every browser (simplify-settings-and-
+// first-fetch-states D3). `finishedAt` names the run being closed, so a close
+// that lands after a newer import started changes nothing; the answer is the
+// status as it now stands, either way.
+export function dismissTransferImport(finishedAt: string): Promise<TransferImportStatusDto> {
+  return fetchJson<TransferImportStatusDto>('/api/transfer/import/dismiss', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ finishedAt }),
+  })
+}

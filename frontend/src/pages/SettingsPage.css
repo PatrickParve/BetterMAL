@@ -53,13 +53,6 @@
   font-size: 18px;
 }
 
-.settings-group__hint {
-  margin: 0;
-  color: var(--text);
-  opacity: 0.75;
-  font-size: 13px;
-}
-
 .settings-group__body {
   display: flex;
   flex-direction: column;
@@ -108,19 +101,28 @@
 
 /* An action that starts work (settings-page spec "A preference is visibly
    not a job"): a titled block with its own explanation, optional run state,
-   and a single button — wraps at narrow widths (spec "Narrow windows do not
-   break the page") rather than shrinking the button out of reach. */
+   and a single button. Two rows (spec "Settings layout"): the head keeps the
+   button level with the name whatever is shown below, and the state runs
+   beneath at the action's full width. */
 .settings-action {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .settings-action + .settings-action {
   padding-top: 16px;
   border-top: 1px solid var(--border);
+}
+
+/* Wraps at narrow widths (spec "Narrow windows do not break the page"): the
+   button drops beneath the explanation rather than shrinking out of reach. */
+.settings-action__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .settings-action__info {
@@ -129,6 +131,20 @@
   gap: 6px;
   flex: 1 1 320px;
   min-width: 0;
+}
+
+/* Everything an action reports: job progress, the import's summary card,
+   errors, "Saved …". Empty when there is nothing to report (a job that never
+   ran renders nothing), so it takes no row of its own then. */
+.settings-action__state {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-action__state:empty {
+  display: none;
 }
 
 .settings-action__title {
@@ -534,39 +550,6 @@
   border-radius: 8px;
   outline: 2px dashed var(--accent);
   outline-offset: 4px;
-}
-
-.settings-import-report {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.settings-import-report__section {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.settings-import-report__label {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-h);
-}
-
-.settings-import-report__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 12px;
-  color: var(--text);
-  opacity: 0.85;
-  max-height: 200px;
-  overflow-y: auto;
 }
 
 .settings-page__loading {

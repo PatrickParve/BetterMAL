@@ -146,4 +146,72 @@ public class TransferImportProgressTrackerTests
         tracker.MarkOutcomeSeen(finishedAt);
         Assert.True(tracker.Snapshot.OutcomeSeen);
     }
+
+    // Closing the outcome (simplify-settings-and-first-fetch-states D3, tasks 4.4).
+    [Fact]
+    public void DismissingACompleteRunClosesItAndCountsItAsSeen()
+    {
+        var tracker = new TransferImportProgressTracker();
+        tracker.MarkPending("My Phone", DateTimeOffset.UtcNow);
+        tracker.Complete(new TransferImportReport([], [], [], []));
+        Assert.False(tracker.Snapshot.Dismissed);
+
+        tracker.Dismiss(tracker.Snapshot.FinishedAt!.Value);
+
+        Assert.True(tracker.Snapshot.Dismissed);
+        Assert.True(tracker.Snapshot.OutcomeSeen);
+    }
+
+    [Fact]
+    public void DismissingAFailedRunClosesItAndCountsItAsSeen()
+    {
+        var tracker = new TransferImportProgressTracker();
+        tracker.MarkPending("My Phone", DateTimeOffset.UtcNow);
+        tracker.Fail("Nothing from the file was applied.");
+
+        tracker.Dismiss(tracker.Snapshot.FinishedAt!.Value);
+
+        Assert.True(tracker.Snapshot.Dismissed);
+        Assert.True(tracker.Snapshot.OutcomeSeen);
+        Assert.Equal(TransferImportPhase.Failed, tracker.Snapshot.Phase);
+    }
+
+    [Fact]
+    public void DismissingARunningImportChangesNothing()
+    {
+        var tracker = new TransferImportProgressTracker();
+        tracker.MarkPending("My Phone", DateTimeOffset.UtcNow);
+
+        tracker.Dismiss(DateTimeOffset.UtcNow);
+
+        Assert.False(tracker.Snapshot.Dismissed);
+        Assert.False(tracker.Snapshot.OutcomeSeen);
+    }
+
+    [Fact]
+    public void DismissingWithAStaleFinishedAtChangesNothing()
+    {
+        var tracker = new TransferImportProgressTracker();
+        tracker.MarkPending("My Phone", DateTimeOffset.UtcNow);
+        tracker.Complete(new TransferImportReport([], [], [], []));
+
+        tracker.Dismiss(DateTimeOffset.UtcNow.AddMinutes(-5));
+
+        Assert.False(tracker.Snapshot.Dismissed);
+        Assert.False(tracker.Snapshot.OutcomeSeen);
+    }
+
+    [Fact]
+    public void ANewRunAfterADismissalStartsClean()
+    {
+        var tracker = new TransferImportProgressTracker();
+        tracker.MarkPending("My Phone", DateTimeOffset.UtcNow);
+        tracker.Complete(new TransferImportReport([], [], [], []));
+        tracker.Dismiss(tracker.Snapshot.FinishedAt!.Value);
+
+        tracker.MarkPending("My Phone", DateTimeOffset.UtcNow);
+
+        Assert.False(tracker.Snapshot.Dismissed);
+        Assert.False(tracker.Snapshot.OutcomeSeen);
+    }
 }

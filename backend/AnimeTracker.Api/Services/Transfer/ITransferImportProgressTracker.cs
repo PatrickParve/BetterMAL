@@ -15,7 +15,9 @@ public enum TransferImportPhase
 /// for; <see cref="Report"/> and <see cref="Error"/> are that run's outcome,
 /// whichever phase it ended in. <see cref="StartedAt"/>/<see cref="FinishedAt"/>
 /// and <see cref="OutcomeSeen"/> join the shared job shape (design.md
-/// D4).</summary>
+/// D4). <see cref="Dismissed"/> is set when the person closes the ended
+/// run's outcome; it is kept here, beside the run, so every browser agrees
+/// (simplify-settings-and-first-fetch-states D3).</summary>
 public record TransferImportStatusSnapshot(
     TransferImportPhase Phase,
     int Done,
@@ -26,7 +28,8 @@ public record TransferImportStatusSnapshot(
     string? Error,
     DateTimeOffset? StartedAt = null,
     DateTimeOffset? FinishedAt = null,
-    bool OutcomeSeen = false);
+    bool OutcomeSeen = false,
+    bool Dismissed = false);
 
 /// <summary>In-memory progress for the file import (device-transfer),
 /// modelled on <c>ISeriesBulkBuildProgressTracker</c>. Not persisted — a
@@ -65,6 +68,13 @@ public interface ITransferImportProgressTracker
     /// <see cref="JobProgressTracker.MarkOutcomeSeen"/> applies (design.md
     /// D4).</summary>
     void MarkOutcomeSeen(DateTimeOffset finishedAt);
+
+    /// <summary>Closes this run's ended outcome for everyone, and counts it as
+    /// seen. Guarded like <see cref="MarkOutcomeSeen"/>: a run still in flight,
+    /// or a <paramref name="finishedAt"/> that is no longer the latest run's,
+    /// changes nothing. <see cref="MarkPending"/> starts the next run not
+    /// dismissed.</summary>
+    void Dismiss(DateTimeOffset finishedAt);
 
     /// <summary>Maps into the shared job shape for the combined status read
     /// (design.md D15).</summary>

@@ -1336,7 +1336,10 @@ export type RecapAvailabilityDto = {
 // device-transfer import (04): mirrors backend TransferImportStatusSnapshot
 // and TransferImportReport (design.md D1/D13). deviceName/exportedAt name the
 // file the current or most recent run is for; report/error are that run's
-// outcome, whichever phase it ended in.
+// outcome, whichever phase it ended in. finishedAt is when the run ended (null
+// until it has) and names the run for a close; dismissed is true once the
+// outcome has been closed, for every browser (simplify-settings-and-first-
+// fetch-states D3).
 export type TransferImportPhase = 'NotStarted' | 'Running' | 'Complete' | 'Failed'
 
 export type TransferReportAnimeDto = {
@@ -1347,6 +1350,15 @@ export type TransferReportAnimeDto = {
 
 export type TransferImportFailureSubject = 'Anime' | 'Series'
 
+// What could not be applied, as a category to group by; `what` keeps the
+// human wording (simplify-settings-and-first-fetch-states D4).
+export type TransferImportFailureKind =
+  | 'ChosenPicture'
+  | 'SeriesTitle'
+  | 'SeriesPicture'
+  | 'EditHistory'
+  | 'Ranking'
+
 // title is null when this device never learned it (design.md D13 "Neither
 // stored: no title").
 export type TransferImportFailureDto = {
@@ -1355,6 +1367,7 @@ export type TransferImportFailureDto = {
   title: string | null
   englishTitle: string | null
   what: string
+  kind: TransferImportFailureKind
   reason: string
 }
 
@@ -1373,4 +1386,6 @@ export type TransferImportStatusDto = {
   exportedAt: string | null
   report: TransferImportReportDto | null
   error: string | null
+  finishedAt: string | null
+  dismissed: boolean
 }

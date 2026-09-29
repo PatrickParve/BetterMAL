@@ -18,8 +18,21 @@ public enum TransferImportFailureSubject
     Series,
 }
 
+/// <summary>What could not be applied, as a category the report's details can
+/// group by (simplify-settings-and-first-fetch-states D4). <c>What</c> keeps
+/// the human wording; this is the stable key.</summary>
+public enum TransferImportFailureKind
+{
+    ChosenPicture,
+    SeriesTitle,
+    SeriesPicture,
+    EditHistory,
+    Ranking,
+}
+
 /// <summary><paramref name="What"/> names what could not be applied
 /// (a chosen picture, a series title, a series picture, edit history, or the
-/// ranking); <paramref name="Reason"/> says why.</summary>
+/// ranking) and <paramref name="Kind"/> is the same thing as a category;
+/// <paramref name="Reason"/> says why.</summary>
 public record TransferImportFailure(
-    TransferImportFailureSubject Subject, int Id, string? Title, string? EnglishTitle, string What, string Reason);
+    TransferImportFailureSubject Subject, int Id, string? Title, string? EnglishTitle, string What, TransferImportFailureKind Kind, string Reason);

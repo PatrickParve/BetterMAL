@@ -243,6 +243,7 @@ public class AppStatusControllerTests
         public void Complete(TransferImportReport report) => throw new NotImplementedException();
         public void Fail(string reason) => throw new NotImplementedException();
         public void MarkOutcomeSeen(DateTimeOffset finishedAt) => throw new NotImplementedException();
+        public void Dismiss(DateTimeOffset finishedAt) => throw new NotImplementedException();
         public JobSnapshot ToJobSnapshot() => new(JobPhase.NotStarted, 0, null, null, null, null);
     }
 }

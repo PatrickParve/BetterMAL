@@ -23,7 +23,7 @@ internal sealed record PreparedImport(
     List<int> FetchedAnimeIds,
     Dictionary<int, SeriesResolution> SeriesResolutions);
 
-internal readonly record struct DraftFailure(TransferImportFailureSubject Subject, int Id, string What, string Reason);
+internal readonly record struct DraftFailure(TransferImportFailureSubject Subject, int Id, string What, TransferImportFailureKind Kind, string Reason);
 
 /// <summary>Prepares an import — fetching from MyAnimeList whatever the file
 /// needs that this device lacks, and from TMDB the pictures a refused TMDB
@@ -307,7 +307,7 @@ public class TransferImportRunner(
 
         foreach (var (animeId, (count, reason)) in skippedByAnimeId)
             failures.Add(new DraftFailure(
-                TransferImportFailureSubject.Anime, animeId, $"edit history ({count} record{(count == 1 ? "" : "s")})", reason));
+                TransferImportFailureSubject.Anime, animeId, $"edit history ({count} record{(count == 1 ? "" : "s")})", TransferImportFailureKind.EditHistory, reason));
     }
 
     // 7.3
@@ -319,7 +319,7 @@ public class TransferImportRunner(
         {
             if (prepared.UnfetchableAnimeReasons.TryGetValue(picture.AnimeId, out var fetchFailureReason))
             {
-                failures.Add(new DraftFailure(TransferImportFailureSubject.Anime, picture.AnimeId, "chosen picture", fetchFailureReason));
+                failures.Add(new DraftFailure(TransferImportFailureSubject.Anime, picture.AnimeId, "chosen picture", TransferImportFailureKind.ChosenPicture, fetchFailureReason));
                 continue;
             }
 
@@ -335,7 +335,7 @@ public class TransferImportRunner(
             }
             catch (ArtworkSelectionRejectedException ex)
             {
-                failures.Add(new DraftFailure(TransferImportFailureSubject.Anime, picture.AnimeId, "chosen picture", ex.Message));
+                failures.Add(new DraftFailure(TransferImportFailureSubject.Anime, picture.AnimeId, "chosen picture", TransferImportFailureKind.ChosenPicture, ex.Message));
             }
         }
     }
@@ -353,9 +353,9 @@ public class TransferImportRunner(
             if (resolution.LocalSeriesId is not { } localSeriesId)
             {
                 if (entry.Title is not null)
-                    failures.Add(new DraftFailure(TransferImportFailureSubject.Series, entry.SeriesId, "series title", resolution.FailureReason!));
+                    failures.Add(new DraftFailure(TransferImportFailureSubject.Series, entry.SeriesId, "series title", TransferImportFailureKind.SeriesTitle, resolution.FailureReason!));
                 if (entry.Picture is not null)
-                    failures.Add(new DraftFailure(TransferImportFailureSubject.Series, entry.SeriesId, "series picture", resolution.FailureReason!));
+                    failures.Add(new DraftFailure(TransferImportFailureSubject.Series, entry.SeriesId, "series picture", TransferImportFailureKind.SeriesPicture, resolution.FailureReason!));
                 continue;
             }
 
@@ -371,7 +371,7 @@ public class TransferImportRunner(
                     }
                     catch (ArtworkSelectionRejectedException ex)
                     {
-                        failures.Add(new DraftFailure(TransferImportFailureSubject.Series, entry.SeriesId, "series title", ex.Message));
+                        failures.Add(new DraftFailure(TransferImportFailureSubject.Series, entry.SeriesId, "series title", TransferImportFailureKind.SeriesTitle, ex.Message));
                     }
                 }
             }
@@ -388,7 +388,7 @@ public class TransferImportRunner(
                     }
                     catch (ArtworkSelectionRejectedException ex)
                     {
-                        failures.Add(new DraftFailure(TransferImportFailureSubject.Series, entry.SeriesId, "series picture", ex.Message));
+                        failures.Add(new DraftFailure(TransferImportFailureSubject.Series, entry.SeriesId, "series picture", TransferImportFailureKind.SeriesPicture, ex.Message));
                     }
                 }
             }
@@ -409,7 +409,7 @@ public class TransferImportRunner(
         if (blockingIds.Count > 0)
         {
             foreach (var id in blockingIds)
-                failures.Add(new DraftFailure(TransferImportFailureSubject.Anime, id, "ranking", prepared.UnfetchableAnimeReasons[id]));
+                failures.Add(new DraftFailure(TransferImportFailureSubject.Anime, id, "ranking", TransferImportFailureKind.Ranking, prepared.UnfetchableAnimeReasons[id]));
             return;
         }
 
@@ -426,7 +426,7 @@ public class TransferImportRunner(
             // apply (design.md D9's fallback) — ReplaceAllAsync itself
             // refuses the whole list before touching a row.
             foreach (var id in ex.AnimeIds)
-                failures.Add(new DraftFailure(TransferImportFailureSubject.Anime, id, "ranking", "This anime could not be fetched from MyAnimeList."));
+                failures.Add(new DraftFailure(TransferImportFailureSubject.Anime, id, "ranking", TransferImportFailureKind.Ranking, "This anime could not be fetched from MyAnimeList."));
         }
     }
 
@@ -468,7 +468,7 @@ public class TransferImportRunner(
                 var (title, englishTitle) = f.Subject == TransferImportFailureSubject.Anime
                     ? animeTitles.GetValueOrDefault(f.Id)
                     : seriesTitles.GetValueOrDefault(f.Id);
-                return new TransferImportFailure(f.Subject, f.Id, title, englishTitle, f.What, f.Reason);
+                return new TransferImportFailure(f.Subject, f.Id, title, englishTitle, f.What, f.Kind, f.Reason);
             }).ToList());
     }
 

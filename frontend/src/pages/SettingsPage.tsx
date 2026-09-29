@@ -8,6 +8,7 @@ import {
   cancelReconciliationDiff,
   declineAllHeldChanges,
   declineHeldChange,
+  dismissTransferImport,
   exportData,
   exportListBackup,
   getHeldChanges,
@@ -31,10 +32,11 @@ import type {
   JobPhase,
   PendingReconciliationDiffDto,
   ReconciliationDiffChangeType,
-  TransferImportFailureDto,
   TransferImportStatusDto,
   WeeklyCheckDto,
 } from '../api/types.ts'
+import { ImportReportCard } from '../components/ImportReportCard.tsx'
+import { ImportReportOverlay } from '../components/ImportReportOverlay.tsx'
 import { JobProgressTrack } from '../components/JobProgressTrack.tsx'
 import { LibraryDataEntry } from '../components/Setup/LibraryDataEntry.tsx'
 import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
@@ -53,13 +55,14 @@ import './SettingsPage.css'
 // A named group of controls (design.md decision 10): every control on the
 // page belongs to exactly one of these, in an order that runs cheapest/most
 // reversible first — instant preferences, the routine sync, the minutes-long
-// jobs, the transfer between devices, the account connection last.
-function SettingsGroup({ title, hint, children }: { title: string; hint: string; children: ReactNode }) {
+// jobs, the transfer between devices, the account connection last. Carries a
+// name and nothing under it: each action inside explains itself (settings-page
+// spec "Settings are organised into named groups").
+function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="settings-group">
       <div className="settings-group__header">
         <h2>{title}</h2>
-        <p className="settings-group__hint">{hint}</p>
       </div>
       <div className="settings-group__body">{children}</div>
     </section>
@@ -96,7 +99,11 @@ function SettingsToggleRow({
 // optional run state (a JobProgress for one of the page's background jobs,
 // report-jobs-and-lost-mal-connection settings-page spec "Background jobs
 // report progress the same way"), and a button — button is omitted for the
-// MyAnimeList list import, which the app starts on its own.
+// MyAnimeList list import, which the app starts on its own. Two rows
+// (simplify-settings-and-first-fetch-states D6): the head holds the name,
+// explanation and button, so the button stays level with the name; the state
+// sits beneath at the action's full width, so a long report or a progress bar
+// never moves the button or narrows the explanation.
 // className/onDrag*/onDrop are only ever passed by the import action, which
 // is also a drop target (settings-page spec "Dropping a file starts an
 // import") — every other caller leaves them undefined, so no handlers attach.
@@ -126,12 +133,14 @@ function SettingsAction({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      <div className="settings-action__info">
-        <h3 className="settings-action__title">{title}</h3>
-        <p className="settings-action__hint">{hint}</p>
-        {state}
+      <div className="settings-action__head">
+        <div className="settings-action__info">
+          <h3 className="settings-action__title">{title}</h3>
+          <p className="settings-action__hint">{hint}</p>
+        </div>
+        {button && <div className="settings-action__control">{button}</div>}
       </div>
-      {button && <div className="settings-action__control">{button}</div>}
+      {state && <div className="settings-action__state">{state}</div>}
     </div>
   )
 }
@@ -318,6 +327,7 @@ type TrackedJobPhases = {
   reconcile: JobPhase
   heldDecision: JobPhase
   fileImport: JobPhase
+  fileImportFinishedAt: string | null
 }
 
 // Operational/settings page: sync status + manual triggers, pending
@@ -355,6 +365,12 @@ export function SettingsPage() {
   const [importing, setImporting] = useState(false)
   const [importRefusal, setImportRefusal] = useState<string | null>(null)
   const [importDragOver, setImportDragOver] = useState(false)
+  // The import's outcome card (simplify-settings-and-first-fetch-states D5).
+  // Closing is optimistic: closedImportRun hides the run at once, by the time it
+  // ended, and is undone if the server can't be told.
+  const [closedImportRun, setClosedImportRun] = useState<string | null>(null)
+  const [importCloseError, setImportCloseError] = useState<string | null>(null)
+  const [importDetailsOpen, setImportDetailsOpen] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
 
   const {
@@ -424,16 +440,24 @@ export function SettingsPage() {
           .then(setHeldChanges)
           .catch(() => {})
       }
-      if (prev.fileImport === 'Running' && jobs.fileImport.phase !== 'Running') {
+      // A new run's end time is the other cue: a run that started and ended
+      // between two polls was never seen Running, but its card still has to
+      // come up. A read that fails leaves the ended job's own line to say how
+      // it ended (importStatus null), rather than a stale card.
+      if (
+        (prev.fileImport === 'Running' && jobs.fileImport.phase !== 'Running') ||
+        (jobs.fileImport.finishedAt !== null && jobs.fileImport.finishedAt !== prev.fileImportFinishedAt)
+      ) {
         void getTransferImportStatus()
           .then(setImportStatus)
-          .catch(() => {})
+          .catch(() => setImportStatus(null))
       }
     }
     prevJobPhasesRef.current = {
       reconcile: jobs.reconcile.phase,
       heldDecision: jobs.heldDecision.phase,
       fileImport: jobs.fileImport.phase,
+      fileImportFinishedAt: jobs.fileImport.finishedAt,
     }
   }, [appStatus])
 
@@ -749,10 +773,25 @@ export function SettingsPage() {
     if (file) void handleImportFile(file)
   }
 
-  // failure.title is null when this device never learned it (design.md D13).
-  function importFailureLabel(failure: TransferImportFailureDto): string {
-    if (failure.title) return pickDisplayTitle(failure.title, failure.englishTitle)
-    return failure.subject === 'Series' ? `Series ${failure.id}` : `Anime ${failure.id}`
+  // Closes the ended import's outcome for every browser (device-transfer "The
+  // import reports what it did"). The card goes at once; if the server can't
+  // be told it comes back with a short line, and its × works again. The answer
+  // is the status as it now stands, so a newer run is never hidden by a late
+  // close.
+  async function handleCloseImportReport() {
+    const run = importStatus?.finishedAt
+    if (!run) return
+    setClosedImportRun(run)
+    setImportCloseError(null)
+    setImportDetailsOpen(false)
+    try {
+      setImportStatus(await dismissTransferImport(run))
+      const current = appStatusRef.current?.jobs.fileImport
+      if (current && current.finishedAt === run) applyJob('fileImport', { ...current, outcomeSeen: true })
+    } catch {
+      setClosedImportRun(null)
+      setImportCloseError("Couldn't close this. Please try again.")
+    }
   }
 
   // The status read failing with nothing held is a failure, not a page that
@@ -762,6 +801,21 @@ export function SettingsPage() {
 
   const jobs = appStatus.jobs
 
+  // The import's outcome is a card once the run has ended and its status has
+  // loaded for that same run; the ended job line is only the fallback for a
+  // status that couldn't be read (D5). A run I closed stays hidden.
+  const importEnded = jobs.fileImport.phase === 'Complete' || jobs.fileImport.phase === 'Failed'
+  const importCard =
+    importEnded &&
+    importStatus !== null &&
+    importStatus.finishedAt !== null &&
+    jobs.fileImport.finishedAt !== null &&
+    new Date(importStatus.finishedAt).getTime() === new Date(jobs.fileImport.finishedAt).getTime() &&
+    !importStatus.dismissed &&
+    closedImportRun !== importStatus.finishedAt
+      ? importStatus
+      : null
+
   return (
     <div className="settings-page">
       <div className="settings-page__header">
@@ -769,26 +823,26 @@ export function SettingsPage() {
         <p className="settings-page__subtitle">Sync status, corrective tools, and account connections.</p>
       </div>
 
-      <SettingsGroup title="Preferences" hint="Change how the app displays things for you. Takes effect immediately.">
+      <SettingsGroup title="Preferences">
         <SettingsToggleRow
           checked={alwaysShowCompletedScores}
           onChange={toggleAlwaysShowCompletedScores}
           label="Always show MAL scores for completed and dropped shows"
-          hint={`Reveal MAL scores for shows you've completed or dropped even while the global "hide scores" toggle is on.`}
+          hint="Even when scores are hidden."
         />
         <SettingsToggleRow
           checked={hideHentai}
           onChange={toggleHideHentai}
           label="Hide NSFW"
-          hint="Hides NSFW (MAL Rx) from the seasonal page. R and R+ titles, search results, and anything already in your list are unaffected."
+          hint="Hides Rx titles when browsing seasons and years."
         />
       </SettingsGroup>
 
-      <SettingsGroup title="Sync" hint="The state of your ongoing MyAnimeList sync, and the actions that drive it.">
+      <SettingsGroup title="Sync">
         {jobs.listImport.phase !== 'NotStarted' && (
           <SettingsAction
             title="MyAnimeList list import"
-            hint="Brings in anime on your MyAnimeList list that this device doesn't have yet — runs when the app starts and after you re-authorize."
+            hint="Adds anime from your MyAnimeList list that aren't here yet."
             state={
               <JobProgress
                 phase={jobs.listImport.phase}
@@ -830,8 +884,8 @@ export function SettingsPage() {
           title="Sync now"
           hint={
             heldChanges && heldChanges.length > 0
-              ? "Pushes your own unsent edits to MyAnimeList right away instead of waiting for the next scheduled sync. Sends nothing else, and changes nothing on your list locally. Changes held for review below are not among what it pushes — they're waiting on your decision."
-              : 'Pushes your own unsent edits to MyAnimeList right away instead of waiting for the next scheduled sync. Sends nothing else, and changes nothing on your list locally.'
+              ? 'Sends your unsent changes to MyAnimeList now. Held changes wait for your decision below.'
+              : 'Sends your unsent changes to MyAnimeList now.'
           }
           state={
             <JobProgress
@@ -853,7 +907,7 @@ export function SettingsPage() {
 
         <SettingsAction
           title="Run full reconciliation"
-          hint="Fetches your current MyAnimeList list, compares it against what's stored locally, and presents the differences below for you to accept or decline — changes nothing on your list until you do."
+          hint="Compares your list with MyAnimeList. You review the differences before anything changes."
           state={
             <JobProgress
               phase={jobs.reconcile.phase}
@@ -876,12 +930,7 @@ export function SettingsPage() {
           <div className="settings-subsection">
             <h3 className="settings-subsection__title">Changes held for review</h3>
             <p className="settings-subsection__hint">
-              These are changes from a previous session that never reached MyAnimeList and are waiting on your
-              decision. Accepting sends the anime's stored values to MyAnimeList now, overwriting what MyAnimeList
-              holds for it. Declining discards the unsent change and takes MyAnimeList's current value for that
-              anime instead — unless MyAnimeList holds no entry for it, in which case declining removes the anime
-              from your list locally. What declining applies is recorded in your edit history, like any other
-              change you make here.
+              These changes never reached MyAnimeList. Accept sends yours; Decline keeps MyAnimeList's.
             </p>
             <ul className="settings-held-list">
               {heldChanges.map((item) => {
@@ -959,11 +1008,9 @@ export function SettingsPage() {
 
         {diff && (
           <div className="settings-subsection">
-            <h3 className="settings-subsection__title">Pending reconciliation diff</h3>
+            <h3 className="settings-subsection__title">Differences from MyAnimeList</h3>
             <p className="settings-subsection__hint">
-              Computed {formatTimestamp(diff.computedAt)} — review before applying. Accepting applies exactly
-              the differences listed below and touches nothing else on your list; declining discards them and
-              applies none of them. Nothing you accept is recorded in Latest updates or the full edit history.
+              Found {formatTimestamp(diff.computedAt)}. Accept applies these; Cancel drops them.
             </p>
             <ul className="settings-diff-list">
               {diff.entries.map((entry) => (
@@ -994,16 +1041,16 @@ export function SettingsPage() {
         )}
       </SettingsGroup>
 
-      <SettingsGroup title="Data tools" hint="What setup brought in, and the long-running corrective and backfill jobs.">
+      <SettingsGroup title="Data tools">
         <SettingsAction
           title="Library data"
-          hint="What the first-run setup brought in, and anything still being fetched in the background. Anime that MyAnimeList doesn't have, or lists with a status this app doesn't recognize, are skipped and listed here."
+          hint="What setup brought in, and anything still loading."
           state={<LibraryDataEntry />}
         />
 
         <SettingsAction
           title="Airing dates"
-          hint="Fetches per-episode airing dates from AniList for the anime in my list, in case something looks wrong. Refresh all airing dates skips finished shows whose stored episodes already reach their episode count. Force all airing dates skips nothing: it fetches every anime in my list again, so it takes longer. Both are paced to stay under AniList's rate limit and run in the background."
+          hint="Re-fetches episode air dates from AniList. Refresh all skips finished shows; Force all fetches everything again and takes longer."
           state={
             <JobProgress
               phase={jobs.airingRefresh.phase}
@@ -1041,7 +1088,7 @@ export function SettingsPage() {
 
         <SettingsAction
           title="Build all series"
-          hint="Builds a franchise for every anime in my list that isn't part of one yet, so the profile page's Top series ranking can be completed on demand instead of only filling in a little on each profile visit. Runs in the background; can take a while for a large list."
+          hint="Finds the series for every anime in your list that isn't in one yet. Can take a while."
           state={
             <JobProgress
               phase={jobs.seriesBuild.phase}
@@ -1062,18 +1109,15 @@ export function SettingsPage() {
 
         <div className="settings-subsection">
           <h3 className="settings-subsection__title">Force-refresh anime metadata</h3>
-          <p className="settings-subsection__hint">Search for a specific anime to refresh its cached metadata immediately.</p>
+          <p className="settings-subsection__hint">Refreshes one anime's details from MyAnimeList.</p>
           <AnimeRefreshPicker />
         </div>
       </SettingsGroup>
 
-      <SettingsGroup
-        title="Files"
-        hint="Save a copy of your list, or move what only this app holds between your devices, as a file."
-      >
+      <SettingsGroup title="Files">
         <SettingsAction
           title="Back up my list"
-          hint="Saves every anime in your list — its status, progress, score, dates and rewatch count — as a file. Rewatching stays Rewatching, which MyAnimeList can't hold. Holds nothing else: not your ranking, pictures or edit history, and not your MyAnimeList connection. It's a copy to keep: the app never imports it, and it isn't the file for your other device. Producing it changes nothing here and sends nothing anywhere; the browser saves the file."
+          hint="Saves your list as a file to keep."
           state={
             <>
               {backupFileName && <p className="settings-box__hint">Saved {backupFileName}.</p>}
@@ -1089,7 +1133,7 @@ export function SettingsPage() {
 
         <SettingsAction
           title="Export to a file"
-          hint="Holds your ranking, chosen anime pictures, chosen series titles and pictures, and your edit history. Holds nothing from MyAnimeList — not your MyAnimeList connection, and not your display preferences. Producing it changes nothing here and sends nothing anywhere; the browser saves the file, and getting it to your other device is up to you."
+          hint="Saves your ranking, chosen pictures and titles, and edit history for your other device."
           state={
             <>
               {exportedFileName && <p className="settings-box__hint">Saved {exportedFileName}.</p>}
@@ -1105,86 +1149,46 @@ export function SettingsPage() {
 
         <SettingsAction
           title="Import from a file"
-          hint="Merges a file exported on your other device into this one: the edit history is combined, each chosen picture and title goes to whichever device changed it last, and the ranking is replaced whole by whichever device arranged it last. It asks nothing before applying and cannot be undone — export this device first to keep a copy of what it holds. Runs in the background, and can take minutes when anime have to be fetched from MyAnimeList."
+          hint="Adds a file exported on your other device. Newer changes win, and it can't be undone."
           className={importDragOver ? 'settings-action--drop-target' : undefined}
           onDragOver={handleImportDragOver}
           onDragLeave={handleImportDragLeave}
           onDrop={handleImportDrop}
           state={
             <>
-              <JobProgress
-                phase={jobs.fileImport.phase}
-                done={jobs.fileImport.done}
-                total={jobs.fileImport.total}
-                noun="fetches"
-                error={
-                  jobs.fileImport.phase === 'Failed'
-                    ? `${jobs.fileImport.error ?? 'Unknown error'}. Nothing from the file was applied.`
-                    : jobs.fileImport.error
-                }
-                finishedAt={jobs.fileImport.finishedAt}
-                outcomeSeen={jobs.fileImport.outcomeSeen}
-              />
-              {importRefusal && <p className="settings-box__error">{importRefusal}</p>}
-              {jobs.fileImport.phase === 'Complete' && importStatus?.report && (
-                <div className="settings-import-report">
-                  <p className="settings-box__hint">
-                    From {importStatus.deviceName ?? 'the other device'} — exported{' '}
-                    {formatTimestamp(importStatus.exportedAt)}
-                  </p>
-                  {importStatus.report.rankingAdded.length === 0 &&
-                  importStatus.report.rankingRemoved.length === 0 &&
-                  importStatus.report.fetched.length === 0 &&
-                  importStatus.report.failures.length === 0 ? (
-                    <p className="settings-box__hint">Nothing to report.</p>
-                  ) : (
-                    <>
-                      {importStatus.report.rankingAdded.length > 0 && (
-                        <div className="settings-import-report__section">
-                          <h4 className="settings-import-report__label">Added to the ranking</h4>
-                          <ul className="settings-import-report__list">
-                            {importStatus.report.rankingAdded.map((anime) => (
-                              <li key={anime.animeId}>{pickDisplayTitle(anime.title, anime.englishTitle)}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      {importStatus.report.rankingRemoved.length > 0 && (
-                        <div className="settings-import-report__section">
-                          <h4 className="settings-import-report__label">Removed from the ranking</h4>
-                          <ul className="settings-import-report__list">
-                            {importStatus.report.rankingRemoved.map((anime) => (
-                              <li key={anime.animeId}>{pickDisplayTitle(anime.title, anime.englishTitle)}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      {importStatus.report.fetched.length > 0 && (
-                        <div className="settings-import-report__section">
-                          <h4 className="settings-import-report__label">Fetched for the first time</h4>
-                          <ul className="settings-import-report__list">
-                            {importStatus.report.fetched.map((anime) => (
-                              <li key={anime.animeId}>{pickDisplayTitle(anime.title, anime.englishTitle)}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      {importStatus.report.failures.length > 0 && (
-                        <div className="settings-import-report__section">
-                          <h4 className="settings-import-report__label">Could not be applied</h4>
-                          <ul className="settings-import-report__list">
-                            {importStatus.report.failures.map((failure, index) => (
-                              <li key={index}>
-                                {importFailureLabel(failure)} — {failure.what}: {failure.reason}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
+              {(jobs.fileImport.phase === 'Running' || importStatus === null) && (
+                <JobProgress
+                  phase={jobs.fileImport.phase}
+                  done={jobs.fileImport.done}
+                  total={jobs.fileImport.total}
+                  noun="fetches"
+                  error={
+                    jobs.fileImport.phase === 'Failed'
+                      ? `${jobs.fileImport.error ?? 'Unknown error'}. Nothing from the file was applied.`
+                      : jobs.fileImport.error
+                  }
+                  finishedAt={jobs.fileImport.finishedAt}
+                  outcomeSeen={jobs.fileImport.outcomeSeen}
+                />
               )}
+              {importRefusal && <p className="settings-box__error">{importRefusal}</p>}
+              {importCard && (
+                <ImportReportCard
+                  status={importCard}
+                  closeError={importCloseError}
+                  onClose={handleCloseImportReport}
+                  onDetails={() => setImportDetailsOpen(true)}
+                />
+              )}
+            </>
+          }
+          button={
+            <>
+              <button type="button" onClick={handleChooseImportFile} disabled={importing || importRunning}>
+                {importing || importRunning ? 'Importing…' : 'Choose file…'}
+              </button>
+              {/* Never shown itself, and kept out of the state row so that row is
+                  empty (and takes no space) when there is nothing to report. */}
               <input
                 ref={importInputRef}
                 type="file"
@@ -1194,20 +1198,14 @@ export function SettingsPage() {
               />
             </>
           }
-          button={
-            <button type="button" onClick={handleChooseImportFile} disabled={importing || importRunning}>
-              {importing || importRunning ? 'Importing…' : 'Choose file…'}
-            </button>
-          }
         />
       </SettingsGroup>
 
-      <SettingsGroup title="Account" hint="Your MyAnimeList connection.">
+      <SettingsGroup title="Account">
         {appStatus.malConnection.state === 'Lost' ? (
           <p className="settings-box__error">
-            The connection to MyAnimeList was lost on {formatTimestamp(appStatus.malConnection.lostAt)} — MyAnimeList
-            stopped accepting this app's login. Your changes are kept here but aren't being sent to MyAnimeList, and
-            anime added on MyAnimeList elsewhere aren't being brought in. Re-authorize to reconnect.
+            Lost connection to MyAnimeList on {formatTimestamp(appStatus.malConnection.lostAt)}, so your changes
+            aren't being sent. Re-authorize to reconnect.
           </p>
         ) : (
           <p className="settings-box__hint">{appStatus.malConnection.state === 'Connected' ? 'Connected.' : 'Not connected.'}</p>
@@ -1229,9 +1227,16 @@ export function SettingsPage() {
           about/credits-style surface; the picture picker shows the same
           attribution wherever it offers TMDB images. Always shown, key or not:
           it names a service the app supports, not one it has called. */}
-      <SettingsGroup title="Credits" hint="The services whose data and pictures this app uses.">
+      <SettingsGroup title="Credits">
         <TmdbAttribution />
       </SettingsGroup>
+
+      {importDetailsOpen && importCard?.report && (
+        <ImportReportOverlay
+          status={{ ...importCard, report: importCard.report }}
+          onClose={() => setImportDetailsOpen(false)}
+        />
+      )}
     </div>
   )
 }

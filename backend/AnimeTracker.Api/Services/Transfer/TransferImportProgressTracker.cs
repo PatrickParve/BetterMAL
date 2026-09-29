@@ -65,6 +65,17 @@ public class TransferImportProgressTracker : ITransferImportProgressTracker
         }
     }
 
+    /// <summary>Same guard as <see cref="MarkOutcomeSeen"/>; closing counts as
+    /// having seen the outcome, so it raises no indicator afterwards.</summary>
+    public void Dismiss(DateTimeOffset finishedAt)
+    {
+        lock (_lock)
+        {
+            if ((_snapshot.Phase == TransferImportPhase.Complete || _snapshot.Phase == TransferImportPhase.Failed) && _snapshot.FinishedAt == finishedAt)
+                _snapshot = _snapshot with { Dismissed = true, OutcomeSeen = true };
+        }
+    }
+
     /// <summary>Maps into the shared job shape for the combined status read
     /// (design.md D15). A total of 0 before the file has been read is reported
     /// as unknown (null) rather than zero, so the shared bar moves instead of

@@ -49,6 +49,7 @@ public class TransferControllerTests
         public void Complete(TransferImportReport report) => throw new NotImplementedException();
         public void Fail(string reason) => throw new NotImplementedException();
         public void MarkOutcomeSeen(DateTimeOffset finishedAt) => throw new NotImplementedException();
+        public void Dismiss(DateTimeOffset finishedAt) => throw new NotImplementedException();
 
         public JobSnapshot ToJobSnapshot()
         {
@@ -184,5 +185,63 @@ public class TransferControllerTests
         Assert.Equal(5, (int)dto.total);
         Assert.Equal("Other Device", (string)dto.deviceName);
         Assert.NotNull(dto.report);
+    }
+
+    [Fact]
+    public void GetImportStatusReportsWhenTheRunEndedAndWhetherItWasClosed()
+    {
+        var finishedAt = DateTimeOffset.UtcNow;
+        var snapshot = new TransferImportStatusSnapshot(
+            TransferImportPhase.Complete, 5, 5, "Other Device", DateTimeOffset.UtcNow, new TransferImportReport([], [], [], []), null,
+            FinishedAt: finishedAt, Dismissed: true);
+        var controller = CreateController(importProgress: new FakeTransferImportProgressTracker(snapshot));
+
+        var ok = Assert.IsType<OkObjectResult>(controller.GetImportStatus());
+
+        dynamic dto = ok.Value!;
+        Assert.Equal(finishedAt, (DateTimeOffset)dto.finishedAt);
+        Assert.True((bool)dto.dismissed);
+    }
+
+    // --- Closing the outcome (simplify-settings-and-first-fetch-states 4.3, 4.4) ---
+
+    private static TransferImportProgressTracker CompletedTracker()
+    {
+        var tracker = new TransferImportProgressTracker();
+        tracker.MarkPending("Other Device", DateTimeOffset.UtcNow);
+        tracker.Complete(new TransferImportReport([], [], [], []));
+        return tracker;
+    }
+
+    [Fact]
+    public void DismissClosesTheRunItNamesAndReturnsTheCurrentStatus()
+    {
+        var tracker = CompletedTracker();
+        var finishedAt = tracker.Snapshot.FinishedAt!.Value;
+        var controller = CreateController(importProgress: tracker);
+
+        var result = controller.DismissImport(new TransferImportDismissRequest(finishedAt));
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        dynamic dto = ok.Value!;
+        Assert.Equal("Complete", (string)dto.phase);
+        Assert.True((bool)dto.dismissed);
+        Assert.Equal(finishedAt, (DateTimeOffset)dto.finishedAt);
+        Assert.True(tracker.Snapshot.OutcomeSeen);
+    }
+
+    [Fact]
+    public void AStaleDismissReturnsTheStatusUnchanged()
+    {
+        var tracker = CompletedTracker();
+        var controller = CreateController(importProgress: tracker);
+
+        var result = controller.DismissImport(new TransferImportDismissRequest(DateTimeOffset.UtcNow.AddMinutes(-5)));
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        dynamic dto = ok.Value!;
+        Assert.Equal("Complete", (string)dto.phase);
+        Assert.False((bool)dto.dismissed);
+        Assert.False(tracker.Snapshot.OutcomeSeen);
     }
 }

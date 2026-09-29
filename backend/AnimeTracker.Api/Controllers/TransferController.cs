@@ -53,6 +53,19 @@ public class TransferController(IExportService exportService, ITransferImportSer
     [HttpGet("api/transfer/import/status")]
     public IActionResult GetImportStatus() => Ok(ToDto(importProgress.Snapshot));
 
+    /// <summary>Closes the ended import's outcome — its report, or its failure —
+    /// for every browser, and counts it as seen
+    /// (simplify-settings-and-first-fetch-states D3). The body names the run
+    /// by the time it ended, so a close that arrives after a newer import
+    /// started leaves that import alone. Answers <c>200</c> with the current
+    /// status either way, so the caller applies whatever is now true.</summary>
+    [HttpPost("api/transfer/import/dismiss")]
+    public IActionResult DismissImport([FromBody] TransferImportDismissRequest request)
+    {
+        importProgress.Dismiss(request.FinishedAt);
+        return Ok(ToDto(importProgress.Snapshot));
+    }
+
     private static object ToDto(TransferImportStatusSnapshot snapshot) => new
     {
         phase = snapshot.Phase.ToString(),
@@ -62,5 +75,11 @@ public class TransferController(IExportService exportService, ITransferImportSer
         exportedAt = snapshot.ExportedAt,
         report = snapshot.Report,
         error = snapshot.Error,
+        // The time the run ended names it for a close (DismissImport);
+        // dismissed is the shared "closed" state every browser reads.
+        finishedAt = snapshot.FinishedAt,
+        dismissed = snapshot.Dismissed,
     };
 }
+
+public record TransferImportDismissRequest(DateTimeOffset FinishedAt);
