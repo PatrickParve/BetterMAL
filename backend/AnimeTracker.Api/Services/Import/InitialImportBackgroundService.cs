@@ -14,8 +14,10 @@ namespace AnimeTracker.Api.Services.Import;
 /// <para>It does nothing until first-run setup has finished
 /// (add-first-run-setup design D2): reading the list for the first time is
 /// setup's own step. When it had to wait for that, setup ran in this process
-/// and has just read the list, so the at-start signal is skipped; the next
-/// start, or a re-authorization, signals it as usual.</para></summary>
+/// and has just read the list, so the at-start signal is skipped, and setup's
+/// finish opens <see cref="ListImportProgress.Gate"/> itself
+/// (<see cref="ListImportProgress.MarkListReadBySetup"/>) for the file import; the
+/// next start, or a re-authorization, signals it as usual.</para></summary>
 public class InitialImportBackgroundService(
     IServiceScopeFactory scopeFactory,
     IImportTrigger trigger,

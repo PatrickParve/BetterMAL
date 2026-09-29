@@ -153,6 +153,23 @@ public sealed class ListImportProgress : JobProgressTracker
         }
     }
 
+    /// <summary>First-run setup has read the whole list in this process and fetched
+    /// every anime in it (add-first-run-setup design D2), which is what a run that
+    /// goes through the list amounts to, so the gate counts the list as gone through.
+    /// Without it the import that waited for setup skips its start-up run, nothing
+    /// else opens the gate, and the file import refuses with "The list hasn't
+    /// finished importing since the app started" until the next restart. No run is
+    /// begun or shown: the Settings report stays as quiet as it was.</summary>
+    public void MarkListReadBySetup()
+    {
+        lock (_lock)
+        {
+            _wentThroughSinceStart = true;
+            _lastReadFailure = null;
+            _retryAt = null;
+        }
+    }
+
     /// <summary>Publishes when the next automatic retry will run, so a shown
     /// failure can say when (design.md D9). Pass null when none is
     /// planned.</summary>

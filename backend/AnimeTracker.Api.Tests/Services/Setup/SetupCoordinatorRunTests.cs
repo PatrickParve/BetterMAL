@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Setup;
 using Microsoft.EntityFrameworkCore;
@@ -33,6 +34,28 @@ public class SetupCoordinatorRunTests
         Assert.Empty(kit.Airing.Batches);
         await using var db = kit.NewDb();
         Assert.NotNull((await db.SetupStates.SingleAsync()).CompletedAt);
+    }
+
+    [Fact]
+    public async Task FinishingSetupOpensTheFileImportsGate_SinceTheImportServiceSkipsItsStartUpRun()
+    {
+        using var kit = new SetupRunKit();
+        SeedList(kit, 3);
+        var holdDetails = new TaskCompletionSource();
+        kit.Mal.BeforeDetails = (_, ct) => holdDetails.Task.WaitAsync(ct);
+        await kit.StartAsync();
+        await SetupRunKit.WaitUntilAsync(() => kit.Mal.DetailsCalls.Count == 1, "the details step to start");
+
+        Assert.False(kit.ImportProgress.Gate.WentThroughSinceStart); // still setting up: the API refuses the import anyway
+
+        holdDetails.SetResult();
+        await SetupRunKit.WaitUntilAsync(() => kit.Gate.IsFinished, "setup to finish");
+
+        var gate = kit.ImportProgress.Gate;
+        Assert.True(gate.WentThroughSinceStart);
+        Assert.False(gate.Running);
+        Assert.Null(gate.LastReadFailure);
+        Assert.Equal(JobPhase.NotStarted, kit.ImportProgress.Snapshot.Phase); // no import run was begun or shown
     }
 
     [Fact]

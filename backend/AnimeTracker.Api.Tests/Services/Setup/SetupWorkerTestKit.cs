@@ -5,6 +5,7 @@ using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.Import;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Auth;
 using AnimeTracker.Api.Services.Mal.Dto;
@@ -357,6 +358,7 @@ internal sealed class SetupRunKit : IDisposable
     public FakeTokenStore Tokens { get; } = new() { Token = FakeTokenStore.StoredToken() };
     public MalOptions MalOptions { get; } = new() { ClientId = "id", ClientSecret = "secret" };
     public SetupGate Gate { get; }
+    public ListImportProgress ImportProgress { get; } = new();
     public SetupTrigger Trigger { get; } = new();
     public SetupRunState State { get; } = new();
     public SetupWake Wake { get; } = new();
@@ -373,7 +375,7 @@ internal sealed class SetupRunKit : IDisposable
     public AnimeTrackerDbContext NewDb() => new(Store);
 
     public SetupCoordinator NewCoordinator() =>
-        new(Gate, Trigger, State, Options.Create(MalOptions), ScopeFactory, MalHealth, AniListHealth, Log, () => _now);
+        new(Gate, Trigger, State, Options.Create(MalOptions), ScopeFactory, MalHealth, AniListHealth, ImportProgress, Log, () => _now);
 
     public SetupStatusService NewStatusService(AnimeTrackerDbContext db, ISetupCoordinator coordinator) =>
         new(db, Gate, coordinator, Options.Create(MalOptions), Tokens, MalHealth, AniListHealth, new BroadcastLocalTimeConverter());

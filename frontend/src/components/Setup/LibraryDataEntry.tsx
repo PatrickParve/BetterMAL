@@ -34,8 +34,9 @@ function skipReason(skipped: SetupSkippedDto): string {
 }
 
 // Settings' Library data entry (settings-page "Data tools shows what setup brought in and
-// what is still going"): setup's four steps as the setup screen shows them, its issues
-// with Retry now, and the anime setup skipped for good. It reads the same setup status
+// what is still going"): the steps of setup that still have something left, drawn as the
+// setup screen draws them (none once all four are done, since a finished library has nothing
+// to report on them), its issues with Retry now, and the anime setup skipped for good. It reads the same setup status
 // as the setup screen, with a poll of its own rather than AppStatusProvider's, because
 // the navbar has to stay silent about this work (navbar-settings-status). Every 2 s
 // while anything runs or waits, and once otherwise. It offers no button to start setup,
@@ -76,7 +77,7 @@ export function LibraryDataEntry() {
 
   return (
     <div className="library-data">
-      <SetupSteps status={status} />
+      <SetupSteps status={status} onlyUnfinished />
       <SetupIssues status={status} onRetried={read} />
       <div className="library-data__skipped">
         <h4 className="library-data__skipped-title">Skipped anime</h4>

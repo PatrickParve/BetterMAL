@@ -310,6 +310,29 @@ public class TransferImportServiceTests
         Assert.Equal("Other Device", status.DeviceName);
     }
 
+    // Found on the first real run of add-first-run-setup: the import service skips its start-up run
+    // in the process that waited for setup, so nothing opened this gate and the file import refused
+    // with "The list hasn't finished importing since the app started" until the next restart.
+    [Fact]
+    public async Task AcceptAsync_AcceptsOnceSetupHasReadTheListWithNoImportRunEver()
+    {
+        using var db = CreateDb();
+        SeedDevice(db);
+        await db.SaveChangesAsync();
+
+        var listImportProgress = new ListImportProgress(); // no run has begun in this process
+        var trigger = new RecordingTrigger();
+        var service = CreateService(db, trigger, listImportProgress);
+        await Assert.ThrowsAsync<TransferImportBlockedException>(
+            () => service.AcceptAsync(ValidFileBytes(Guid.NewGuid())));
+
+        listImportProgress.MarkListReadBySetup();
+        var status = await service.AcceptAsync(ValidFileBytes(Guid.NewGuid(), "Other Device"));
+
+        Assert.NotNull(trigger.Offered);
+        Assert.Equal(TransferImportPhase.Running, status.Phase);
+    }
+
     [Fact]
     public async Task AcceptAsync_AGateThatWentThroughWithFetchFailuresStillAccepts()
     {

@@ -69,8 +69,8 @@ export function SetupScreen({
         <div className="setup-card">
           <h1 className="setup-card__title">Setting up your library</h1>
           <p className="setup-card__lead">
-            This runs once, in the background, so you can close this tab and come back. Home opens when your list, every
-            anime's details and every series are in.
+            This runs once, in the background, so you can close this tab and come back. The app opens by itself when
+            everything is done.
           </p>
           {unreachable && (
             <p className="setup-card__unreachable" role="status">

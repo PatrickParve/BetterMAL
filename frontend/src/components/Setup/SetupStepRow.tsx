@@ -49,18 +49,6 @@ function stepNote(key: SetupStepKey, step: SetupStepDto, status: SetupStatusDto)
   return null
 }
 
-// The airing step is the only one with a part that opens Home before the rest is done,
-// so it is the only one that says where that part stands (first-run-setup "The screen
-// SHALL show separately when the priority set is done"). Meaningless once setup has
-// finished.
-function priorityNote(status: SetupStatusDto): string | null {
-  const { done, total } = status.airingPriority
-  if (status.finished || total === 0) return null
-  return done >= total
-    ? 'Shows airing now and from recent seasons are in. The rest carries on after Home opens.'
-    : `Shows airing now and from recent seasons: ${done} of ${total}.`
-}
-
 // One of setup's four steps: its name and state, a bar in the shared job presentation
 // (proportional, or moving while the total is unknown), its counts with the time left
 // while there is an estimate, and one line for what it waits for. Used by the setup
@@ -73,7 +61,6 @@ export function SetupStepRow({ stepKey, status }: { stepKey: SetupStepKey; statu
   const eta = step.phase === 'Running' && step.etaSeconds !== null ? formatEta(step.etaSeconds) : null
   const summary = [counts, eta].filter(Boolean).join(' · ')
   const note = stepNote(stepKey, step, status)
-  const priority = stepKey === 'airing' ? priorityNote(status) : null
 
   // JobProgressTrack moves continuously only for a null total, which has to mean "running
   // and not yet knowing it": any other phase passes a number, so a paused or waiting
@@ -98,16 +85,20 @@ export function SetupStepRow({ stepKey, status }: { stepKey: SetupStepKey; statu
       />
       {summary && <p className="setup-step__counts">{summary}</p>}
       {note && <p className="setup-step__note">{note}</p>}
-      {priority && <p className="setup-step__note">{priority}</p>}
     </li>
   )
 }
 
-// The four rows in order.
-export function SetupSteps({ status }: { status: SetupStatusDto }) {
+// The four rows in order. `onlyUnfinished` leaves out the steps that are done, and the whole
+// list when none is left: Settings' Library data uses it, so a finished install doesn't keep
+// listing "Reading your list" and "Building series" long after the first load.
+export function SetupSteps({ status, onlyUnfinished = false }: { status: SetupStatusDto; onlyUnfinished?: boolean }) {
+  const shown = SETUP_STEPS.filter((s) => !onlyUnfinished || status.steps[s.key].phase !== 'Done')
+  if (shown.length === 0) return null
+
   return (
     <ol className="setup-steps">
-      {SETUP_STEPS.map((s) => (
+      {shown.map((s) => (
         <SetupStepRow key={s.key} stepKey={s.key} status={status} />
       ))}
     </ol>

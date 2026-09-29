@@ -1,3 +1,4 @@
+using AnimeTracker.Api.Services.Import;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Auth;
 using Microsoft.Extensions.Options;
@@ -28,6 +29,7 @@ public class SetupCoordinator(
     IServiceScopeFactory scopeFactory,
     MalServiceHealth malHealth,
     AniListServiceHealth aniListHealth,
+    ListImportProgress importProgress,
     ILogger<SetupCoordinator> logger,
     Func<DateTimeOffset>? now = null) : BackgroundService, ISetupCoordinator
 {
@@ -205,6 +207,12 @@ public class SetupCoordinator(
                     if (_airingEnded)
                         state.SetDraining(false); // it ended while we were setting the flag
                 }
+
+                // The list was read in this process, so the file import's gate is open from now on: the
+                // import service skips its start-up run in a process that waited for setup, and nothing
+                // else would ever open it before the next restart. Before the gate opens, so no request
+                // that setup's end lets through can find it shut.
+                importProgress.MarkListReadBySetup();
 
                 await gate.MarkFinishedAsync(ct);
                 logger.LogInformation("Setup finished: the library is complete. {Draining}",

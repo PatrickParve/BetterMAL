@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Services.Import;
+using AnimeTracker.Api.Services.Jobs;
 
 namespace AnimeTracker.Api.Tests.Services.Import;
 
@@ -8,6 +9,35 @@ namespace AnimeTracker.Api.Tests.Services.Import;
 // Snapshot's own choice.
 public class ListImportProgressTests
 {
+    [Fact]
+    public void SetupReadingTheListOpensTheGateWithoutBeginningOrShowingARun()
+    {
+        var progress = new ListImportProgress();
+        Assert.False(progress.Gate.WentThroughSinceStart);
+
+        progress.MarkListReadBySetup();
+
+        Assert.True(progress.Gate.WentThroughSinceStart);
+        Assert.False(progress.Gate.Running);
+        Assert.Null(progress.Gate.LastReadFailure);
+        Assert.Equal(JobPhase.NotStarted, progress.Snapshot.Phase); // Settings' report stays as quiet as it was
+    }
+
+    [Fact]
+    public void SetupReadingTheListClearsAnEarlierFailureAndItsPlannedRetry()
+    {
+        var progress = new ListImportProgress();
+        progress.BeginRun(visibleFromStart: false);
+        progress.FailBeforeRead("MyAnimeList couldn't be reached.");
+        progress.SetRetryAt(DateTimeOffset.UtcNow.AddMinutes(5));
+
+        progress.MarkListReadBySetup();
+
+        Assert.Null(progress.Gate.LastReadFailure);
+        Assert.Null(progress.Gate.RetryAt);
+        Assert.True(progress.Gate.WentThroughSinceStart);
+    }
+
     [Fact]
     public void AShownFailureIsAcknowledgedWhileQuietThroughShownsEndTime()
     {
