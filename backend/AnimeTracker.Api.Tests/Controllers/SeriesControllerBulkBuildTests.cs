@@ -67,6 +67,8 @@ public class SeriesControllerBulkBuildTests
 
     private sealed class UnusedSeriesService : ISeriesService
     {
+        public Task<SetupBuildOutcome> BuildForSetupAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
         public Task<SeriesDto> GetSeriesAsync(int animeId, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task<SeriesDto> RebuildSeriesAsync(int animeId, CancellationToken ct = default) =>

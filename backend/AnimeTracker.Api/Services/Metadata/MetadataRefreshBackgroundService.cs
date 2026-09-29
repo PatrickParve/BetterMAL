@@ -1,3 +1,4 @@
+using AnimeTracker.Api.Services.Setup;
 using AnimeTracker.Api.Services.Updates;
 
 namespace AnimeTracker.Api.Services.Metadata;
@@ -19,6 +20,7 @@ namespace AnimeTracker.Api.Services.Metadata;
 /// only in <c>_skipAnimeIdNextPass</c>, in memory, for that one pass.</summary>
 public class MetadataRefreshBackgroundService(
     IServiceScopeFactory scopeFactory,
+    SetupGate setupGate,
     ILogger<MetadataRefreshBackgroundService> logger) : BackgroundService
 {
     private static readonly TimeSpan TickInterval = TimeSpan.FromMinutes(10);
@@ -35,6 +37,11 @@ public class MetadataRefreshBackgroundService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Setup's details step is refreshing every list anime once; this job's
+        // calls would compete with it for MyAnimeList's pace, so the first pass
+        // waits for setup to finish (add-first-run-setup design D2).
+        await setupGate.WhenFinished.WaitAsync(stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try

@@ -1,0 +1,63 @@
+/* Settings' Library data entry: setup's rows and issues (their own stylesheets) plus the
+   anime it skipped for good. */
+.library-data {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.library-data__loading {
+  margin: 0;
+  font-size: 13px;
+}
+
+.library-data__skipped {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.library-data__skipped-title {
+  margin: 0;
+  color: var(--text-h);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.library-data__none {
+  margin: 0;
+  color: var(--text);
+  opacity: 0.75;
+  font-size: 13px;
+}
+
+.library-data__skipped-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A title and its reason: side by side while there is room, stacked when there is not, so
+   neither is cut off at phone width. */
+.library-data__skipped-item {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  row-gap: 2px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.library-data__skipped-item a {
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+
+.library-data__skipped-reason {
+  color: var(--text);
+  opacity: 0.8;
+}

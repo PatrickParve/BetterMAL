@@ -144,6 +144,8 @@ public class SeriesControllerTmdbTests
     // service answers it: through the anime's primary membership.
     private sealed class FakeSeriesService(AnimeTrackerDbContext db) : ISeriesService
     {
+        public Task<SetupBuildOutcome> BuildForSetupAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
         public Task<int?> FindSeriesIdAsync(int animeId, CancellationToken ct = default) =>
             db.SeriesMembers.AsNoTracking()
                 .Where(m => m.AnimeId == animeId && m.IsPrimary)

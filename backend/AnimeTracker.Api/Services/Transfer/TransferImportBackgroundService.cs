@@ -1,3 +1,5 @@
+using AnimeTracker.Api.Services.Setup;
+
 namespace AnimeTracker.Api.Services.Transfer;
 
 /// <summary>Runs an accepted import when the trigger hands one over
@@ -7,10 +9,16 @@ public class TransferImportBackgroundService(
     IServiceScopeFactory scopeFactory,
     ITransferImportTrigger trigger,
     ITransferImportProgressTracker progress,
+    SetupGate setupGate,
     ILogger<TransferImportBackgroundService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // The API refuses an upload until setup has finished, so no file is
+        // handed over before then; an import would rewrite the list setup is
+        // still reading (add-first-run-setup design D2).
+        await setupGate.WhenFinished.WaitAsync(stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             TransferFile file;

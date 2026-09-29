@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Services.Jobs;
+using AnimeTracker.Api.Services.Setup;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Series;
@@ -16,10 +17,16 @@ public class SeriesBulkBuildBackgroundService(
     IServiceScopeFactory scopeFactory,
     ISeriesBulkBuildTrigger trigger,
     SeriesBulkBuildProgress progress,
+    SetupGate setupGate,
     ILogger<SeriesBulkBuildBackgroundService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // The API refuses the button until setup has finished, and setup's own
+        // series step does this job's work; the job never runs before then
+        // (add-first-run-setup design D2).
+        await setupGate.WhenFinished.WaitAsync(stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try

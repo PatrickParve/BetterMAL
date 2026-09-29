@@ -1,19 +1,26 @@
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Auth;
+using AnimeTracker.Api.Services.Setup;
 
 namespace AnimeTracker.Api.Services.Import;
 
 /// <summary>Runs the initial import when signaled — by the OAuth callback on
-/// first authorization or re-authorization, or by itself on startup if a
-/// token already exists (so an import interrupted by an app/PC restart
-/// resumes automatically) — and retries a run that couldn't finish on its
-/// own, after 1, 5, 15, 60 and 60 minutes in turn, then not again until the
-/// next start or re-authorization (design.md D9). No run is attempted, and no
-/// retry is planned, while the MyAnimeList connection is lost.</summary>
+/// re-authorization, or by itself on startup if a token already exists (so an
+/// import interrupted by an app/PC restart resumes automatically) — and retries
+/// a run that couldn't finish on its own, after 1, 5, 15, 60 and 60 minutes in
+/// turn, then not again until the next start or re-authorization (design.md
+/// D9). No run is attempted, and no retry is planned, while the MyAnimeList
+/// connection is lost.
+/// <para>It does nothing until first-run setup has finished
+/// (add-first-run-setup design D2): reading the list for the first time is
+/// setup's own step. When it had to wait for that, setup ran in this process
+/// and has just read the list, so the at-start signal is skipped; the next
+/// start, or a re-authorization, signals it as usual.</para></summary>
 public class InitialImportBackgroundService(
     IServiceScopeFactory scopeFactory,
     IImportTrigger trigger,
     ListImportProgress progress,
+    SetupGate setupGate,
     ILogger<InitialImportBackgroundService> logger,
     IReadOnlyList<TimeSpan>? retrySchedule = null) : BackgroundService
 {
@@ -31,7 +38,13 @@ public class InitialImportBackgroundService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await SignalIfConnectedAsync(stoppingToken);
+        // Read before waiting: a gate that is still open here means setup runs in
+        // this process, and reads the list itself.
+        var waitedForSetup = !setupGate.IsFinished;
+        await setupGate.WhenFinished.WaitAsync(stoppingToken);
+
+        if (!waitedForSetup)
+            await SignalIfConnectedAsync(stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {

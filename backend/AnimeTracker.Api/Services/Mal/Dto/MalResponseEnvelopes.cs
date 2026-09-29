@@ -31,3 +31,16 @@ public class MalUserAnimeListEdge
     public MalAnimeNode Node { get; set; } = null!;
     public MalListStatus? ListStatus { get; set; }
 }
+
+/// <summary>The part of <c>GET users/@me?fields=anime_statistics</c> that setup reads:
+/// how many entries the list holds (first-run-setup design D7).</summary>
+public class MalUserResponse
+{
+    public MalAnimeStatistics? AnimeStatistics { get; set; }
+}
+
+public class MalAnimeStatistics
+{
+    /// <summary>Every entry on the list, whatever its status.</summary>
+    public int? NumItems { get; set; }
+}

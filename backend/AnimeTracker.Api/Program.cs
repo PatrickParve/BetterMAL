@@ -23,6 +23,7 @@ using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Season;
 using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Services.Setup;
 using AnimeTracker.Api.Services.Sync;
 using AnimeTracker.Api.Services.Tmdb;
 using AnimeTracker.Api.Services.Transfer;
@@ -62,6 +63,7 @@ builder.Services.Configure<MalOptions>(builder.Configuration.GetSection(MalOptio
 builder.Services.Configure<TmdbOptions>(builder.Configuration.GetSection(TmdbOptions.SectionName));
 
 builder.Services.AddSingleton<MalRequestPacer>();
+builder.Services.AddSingleton<MalServiceHealth>();
 builder.Services.AddSingleton<MalSearchCache>();
 builder.Services.AddSingleton<IAnimeSearchIndex, AnimeSearchIndexCache>();
 builder.Services.AddSingleton<MalOAuthStateStore>();
@@ -72,6 +74,15 @@ builder.Services.AddScoped<IMalOAuthService, MalOAuthService>();
 
 builder.Services.AddTransient<MalAuthPacingHandler>();
 builder.Services.AddHttpClient<IMalClient, MalClient>(client =>
+{
+    client.BaseAddress = new Uri("https://api.myanimelist.net/v2/");
+}).AddHttpMessageHandler<MalAuthPacingHandler>();
+
+// The same client for first-run setup's two list reads (IMalSetupClient). A typed
+// client per interface, on the same handler: the pacing and 403 backoff are shared
+// through the singleton MalRequestPacer, so setup's requests and everyone else's
+// still go out at one pace.
+builder.Services.AddHttpClient<IMalSetupClient, MalClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.myanimelist.net/v2/");
 }).AddHttpMessageHandler<MalAuthPacingHandler>();
@@ -95,6 +106,18 @@ builder.Services.AddSingleton<ReconcileProgress>();
 builder.Services.AddSingleton<HeldDecisionProgress>();
 builder.Services.AddSingleton<BackgroundJobRunner>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BackgroundJobRunner>());
+
+// --- First-run setup ---
+// Whether setup has finished, which every job it holds back awaits and which
+// the API's request gate reads. Loaded from the database after the migration
+// below.
+builder.Services.AddSingleton<SetupGate>();
+builder.Services.AddSingleton<ISetupTrigger, SetupTrigger>();
+builder.Services.AddSingleton<SetupRunState>();
+builder.Services.AddSingleton<SetupCoordinator>();
+builder.Services.AddSingleton<ISetupCoordinator>(sp => sp.GetRequiredService<SetupCoordinator>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SetupCoordinator>());
+builder.Services.AddScoped<SetupStatusService>();
 
 // --- Initial import ---
 builder.Services.AddSingleton<ListImportProgress>();
@@ -192,6 +215,7 @@ builder.Services.AddScoped<IAiringScheduleService, AiringScheduleService>();
 // EpisodeAiring rows and refreshed in the background — no in-memory cache and
 // no cadence-estimate fallback; a value not backed by a stored row is unknown.
 builder.Services.AddSingleton<AniListRequestPacer>();
+builder.Services.AddSingleton<AniListServiceHealth>();
 builder.Services.AddHttpClient<IAniListClient, AniListClient>(client =>
 {
     client.BaseAddress = new Uri("https://graphql.anilist.co/");
@@ -273,6 +297,14 @@ if (app.Environment.IsDevelopment())
 // runs (design.md D4).
 app.Use(CrossSiteRequestGuard.Invoke);
 
+// After the guard, so a cross-site request is still a 403. Until first-run
+// setup has finished this refuses every /api request but setup's own. It is an
+// allow-list on purpose: many reads start MAL or AniList work indirectly (a
+// visit refresh, a series build, a season refresh, a live search), and a
+// deny-list of the ones that do would have to grow with every endpoint added
+// (add-first-run-setup design D4).
+app.Use(SetupRequestGate.Invoke);
+
 app.UseAuthorization();
 
 app.MapControllers();
@@ -281,6 +313,10 @@ using (var startupScope = app.Services.CreateScope())
 {
     var db = startupScope.ServiceProvider.GetRequiredService<AnimeTrackerDbContext>();
     db.Database.Migrate();
+
+    // Right after the migration and before app.Run(), so no hosted service or
+    // request can observe the gate unloaded (add-first-run-setup design D2).
+    await startupScope.ServiceProvider.GetRequiredService<SetupGate>().LoadAsync();
 
     // Right after the migration, so a device identity exists before
     // anything — a hosted service, a controller, an export request — could

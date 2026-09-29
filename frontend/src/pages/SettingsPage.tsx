@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   acceptAllHeldChanges,
   acceptHeldChange,
@@ -22,6 +23,7 @@ import {
 } from '../api/client.ts'
 import type {
   AnimeSearchResult,
+  ConnectError,
   HeldChangeDto,
   HeldChangeRecentChangeDto,
   HeldChangeValuesDto,
@@ -34,9 +36,11 @@ import type {
   WeeklyCheckDto,
 } from '../api/types.ts'
 import { JobProgressTrack } from '../components/JobProgressTrack.tsx'
+import { LibraryDataEntry } from '../components/Setup/LibraryDataEntry.tsx'
 import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
 import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { RowPicture } from '../components/RowPicture.tsx'
+import { CONNECT_ERROR_MESSAGES } from '../components/Setup/setupFormat.ts'
 import { TmdbAttribution } from '../components/TmdbAttribution.tsx'
 import { unseenOutcomes, useAppStatus } from '../context/AppStatusContext.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
@@ -298,6 +302,13 @@ function formatHeldValues(values: HeldChangeValuesDto): string {
   return `${STATUS_LABELS[values.status]}, ${values.episodesWatched} ep${values.myScore !== null ? `, score ${values.myScore}` : ''}`
 }
 
+// The failure the OAuth callback carried back after a re-authorization
+// (?connectError=, mal-api-integration): shown in the Account section until I leave or
+// reload the page.
+function parseConnectError(value: string | null): ConnectError | null {
+  return value === 'denied' || value === 'expired' || value === 'failed' ? value : null
+}
+
 // Which jobs the Settings page reloads other state for when they leave
 // Running (design.md D16 of report-jobs-and-lost-mal-connection) — syncNow
 // and listImport dropped out once the sync figures below started reading
@@ -331,6 +342,9 @@ export function SettingsPage() {
   const [startingHeldAction, setStartingHeldAction] = useState<HeldDecisionAction | null>(null)
   const [heldError, setHeldError] = useState<string | null>(null)
   const [startingAiringRefresh, setStartingAiringRefresh] = useState(false)
+  // Which of the two airing-date buttons started the run in front of me, so that one can
+  // say it is running. Local: the job's status is the same for both.
+  const [airingRefreshMode, setAiringRefreshMode] = useState<'refresh' | 'force' | null>(null)
   const [startingSeriesBulkBuild, setStartingSeriesBulkBuild] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -350,6 +364,17 @@ export function SettingsPage() {
     applyJob,
     applyWeeklyOutcomeSeen,
   } = useAppStatus()
+
+  // Read once into state and taken out of the address, so a reload no longer shows it
+  // (the same rule as the connect screen's).
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [connectError] = useState(() => parseConnectError(searchParams.get('connectError')))
+  useEffect(() => {
+    if (!searchParams.has('connectError')) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('connectError')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
 
   const { alwaysShowCompletedScores, toggleAlwaysShowCompletedScores } = useScoreVisibility()
   const { hideHentai, toggleHideHentai } = useContentFilter()
@@ -373,6 +398,12 @@ export function SettingsPage() {
   }, [load])
 
   const loading = initialLoading || appStatus === null
+
+  // Once the run has ended (or none is), no button is "the one that started it".
+  const airingPhase = appStatus?.jobs.airingRefresh.phase
+  useEffect(() => {
+    if (airingPhase !== undefined && airingPhase !== 'Running' && !startingAiringRefresh) setAiringRefreshMode(null)
+  }, [airingPhase, startingAiringRefresh])
 
   // Reloads what each job changes once it leaves Running, from a ref of
   // previous phases rather than a state variable, so this never itself
@@ -499,13 +530,15 @@ export function SettingsPage() {
     }
   }
 
-  async function handleAiringFullRefresh() {
+  async function handleAiringFullRefresh(force: boolean) {
     if (startingAiringRefresh || appStatus?.jobs.airingRefresh.phase === 'Running') return
     setStartingAiringRefresh(true)
+    setAiringRefreshMode(force ? 'force' : 'refresh')
     try {
-      applyJob('airingRefresh', await triggerAiringFullRefresh())
+      applyJob('airingRefresh', await triggerAiringFullRefresh(force))
     } catch {
       // Leave whatever status was already there; the button stays retryable.
+      setAiringRefreshMode(null)
     } finally {
       setStartingAiringRefresh(false)
     }
@@ -961,10 +994,16 @@ export function SettingsPage() {
         )}
       </SettingsGroup>
 
-      <SettingsGroup title="Data tools" hint="Long-running corrective and backfill jobs.">
+      <SettingsGroup title="Data tools" hint="What setup brought in, and the long-running corrective and backfill jobs.">
+        <SettingsAction
+          title="Library data"
+          hint="What the first-run setup brought in, and anything still being fetched in the background. Anime that MyAnimeList doesn't have, or lists with a status this app doesn't recognize, are skipped and listed here."
+          state={<LibraryDataEntry />}
+        />
+
         <SettingsAction
           title="Airing dates"
-          hint="Re-fetches per-episode airing dates from AniList for every anime in my list, in case something looks wrong. Skips shows that have already finished airing and were fetched successfully before — their episode dates can't change further. Paced to stay under AniList's rate limit, so a full list can take a while; runs in the background."
+          hint="Fetches per-episode airing dates from AniList for the anime in my list, in case something looks wrong. Refresh all airing dates skips finished shows whose stored episodes already reach their episode count. Force all airing dates skips nothing: it fetches every anime in my list again, so it takes longer. Both are paced to stay under AniList's rate limit and run in the background."
           state={
             <JobProgress
               phase={jobs.airingRefresh.phase}
@@ -977,9 +1016,26 @@ export function SettingsPage() {
             />
           }
           button={
-            <button type="button" onClick={handleAiringFullRefresh} disabled={startingAiringRefresh || jobs.airingRefresh.phase === 'Running'}>
-              {jobs.airingRefresh.phase === 'Running' ? 'Refreshing…' : 'Refresh all airing dates'}
-            </button>
+            <div className="settings-action__stack">
+              <button
+                type="button"
+                onClick={() => handleAiringFullRefresh(false)}
+                disabled={startingAiringRefresh || jobs.airingRefresh.phase === 'Running'}
+              >
+                {jobs.airingRefresh.phase === 'Running' && airingRefreshMode !== 'force'
+                  ? 'Refreshing…'
+                  : 'Refresh all airing dates'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAiringFullRefresh(true)}
+                disabled={startingAiringRefresh || jobs.airingRefresh.phase === 'Running'}
+              >
+                {jobs.airingRefresh.phase === 'Running' && airingRefreshMode === 'force'
+                  ? 'Forcing…'
+                  : 'Force all airing dates'}
+              </button>
+            </div>
           }
         />
 
@@ -1155,6 +1211,11 @@ export function SettingsPage() {
           </p>
         ) : (
           <p className="settings-box__hint">{appStatus.malConnection.state === 'Connected' ? 'Connected.' : 'Not connected.'}</p>
+        )}
+        {connectError && (
+          <p className="settings-box__error" role="alert">
+            {CONNECT_ERROR_MESSAGES[connectError]} Re-authorize to try again.
+          </p>
         )}
         <a className="settings-box__link" href="/api/mal-auth/start">
           Re-authorize with MAL

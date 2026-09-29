@@ -32,6 +32,19 @@ public class MetadataRefreshControllerTests
         Assert.Equal([(7, true)], tmdb.AnimeRefreshes); // force: true, "Refresh data" asks for fresh images
     }
 
+    // metadata-refresh / episode-airing-data "AniList request pacing": a refresh the
+    // user starts by hand looks an anime AniList was recorded as not knowing up
+    // again, whatever the age of that record.
+    [Fact]
+    public async Task RefreshOneAsksForAFreshLookupOfAnAnimeAniListDoesNotKnow()
+    {
+        var airing = new FakeAiringRefreshService();
+
+        await CreateController(new FakeMetadataRefreshService(), airing, new FakeTmdbArtworkService()).RefreshOne(7, CancellationToken.None);
+
+        Assert.Equal([true], airing.RelookupAbsentRequests);
+    }
+
     [Fact]
     public async Task RefreshOneStillReturns204WhenTheTmdbStepThrows()
     {
@@ -88,18 +101,20 @@ public class MetadataRefreshControllerTests
     private sealed class FakeAiringRefreshService : IEpisodeScheduleRefreshService
     {
         public List<int> Refreshed { get; } = [];
+        public List<bool> RelookupAbsentRequests { get; } = [];
         public Exception? RefreshFailure { get; set; }
 
-        public Task RefreshOneAsync(int animeId, CancellationToken ct = default)
+        public Task RefreshOneAsync(int animeId, bool relookupAbsent = false, CancellationToken ct = default)
         {
             Refreshed.Add(animeId);
+            RelookupAbsentRequests.Add(relookupAbsent);
             return RefreshFailure is { } failure ? Task.FromException(failure) : Task.CompletedTask;
         }
 
-        public Task<RefreshManyResult> RefreshManyAsync(IReadOnlyList<int> animeIds, CancellationToken ct = default, Action<int>? onProgress = null) =>
+        public Task<RefreshBatchResult> RefreshBatchAsync(IReadOnlyList<int> animeIds, RefreshBatchOptions? options = null, CancellationToken ct = default) =>
             throw new NotImplementedException();
-        public Task BackfillAsync(CancellationToken ct = default) => throw new NotImplementedException();
+        public Task CatchUpAsync(CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<int>> GetTrackedAnimeIdsAsync(CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<List<int>> GetFullRefreshTargetsAsync(CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<List<int>> GetFullRefreshTargetsAsync(bool force, CancellationToken ct = default) => throw new NotImplementedException();
     }
 }

@@ -299,4 +299,81 @@ public class MalMappingExtensionsTests
         Assert.Equal(["https://mal/p1-large.jpg", "https://mal/p2-medium.jpg"], anime.PictureUrls);
         Assert.Equal(now, anime.PicturesSyncedAt);
     }
+
+    // --- ToBasicAnimeMetadata (first-run setup's list read) ---
+
+    private static MalAnimeNode ListNode() => new()
+    {
+        Id = 5114,
+        Title = "Fullmetal Alchemist: Brotherhood",
+        AlternativeTitles = new MalAlternativeTitles { En = "Fullmetal Alchemist: Brotherhood" },
+        MainPicture = new MalMainPicture { Medium = "https://img/m.jpg", Large = "https://img/l.jpg" },
+        Mean = 9.1,
+        MediaType = "tv",
+        Status = "finished_airing",
+        NumEpisodes = 64,
+        StartDate = "2009-04-05",
+        EndDate = "2010-07-04",
+        Studios = [new MalStudio { Id = 4, Name = "Bones" }],
+        Broadcast = new MalBroadcast { DayOfTheWeek = "sunday", StartTime = "17:00" },
+        Popularity = 3,
+        Rank = 1,
+        Rating = "r",
+        Genres = [new MalGenre { Id = 1, Name = "Action" }, new MalGenre { Id = 2, Name = "Adventure" }],
+        Synopsis = "Two brothers...",
+        AverageEpisodeDuration = 1440,
+        Source = "manga",
+    };
+
+    [Fact]
+    public void ABasicRowCarriesEveryFieldTheListResponseHolds()
+    {
+        var now = new DateTimeOffset(2026, 9, 29, 12, 0, 0, TimeSpan.Zero);
+
+        var row = ListNode().ToBasicAnimeMetadata(now);
+
+        Assert.Equal(5114, row.Id);
+        Assert.Equal("Fullmetal Alchemist: Brotherhood", row.Title);
+        Assert.Equal("Fullmetal Alchemist: Brotherhood", row.EnglishTitle);
+        Assert.Equal("https://img/l.jpg", row.MalPictureUrl);
+        Assert.Equal("tv", row.MediaType);
+        Assert.Equal(9.1, row.MalScore);
+        Assert.Equal(64, row.TotalEpisodes);
+        Assert.Equal("finished_airing", row.AiringStatus);
+        Assert.Equal(new DateOnly(2009, 4, 5), row.AiredFrom);
+        Assert.Equal(new DateOnly(2010, 7, 4), row.AiredTo);
+        Assert.Equal(DayOfWeek.Sunday, MalMappingExtensions.ParseMalDayOfWeek(row.BroadcastDayOfWeek));
+        Assert.Equal(new TimeOnly(17, 0), row.BroadcastTime);
+        Assert.Equal("Bones", row.Studio);
+        Assert.Equal(["Action", "Adventure"], row.Genres);
+        Assert.Equal("Two brothers...", row.Synopsis);
+        Assert.Equal(1440, row.AverageEpisodeDurationSeconds);
+        Assert.Equal("manga", row.Source);
+    }
+
+    [Fact]
+    public void ABasicRowCountsAsNeverFullyFetchedSoTheDetailsStepStillTakesIt()
+    {
+        var row = ListNode().ToBasicAnimeMetadata(DateTimeOffset.UtcNow);
+
+        Assert.Equal(default, row.LastSyncedAt);
+        Assert.Null(row.LastRefreshFailedAt);
+        Assert.Null(row.PicturesSyncedAt);
+        Assert.Empty(row.RelatedAnime);
+    }
+
+    [Fact]
+    public void ABasicRowFromASparseNodeLeavesTheMissingFieldsNull()
+    {
+        var row = new MalAnimeNode { Id = 7, Title = "Sparse" }.ToBasicAnimeMetadata(DateTimeOffset.UtcNow);
+
+        Assert.Null(row.AiringStatus);
+        Assert.Null(row.AiredFrom);
+        Assert.Null(row.Studio);
+        Assert.Null(row.BroadcastTime);
+        Assert.Null(row.Genres);
+        Assert.Null(row.Synopsis);
+        Assert.Null(row.AverageEpisodeDurationSeconds);
+        Assert.Null(row.Source);
+    }
 }

@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Jobs;
+using AnimeTracker.Api.Tests.Services.Setup;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -21,7 +22,7 @@ public class AiringFullRefreshBackgroundServiceTests
             new FakeServiceScopeFactory(new FakeServiceProvider(refreshService)),
             trigger,
             progress,
-            NullLogger<AiringFullRefreshBackgroundService>.Instance);
+            TestSetupGates.Finished(), NullLogger<AiringFullRefreshBackgroundService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
         try
@@ -48,12 +49,12 @@ public class AiringFullRefreshBackgroundServiceTests
         var trigger = new AiringFullRefreshTrigger();
         var progress = new AiringFullRefreshProgress();
         var targets = Enumerable.Range(1, 5).ToList();
-        var refreshService = new FakeEpisodeScheduleRefreshService(targets, new RefreshManyResult(NoData: 0, Failed: 2));
+        var refreshService = new FakeEpisodeScheduleRefreshService(targets, new RefreshBatchResult(Fetched: 3, NoData: 0, Failed: 2));
         var service = new AiringFullRefreshBackgroundService(
             new FakeServiceScopeFactory(new FakeServiceProvider(refreshService)),
             trigger,
             progress,
-            NullLogger<AiringFullRefreshBackgroundService>.Instance);
+            TestSetupGates.Finished(), NullLogger<AiringFullRefreshBackgroundService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
         try
@@ -80,12 +81,12 @@ public class AiringFullRefreshBackgroundServiceTests
         var trigger = new AiringFullRefreshTrigger();
         var progress = new AiringFullRefreshProgress();
         var targets = Enumerable.Range(1, 5).ToList();
-        var refreshService = new FakeEpisodeScheduleRefreshService(targets, new RefreshManyResult(NoData: 3, Failed: 0));
+        var refreshService = new FakeEpisodeScheduleRefreshService(targets, new RefreshBatchResult(Fetched: 2, NoData: 3, Failed: 0));
         var service = new AiringFullRefreshBackgroundService(
             new FakeServiceScopeFactory(new FakeServiceProvider(refreshService)),
             trigger,
             progress,
-            NullLogger<AiringFullRefreshBackgroundService>.Instance);
+            TestSetupGates.Finished(), NullLogger<AiringFullRefreshBackgroundService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
         try
@@ -105,27 +106,133 @@ public class AiringFullRefreshBackgroundServiceTests
         }
     }
 
+    // episode-airing-data "Refreshing all airing dates skips only shows whose history
+    // is complete": both buttons are one job. The trigger carries which one was
+    // pressed, and a refresh started by hand looks unknown anime up again in both.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TheModeThatWasSignalledSelectsTheTargets_AndBothLookUnknownAnimeUpAgain(bool force)
+    {
+        var trigger = new AiringFullRefreshTrigger();
+        var progress = new AiringFullRefreshProgress();
+        var refreshService = new FakeEpisodeScheduleRefreshService(Enumerable.Range(1, 4).ToList(), new RefreshBatchResult(Fetched: 4, NoData: 0, Failed: 0));
+        var service = new AiringFullRefreshBackgroundService(
+            new FakeServiceScopeFactory(new FakeServiceProvider(refreshService)),
+            trigger,
+            progress,
+            TestSetupGates.Finished(), NullLogger<AiringFullRefreshBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            progress.TryBegin();
+            trigger.Signal(force);
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            while (progress.Snapshot.Phase == JobPhase.Running && !cts.IsCancellationRequested)
+                await Task.Delay(10, CancellationToken.None);
+
+            Assert.Equal(JobPhase.Complete, progress.Snapshot.Phase);
+            Assert.Equal([force], refreshService.ForceRequests);
+            Assert.True(Assert.Single(refreshService.BatchOptions)!.RelookupAbsent);
+            Assert.Equal(4, progress.Snapshot.Total);
+            Assert.Equal(4, progress.Snapshot.Done); // one report per anime the batch finished
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task AForcedSignalDoesNotLeakIntoTheNextPlainRun()
+    {
+        var trigger = new AiringFullRefreshTrigger();
+
+        trigger.Signal(force: true);
+        Assert.True(await trigger.WaitAsync(CancellationToken.None));
+
+        trigger.Signal();
+        Assert.False(await trigger.WaitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task APlainSignalCoalescedIntoAForcedOneStaysForced()
+    {
+        var trigger = new AiringFullRefreshTrigger();
+
+        trigger.Signal(force: true);
+        trigger.Signal();
+
+        Assert.True(await trigger.WaitAsync(CancellationToken.None));
+    }
+
+    // add-first-run-setup design D2: the API refuses the button until setup has
+    // finished; a signal that arrived anyway does not start the job early.
+    [Fact]
+    public async Task NoRefreshRunsUntilSetupHasFinished_ThenTheSignalledRunStarts()
+    {
+        var trigger = new AiringFullRefreshTrigger();
+        var progress = new AiringFullRefreshProgress();
+        var refreshService = new FakeEpisodeScheduleRefreshService([1, 2], new RefreshBatchResult(2, 0, 0));
+        var gate = TestSetupGates.Unfinished();
+        var service = new AiringFullRefreshBackgroundService(
+            new FakeServiceScopeFactory(new FakeServiceProvider(refreshService)),
+            trigger, progress, gate, NullLogger<AiringFullRefreshBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            progress.TryBegin();
+            trigger.Signal();
+            await TestSetupGates.LetItRunAsync();
+            Assert.Empty(refreshService.ForceRequests);
+            Assert.Equal(JobPhase.Running, progress.Snapshot.Phase);
+
+            await gate.MarkFinishedAsync();
+            await TestSetupGates.WaitForAsync(() => progress.Snapshot.Phase == JobPhase.Complete);
+            Assert.Equal([false], refreshService.ForceRequests);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
     private sealed class ThrowingEpisodeScheduleRefreshService : IEpisodeScheduleRefreshService
     {
-        public Task<List<int>> GetFullRefreshTargetsAsync(CancellationToken ct = default) =>
+        public Task<List<int>> GetFullRefreshTargetsAsync(bool force, CancellationToken ct = default) =>
             throw new HttpRequestException("AniList is unreachable");
 
-        public Task RefreshOneAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<RefreshManyResult> RefreshManyAsync(IReadOnlyList<int> animeIds, CancellationToken ct = default, Action<int>? onProgress = null) =>
+        public Task RefreshOneAsync(int animeId, bool relookupAbsent = false, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<RefreshBatchResult> RefreshBatchAsync(IReadOnlyList<int> animeIds, RefreshBatchOptions? options = null, CancellationToken ct = default) =>
             throw new NotImplementedException();
-        public Task BackfillAsync(CancellationToken ct = default) => throw new NotImplementedException();
+        public Task CatchUpAsync(CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<int>> GetTrackedAnimeIdsAsync(CancellationToken ct = default) => throw new NotImplementedException();
     }
 
-    private sealed class FakeEpisodeScheduleRefreshService(List<int> targets, RefreshManyResult result) : IEpisodeScheduleRefreshService
+    private sealed class FakeEpisodeScheduleRefreshService(List<int> targets, RefreshBatchResult result) : IEpisodeScheduleRefreshService
     {
-        public Task<List<int>> GetFullRefreshTargetsAsync(CancellationToken ct = default) => Task.FromResult(targets);
+        public List<bool> ForceRequests { get; } = [];
+        public List<RefreshBatchOptions?> BatchOptions { get; } = [];
 
-        public Task<RefreshManyResult> RefreshManyAsync(IReadOnlyList<int> animeIds, CancellationToken ct = default, Action<int>? onProgress = null) =>
-            Task.FromResult(result);
+        public Task<List<int>> GetFullRefreshTargetsAsync(bool force, CancellationToken ct = default)
+        {
+            ForceRequests.Add(force);
+            return Task.FromResult(targets);
+        }
 
-        public Task RefreshOneAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task BackfillAsync(CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<RefreshBatchResult> RefreshBatchAsync(IReadOnlyList<int> animeIds, RefreshBatchOptions? options = null, CancellationToken ct = default)
+        {
+            BatchOptions.Add(options);
+            foreach (var animeId in animeIds)
+                options?.OnAnimeDone?.Invoke(animeId, AiringRefreshOutcome.Fetched);
+            return Task.FromResult(result);
+        }
+
+        public Task RefreshOneAsync(int animeId, bool relookupAbsent = false, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task CatchUpAsync(CancellationToken ct = default) => throw new NotImplementedException();
         public Task<List<int>> GetTrackedAnimeIdsAsync(CancellationToken ct = default) => throw new NotImplementedException();
     }
 

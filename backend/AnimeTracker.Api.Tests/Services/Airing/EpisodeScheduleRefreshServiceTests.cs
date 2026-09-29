@@ -17,12 +17,9 @@ namespace AnimeTracker.Api.Tests.Services.Airing;
 // local calendar days and considering only episodes unaired as of now.
 public class EpisodeScheduleRefreshServiceTests
 {
-    private static AnimeTrackerDbContext CreateDb() =>
-        new(new DbContextOptionsBuilder<AnimeTrackerDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options);
+    private static AnimeTrackerDbContext CreateDb() => AiringRefreshTestKit.CreateDb();
 
-    private static readonly IBroadcastLocalTimeConverter LocalTime = new BroadcastLocalTimeConverter();
+    private static readonly IBroadcastLocalTimeConverter LocalTime = AiringRefreshTestKit.LocalTime;
 
     private static DateOnly TodayUtc => DateOnly.FromDateTime(DateTime.UtcNow);
 
@@ -32,7 +29,7 @@ public class EpisodeScheduleRefreshServiceTests
     private static DateTimeOffset AtNoonUtc(DateOnly date) => new(date.ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero);
 
     private static EpisodeScheduleRefreshService CreateService(
-        AnimeTrackerDbContext db, FakeAniListClient aniList, FakeEpisodeAiringRepository episodeAiringRepository) =>
+        AnimeTrackerDbContext db, FakeAniListClient aniList, InMemoryEpisodeAiringRepository episodeAiringRepository) =>
         new(
             db,
             new UserAnimeEntryRepository(db),
@@ -73,7 +70,7 @@ public class EpisodeScheduleRefreshServiceTests
         db.EpisodeAirings.Add(new EpisodeAiring { AnimeId = 1, Episode = 5, AirsAtUtc = oldAirsAt, FetchedAt = DateTimeOffset.UtcNow.AddDays(-1) });
         await db.SaveChangesAsync();
 
-        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
+        var episodeAiringRepository = new InMemoryEpisodeAiringRepository(db);
         var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([new AniListEpisode(5, newAirsAt)], "RELEASING", newAirsAt, null) };
         var service = CreateService(db, aniList, episodeAiringRepository);
 
@@ -96,7 +93,7 @@ public class EpisodeScheduleRefreshServiceTests
         db.EpisodeAirings.Add(new EpisodeAiring { AnimeId = 1, Episode = 5, AirsAtUtc = oldAirsAt, FetchedAt = DateTimeOffset.UtcNow.AddDays(-1) });
         await db.SaveChangesAsync();
 
-        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
+        var episodeAiringRepository = new InMemoryEpisodeAiringRepository(db);
         var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([new AniListEpisode(5, newAirsAt)], "RELEASING", newAirsAt, null) };
         var service = CreateService(db, aniList, episodeAiringRepository);
 
@@ -115,7 +112,7 @@ public class EpisodeScheduleRefreshServiceTests
         db.EpisodeAirings.Add(new EpisodeAiring { AnimeId = 1, Episode = 3, AirsAtUtc = oldAirsAt, FetchedAt = DateTimeOffset.UtcNow.AddDays(-1) });
         await db.SaveChangesAsync();
 
-        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
+        var episodeAiringRepository = new InMemoryEpisodeAiringRepository(db);
         var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([new AniListEpisode(3, newAirsAt)], "RELEASING", null, null) };
         var service = CreateService(db, aniList, episodeAiringRepository);
 
@@ -136,7 +133,7 @@ public class EpisodeScheduleRefreshServiceTests
             new EpisodeAiring { AnimeId = 1, Episode = 7, AirsAtUtc = AtNoonUtc(TodayUtc.AddDays(24)), FetchedAt = DateTimeOffset.UtcNow.AddDays(-1) });
         await db.SaveChangesAsync();
 
-        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
+        var episodeAiringRepository = new InMemoryEpisodeAiringRepository(db);
         var aniList = new FakeAniListClient
         {
             Schedule = new AniListScheduleResult(
@@ -162,38 +159,12 @@ public class EpisodeScheduleRefreshServiceTests
         using var db = CreateDb();
         await SeedAnimeAsync(db, 1, "not_yet_aired"); // no prior EpisodeAiring rows at all
 
-        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
+        var episodeAiringRepository = new InMemoryEpisodeAiringRepository(db);
         var newAirsAt = AtNoonUtc(TodayUtc.AddDays(10));
         var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([new AniListEpisode(1, newAirsAt)], "NOT_YET_RELEASED", newAirsAt, null) };
         var service = CreateService(db, aniList, episodeAiringRepository);
 
         await service.RefreshOneAsync(1);
-
-        Assert.Empty(await db.AnimeUpdates.ToListAsync());
-    }
-
-    [Fact]
-    public async Task TheBackfillPathOverAFinishedShowRecordsNothing()
-    {
-        using var db = CreateDb();
-        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", AiringStatus = "finished_airing" });
-        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Completed });
-        var oldAirsAt = AtNoonUtc(TodayUtc.AddDays(-400));
-        db.EpisodeAirings.Add(new EpisodeAiring { AnimeId = 1, Episode = 1, AirsAtUtc = oldAirsAt, FetchedAt = DateTimeOffset.UtcNow.AddDays(-30) });
-        // No AnimeAiringSync row yet: the backfill's first pass over this
-        // anime, exercising the AniList lookup branch too.
-        await db.SaveChangesAsync();
-
-        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
-        var newAirsAt = AtNoonUtc(TodayUtc.AddDays(-395)); // MAL/AniList tidying old history
-        var aniList = new FakeAniListClient
-        {
-            Lookup = new AniListMediaLookup(999, "FINISHED", null, [], null),
-            Schedule = new AniListScheduleResult([new AniListEpisode(1, newAirsAt)], "FINISHED", null, null),
-        };
-        var service = CreateService(db, aniList, episodeAiringRepository);
-
-        await service.BackfillAsync();
 
         Assert.Empty(await db.AnimeUpdates.ToListAsync());
     }
@@ -207,7 +178,7 @@ public class EpisodeScheduleRefreshServiceTests
         using var db = CreateDb();
         await SeedAnimeAsync(db, 1, "currently_airing"); // MalTotalEpisodes/TotalEpisodes both null
 
-        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
+        var episodeAiringRepository = new InMemoryEpisodeAiringRepository(db);
         var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([], "RELEASING", null, 12) };
         var service = CreateService(db, aniList, episodeAiringRepository);
 
@@ -231,7 +202,7 @@ public class EpisodeScheduleRefreshServiceTests
         anime.ResolveTotalEpisodes();
         await db.SaveChangesAsync();
 
-        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
+        var episodeAiringRepository = new InMemoryEpisodeAiringRepository(db);
         var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([], "RELEASING", null, 12) };
         var service = CreateService(db, aniList, episodeAiringRepository);
 
@@ -250,7 +221,7 @@ public class EpisodeScheduleRefreshServiceTests
         using var db = CreateDb();
         await SeedAnimeAsync(db, 1, "currently_airing");
 
-        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
+        var episodeAiringRepository = new InMemoryEpisodeAiringRepository(db);
         var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([], "RELEASING", null, 12) };
         var service = CreateService(db, aniList, episodeAiringRepository);
 
@@ -260,82 +231,108 @@ public class EpisodeScheduleRefreshServiceTests
         Assert.Single(await db.AnimeUpdates.ToListAsync());
     }
 
-    // report-partial-runs-and-mal-side-removals tasks 1.1-1.2 (design D1):
-    // RefreshManyAsync splits "no data" from "threw" instead of lumping both
-    // into one zeroRows count.
-    [Fact]
-    public async Task RefreshManyCountsNoDataAndFailedSeparately()
-    {
-        using var db = CreateDb();
-        await SeedAnimeAsync(db, 1, "currently_airing");
-        await SeedAnimeAsync(db, 2, "currently_airing");
-
-        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
-        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([], "RELEASING", null, null) };
-        aniList.ThrowForAniListId[902] = new HttpRequestException("AniList is unreachable"); // anime 2's cached AniListId (900 + animeId)
-        var service = CreateService(db, aniList, episodeAiringRepository);
-
-        var processed = new List<int>();
-        var result = await service.RefreshManyAsync([1, 2], onProgress: processed.Add);
-
-        Assert.Equal(1, result.NoData);
-        Assert.Equal(1, result.Failed);
-        Assert.Equal([1, 2], processed);
-    }
-
-    // HttpClient reports its own timeout as a TaskCanceledException while the
-    // caller's token is still live. It used to escape the per-anime catch and
-    // end the whole pass (and, through the hourly loop's catch, the loop too).
-    private static TaskCanceledException HttpClientTimeout() =>
-        new("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.", new TimeoutException());
+    // --- The first-fetch rule (anime-updates, "Writing ... for the first time SHALL
+    // record nothing"): an anime's first airing fetch, the one that gives it its
+    // airing-fetched mark, records no release and no move. ---
 
     [Fact]
-    public async Task RefreshManyCountsATimeoutAsFailedAndCarriesOn()
+    public async Task AFirstEverAniListFetchRecordsNoEpisodeCountRelease()
     {
         using var db = CreateDb();
-        await SeedAnimeAsync(db, 1, "currently_airing");
-        await SeedAnimeAsync(db, 2, "currently_airing");
+        await AiringRefreshTestKit.SeedAsync(db, 1); // no airing sync row: never looked up, no MAL total
+        var aniList = new ScriptedAniListClient();
+        aniList.Add(1, rows: 3, status: "RELEASING", episodes: 12);
 
-        var episodeAiringRepository = new FakeEpisodeAiringRepository(db);
-        var aniList = new FakeAniListClient { Schedule = new AniListScheduleResult([], "RELEASING", null, null) };
-        aniList.ThrowForAniListId[901] = HttpClientTimeout(); // anime 1's cached AniListId (900 + animeId)
-        var service = CreateService(db, aniList, episodeAiringRepository);
+        await AiringRefreshTestKit.CreateService(db, aniList).RefreshOneAsync(1);
 
-        var processed = new List<int>();
-        var result = await service.RefreshManyAsync([1, 2], onProgress: processed.Add);
-
-        Assert.Equal(1, result.Failed);
-        Assert.Equal(1, result.NoData); // anime 2 was still refreshed
-        Assert.Equal([1, 2], processed);
+        var anime = await db.AnimeMetadata.AsNoTracking().SingleAsync(a => a.Id == 1);
+        Assert.Equal(12, anime.TotalEpisodes); // the total is still stored,
+        Assert.Empty(await db.AnimeUpdates.ToListAsync()); // it is just not news
     }
 
     [Fact]
-    public async Task ABackfillTimeoutSkipsThatAnimeAndCarriesOn()
+    public async Task ALaterFetchThatFillsAnUnknownTotalIsNews()
     {
         using var db = CreateDb();
-        foreach (var animeId in new[] { 1, 2 })
+        await AiringRefreshTestKit.SeedAsync(db, 1, fetchedAgo: TimeSpan.FromDays(1), aniListId: 901); // already has its mark
+        var aniList = new ScriptedAniListClient();
+        aniList.Add(1, rows: 3, status: "RELEASING", episodes: 12);
+
+        await AiringRefreshTestKit.CreateService(db, aniList).RefreshOneAsync(1);
+
+        var update = Assert.Single(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal(AnimeUpdateKinds.EpisodeCountReleased, update.Kinds);
+    }
+
+    [Fact]
+    public async Task AFirstFetchRecordsNoMoveEvenWhenRowsAreAlreadyStored()
+    {
+        using var db = CreateDb();
+        await AiringRefreshTestKit.SeedAsync(db, 1); // rows below, but no airing-fetched mark
+        db.EpisodeAirings.Add(new EpisodeAiring
         {
-            // No AnimeAiringSync row: never fetched, so both are backfill targets.
-            db.AnimeMetadata.Add(new AnimeMetadata { Id = animeId, Title = $"Anime {animeId}", AiringStatus = "finished_airing" });
-            db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = animeId, Status = WatchStatus.Completed });
-        }
+            AnimeId = 1, Episode = 5, AirsAtUtc = AtNoonUtc(TodayUtc.AddDays(10)), FetchedAt = DateTimeOffset.UtcNow.AddDays(-1),
+        });
         await db.SaveChangesAsync();
+        var aniList = new ScriptedAniListClient();
+        var media = aniList.Add(1, status: "RELEASING");
+        media.Rows = [new AniListEpisode(5, AtNoonUtc(TodayUtc.AddDays(17)))];
 
-        var aniList = new FakeAniListClient
-        {
-            Lookup = new AniListMediaLookup(902, "FINISHED", null, [], 12),
-            Schedule = new AniListScheduleResult([], "FINISHED", null, 12),
-        };
-        aniList.ThrowForMalId[1] = HttpClientTimeout();
-        var service = CreateService(db, aniList, new FakeEpisodeAiringRepository(db));
+        await AiringRefreshTestKit.CreateService(db, aniList).RefreshOneAsync(1);
 
-        await service.BackfillAsync();
+        Assert.Empty(await db.AnimeUpdates.ToListAsync());
+    }
 
-        var fetched = await db.AnimeAiringSyncs.Where(s => s.LastFetchedAt != null).Select(s => s.AnimeId).ToListAsync();
-        Assert.Equal([2], fetched);
-        // Anime 1 is still unfetched, so the backfill is not marked complete
-        // and its next run retries it.
-        Assert.Null((await db.AiringRefreshStates.SingleOrDefaultAsync())?.BackfillCompletedAtUtc);
+    // --- episode-airing-data "AniList request pacing": an anime AniList doesn't
+    // know is looked up again by automatic refreshes only once its record is 90
+    // days old, and by a refresh started by hand at any age. ---
+
+    [Theory]
+    [InlineData(89, false)]
+    [InlineData(91, true)]
+    public async Task AnAnimeUnknownToAniListIsLookedUpAgainByAnAutomaticRefreshOnlyAfter90Days(int days, bool lookedUp)
+    {
+        using var db = CreateDb();
+        await AiringRefreshTestKit.SeedAsync(db, 1, "finished_airing", fetchedAgo: TimeSpan.FromDays(days), aniListId: null);
+        var aniList = new ScriptedAniListClient();
+        aniList.Add(1, rows: 2); // AniList knows it now
+
+        await AiringRefreshTestKit.CreateService(db, aniList).RefreshOneAsync(1);
+
+        Assert.Equal(lookedUp, aniList.SingleLookups.Count == 1);
+        var sync = await db.AnimeAiringSyncs.AsNoTracking().SingleAsync(s => s.AnimeId == 1);
+        Assert.Equal(lookedUp ? 901 : null, sync.AniListId);
+    }
+
+    [Fact]
+    public async Task ARefreshStartedByHandLooksAnUnknownAnimeUpAgainWhateverItsAge()
+    {
+        using var db = CreateDb();
+        await AiringRefreshTestKit.SeedAsync(db, 1, "finished_airing", fetchedAgo: TimeSpan.FromDays(2), aniListId: null);
+        var aniList = new ScriptedAniListClient();
+        aniList.Add(1, rows: 2);
+
+        await AiringRefreshTestKit.CreateService(db, aniList).RefreshOneAsync(1, relookupAbsent: true);
+
+        Assert.Equal([1], aniList.SingleLookups);
+        Assert.Equal(901, (await db.AnimeAiringSyncs.AsNoTracking().SingleAsync(s => s.AnimeId == 1)).AniListId);
+    }
+
+    [Fact]
+    public async Task AStillUnknownAnimeGetsAFreshRecordOfTheLookThatKeepsTheNext90DaysQuiet()
+    {
+        using var db = CreateDb();
+        await AiringRefreshTestKit.SeedAsync(db, 1, "finished_airing", fetchedAgo: TimeSpan.FromDays(120), aniListId: null);
+        var aniList = new ScriptedAniListClient(); // AniList still has nothing for MAL id 1
+        var service = AiringRefreshTestKit.CreateService(db, aniList);
+
+        await service.RefreshOneAsync(1);
+        await service.RefreshOneAsync(1);
+
+        Assert.Equal([1], aniList.SingleLookups); // the second call found the record fresh
+        var sync = await db.AnimeAiringSyncs.AsNoTracking().SingleAsync(s => s.AnimeId == 1);
+        Assert.Null(sync.AniListId);
+        Assert.InRange(sync.LastFetchedAt!.Value, DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow);
     }
 
     private sealed class FakeAniListClient : IAniListClient
@@ -354,36 +351,17 @@ public class EpisodeScheduleRefreshServiceTests
 
         public Task<IReadOnlyDictionary<int, AniListRelationsLookup>> GetRelationsBatchAsync(IReadOnlyList<int> malIds, CancellationToken ct = default) =>
             throw new NotImplementedException();
-    }
 
-    // Mirrors the real repository's replace-wholesale behaviour without a
-    // database transaction, which the in-memory provider doesn't support.
-    private sealed class FakeEpisodeAiringRepository(AnimeTrackerDbContext db) : IEpisodeAiringRepository
-    {
-        public Task<int?> GetMaxAiredEpisodeAsync(int animeId, DateTimeOffset asOfUtc, CancellationToken ct = default) =>
+        // These tests are about the single-anime path; the batched one is in
+        // EpisodeScheduleRefreshBatchTests, over a scripted client.
+        public Task<IReadOnlyDictionary<int, AniListMediaLookup>> LookupBatchByMalIdsAsync(IReadOnlyList<int> malIds, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
-        public Task<Dictionary<int, int>> GetMaxAiredEpisodesAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset asOfUtc, CancellationToken ct = default) =>
+        public Task<IReadOnlyDictionary<int, AniListMediaState>> GetMediaBatchAsync(IReadOnlyList<int> aniListIds, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
-        public Task<DateTimeOffset?> GetNextAiringInstantAsync(int animeId, DateTimeOffset afterUtc, CancellationToken ct = default) =>
+        public Task<IReadOnlyList<int>> GetAiringSchedulesAsync(
+            IReadOnlyList<int> aniListIds, Func<int, IReadOnlyList<AniListEpisode>, Task> onAnimeComplete, CancellationToken ct = default) =>
             throw new NotImplementedException();
-
-        public Task<Dictionary<int, DateTimeOffset>> GetNextAiringInstantsAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset afterUtc, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public Task<List<EpisodeAiring>> GetRowsInRangeAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
-            throw new NotImplementedException();
-
-        public async Task ReplaceForAnimeAsync(int animeId, IReadOnlyList<EpisodeAiring> rows, CancellationToken ct = default)
-        {
-            if (rows.Count == 0)
-                return;
-
-            var existing = await db.EpisodeAirings.Where(e => e.AnimeId == animeId).ToListAsync(ct);
-            db.EpisodeAirings.RemoveRange(existing);
-            db.EpisodeAirings.AddRange(rows);
-            await db.SaveChangesAsync(ct);
-        }
     }
 }

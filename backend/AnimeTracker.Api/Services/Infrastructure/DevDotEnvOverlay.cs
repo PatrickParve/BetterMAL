@@ -78,6 +78,10 @@ public static class DevDotEnvOverlay
             result["urls"] = $"http://localhost:{port}";
         }
 
+        var frontendPort = env.GetValueOrDefault("FRONTEND_PORT");
+        if (!string.IsNullOrEmpty(frontendPort))
+            result["Mal:FrontendPort"] = ParsePort(frontendPort, "FRONTEND_PORT").ToString();
+
         var database = env.GetValueOrDefault("POSTGRES_DB");
         var username = env.GetValueOrDefault("POSTGRES_USER");
         var password = env.GetValueOrDefault("POSTGRES_PASSWORD");

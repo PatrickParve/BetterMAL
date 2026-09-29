@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.WebUtilities;
 
 namespace AnimeTracker.Api.Services.Mal;
 
-public class MalClient(HttpClient http) : IMalClient
+public class MalClient(HttpClient http) : IMalClient, IMalSetupClient
 {
     // MAL uses snake_case field names throughout; this maps our PascalCase DTOs
     // without needing a [JsonPropertyName] on every property.
@@ -47,6 +47,14 @@ public class MalClient(HttpClient http) : IMalClient
     // list_status entirely and every imported entry looks like "plan to watch".
     private const string UserAnimeListFields = DefaultAnimeFields +
         ",list_status{status,score,num_episodes_watched,start_date,finish_date,num_times_rewatched}";
+
+    // What setup's list read asks for (first-run-setup design D7): the list status plus the
+    // detail-page fields a basic anime row carries, so a row built from this response holds
+    // genres, synopsis, episode duration and source without a details request. Verified
+    // against MyAnimeList on 2026-09-28: all four extra fields come back on every row. The
+    // post-setup import and reconciliation keep UserAnimeListFields, whose rows are
+    // full-fetched anyway.
+    public const string SetupListFields = UserAnimeListFields + ",genres,synopsis,average_episode_duration,source";
 
     public Task<MalPagedResponse<MalAnimeListEdge>> SearchAnimeAsync(string query, int limit = 5, CancellationToken ct = default) =>
         // nsfw=true — without it MAL silently omits R+/Rx-rated entries from
@@ -112,12 +120,39 @@ public class MalClient(HttpClient http) : IMalClient
         return GetAsync<MalAnimeNode>($"anime/{animeId}?fields={fieldsParam}", MalAuthMode.ClientId, ct);
     }
 
-    public Task<MalPagedResponse<MalUserAnimeListEdge>> GetUserAnimeListAsync(string? status = null, int limit = 100, int offset = 0, CancellationToken ct = default)
+    public Task<MalPagedResponse<MalUserAnimeListEdge>> GetUserAnimeListAsync(string? status = null, int limit = 100, int offset = 0, CancellationToken ct = default) =>
+        GetUserAnimeListPageAsync(UserAnimeListFields, status, limit, offset, ct);
+
+    private Task<MalPagedResponse<MalUserAnimeListEdge>> GetUserAnimeListPageAsync(
+        string fields, string? status, int limit, int offset, CancellationToken ct)
     {
-        var url = $"users/@me/animelist?fields={UserAnimeListFields}&nsfw=true&limit={limit}&offset={offset}";
+        var url = $"users/@me/animelist?fields={fields}&nsfw=true&limit={limit}&offset={offset}";
         if (!string.IsNullOrEmpty(status))
             url += $"&status={Uri.EscapeDataString(status)}";
         return GetAsync<MalPagedResponse<MalUserAnimeListEdge>>(url, MalAuthMode.Bearer, ct);
+    }
+
+    public async IAsyncEnumerable<List<MalUserAnimeListEdge>> GetUserAnimeListPagesAsync(
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var offset = 0;
+        while (true)
+        {
+            var page = await GetUserAnimeListPageAsync(SetupListFields, status: null, FullListPageSize, offset, ct);
+            yield return page.Data;
+
+            // The same stop rule as GetAllPagesAsync: no next link, or an empty page.
+            if (page.Paging?.Next is null || page.Data.Count == 0)
+                yield break;
+
+            offset = NextPageOffset(page.Paging.Next, offset);
+        }
+    }
+
+    public async Task<int?> GetUserAnimeCountAsync(CancellationToken ct = default)
+    {
+        var user = await GetAsync<MalUserResponse>("users/@me?fields=anime_statistics", MalAuthMode.Bearer, ct);
+        return user.AnimeStatistics?.NumItems;
     }
 
     /// <summary>Pages through the full my-list (import and reconciliation both

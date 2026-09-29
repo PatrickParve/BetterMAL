@@ -1,3 +1,5 @@
+using AnimeTracker.Api.Services.Setup;
+
 namespace AnimeTracker.Api.Services.Relations;
 
 /// <summary>Periodic tick that looks up AniList relations for anime holding
@@ -8,6 +10,7 @@ namespace AnimeTracker.Api.Services.Relations;
 /// of tick frequency.</summary>
 public class RelationAdjudicationBackgroundService(
     IServiceScopeFactory scopeFactory,
+    SetupGate setupGate,
     ILogger<RelationAdjudicationBackgroundService> logger) : BackgroundService
 {
     private static readonly TimeSpan TickInterval = TimeSpan.FromMinutes(10);
@@ -15,6 +18,10 @@ public class RelationAdjudicationBackgroundService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Its AniList lookups would share the pacer with setup's airing step, so
+        // the first pass waits for setup to finish (add-first-run-setup design D2).
+        await setupGate.WhenFinished.WaitAsync(stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try

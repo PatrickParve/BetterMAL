@@ -23,6 +23,7 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<EpisodeAiring> EpisodeAirings => Set<EpisodeAiring>();
     public DbSet<AnimeAiringSync> AnimeAiringSyncs => Set<AnimeAiringSync>();
     public DbSet<AiringRefreshState> AiringRefreshStates => Set<AiringRefreshState>();
+    public DbSet<SetupState> SetupStates => Set<SetupState>();
     public DbSet<AnimeRelatedAnime> AnimeRelatedAnime => Set<AnimeRelatedAnime>();
     public DbSet<Series> Series => Set<Series>();
     public DbSet<SeriesMember> SeriesMembers => Set<SeriesMember>();
@@ -139,6 +140,14 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
         modelBuilder.Entity<TopAnimeFetchLog>(entity =>
         {
             entity.HasKey(e => e.RankingType);
+        });
+
+        modelBuilder.Entity<SetupState>(entity =>
+        {
+            // The one row is always Id 1, written by the app (SetupGate) or by
+            // the migration that marks an existing install finished — never
+            // database-generated, so a second row can't appear.
+            entity.Property(e => e.Id).ValueGeneratedNever();
         });
 
         modelBuilder.Entity<EpisodeAiring>(entity =>

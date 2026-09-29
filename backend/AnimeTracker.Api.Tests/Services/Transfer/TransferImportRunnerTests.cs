@@ -115,6 +115,8 @@ public class TransferImportRunnerTests
 
     private sealed class FakeSeriesService(AnimeTrackerDbContext db) : ISeriesService
     {
+        public Task<SetupBuildOutcome> BuildForSetupAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
         public HashSet<int> Unbuildable { get; } = []; // GetSeriesAsync throws SeriesNotFoundException
         public HashSet<int> BuildFails { get; } = []; // GetSeriesAsync throws a different exception
         public Dictionary<int, Action> BuildActions { get; } = []; // what a successful build stores

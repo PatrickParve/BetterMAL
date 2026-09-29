@@ -2,6 +2,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Import;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Auth;
+using AnimeTracker.Api.Tests.Services.Setup;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -50,7 +51,7 @@ public class InitialImportBackgroundServiceTests
         var trigger = new ImportTrigger();
         var scopeFactory = new FakeServiceScopeFactory(importService, new FakeMalTokenStore(HealthyToken()));
         var service = new InitialImportBackgroundService(
-            scopeFactory, trigger, progress, NullLogger<InitialImportBackgroundService>.Instance,
+            scopeFactory, trigger, progress, TestSetupGates.Finished(), NullLogger<InitialImportBackgroundService>.Instance,
             Schedule(20, 25, 30, 35, 40));
 
         await service.StartAsync(CancellationToken.None);
@@ -91,7 +92,7 @@ public class InitialImportBackgroundServiceTests
         var trigger = new ImportTrigger();
         var scopeFactory = new FakeServiceScopeFactory(importService, new FakeMalTokenStore(HealthyToken()));
         var service = new InitialImportBackgroundService(
-            scopeFactory, trigger, progress, NullLogger<InitialImportBackgroundService>.Instance,
+            scopeFactory, trigger, progress, TestSetupGates.Finished(), NullLogger<InitialImportBackgroundService>.Instance,
             Schedule(20, 20, 20, 20, 20));
 
         await service.StartAsync(CancellationToken.None);
@@ -121,7 +122,7 @@ public class InitialImportBackgroundServiceTests
         // run within the test's bound, proving the sequence restarted at
         // the schedule's first entry rather than continuing to the second.
         var service = new InitialImportBackgroundService(
-            scopeFactory, trigger, progress, NullLogger<InitialImportBackgroundService>.Instance,
+            scopeFactory, trigger, progress, TestSetupGates.Finished(), NullLogger<InitialImportBackgroundService>.Instance,
             Schedule(20, 20_000));
 
         await service.StartAsync(CancellationToken.None);
@@ -152,7 +153,7 @@ public class InitialImportBackgroundServiceTests
         lostToken.ConnectionLostAt = DateTimeOffset.UtcNow;
         var scopeFactory = new FakeServiceScopeFactory(importService, new FakeMalTokenStore(lostToken));
         var service = new InitialImportBackgroundService(
-            scopeFactory, trigger, progress, NullLogger<InitialImportBackgroundService>.Instance,
+            scopeFactory, trigger, progress, TestSetupGates.Finished(), NullLogger<InitialImportBackgroundService>.Instance,
             Schedule(20, 20, 20, 20, 20));
 
         await service.StartAsync(CancellationToken.None);
@@ -184,7 +185,7 @@ public class InitialImportBackgroundServiceTests
         var trigger = new ImportTrigger();
         var scopeFactory = new FakeServiceScopeFactory(importService, new FakeMalTokenStore(HealthyToken()));
         var service = new InitialImportBackgroundService(
-            scopeFactory, trigger, progress, NullLogger<InitialImportBackgroundService>.Instance,
+            scopeFactory, trigger, progress, TestSetupGates.Finished(), NullLogger<InitialImportBackgroundService>.Instance,
             Schedule(20, 20, 20, 20, 20));
 
         await service.StartAsync(CancellationToken.None);
@@ -210,7 +211,7 @@ public class InitialImportBackgroundServiceTests
         var trigger = new ImportTrigger();
         var scopeFactory = new FakeServiceScopeFactory(importService, new FakeMalTokenStore(HealthyToken()));
         var service = new InitialImportBackgroundService(
-            scopeFactory, trigger, progress, NullLogger<InitialImportBackgroundService>.Instance,
+            scopeFactory, trigger, progress, TestSetupGates.Finished(), NullLogger<InitialImportBackgroundService>.Instance,
             Schedule(30)); // a single retry, so the schedule is exhausted right after it
 
         await service.StartAsync(CancellationToken.None);
@@ -226,6 +227,107 @@ public class InitialImportBackgroundServiceTests
             await Task.Delay(100, CancellationToken.None); // the schedule is now exhausted
             Assert.Null(progress.Snapshot.RetryAt);
             Assert.Equal(2, importService.CallCount);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    // A run that finds nothing missing, so no retry follows it and the call counts
+    // below are only the runs the service chose to make.
+    private static FakeInitialImportService CleanRunningImportService(ListImportProgress progress) =>
+        new(progress)
+        {
+            OnRun = _ =>
+            {
+                progress.BeginRun(visibleFromStart: false);
+                progress.EndWithoutWork();
+                return Task.CompletedTask;
+            },
+        };
+
+    // initial-import delta, "The import runs at every start": a finished install
+    // has no gate to wait at, so it signals itself as it always has.
+    [Fact]
+    public async Task OnAFinishedInstallTheImportRunsAtStart()
+    {
+        var progress = new ListImportProgress();
+        var importService = CleanRunningImportService(progress);
+        var scopeFactory = new FakeServiceScopeFactory(importService, new FakeMalTokenStore(HealthyToken()));
+        var service = new InitialImportBackgroundService(
+            scopeFactory, new ImportTrigger(), progress, TestSetupGates.Finished(), NullLogger<InitialImportBackgroundService>.Instance,
+            Schedule(20));
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitForCallCountAsync(importService, 1, TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    // initial-import delta, "No run during setup" and "No second read right after
+    // setup": nothing runs while the gate is open, setup has just read the list when
+    // it closes so the at-start signal is skipped, and a later re-authorization still
+    // runs it.
+    [Fact]
+    public async Task NoImportRunsDuringSetupNorRightAfterIt_ButAReAuthorizationStillRunsIt()
+    {
+        var progress = new ListImportProgress();
+        var importService = CleanRunningImportService(progress);
+        var trigger = new ImportTrigger();
+        var gate = TestSetupGates.Unfinished();
+        var scopeFactory = new FakeServiceScopeFactory(importService, new FakeMalTokenStore(HealthyToken()));
+        var service = new InitialImportBackgroundService(
+            scopeFactory, trigger, progress, gate, NullLogger<InitialImportBackgroundService>.Instance,
+            Schedule(20));
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await TestSetupGates.LetItRunAsync();
+            Assert.Equal(0, importService.CallCount); // setup reads the list
+
+            await gate.MarkFinishedAsync();
+            await TestSetupGates.LetItRunAsync();
+            Assert.Equal(0, importService.CallCount); // setup has just read it
+
+            trigger.Signal(); // a re-authorization
+            await WaitForCallCountAsync(importService, 1, TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    // The wait is what holds the import, not only the skipped at-start signal: a
+    // signal that reaches it while setup is unfinished does not run it early.
+    [Fact]
+    public async Task ASignalDuringSetupWaitsForTheGate()
+    {
+        var progress = new ListImportProgress();
+        var importService = CleanRunningImportService(progress);
+        var trigger = new ImportTrigger();
+        var gate = TestSetupGates.Unfinished();
+        var scopeFactory = new FakeServiceScopeFactory(importService, new FakeMalTokenStore(HealthyToken()));
+        var service = new InitialImportBackgroundService(
+            scopeFactory, trigger, progress, gate, NullLogger<InitialImportBackgroundService>.Instance,
+            Schedule(20));
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            trigger.Signal();
+            await TestSetupGates.LetItRunAsync();
+            Assert.Equal(0, importService.CallCount);
+
+            await gate.MarkFinishedAsync();
+            await WaitForCallCountAsync(importService, 1, TimeSpan.FromSeconds(5));
         }
         finally
         {

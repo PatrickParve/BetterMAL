@@ -36,7 +36,9 @@ public class MetadataRefreshController(
         // metadata, and previously stored airing rows are left intact.
         try
         {
-            await airingRefreshService.RefreshOneAsync(animeId, ct);
+            // By hand, so an anime AniList was recorded as not knowing is looked
+            // up again whatever the age of that record.
+            await airingRefreshService.RefreshOneAsync(animeId, relookupAbsent: true, ct);
         }
         catch (Exception ex)
         {

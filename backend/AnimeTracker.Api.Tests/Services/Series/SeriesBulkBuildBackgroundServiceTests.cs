@@ -4,6 +4,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Tmdb;
+using AnimeTracker.Api.Tests.Services.Setup;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -39,7 +40,7 @@ public class SeriesBulkBuildBackgroundServiceTests
             new FakeServiceScopeFactory(new FakeServiceProvider(db, new FakeUserAnimeEntryRepository(entries), seriesService)),
             trigger,
             tracker,
-            NullLogger<SeriesBulkBuildBackgroundService>.Instance);
+            TestSetupGates.Finished(), NullLogger<SeriesBulkBuildBackgroundService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
         try
@@ -263,7 +264,7 @@ public class SeriesBulkBuildBackgroundServiceTests
             new FakeServiceScopeFactory(new FakeServiceProvider(db, new ThrowingUserAnimeEntryRepository(), new FakeSeriesService())),
             trigger,
             tracker,
-            NullLogger<SeriesBulkBuildBackgroundService>.Instance);
+            TestSetupGates.Finished(), NullLogger<SeriesBulkBuildBackgroundService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
         try
@@ -319,8 +320,46 @@ public class SeriesBulkBuildBackgroundServiceTests
         Assert.Equal(2, tracker.Snapshot.Done);
     }
 
+    // add-first-run-setup design D2: the API refuses the button until setup has
+    // finished, and setup's own series step does this job's work; a signal that
+    // arrived anyway does not start the job early.
+    [Fact]
+    public async Task NoBuildRunsUntilSetupHasFinished_ThenTheSignalledRunStarts()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        var seriesService = new FakeSeriesService();
+        var trigger = new SeriesBulkBuildTrigger();
+        var tracker = new SeriesBulkBuildProgress();
+        var gate = TestSetupGates.Unfinished();
+        var service = new SeriesBulkBuildBackgroundService(
+            new FakeServiceScopeFactory(new FakeServiceProvider(db, new FakeUserAnimeEntryRepository([Entry(1)]), seriesService)),
+            trigger, tracker, gate, NullLogger<SeriesBulkBuildBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            tracker.TryBegin();
+            trigger.Signal();
+            await TestSetupGates.LetItRunAsync();
+            Assert.Empty(seriesService.CalledFor);
+            Assert.Equal(JobPhase.Running, tracker.Snapshot.Phase);
+
+            await gate.MarkFinishedAsync();
+            await TestSetupGates.WaitForAsync(() => tracker.Snapshot.Phase == JobPhase.Complete);
+            Assert.Equal([1], seriesService.CalledFor);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
     private sealed class FakeSeriesService : ISeriesService
     {
+        public Task<SetupBuildOutcome> BuildForSetupAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
         private readonly Dictionary<int, Action> _onCall = new();
         public List<int> CalledFor { get; } = [];
 

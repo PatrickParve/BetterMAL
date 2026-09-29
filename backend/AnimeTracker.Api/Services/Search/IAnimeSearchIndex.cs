@@ -21,7 +21,8 @@ public interface IAnimeSearchIndex
     /// the seven writers listed in the <c>cache-type-ahead-search-index</c>
     /// change's proposal: <c>TopAnimeService</c>, <c>SeasonBrowseService</c>,
     /// <c>ReconciliationService</c>, <c>InitialImportService</c>,
-    /// <c>MetadataRefreshService</c> (two methods), and
-    /// <c>ArtworkSelectionService</c> (three methods).</summary>
+    /// <c>MetadataRefreshService</c> (two methods),
+    /// <c>ArtworkSelectionService</c> (three methods), and first-run setup's
+    /// list and details steps (<c>SetupListStep</c>, <c>SetupDetailsStep</c>).</summary>
     void Invalidate();
 }

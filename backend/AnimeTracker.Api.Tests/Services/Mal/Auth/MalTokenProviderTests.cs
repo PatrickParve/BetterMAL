@@ -234,7 +234,7 @@ public class MalTokenProviderTests
         public string? LastRefreshToken { get; private set; }
 
         public string BuildAuthorizeUrl() => throw new NotImplementedException();
-        public Task<OAuthToken> HandleCallbackAsync(string code, string state, CancellationToken ct = default) =>
+        public Task<MalCallbackResult> HandleCallbackAsync(string code, string state, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
         public async Task<MalRefreshResult> RefreshAsync(string refreshToken, CancellationToken ct = default)

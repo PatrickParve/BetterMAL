@@ -6,6 +6,7 @@ using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Transfer;
 using AnimeTracker.Api.Tests.Services.Tmdb;
+using AnimeTracker.Api.Tests.Services.Setup;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -33,7 +34,7 @@ public class TransferImportBackgroundServiceTests
             new FakeServiceScopeFactory(new FakeServiceProvider()),
             trigger,
             tracker,
-            NullLogger<TransferImportBackgroundService>.Instance);
+            TestSetupGates.Finished(), NullLogger<TransferImportBackgroundService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
         try
@@ -63,7 +64,7 @@ public class TransferImportBackgroundServiceTests
             new FakeServiceScopeFactory(new FakeServiceProvider()),
             trigger,
             tracker,
-            NullLogger<TransferImportBackgroundService>.Instance);
+            TestSetupGates.Finished(), NullLogger<TransferImportBackgroundService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
         try
@@ -77,6 +78,38 @@ public class TransferImportBackgroundServiceTests
             Assert.Equal(TransferImportPhase.Failed, tracker.Snapshot.Phase);
 
             Assert.True(trigger.TryOffer(File())); // the slot was released, so a new offer succeeds
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    // add-first-run-setup design D2: the API refuses an upload until setup has
+    // finished; an offer that arrived anyway is held, not dropped, and runs once
+    // setup has finished.
+    [Fact]
+    public async Task NoImportRunsUntilSetupHasFinished_ThenTheOfferedFileRuns()
+    {
+        var trigger = new TransferImportTrigger();
+        var tracker = new TransferImportProgressTracker();
+        var gate = TestSetupGates.Unfinished();
+        var service = new TransferImportBackgroundService(
+            new FakeServiceScopeFactory(new FakeServiceProvider()),
+            trigger, tracker, gate, NullLogger<TransferImportBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            tracker.MarkPending("Device", DateTimeOffset.UtcNow);
+            Assert.True(trigger.TryOffer(File()));
+            await TestSetupGates.LetItRunAsync();
+            Assert.NotEqual(TransferImportPhase.Failed, tracker.Snapshot.Phase);
+            Assert.False(trigger.TryOffer(File())); // the file is still held, so the slot is taken
+
+            await gate.MarkFinishedAsync();
+            await TestSetupGates.WaitForAsync(() => tracker.Snapshot.Phase == TransferImportPhase.Failed);
+            Assert.True(trigger.TryOffer(File())); // ran (this fake runner always fails), and released the slot
         }
         finally
         {
@@ -135,6 +168,8 @@ public class TransferImportBackgroundServiceTests
 
     private sealed class UnusedSeriesService : ISeriesService
     {
+        public Task<SetupBuildOutcome> BuildForSetupAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
         public Task<SeriesDto> GetSeriesAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<SeriesDto> RebuildSeriesAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<int?> FindSeriesIdAsync(int animeId, CancellationToken ct = default) => throw new NotImplementedException();

@@ -4,14 +4,15 @@ using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.IdMapping;
 using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Season;
+using AnimeTracker.Api.Services.Setup;
 using AnimeTracker.Api.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Airing;
 
 /// <summary>Hourly tick that evaluates due airing-refresh work rather than
-/// running on a fixed interval: the one-time full-history backfill, the daily
-/// refresh pass for tracked anime, out-of-band rechecks for anime with
+/// running on a fixed interval: the catch-up fetch for list anime with no airing
+/// data yet, the daily refresh pass for tracked anime, out-of-band rechecks for anime with
 /// incomplete data, and a forced pass at a season-quarter boundary. Runs
 /// immediately on start — boot isn't special-cased; the daily pass's
 /// not-already-today condition is what makes a boot-after-being-stopped
@@ -20,9 +21,18 @@ namespace AnimeTracker.Api.Services.Airing;
 /// id-mapping sync (design.md D2), then the deletion of cached TMDB image sets
 /// that have outlived what TMDB's terms allow (design.md D20). A failed save in
 /// one can't leave tracked entities behind for the others' saves, and none of
-/// them can stop another.</summary>
+/// them can stop another.
+/// <para>The airing tick itself waits for first-run setup (add-first-run-setup
+/// design D2): until <see cref="SetupGate.IsFinished"/> it does nothing, since it
+/// would compete with setup's own airing step for AniList. The two housekeeping
+/// steps touch neither MAL nor AniList, so they keep running. While setup's
+/// leftover airing work is still draining in this process
+/// (<see cref="ISetupCoordinator.IsDraining"/>) the catch-up skips its turn, so no
+/// anime is fetched twice at once; the daily pass and the rechecks are untouched.</para></summary>
 public class EpisodeScheduleRefreshBackgroundService(
     IServiceScopeFactory scopeFactory,
+    SetupGate setupGate,
+    ISetupCoordinator setupCoordinator,
     ILogger<EpisodeScheduleRefreshBackgroundService> logger) : BackgroundService
 {
     private static readonly TimeSpan TickInterval = TimeSpan.FromHours(1);
@@ -65,12 +75,17 @@ public class EpisodeScheduleRefreshBackgroundService(
     /// (`InternalsVisibleTo`).</summary>
     internal async Task RunIterationAsync(CancellationToken ct)
     {
-        // First, so the once-ever AniList backfill (potentially tens of
-        // minutes) can't hold up the weekly sync or the purge. The sync itself
+        // First, so the AniList fetch for anime with no airing data
+        // (potentially tens of minutes) can't hold up the weekly sync or the purge. The sync itself
         // is one download and one diff-write; the purge is three reads and,
         // nearly always, no write.
         await RunMappingSyncAsync(ct);
         await RunTmdbCachePurgeAsync(ct);
+
+        // Setup's own airing step fetches until it finishes. This tick begins on
+        // its next iteration after that, without a restart.
+        if (!setupGate.IsFinished)
+            return;
 
         using var scope = scopeFactory.CreateScope();
         await RunTickAsync(scope.ServiceProvider, ct);
@@ -119,7 +134,7 @@ public class EpisodeScheduleRefreshBackgroundService(
         }
     }
 
-    private static async Task RunTickAsync(IServiceProvider services, CancellationToken ct)
+    private async Task RunTickAsync(IServiceProvider services, CancellationToken ct)
     {
         var db = services.GetRequiredService<AnimeTrackerDbContext>();
         var refreshService = services.GetRequiredService<IEpisodeScheduleRefreshService>();
@@ -135,9 +150,12 @@ public class EpisodeScheduleRefreshBackgroundService(
             await db.SaveChangesAsync(ct);
         }
 
-        // Backfill first, once ever.
-        if (state.BackfillCompletedAtUtc is null)
-            await refreshService.BackfillAsync(ct);
+        // Every tick, not once ever: it fetches the list anime that have no
+        // airing-fetched mark, which is empty work when there are none. Not while
+        // setup's leftover airing work is still draining in this process, which is
+        // fetching those same anime.
+        if (!setupCoordinator.IsDraining)
+            await refreshService.CatchUpAsync(ct);
 
         var now = DateTimeOffset.UtcNow;
         var today = localTimeConverter.GetLocalDate(now);
@@ -154,7 +172,7 @@ public class EpisodeScheduleRefreshBackgroundService(
         {
             var targets = await refreshService.GetTrackedAnimeIdsAsync(ct);
             passCoverage.UnionWith(targets);
-            await refreshService.RefreshManyAsync(targets, ct);
+            await refreshService.RefreshBatchAsync(targets, ct: ct);
 
             state.LastSuccessfulPassAtUtc = now;
             state.LastPassSeason = currentSeasonKey;
@@ -169,7 +187,7 @@ public class EpisodeScheduleRefreshBackgroundService(
             .ToListAsync(ct);
         var uncovered = dueRechecks.Where(id => !passCoverage.Contains(id)).ToList();
         if (uncovered.Count > 0)
-            await refreshService.RefreshManyAsync(uncovered, ct);
+            await refreshService.RefreshBatchAsync(uncovered, ct: ct);
 
         // design.md D6 backstop: without this, an entry for a show nobody
         // opens would never have its status settled — reopened, or completed

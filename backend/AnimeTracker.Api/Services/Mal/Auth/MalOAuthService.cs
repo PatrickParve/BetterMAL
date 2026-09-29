@@ -37,11 +37,15 @@ public class MalOAuthService(
         return $"{AuthorizeEndpoint}?{queryString}";
     }
 
-    public async Task<OAuthToken> HandleCallbackAsync(string code, string state, CancellationToken ct = default)
+    public async Task<MalCallbackResult> HandleCallbackAsync(string code, string state, CancellationToken ct = default)
     {
-        var verifier = stateStore.ConsumeVerifier(state)
-            ?? throw new InvalidOperationException(
+        var verifier = stateStore.ConsumeVerifier(state);
+        if (verifier is null)
+        {
+            logger.LogWarning(
                 "MAL OAuth callback state is missing, expired, or does not match the pending authorization request.");
+            return new MalCallbackResult.StateRejected();
+        }
 
         var opts = options.Value;
         var form = new Dictionary<string, string>
@@ -54,7 +58,7 @@ public class MalOAuthService(
             ["redirect_uri"] = RedirectUri(opts),
         };
 
-        return await ExchangeAsync(form, ct);
+        return new MalCallbackResult.Completed(await ExchangeAsync(form, ct));
     }
 
     public async Task<MalRefreshResult> RefreshAsync(string refreshToken, CancellationToken ct = default)

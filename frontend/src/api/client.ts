@@ -14,7 +14,6 @@ import type {
   HeldDecisionJobDto,
   JobStatusDto,
   MainDashboardDto,
-  MalAuthStatus,
   MyListItemDto,
   PendingReconciliationDiffDto,
   ProfileDto,
@@ -31,6 +30,7 @@ import type {
   SeriesListDto,
   SeriesLookupResult,
   SeriesTmdbPicturesDto,
+  SetupStatusDto,
   TimeSpentSeriesSectionDto,
   TopAnimeItemDto,
   TopAnimeMediaType,
@@ -144,8 +144,19 @@ async function fetchVoid(input: string, init?: RequestInit): Promise<void> {
   if (!res.ok) throw new ApiError(input, res.status, await readErrorReason(res))
 }
 
-export function getMalAuthStatus(): Promise<MalAuthStatus> {
-  return fetchJson<MalAuthStatus>('/api/mal-auth/status')
+// The first-run setup's whole state (first-run-setup design.md D17): the gate
+// App.tsx reads, the setup screen's 1 s poll, and Settings' Library data entry.
+// Answered while setup runs (the backend's API gate allow-lists it), and cheap:
+// it makes no outside call.
+export function getSetupStatus(): Promise<SetupStatusDto> {
+  return fetchJson<SetupStatusDto>('/api/setup/status')
+}
+
+// Retry now (first-run-setup "Retry now"): makes every waiting anime and every
+// paused queue due at once. Leaves a throttle wait alone, since the service asked
+// for it.
+export function retrySetupNow(): Promise<void> {
+  return fetchVoid('/api/setup/retry-now', { method: 'POST' })
 }
 
 // One cheap read of every job's state, the MyAnimeList connection state, the
@@ -590,10 +601,14 @@ export function declineAllHeldChanges(): Promise<HeldDecisionJobDto> {
 }
 
 // Manual "refresh all airing data" (settings page): kicks off a background
-// run, paced through AniList's rate limit and skipping finished shows already
-// fetched before.
-export function triggerAiringFullRefresh(): Promise<JobStatusDto> {
-  return fetchJson<JobStatusDto>('/api/airing/refresh-all', { method: 'POST' })
+// run, paced through AniList's rate limit and skipping finished shows whose
+// stored episodes already reach their episode count. `force` is Force all: skips
+// nothing and looks every anime up again. Both are the one job, so a second
+// press of either while it runs gets the running job back.
+export function triggerAiringFullRefresh(force = false): Promise<JobStatusDto> {
+  return fetchJson<JobStatusDto>(force ? '/api/airing/refresh-all?force=true' : '/api/airing/refresh-all', {
+    method: 'POST',
+  })
 }
 
 // Manual "build all series from my list" (settings page): kicks off a

@@ -114,7 +114,7 @@ public class UserAnimeEntryEditService(
             syncScheduler.ScheduleSync(animeId);
 
         // Fire-and-forget: any anime just added gets its episode history
-        // fetched now rather than waiting for the backfill, without delaying
+        // fetched now rather than waiting for the hourly catch-up, without delaying
         // this response on an AniList round-trip.
         if (isNew)
             airingRefreshTrigger.Enqueue(animeId);

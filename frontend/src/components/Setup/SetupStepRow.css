@@ -1,0 +1,83 @@
+/* The four setup steps (first-run-setup "The setup screen shows each step's progress"),
+   shared by the setup screen and Settings' Library data entry. The bar itself is the
+   shared JobProgressTrack; this is the wording around it. */
+.setup-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.setup-step {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.setup-step__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.setup-step__title {
+  color: var(--text-h);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* The state reads as a word, and takes its colour from the phase, so a done, a paused
+   and a running step tell apart at a glance and not only by the word. */
+.setup-step__state {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.setup-step--running .setup-step__state {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.setup-step--done .setup-step__state {
+  color: var(--status-watching);
+  opacity: 1;
+}
+
+.setup-step--paused .setup-step__state {
+  color: var(--status-onhold);
+  opacity: 1;
+}
+
+.setup-step--paused .job-progress-track__fill {
+  background: var(--status-onhold);
+}
+
+.setup-step--done .job-progress-track__fill {
+  background: var(--status-watching);
+}
+
+.setup-step--waiting .job-progress-track {
+  opacity: 0.7;
+}
+
+.setup-step__counts,
+.setup-step__note {
+  margin: 0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.setup-step__counts {
+  color: var(--text-h);
+}
+
+.setup-step__note {
+  color: var(--text);
+  opacity: 0.8;
+}

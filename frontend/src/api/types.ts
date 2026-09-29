@@ -15,6 +15,69 @@ export type HealthStatus = {
   status: string
 }
 
+// GET api/setup/status (first-run-setup design.md D17), mirroring backend
+// Services/Setup/SetupStatusDto.cs: what the setup screen and Settings' Library
+// data entry both read. Enums arrive as strings.
+export type SetupStepPhase = 'Waiting' | 'Running' | 'Paused' | 'Done'
+
+export type SetupWaitingRetryDto = {
+  count: number
+  nextAt: string
+}
+
+// total is null while the step doesn't know it yet (the list read, before
+// MyAnimeList has said how long the list is). etaSeconds is null until the step
+// has made enough progress to estimate from, and while it is paused or throttled.
+export type SetupStepDto = {
+  phase: SetupStepPhase
+  done: number
+  total: number | null
+  etaSeconds: number | null
+  waitingRetry: SetupWaitingRetryDto | null
+}
+
+export type SetupStepsDto = {
+  list: SetupStepDto
+  details: SetupStepDto
+  series: SetupStepDto
+  airing: SetupStepDto
+}
+
+export type SetupServiceDto = {
+  name: 'MyAnimeList' | 'AniList'
+  down: boolean
+  nextTryAt: string | null
+  throttledUntil: string | null
+}
+
+export type SetupSkipReason = 'NotOnMal' | 'UnrecognizedStatus'
+
+export type SetupSkippedDto = {
+  animeId: number
+  title: string
+  reason: SetupSkipReason
+  malStatus: string | null
+}
+
+export type SetupStatusDto = {
+  finished: boolean
+  // The .env names (MAL_CLIENT_ID, MAL_CLIENT_SECRET) with no value.
+  missingCredentials: string[]
+  connection: MalAuthStatus
+  waitingForReconnect: boolean
+  steps: SetupStepsDto
+  // The airing priority set (airing now, this and next season, last season):
+  // Home opens once it is done, and the rest of the step carries on after.
+  airingPriority: { done: number; total: number }
+  airingDraining: boolean
+  services: SetupServiceDto[]
+  skipped: SetupSkippedDto[]
+}
+
+// The failure the OAuth callback carries back in ?connectError= (backend
+// MalAuthController.ReturnToApp): a short code, never MyAnimeList's own text.
+export type ConnectError = 'denied' | 'expired' | 'failed'
+
 export type UserAnimeEntryDto = {
   animeId: number
   status: WatchStatus

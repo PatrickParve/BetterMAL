@@ -9,6 +9,7 @@ using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Updates;
 using AnimeTracker.Api.Tests.Services.Search;
+using AnimeTracker.Api.Tests.Services.Setup;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -81,7 +82,7 @@ public class MetadataRefreshBackgroundServiceTests
         foreach (var id in new[] { 100, 1, 2, 3, 4, 5 })
             malClient.Failures[id] = noResponse;
 
-        var service = new MetadataRefreshBackgroundService(new FakeServiceScopeFactory(options, malClient), NullLogger<MetadataRefreshBackgroundService>.Instance);
+        var service = new MetadataRefreshBackgroundService(new FakeServiceScopeFactory(options, malClient), TestSetupGates.Finished(), NullLogger<MetadataRefreshBackgroundService>.Instance);
         var today = DateOnly.FromDateTime(now.UtcDateTime);
 
         await service.RunPassAsync(today, CancellationToken.None);
@@ -113,7 +114,7 @@ public class MetadataRefreshBackgroundServiceTests
         for (var id = 2; id <= 5; id++)
             malClient.Responses[id] = DetailNode(id);
 
-        var service = new MetadataRefreshBackgroundService(new FakeServiceScopeFactory(options, malClient), NullLogger<MetadataRefreshBackgroundService>.Instance);
+        var service = new MetadataRefreshBackgroundService(new FakeServiceScopeFactory(options, malClient), TestSetupGates.Finished(), NullLogger<MetadataRefreshBackgroundService>.Instance);
         var today = DateOnly.FromDateTime(now.UtcDateTime);
 
         await service.RunPassAsync(today, CancellationToken.None); // pass 1: only anime 1
@@ -143,7 +144,7 @@ public class MetadataRefreshBackgroundServiceTests
         for (var id = 2; id <= 5; id++)
             malClient.Responses[id] = DetailNode(id);
 
-        var service = new MetadataRefreshBackgroundService(new FakeServiceScopeFactory(options, malClient), NullLogger<MetadataRefreshBackgroundService>.Instance);
+        var service = new MetadataRefreshBackgroundService(new FakeServiceScopeFactory(options, malClient), TestSetupGates.Finished(), NullLogger<MetadataRefreshBackgroundService>.Instance);
         var today = DateOnly.FromDateTime(now.UtcDateTime);
 
         await service.RunPassAsync(today, CancellationToken.None); // pass 1: 1 fails, ends the pass
@@ -181,7 +182,7 @@ public class MetadataRefreshBackgroundServiceTests
         malClient.Responses[1] = DetailNode(1);
         malClient.Failures[2] = new HttpRequestException("failed", null, HttpStatusCode.ServiceUnavailable);
 
-        var service = new MetadataRefreshBackgroundService(new FakeServiceScopeFactory(options, malClient), NullLogger<MetadataRefreshBackgroundService>.Instance);
+        var service = new MetadataRefreshBackgroundService(new FakeServiceScopeFactory(options, malClient), TestSetupGates.Finished(), NullLogger<MetadataRefreshBackgroundService>.Instance);
 
         await service.RunPassAsync(DateOnly.FromDateTime(now.UtcDateTime), CancellationToken.None);
 
@@ -206,7 +207,7 @@ public class MetadataRefreshBackgroundServiceTests
         malClient.Failures[100] = new HttpRequestException("failed", null, HttpStatusCode.ServiceUnavailable);
         malClient.Responses[1] = DetailNode(1); // would succeed if the batch ever ran
 
-        var service = new MetadataRefreshBackgroundService(new FakeServiceScopeFactory(options, malClient), NullLogger<MetadataRefreshBackgroundService>.Instance);
+        var service = new MetadataRefreshBackgroundService(new FakeServiceScopeFactory(options, malClient), TestSetupGates.Finished(), NullLogger<MetadataRefreshBackgroundService>.Instance);
 
         await service.RunPassAsync(DateOnly.FromDateTime(now.UtcDateTime), CancellationToken.None);
 
@@ -230,7 +231,7 @@ public class MetadataRefreshBackgroundServiceTests
         foreach (var id in new[] { 1, 2, 4, 5 })
             malClient.Responses[id] = DetailNode(id); // no relations: nothing for a second pass to resolve
 
-        var service = new MetadataRefreshBackgroundService(new FakeServiceScopeFactory(options, malClient), NullLogger<MetadataRefreshBackgroundService>.Instance);
+        var service = new MetadataRefreshBackgroundService(new FakeServiceScopeFactory(options, malClient), TestSetupGates.Finished(), NullLogger<MetadataRefreshBackgroundService>.Instance);
         var today = DateOnly.FromDateTime(now.UtcDateTime);
 
         await service.RunPassAsync(today, CancellationToken.None);
@@ -264,7 +265,7 @@ public class MetadataRefreshBackgroundServiceTests
         for (var id = 1; id <= 21; id++)
             malClient.Failures[id] = new HttpRequestException("bad request", null, HttpStatusCode.BadRequest);
 
-        var service = new MetadataRefreshBackgroundService(new FakeServiceScopeFactory(options, malClient), NullLogger<MetadataRefreshBackgroundService>.Instance);
+        var service = new MetadataRefreshBackgroundService(new FakeServiceScopeFactory(options, malClient), TestSetupGates.Finished(), NullLogger<MetadataRefreshBackgroundService>.Instance);
         var today = DateOnly.FromDateTime(now.UtcDateTime);
 
         while (service.CallsThisWindow < MetadataRefreshBackgroundService.NightlyCap)
@@ -301,7 +302,7 @@ public class MetadataRefreshBackgroundServiceTests
 
         var searchIndex = new FakeAnimeSearchIndex();
         var service = new MetadataRefreshBackgroundService(
-            new FakeServiceScopeFactory(options, malClient, searchIndex), NullLogger<MetadataRefreshBackgroundService>.Instance);
+            new FakeServiceScopeFactory(options, malClient, searchIndex), TestSetupGates.Finished(), NullLogger<MetadataRefreshBackgroundService>.Instance);
 
         await service.RunPassAsync(DateOnly.FromDateTime(now.UtcDateTime), CancellationToken.None);
 
@@ -320,11 +321,47 @@ public class MetadataRefreshBackgroundServiceTests
         var malClient = new FakeMalClient();
         var searchIndex = new FakeAnimeSearchIndex();
         var service = new MetadataRefreshBackgroundService(
-            new FakeServiceScopeFactory(options, malClient, searchIndex), NullLogger<MetadataRefreshBackgroundService>.Instance);
+            new FakeServiceScopeFactory(options, malClient, searchIndex), TestSetupGates.Finished(), NullLogger<MetadataRefreshBackgroundService>.Instance);
 
         await service.RunPassAsync(DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime), CancellationToken.None);
 
         Assert.Equal(0, searchIndex.InvalidateCallCount);
+    }
+
+    // add-first-run-setup design D2: setup's details step is fetching every list
+    // anime, so this job makes no call until setup has finished, and then starts
+    // in the same process.
+    [Fact]
+    public async Task NoPassRunsUntilSetupHasFinished_ThenTheFirstPassRunsWithoutARestart()
+    {
+        var options = CreateOptions();
+        var now = DateTimeOffset.UtcNow;
+        using (var db = new AnimeTrackerDbContext(options))
+        {
+            SeedFiveDueAnime(db, now);
+            await db.SaveChangesAsync();
+        }
+
+        var malClient = new FakeMalClient();
+        foreach (var id in new[] { 1, 2, 3, 4, 5 })
+            malClient.Responses[id] = DetailNode(id);
+        var gate = TestSetupGates.Unfinished();
+        var service = new MetadataRefreshBackgroundService(
+            new FakeServiceScopeFactory(options, malClient), gate, NullLogger<MetadataRefreshBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await TestSetupGates.LetItRunAsync();
+            Assert.Empty(malClient.Calls);
+
+            await gate.MarkFinishedAsync();
+            await TestSetupGates.WaitForAsync(() => malClient.Calls.Count > 0);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
     }
 
     private sealed class FakeMalClient : IMalClient

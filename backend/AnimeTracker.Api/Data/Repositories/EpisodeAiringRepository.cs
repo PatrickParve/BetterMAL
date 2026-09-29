@@ -52,10 +52,31 @@ public class EpisodeAiringRepository(AnimeTrackerDbContext db) : IEpisodeAiringR
         if (rows.Count == 0)
             return; // guard: a failed or empty fetch must never wipe existing rows (design decision 4)
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        // Rows a previous replace in this context left tracked would collide, by
+        // their natural key, with the ones added below: ExecuteDelete removes the
+        // stored rows without telling the change tracker about them.
+        Untrack(animeId);
+
+        // Inside a transaction its caller already holds, this joins it rather than
+        // opening one: the airing refresh saves an anime's rows, bookkeeping,
+        // total and relations as one unit, and the caller commits it.
+        var ambient = db.Database.CurrentTransaction is not null;
+        await using var transaction = ambient ? null : await db.Database.BeginTransactionAsync(ct);
         await db.EpisodeAirings.Where(e => e.AnimeId == animeId).ExecuteDeleteAsync(ct);
         db.EpisodeAirings.AddRange(rows);
         await db.SaveChangesAsync(ct);
-        await transaction.CommitAsync(ct);
+        if (transaction is not null)
+            await transaction.CommitAsync(ct);
+
+        // Written and never read back through this context. Left tracked, a pass
+        // over hundreds of anime would keep every row in memory, and refreshing one
+        // of them again in the same context would fail on its key.
+        Untrack(animeId);
+    }
+
+    private void Untrack(int animeId)
+    {
+        foreach (var entry in db.ChangeTracker.Entries<EpisodeAiring>().Where(e => e.Entity.AnimeId == animeId).ToList())
+            entry.State = EntityState.Detached;
     }
 }

@@ -1,3 +1,5 @@
+using AnimeTracker.Api.Services.Setup;
+
 namespace AnimeTracker.Api.Services.Series;
 
 /// <summary>Drains ISeriesBuildTrigger's queue: an anime whose search match
@@ -7,10 +9,16 @@ namespace AnimeTracker.Api.Services.Series;
 public class SeriesBuildTriggerBackgroundService(
     IServiceScopeFactory scopeFactory,
     ISeriesBuildTrigger trigger,
+    SetupGate setupGate,
     ILogger<SeriesBuildTriggerBackgroundService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Setup builds every list anime's series itself, without a budget, so a
+        // queued build would only repeat or race it; whatever is queued waits
+        // here and finds its series up to date (add-first-run-setup design D2).
+        await setupGate.WhenFinished.WaitAsync(stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             int animeId;

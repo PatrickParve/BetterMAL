@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Sync;
+using AnimeTracker.Api.Tests.Services.Setup;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -43,7 +44,7 @@ public class ReconciliationBackgroundServiceTests
         var options = CreateOptions();
         var service = new ReconciliationBackgroundService(
             new FakeServiceScopeFactory(options, new StubReconciliationService(ex: null)),
-            NullLogger<ReconciliationBackgroundService>.Instance);
+            TestSetupGates.Finished(), NullLogger<ReconciliationBackgroundService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
         try
@@ -66,7 +67,7 @@ public class ReconciliationBackgroundServiceTests
         var options = CreateOptions();
         var service = new ReconciliationBackgroundService(
             new FakeServiceScopeFactory(options, new StubReconciliationService(ex: new HttpRequestException("boom"))),
-            NullLogger<ReconciliationBackgroundService>.Instance);
+            TestSetupGates.Finished(), NullLogger<ReconciliationBackgroundService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
         try
@@ -102,7 +103,7 @@ public class ReconciliationBackgroundServiceTests
 
         var service = new ReconciliationBackgroundService(
             new FakeServiceScopeFactory(options, new StubReconciliationService(ex: null)),
-            NullLogger<ReconciliationBackgroundService>.Instance);
+            TestSetupGates.Finished(), NullLogger<ReconciliationBackgroundService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
         try
@@ -142,7 +143,7 @@ public class ReconciliationBackgroundServiceTests
         var options = CreateOptions();
         var service = new ReconciliationBackgroundService(
             new FakeServiceScopeFactory(options, new StubReconciliationService(ex: null, skippedUnrecognized: 2)),
-            NullLogger<ReconciliationBackgroundService>.Instance);
+            TestSetupGates.Finished(), NullLogger<ReconciliationBackgroundService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
         try
@@ -152,6 +153,37 @@ public class ReconciliationBackgroundServiceTests
             Assert.NotNull(log);
             Assert.True(log!.LastRunFailed);
             Assert.Equal(JobFailure.UnrecognizedStatuses(2), log.LastRunError);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    // add-first-run-setup design D2: with no run log it is due at once, which on a
+    // fresh install would read the list beside setup's own read. It waits, and
+    // runs when setup has finished, with no restart.
+    [Fact]
+    public async Task NoRunStartsUntilSetupHasFinished_ThenTheFirstRunHappensWithoutARestart()
+    {
+        var options = CreateOptions();
+        var gate = TestSetupGates.Unfinished();
+        var service = new ReconciliationBackgroundService(
+            new FakeServiceScopeFactory(options, new StubReconciliationService(ex: null)),
+            gate, NullLogger<ReconciliationBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await TestSetupGates.LetItRunAsync();
+            using (var db = new AnimeTrackerDbContext(options))
+                Assert.Empty(await db.ReconciliationRunLogs.AsNoTracking().ToListAsync());
+
+            await gate.MarkFinishedAsync();
+            var log = await WaitForOutcomeAsync(options);
+
+            Assert.NotNull(log);
+            Assert.False(log!.LastRunFailed);
         }
         finally
         {

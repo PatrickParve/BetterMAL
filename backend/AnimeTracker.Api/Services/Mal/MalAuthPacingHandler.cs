@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using AnimeTracker.Api.Services.Mal.Auth;
+using AnimeTracker.Api.Services.Setup;
 using Microsoft.Extensions.Options;
 
 namespace AnimeTracker.Api.Services.Mal;
@@ -8,19 +9,72 @@ namespace AnimeTracker.Api.Services.Mal;
 /// <summary>Central place for MAL cross-cutting HTTP concerns: attaches the
 /// right auth header per request (X-MAL-Client-ID or bearer, per
 /// MalRequestOptions.AuthModeKey), paces every dispatch, and treats 403
-/// (undocumented burst throttling) as backoff-and-retry rather than failure.</summary>
+/// (undocumented burst throttling) as backoff-and-retry rather than failure.
+/// It is also where MyAnimeList's health is measured (<see cref="MalServiceHealth"/>,
+/// add-first-run-setup design D12): the moment a 403 backoff begins and ends, and
+/// whether each request ended in an answer or in a temporary failure.</summary>
 public class MalAuthPacingHandler(
     IOptions<MalOptions> malOptions,
     IMalTokenProvider tokenProvider,
     MalRequestPacer pacer,
-    ILogger<MalAuthPacingHandler> logger) : DelegatingHandler
+    MalServiceHealth health,
+    ILogger<MalAuthPacingHandler> logger,
+    TimeSpan? initialBackoff = null) : DelegatingHandler
 {
     private const int MaxAttempts = 5;
-    private static readonly TimeSpan InitialBackoff = TimeSpan.FromSeconds(2);
+    private readonly TimeSpan _initialBackoff = initialBackoff ?? TimeSpan.FromSeconds(2);
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
-        var delay = InitialBackoff;
+        var response = await SendWithBackoffAsync(request, ct);
+        RecordOutcome(response);
+        return response;
+    }
+
+    /// <summary>What a finished request says about MyAnimeList. Only a response
+    /// reaches here — an exception was recorded where it was thrown
+    /// (<see cref="DispatchAsync"/>).</summary>
+    private void RecordOutcome(HttpResponseMessage response)
+    {
+        // The only 403 that gets this far outlasted every retry: MAL is still
+        // throttling. Its throttle window is left to run out, since it is only
+        // cleared by an answer that is not a throttle.
+        if (response.StatusCode == HttpStatusCode.Forbidden || (int)response.StatusCode >= 500)
+        {
+            health.RecordTemporaryFailure();
+            return;
+        }
+
+        // Any other answer, a 404 or another 4xx included, shows MAL is up and
+        // not limiting us.
+        health.ClearThrottle();
+        health.RecordSuccess();
+    }
+
+    /// <summary>The one place a request leaves for MAL. A network error or a
+    /// timeout is a temporary failure of the service, recorded here so the
+    /// pacer, token and backoff work around it isn't mistaken for one.
+    /// <para>A caller's cancellation looks the same as a timeout from this
+    /// side: <c>HttpClient</c> hands the handler a token linked to both, so a
+    /// cancellation can't be told from its timeout here. Counting it errs
+    /// towards a strike, and one takes three in a row with no answer between to
+    /// matter.</para></summary>
+    private async Task<HttpResponseMessage> DispatchAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        try
+        {
+            return await base.SendAsync(request, ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or HttpIOException or OperationCanceledException)
+        {
+            health.RecordTemporaryFailure();
+            throw;
+        }
+    }
+
+    private async Task<HttpResponseMessage> SendWithBackoffAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        var delay = _initialBackoff;
         var current = request;
         // Separate from the 403 backoff loop below (design.md D12): a 401 on
         // a Bearer request gets exactly one forced refresh-and-retry, no
@@ -35,7 +89,7 @@ public class MalAuthPacingHandler(
             var bearerToken = await ApplyAuthAsync(current, ct);
             await pacer.WaitAsync(ct);
 
-            var response = await base.SendAsync(current, ct);
+            var response = await DispatchAsync(current, ct);
 
             if (response.StatusCode == HttpStatusCode.Unauthorized && bearerToken is not null && !authRetried)
             {
@@ -47,7 +101,7 @@ public class MalAuthPacingHandler(
                 current = await CloneAsync(request, ct);
                 await ApplyAuthAsync(current, ct); // re-reads the now-refreshed token
                 await pacer.WaitAsync(ct);
-                response = await base.SendAsync(current, ct);
+                response = await DispatchAsync(current, ct);
                 // A 401 on this retried request is returned as it is.
             }
 
@@ -59,6 +113,8 @@ public class MalAuthPacingHandler(
                 request.Method, request.RequestUri, delay.TotalSeconds, attempt, MaxAttempts);
 
             response.Dispose();
+            // Published before the wait, so a reader sees it while it runs.
+            health.SetThrottledUntil(DateTimeOffset.UtcNow + delay);
             await Task.Delay(delay, ct);
             delay *= 2;
         }

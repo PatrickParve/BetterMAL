@@ -36,7 +36,8 @@ public interface IEpisodeAiringRepository
     Task<List<EpisodeAiring>> GetRowsInRangeAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default);
 
     /// <summary>Replaces this anime's entire stored row set with rows, in one
-    /// transaction. A no-op when rows is empty, so a failed or empty fetch
-    /// never wipes good data.</summary>
+    /// transaction (the caller's own, when it already holds one: then it is the
+    /// caller that commits). A no-op when rows is empty, so a failed or empty
+    /// fetch never wipes good data.</summary>
     Task ReplaceForAnimeAsync(int animeId, IReadOnlyList<EpisodeAiring> rows, CancellationToken ct = default);
 }

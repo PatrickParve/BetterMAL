@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Services.Infrastructure;
+using AnimeTracker.Api.Services.Mal;
 using Microsoft.AspNetCore.Builder;
 using Npgsql;
 
@@ -95,7 +96,7 @@ public class DevDotEnvOverlayTests
         var result = DevDotEnvOverlay.ToConfiguration(FullEnvExample());
 
         Assert.Equal(
-            new[] { "ConnectionStrings:Default", "Mal:CallbackPort", "Mal:ClientId", "Mal:ClientSecret", "urls" },
+            new[] { "ConnectionStrings:Default", "Mal:CallbackPort", "Mal:ClientId", "Mal:ClientSecret", "Mal:FrontendPort", "urls" },
             result.Keys.OrderBy(k => k, StringComparer.Ordinal));
         Assert.Equal("http://localhost:5050", result["urls"]);
     }
@@ -230,6 +231,55 @@ public class DevDotEnvOverlayTests
         var ex = Assert.Throws<InvalidOperationException>(() => DevDotEnvOverlay.ToConfiguration(env));
 
         Assert.Contains("BACKEND_PORT", ex.Message);
+        Assert.DoesNotContain("abc", ex.Message);
+    }
+
+    // first-run-setup: FRONTEND_PORT is where the OAuth callback sends the
+    // browser back to (deployment, "The backend is told the frontend's port").
+
+    [Fact]
+    public void AFrontendPortIsMappedToTheMalFrontendPortKey()
+    {
+        var env = FullEnvExample();
+        env["FRONTEND_PORT"] = "5200";
+
+        var result = DevDotEnvOverlay.ToConfiguration(env);
+
+        Assert.Equal("5200", result["Mal:FrontendPort"]);
+    }
+
+    [Fact]
+    public void NoFrontendPortGivesNoKeySoTheDefault5173Applies()
+    {
+        var env = FullEnvExample();
+        env.Remove("FRONTEND_PORT");
+
+        var result = DevDotEnvOverlay.ToConfiguration(env);
+
+        Assert.False(result.ContainsKey("Mal:FrontendPort"));
+        Assert.Equal(5173, new MalOptions().FrontendPort);
+    }
+
+    [Fact]
+    public void AnEmptyFrontendPortGivesNoKey()
+    {
+        var env = FullEnvExample();
+        env["FRONTEND_PORT"] = "";
+
+        var result = DevDotEnvOverlay.ToConfiguration(env);
+
+        Assert.False(result.ContainsKey("Mal:FrontendPort"));
+    }
+
+    [Fact]
+    public void ANonIntegerFrontendPortThrowsNamingTheKeyButNotTheValue()
+    {
+        var env = FullEnvExample();
+        env["FRONTEND_PORT"] = "abc";
+
+        var ex = Assert.Throws<InvalidOperationException>(() => DevDotEnvOverlay.ToConfiguration(env));
+
+        Assert.Contains("FRONTEND_PORT", ex.Message);
         Assert.DoesNotContain("abc", ex.Message);
     }
 

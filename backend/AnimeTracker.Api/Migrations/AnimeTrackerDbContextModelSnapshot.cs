@@ -70,9 +70,6 @@ namespace AnimeTracker.Api.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTimeOffset?>("BackfillCompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("LastPassSeason")
                         .HasColumnType("text");
 
@@ -691,6 +688,19 @@ namespace AnimeTracker.Api.Migrations
                     b.HasIndex("SeriesId");
 
                     b.ToTable("SeriesMembers");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.SetupState", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SetupStates");
                 });
 
             modelBuilder.Entity("AnimeTracker.Api.Models.TmdbMovieImage", b =>

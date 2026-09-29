@@ -126,9 +126,11 @@ export function SeriesBrowserPage() {
   // otherwise "couldn't be loaded" when the read failed; otherwise a loading
   // indicator until the read has settled; otherwise, once loaded, either "no
   // series match the filters" (something is stored but the current filters
-  // exclude all of it) or "still being discovered" (nothing is stored at
-  // all). Different facts get different messages (spec "The Series page
-  // states which empty situation it is in"). Every one is decided from the
+  // exclude all of it) or "none of your anime belong to a franchise" (nothing
+  // is stored at all: setup has built every list anime's series before this
+  // page can be opened, so an empty list means there are none). Different
+  // facts get different messages (spec "The Series page states which empty
+  // situation it is in"). Every one is decided from the
   // whole filtered list (`sortedItems`), never from `visibleItems`: the
   // reveal has drawn nothing yet in the frame the list arrives, and reading
   // that as "the filters exclude everything" flashed "No series match the
@@ -225,8 +227,8 @@ export function SeriesBrowserPage() {
       )}
       {terminalState === 'empty' && (
         <p className="series-browser-page__empty">
-          Series are still being discovered from your list. Use{' '}
-          <Link to="/settings">"Build all series from my list"</Link> on the Settings page to fill this in now.
+          None of the anime in your list belong to a franchise yet. Explore anime by <Link to="/season">season</Link>{' '}
+          or in <Link to="/top">Top anime</Link>.
         </p>
       )}
       {terminalState === 'loadFailed' && <LoadFailedNotice what="the series list" onRetry={retry} />}

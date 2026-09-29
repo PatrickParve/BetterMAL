@@ -149,6 +149,14 @@
   flex: 0 0 auto;
 }
 
+/* The airing-date refresh's two buttons (Refresh all, Force all): one above the other and
+   the same width, so the pair reads as two ways to run the one job. */
+.settings-action__stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* The shared background-job readout (settings-page spec "Background jobs
    report progress the same way"): the processed-of-total counts beside a
    shared JobProgressTrack (components/JobProgressTrack.css,

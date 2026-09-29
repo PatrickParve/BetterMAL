@@ -161,6 +161,120 @@ public class MalClientTests
         Assert.DoesNotContain("is_rewatching", firstFields);
     }
 
+    // --- GetUserAnimeListPagesAsync / GetUserAnimeCountAsync (first-run setup's reads) ---
+
+    private static async Task<(List<List<int>> Pages, List<int> Offsets)> RunSetupPagesAsync(
+        Dictionary<int, (HttpStatusCode Status, string Json)> script)
+    {
+        var stub = new OffsetScriptedHandler(script);
+        var pages = new List<List<int>>();
+
+        await foreach (var page in CreateClient(stub).GetUserAnimeListPagesAsync())
+            pages.Add(page.Select(e => e.Node.Id).ToList());
+
+        return (pages, RequestedOffsets(stub));
+    }
+
+    [Fact]
+    public async Task SetupPagesArriveOneAtATimeAndStartTheNextAtMalsOffset()
+    {
+        var script = new Dictionary<int, (HttpStatusCode, string)>
+        {
+            [0] = (HttpStatusCode.OK, UserListPage(1, 98, next: "https://api.myanimelist.net/v2/users/@me/animelist?offset=100&limit=100")),
+            [100] = (HttpStatusCode.OK, UserListPage(101, 50)),
+        };
+
+        var (pages, offsets) = await RunSetupPagesAsync(script);
+
+        Assert.Equal(new[] { 0, 100 }, offsets);
+        Assert.Equal(new[] { 98, 50 }, pages.Select(p => p.Count));
+        Assert.Equal(Enumerable.Range(1, 98), pages[0]);
+    }
+
+    [Fact]
+    public async Task SetupPagesEndOnAnEmptyPageAndWithoutANextLink()
+    {
+        var emptyThenNext = new Dictionary<int, (HttpStatusCode, string)>
+        {
+            [0] = (HttpStatusCode.OK, UserListPage(1, 100, next: "https://api.myanimelist.net/v2/users/@me/animelist?offset=100&limit=100")),
+            [100] = (HttpStatusCode.OK, UserListPage(101, 0, next: "https://api.myanimelist.net/v2/users/@me/animelist?offset=200&limit=100")),
+        };
+        var (pages, offsets) = await RunSetupPagesAsync(emptyThenNext);
+        Assert.Equal(new[] { 0, 100 }, offsets);
+        Assert.Equal(new[] { 100, 0 }, pages.Select(p => p.Count));
+
+        var single = new Dictionary<int, (HttpStatusCode, string)> { [0] = (HttpStatusCode.OK, UserListPage(1, 30)) };
+        var (singlePages, singleOffsets) = await RunSetupPagesAsync(single);
+        Assert.Equal(new[] { 0 }, singleOffsets);
+        Assert.Single(singlePages);
+    }
+
+    [Fact]
+    public async Task SetupPagesAskForTheBasicRowFieldsOnTheListEndpointWithNsfw()
+    {
+        var script = new Dictionary<int, (HttpStatusCode, string)> { [0] = (HttpStatusCode.OK, UserListPage(1, 3)) };
+        var stub = new OffsetScriptedHandler(script);
+
+        await foreach (var _ in CreateClient(stub).GetUserAnimeListPagesAsync()) { }
+
+        var request = stub.Requests.Single();
+        Assert.Equal("/v2/users/@me/animelist", request.AbsolutePath);
+        Assert.Equal("100", Query(request, "limit"));
+        Assert.Equal("true", Query(request, "nsfw"));
+        Assert.Equal(MalClient.SetupListFields, Query(request, "fields"));
+        foreach (var field in new[] { "genres", "synopsis", "average_episode_duration", "source", "broadcast", "studios", "start_date", "end_date" })
+            Assert.Contains(field, MalClient.SetupListFields);
+        Assert.Contains("list_status{status,score,num_episodes_watched,start_date,finish_date,num_times_rewatched}", MalClient.SetupListFields);
+    }
+
+    [Fact]
+    public async Task SetupPagesAFailurePartwayThroughThrowsAfterTheEarlierPageWasHandedOver()
+    {
+        var script = new Dictionary<int, (HttpStatusCode, string)>
+        {
+            [0] = (HttpStatusCode.OK, UserListPage(1, 100, next: "https://api.myanimelist.net/v2/users/@me/animelist?offset=100&limit=100")),
+            [100] = (HttpStatusCode.InternalServerError, "{}"),
+        };
+        var handedOver = 0;
+
+        await Assert.ThrowsAsync<HttpRequestException>(async () =>
+        {
+            await foreach (var page in CreateClient(new OffsetScriptedHandler(script)).GetUserAnimeListPagesAsync())
+                handedOver += page.Count;
+        });
+
+        Assert.Equal(100, handedOver); // page one was already the caller's to store
+    }
+
+    [Fact]
+    public async Task UserAnimeCountReadsNumItemsFromTheBearerStatisticsCall()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, """{"id":1,"name":"me","anime_statistics":{"num_items_watching":6,"num_items":624}}""");
+
+        var count = await CreateClient(handler).GetUserAnimeCountAsync();
+
+        Assert.Equal(624, count);
+        Assert.Equal("/v2/users/@me", handler.Request!.RequestUri!.AbsolutePath);
+        Assert.Equal("anime_statistics", Query(handler.Request.RequestUri, "fields"));
+        Assert.True(handler.Request.Options.TryGetValue(MalRequestOptions.AuthModeKey, out var mode));
+        Assert.Equal(MalAuthMode.Bearer, mode);
+    }
+
+    [Theory]
+    [InlineData("""{"id":1,"name":"me"}""")]
+    [InlineData("""{"anime_statistics":{}}""")]
+    public async Task UserAnimeCountIsNullWhenMalGivesNoCount(string json)
+    {
+        Assert.Null(await CreateClient(new RecordingHandler(HttpStatusCode.OK, json)).GetUserAnimeCountAsync());
+    }
+
+    [Fact]
+    public async Task UserAnimeCountThrowsOnAFailedRequest()
+    {
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            CreateClient(new RecordingHandler(HttpStatusCode.InternalServerError, "{}")).GetUserAnimeCountAsync());
+    }
+
     // --- GetFullSeasonAsync ---
 
     [Fact]

@@ -33,18 +33,20 @@ public class AiringController(
         return Ok(result);
     }
 
-    /// <summary>Kicks off the settings page's manual "refresh all airing data"
-    /// action: re-fetches AniList data for every my-list anime except finished
-    /// shows already fetched at least once. Runs in the background (paced
-    /// through AniList's rate limit) — starts once (background-jobs "A job is
-    /// started once") and the answer already reports it as running either
-    /// way, so the page reads its progress from the combined status read
-    /// rather than polling this endpoint.</summary>
+    /// <summary>Kicks off the settings page's manual "Refresh all airing dates"
+    /// action: re-fetches AniList data for every my-list anime except those
+    /// whose airing history is complete. With <c>?force=true</c> ("Force all
+    /// airing dates") it re-fetches every my-list anime. Both are one job, on
+    /// one tracker: runs in the background (paced through AniList's rate limit),
+    /// starts once (background-jobs "A job is started once") and the answer
+    /// already reports it as running either way, so a second press of either
+    /// while it runs gets the running job back. The page reads its progress from
+    /// the combined status read rather than polling this endpoint.</summary>
     [HttpPost("api/airing/refresh-all")]
-    public IActionResult TriggerFullRefresh()
+    public IActionResult TriggerFullRefresh([FromQuery] bool force = false)
     {
         if (fullRefreshProgress.TryBegin())
-            fullRefreshTrigger.Signal();
+            fullRefreshTrigger.Signal(force);
 
         return Accepted(JobDto.From(fullRefreshProgress.Snapshot));
     }

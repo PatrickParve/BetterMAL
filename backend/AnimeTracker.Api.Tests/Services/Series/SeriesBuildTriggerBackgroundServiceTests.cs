@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Tests.Services.Setup;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -24,7 +25,7 @@ public class SeriesBuildTriggerBackgroundServiceTests
 
         var trigger = new SeriesBuildTrigger();
         var service = new SeriesBuildTriggerBackgroundService(
-            provider.GetRequiredService<IServiceScopeFactory>(), trigger, NullLogger<SeriesBuildTriggerBackgroundService>.Instance);
+            provider.GetRequiredService<IServiceScopeFactory>(), trigger, TestSetupGates.Finished(), NullLogger<SeriesBuildTriggerBackgroundService>.Instance);
 
         await service.StartAsync(CancellationToken.None);
         try
@@ -45,8 +46,42 @@ public class SeriesBuildTriggerBackgroundServiceTests
         }
     }
 
+    // add-first-run-setup design D2: setup builds every series itself, so a build
+    // queued meanwhile waits, and is taken once setup has finished, with no restart.
+    [Fact]
+    public async Task NothingIsBuiltUntilSetupHasFinished_ThenTheQueuedBuildRuns()
+    {
+        var seriesService = new RecordingSeriesService();
+        var services = new ServiceCollection();
+        services.AddScoped<ISeriesService>(_ => seriesService);
+        using var provider = services.BuildServiceProvider();
+
+        var trigger = new SeriesBuildTrigger();
+        var gate = TestSetupGates.Unfinished();
+        var service = new SeriesBuildTriggerBackgroundService(
+            provider.GetRequiredService<IServiceScopeFactory>(), trigger, gate, NullLogger<SeriesBuildTriggerBackgroundService>.Instance);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            trigger.Enqueue(1);
+            await TestSetupGates.LetItRunAsync();
+            Assert.Empty(seriesService.Attempted);
+
+            await gate.MarkFinishedAsync();
+            await TestSetupGates.WaitForAsync(() => seriesService.Attempted.Count == 1);
+            Assert.Equal([1], seriesService.Attempted);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
     private sealed class RecordingSeriesService : ISeriesService
     {
+        public Task<SetupBuildOutcome> BuildForSetupAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
         public Dictionary<int, Exception> FailFor { get; } = new();
         public List<int> Attempted { get; } = [];
 

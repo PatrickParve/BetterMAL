@@ -184,6 +184,27 @@ public static class MalMappingExtensions
         return metadata;
     }
 
+    /// <summary>Builds a basic cached row from a node of setup's list read
+    /// (<see cref="MalClient.SetupListFields"/>): the lean fields, plus airing status, dates,
+    /// broadcast, studio, genres, synopsis, episode duration and source. It has no relations
+    /// and no picture set, and leaves <see cref="AnimeMetadata.LastSyncedAt"/> at its default,
+    /// so the row still counts as never fully fetched and setup's details step takes it.</summary>
+    public static AnimeMetadata ToBasicAnimeMetadata(this MalAnimeNode node, DateTimeOffset now)
+    {
+        var metadata = node.ToLeanAnimeMetadata(now);
+        metadata.AiringStatus = node.Status;
+        metadata.AiredFrom = ParseMalDate(node.StartDate);
+        metadata.AiredTo = ParseMalDate(node.EndDate);
+        metadata.Studio = node.Studios?.FirstOrDefault()?.Name;
+        metadata.BroadcastDayOfWeek = node.Broadcast?.DayOfTheWeek;
+        metadata.BroadcastTime = ParseMalTime(node.Broadcast?.StartTime);
+        metadata.Genres = node.Genres?.Select(g => g.Name).ToList();
+        metadata.Synopsis = node.Synopsis;
+        metadata.AverageEpisodeDurationSeconds = node.AverageEpisodeDuration;
+        metadata.Source = node.Source;
+        return metadata;
+    }
+
     /// <summary>Lean upsert: writes only listing-page fields (title, picture,
     /// episode count, type, score, rank/popularity) and never touches rich
     /// detail-page fields (airing status/dates, studio, broadcast, genres,

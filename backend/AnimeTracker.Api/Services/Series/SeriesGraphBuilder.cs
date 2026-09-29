@@ -41,6 +41,16 @@ public class SeriesGraphBuilder(
     public const int VisitProbeBudget = 4;
     public const int RebuildProbeBudget = 10;
 
+    // "No budget", for the builds first-run setup makes (first-run-setup
+    // design.md D9). Passed as either budget, it means the traversal never
+    // runs out: every use below is a comparison of a counter against the
+    // budget (`fetchesUsed >= fetchBudget`, `probesUsed >= probeBudget`,
+    // `fetchesUsed < fetchBudget`), never arithmetic on the budget itself, and
+    // a counter can't reach int.MaxValue before MemberCap stops the traversal,
+    // so nothing here can overflow or trip. Keep it that way: don't add or
+    // subtract on a budget. MemberCap still applies to an unbounded build.
+    public const int Unbounded = int.MaxValue;
+
     // Bump this to the ship date whenever a build's classification of its
     // members changes — main line (ClassifyMainLineChain) or extra relation
     // group (ResolveExtraGroups) alike: SeriesService.NeedsBuild treats every
@@ -65,6 +75,23 @@ public class SeriesGraphBuilder(
     /// on resolving the media type of an `other` edge's uncached far end
     /// (design.md D5c) — see <see cref="TraverseAsync"/>.</summary>
     public async Task<SeriesEntity?> BuildAsync(
+        int seedAnimeId, int fetchBudget, int probeBudget, bool expandLeanMembers, CancellationToken ct = default) =>
+        (await BuildWithResultAsync(seedAnimeId, fetchBudget, probeBudget, expandLeanMembers, ct)).Series;
+
+    /// <summary>What a build produced: the stored series (null when the seed's
+    /// component holds no other member) and whether the traversal came up
+    /// incomplete, meaning a member fetch or a probe failed or ran out of
+    /// budget. With no series the flag is what tells "this anime is alone"
+    /// from "this anime looked alone because its only neighbour failed to
+    /// fetch". A stored series carries the same fact as its own
+    /// <c>IsPartial</c>.</summary>
+    public readonly record struct SeriesBuildResult(SeriesEntity? Series, bool TraversalIncomplete);
+
+    /// <summary><see cref="BuildAsync"/> plus the incomplete flag, for the
+    /// caller that must not settle an anime on a temporary failure (setup's
+    /// <c>BuildForSetupAsync</c>). Everything else about the build is
+    /// identical.</summary>
+    public async Task<SeriesBuildResult> BuildWithResultAsync(
         int seedAnimeId, int fetchBudget, int probeBudget, bool expandLeanMembers, CancellationToken ct = default)
     {
         var (members, edges, isPartial, isTruncated, versionNeighbours) =
@@ -78,7 +105,7 @@ public class SeriesGraphBuilder(
         // it must still build and persist, or ResolveExtraGroups never gets
         // a chance to run and the pairing stays unclassified forever.
         if (members.Count == 0 || (members.Count == 1 && versionNeighbours.Count == 0))
-            return null;
+            return new SeriesBuildResult(null, isPartial);
 
         // Story components are disjoint (design.md D1), so a build now
         // derives and persists exactly one series — the traversed component
@@ -94,7 +121,7 @@ public class SeriesGraphBuilder(
         }
 
         var telling = ClassifyTelling(coreMemberIds, versionNeighbourKindByAnimeId, memberById, edges);
-        return await PersistAsync(telling, isPartial, isTruncated, ct);
+        return new SeriesBuildResult(await PersistAsync(telling, isPartial, isTruncated, ct), isPartial);
     }
 
     // --- Traversal (2.2, 2.3, 2.4; extended to alternative_setting and

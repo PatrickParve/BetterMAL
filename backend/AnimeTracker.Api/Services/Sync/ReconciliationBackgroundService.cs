@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Jobs;
+using AnimeTracker.Api.Services.Setup;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Sync;
@@ -9,12 +10,18 @@ namespace AnimeTracker.Api.Services.Sync;
 /// of the reconciliation safety net (manual trigger is SyncController).</summary>
 public class ReconciliationBackgroundService(
     IServiceScopeFactory scopeFactory,
+    SetupGate setupGate,
     ILogger<ReconciliationBackgroundService> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromDays(7);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // With no run log it is due at once, which on a fresh install would read
+        // the list a second time beside setup's own read; it starts when setup
+        // has finished (add-first-run-setup design D2).
+        await setupGate.WhenFinished.WaitAsync(stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try

@@ -40,6 +40,55 @@ public class SeriesService(
 
     private async Task<SeriesDto> ResolveAsync(int animeId, bool forceRebuild, CancellationToken ct)
     {
+        var (series, _) = await EnsureBuiltAsync(
+            animeId, forceRebuild,
+            forceRebuild ? SeriesGraphBuilder.RebuildFetchBudget : SeriesGraphBuilder.VisitFetchBudget,
+            forceRebuild ? SeriesGraphBuilder.RebuildProbeBudget : SeriesGraphBuilder.VisitProbeBudget,
+            ct);
+
+        if (series is null)
+            throw new SeriesNotFoundException(animeId);
+
+        return await ProjectAsync(series.Id, ct);
+    }
+
+    // No fetch or probe budget, and no forced rebuild: setup builds a series
+    // when there is none or the stored one is partial or out of date, and
+    // otherwise leaves it (first-run-setup design.md D9). A series built here
+    // can be left partial only by a member fetch or a probe that failed.
+    public async Task<SetupBuildOutcome> BuildForSetupAsync(int animeId, CancellationToken ct = default)
+    {
+        var (series, buildFellShort) = await EnsureBuiltAsync(
+            animeId, forceRebuild: false, SeriesGraphBuilder.Unbounded, SeriesGraphBuilder.Unbounded, ct);
+
+        // A build that found no series but whose traversal failed on the way
+        // is not "alone": the seed's only neighbour may simply not have
+        // fetched, and calling that NoSeries would settle the anime for good
+        // on a temporary failure. A page visit can afford that (it throws
+        // SeriesNotFoundException and the next visit tries again); setup
+        // cannot, so it goes back on the retry ladder as Partial.
+        if (buildFellShort)
+            return SetupBuildOutcome.Partial;
+
+        return series switch
+        {
+            null => SetupBuildOutcome.NoSeries,
+            { IsPartial: true } => SetupBuildOutcome.Partial,
+            _ => SetupBuildOutcome.Settled,
+        };
+    }
+
+    /// <summary>The stored series of <paramref name="animeId"/> after building
+    /// or rebuilding it when it needs that, or null when the anime belongs to no
+    /// series. The one place a build happens, so a page visit and setup share
+    /// the same single-flight key, the same check and the same fall-back.
+    /// <c>BuildFellShort</c> is true when a build ran, stored no series, and
+    /// reported an incomplete traversal: the anime looked alone only because
+    /// something failed to fetch.</summary>
+    private async Task<(SeriesEntity? Series, bool BuildFellShort)> EnsureBuiltAsync(
+        int animeId, bool forceRebuild, int fetchBudget, int probeBudget, CancellationToken ct)
+    {
+        var buildFellShort = false;
         var series = await FindSeriesAsync(animeId, ct);
 
         if (forceRebuild || NeedsBuild(series))
@@ -55,8 +104,6 @@ public class SeriesService(
                 series = await FindSeriesAsync(animeId, ct);
                 if (forceRebuild || NeedsBuild(series))
                 {
-                    var fetchBudget = forceRebuild ? SeriesGraphBuilder.RebuildFetchBudget : SeriesGraphBuilder.VisitFetchBudget;
-                    var probeBudget = forceRebuild ? SeriesGraphBuilder.RebuildProbeBudget : SeriesGraphBuilder.VisitProbeBudget;
                     // BuildAsync returns null when the seed's component has
                     // no other member. That's not necessarily "no series at
                     // all" if one was already stored (relations can thin out
@@ -72,15 +119,14 @@ public class SeriesService(
                     // be full-fetched. Spending part of the visit budget here
                     // is what lets a first visit self-heal instead of always
                     // depending on the user clicking Rebuild.
-                    series = await graphBuilder.BuildAsync(animeId, fetchBudget, probeBudget, expandLeanMembers: true, ct) ?? series;
+                    var built = await graphBuilder.BuildWithResultAsync(animeId, fetchBudget, probeBudget, expandLeanMembers: true, ct);
+                    buildFellShort = built.Series is null && built.TraversalIncomplete;
+                    series = built.Series ?? series;
                 }
             }
         }
 
-        if (series is null)
-            throw new SeriesNotFoundException(animeId);
-
-        return await ProjectAsync(series.Id, ct);
+        return (series, buildFellShort);
     }
 
     // Deliberately does not check IsTruncated: a series genuinely over the
