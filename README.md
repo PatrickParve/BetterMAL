@@ -5,7 +5,8 @@ with one built exactly to taste. It's a **single-user, local-machine app**:
 no accounts, no auth, no multi-tenancy — every page *is* the editing
 interface. Your list lives in this app's own Postgres database as the source
 of truth, and stays synced with your real MyAnimeList account in both
-directions (initial import from MAL, ongoing edits pushed back to MAL).
+directions (a guided first run reads your list from MAL, ongoing edits are
+pushed back to MAL).
 
 **Stack:** ASP.NET Core (C#) + EF Core API, Postgres, React + TypeScript
 frontend, all wired together with Docker Compose.
@@ -46,8 +47,15 @@ app credentials:
    must match `BACKEND_PORT` in your `.env` — 5050 is the default).
 4. Save, then copy the generated **Client ID** and **Client Secret**.
 
-The app runs without these, but the MAL connect/import/sync flow will fail
-until they're set.
+**Both values are required.** The app starts without them, but its first
+screen then names each one that is missing (`MAL_CLIENT_ID`,
+`MAL_CLIENT_SECRET`) and offers no way on until you set it in `.env` and
+restart the app. That includes the secret: the app no longer runs with only a
+client id.
+
+After you approve the app on MyAnimeList, its callback returns you to the app
+itself, at `http://localhost:<FRONTEND_PORT>` (5173 by default), so
+`FRONTEND_PORT` has to match where you open the frontend.
 
 ## Optional: a TMDB API key (better pictures)
 
@@ -110,16 +118,16 @@ cp .env.example .env
 ```
 
 ```dotenv
-# --- MyAnimeList API ---
+# --- MyAnimeList API (both required) ---
 MAL_CLIENT_ID=            # from myanimelist.net/apiconfig
-MAL_CLIENT_SECRET=
+MAL_CLIENT_SECRET=        # from the same page
 
 # --- TMDB (optional) ---
 TMDB_API_KEY=             # v3 API key from themoviedb.org → Settings → API; leave empty to run without TMDB
 
 # --- Ports exposed on localhost ---
 BACKEND_PORT=5050         # must match the redirect URI registered with MAL above
-FRONTEND_PORT=5173
+FRONTEND_PORT=5173        # where you open the app; sign-in returns you here
 
 # --- Postgres ---
 POSTGRES_DB=animetracker
@@ -145,8 +153,8 @@ This builds and starts three containers: `postgres`, `backend`, and
 `frontend`. The backend applies EF Core migrations automatically on startup,
 so the database schema is created for you — no manual migration step needed.
 
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:5050
+- Frontend: http://localhost:5173 (or your `FRONTEND_PORT`)
+- Backend API: http://localhost:5050 (or your `BACKEND_PORT`)
 - Postgres: exposed on `localhost:5434` (for a local DB client, if wanted)
 
 All three services use `restart: unless-stopped`, so they come back up
@@ -227,9 +235,11 @@ cd backend/AnimeTracker.Api
 dotnet run
 ```
 
-In a separate terminal, run the frontend (Vite dev server on port 5173,
-proxying `/api` calls to `localhost:5050`, or `BACKEND_PORT` from `.env`, per
-`vite.config.ts`):
+In a separate terminal, run the frontend (Vite dev server on port 5173, or
+`FRONTEND_PORT` from `.env`, proxying `/api` calls to `localhost:5050`, or
+`BACKEND_PORT` from `.env`, per `vite.config.ts`). The backend sends you back
+to that port after MyAnimeList sign-in, so the dev server has to be the one
+listening on it:
 
 ```bash
 cd frontend
@@ -237,22 +247,74 @@ npm install
 npm run dev
 ```
 
-## 4. Connect your MyAnimeList account
+## 4. The first run
 
-On first run, open the app (http://localhost:5173) and use the "Connect to
-MAL" prompt/settings page — it kicks off a one-time OAuth flow at
-`/api/mal-auth/start`. Once authorized, the app pulls your existing list from
-MAL and keeps it synced from then on.
+Open the app (http://localhost:5173, or your `FRONTEND_PORT`). A new install
+goes through a guided first run, and nothing else in the app is reachable until
+it has finished: every URL shows the setup screen, and the backend refuses
+every request that isn't part of setup. The screen moves through three states.
+
+1. **Credentials check.** If `MAL_CLIENT_ID` or `MAL_CLIENT_SECRET` isn't set,
+   the screen names the missing one and stops. Set it in `.env`, then restart
+   (`docker compose up -d` with Docker, or start the backend again when running
+   it natively). The backend sends no request to MyAnimeList or AniList until
+   both are set.
+2. **Connect.** One **Connect to MyAnimeList** button starts MyAnimeList's
+   sign-in in the same tab. After you approve the app you land back on the
+   setup screen and setup starts by itself. If the sign-in is cancelled,
+   expires (say the app restarted while you were on MyAnimeList) or fails, you
+   come back to this screen with the reason; press the button again.
+3. **Progress.** Four steps, each with a bar, its counts and, once there is
+   enough progress to go on, an estimate of the time left:
+   - **Reading your list**: your whole MyAnimeList list, 100 entries a page.
+   - **Fetching anime details**: one full request per anime at about one a
+     second, anime you are watching and shows airing now first.
+   - **Building series**: every anime's franchise, with no limit on how much
+     is fetched, so the Series page and the profile's Top series are complete
+     from the start.
+   - **Airing dates**: per-episode dates from AniList. It starts as soon as
+     your list is read and runs alongside the other steps, shows airing now
+     and starting this or next season first, then last season's.
+
+The app opens at Home by itself once the list is read, every anime and series
+is done and the airing dates that matter now are in. The rest of the airing
+dates carry on in the background, and **Settings → Data tools → Library data**
+shows how far they are. An AniList outage never keeps Home closed.
+
+The backend does all the work, so you can close the tab and come back. If the
+app restarts, setup carries on from what the database already holds: at most
+the anime or series being saved is redone, and your list is read once more.
+
+When something goes wrong the screen says so, and a **Retry now** button
+appears:
+
+- An anime that fails for a temporary reason is retried after 1, 5, 15 and 60
+  minutes, then every hour, and keeps its place in the order.
+- A service that stops answering pauses its own steps, says when it tries
+  again, and setup resumes by itself. A service that is limiting requests is
+  shown with the time it resumes. Neither is skipped: a MyAnimeList outage
+  holds Home closed until it ends.
+- If MyAnimeList refuses your login, a **Reconnect** button appears, the steps
+  that don't need the login keep going, and reading your list waits for it.
+- An anime MyAnimeList doesn't have, or lists with a status this app doesn't
+  recognize, is skipped for good. It doesn't hold Home closed, and Library data
+  in Settings lists it.
+
+Setup runs once. An install that was already connected and had list entries
+when this first-run flow arrived is recorded as finished by its upgrade and
+never sees it. To go through it again you need an empty database
+(`docker compose down -v` removes the `postgres-data` volume, and with it
+everything this app holds), then start the app again.
 
 ## Environment variable reference
 
 | Variable              | Description                                                              | Default        |
 | ---------------------- | ------------------------------------------------------------------------- | -------------- |
-| `MAL_CLIENT_ID`        | MyAnimeList API app Client ID                                            | *(required)*   |
-| `MAL_CLIENT_SECRET`    | MyAnimeList API app Client Secret                                        | *(required)*   |
+| `MAL_CLIENT_ID`        | MyAnimeList API app Client ID; setup stops until it's set                | *(required)*   |
+| `MAL_CLIENT_SECRET`    | MyAnimeList API app Client Secret; setup stops until it's set            | *(required)*   |
 | `TMDB_API_KEY`         | TMDB v3 API key — enables TMDB pictures in the picker (optional)         | *(optional)*   |
 | `BACKEND_PORT`         | Host port for the backend API; also the OAuth redirect port              | `5050`         |
-| `FRONTEND_PORT`        | Host port for the frontend (Docker only)                                 | `5173`         |
+| `FRONTEND_PORT`        | Host port for the frontend; also where MAL sign-in returns to            | `5173`         |
 | `POSTGRES_DB`          | Postgres database name                                                   | `animetracker` |
 | `POSTGRES_USER`        | Postgres user                                                            | `animetracker` |
 | `POSTGRES_PASSWORD`    | Postgres password                                                        | *(required)*   |
