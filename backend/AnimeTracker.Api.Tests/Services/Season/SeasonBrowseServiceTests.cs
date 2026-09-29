@@ -24,19 +24,22 @@ namespace AnimeTracker.Api.Tests.Services.Season;
 // season, not a fetch failure, and must still count as the day's fetch.
 public class SeasonBrowseServiceTests
 {
-    private static AnimeTrackerDbContext CreateDb() =>
+    // A shared name gives two contexts the same in-memory store, which is how
+    // two requests each get their own scoped DbContext over one database.
+    private static AnimeTrackerDbContext CreateDb(string? name = null) =>
         new(new DbContextOptionsBuilder<AnimeTrackerDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .UseInMemoryDatabase(name ?? Guid.NewGuid().ToString())
             .Options);
 
-    private static SeasonBrowseService CreateService(AnimeTrackerDbContext db, IMalClient malClient, IAnimeSearchIndex? searchIndex = null) =>
+    private static SeasonBrowseService CreateService(
+        AnimeTrackerDbContext db, IMalClient malClient, IAnimeSearchIndex? searchIndex = null, RefreshGate? refreshGate = null) =>
         new(
             db,
             malClient,
             new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), new SeriesBuildTrigger()),
             new SeasonRepository(db),
             new FakeBroadcastLocalTimeConverter(),
-            new RefreshGate(),
+            refreshGate ?? new RefreshGate(),
             searchIndex ?? new FakeAnimeSearchIndex(),
             NullLogger<SeasonBrowseService>.Instance);
 
@@ -84,6 +87,57 @@ public class SeasonBrowseServiceTests
 
         Assert.Equal(SeasonRefreshOutcome.Failed, result.Outcome);
         Assert.False(await db.SeasonFetchLogs.AnyAsync(f => f.Year == 2026 && f.Season == "summer"));
+    }
+
+    // simplify-settings-and-first-fetch-states design D1: what looks like two
+    // fetches of a never-fetched season is one MAL request. A second request
+    // for the same season (another tab, a remounted page) meets the first at
+    // the RefreshGate and is answered Skipped once the first's stamp is in.
+    [Fact]
+    public async Task RefreshAsync_TwoOverlappingCallsOnANeverFetchedSeasonFetchOnceAndReportFetchedThenSkipped()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var firstDb = CreateDb(dbName);
+        using var secondDb = CreateDb(dbName);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var malClient = new FakeMalClient(edges: [], release: release);
+        var gate = new RefreshGate();
+        var firstService = CreateService(firstDb, malClient, refreshGate: gate);
+        var secondService = CreateService(secondDb, malClient, refreshGate: gate);
+
+        var firstCall = firstService.RefreshAsync(2026, "summer");
+        await malClient.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10)); // the first holds the gate, blocked inside MAL
+
+        var secondCall = secondService.RefreshAsync(2026, "summer");
+        await Task.Delay(100);
+        Assert.False(secondCall.IsCompleted); // waiting on the gate, not fetching
+
+        release.SetResult();
+        var first = await firstCall.WaitAsync(TimeSpan.FromSeconds(10));
+        var second = await secondCall.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(SeasonRefreshOutcome.Fetched, first.Outcome);
+        Assert.Equal(SeasonRefreshOutcome.Skipped, second.Outcome);
+        Assert.Equal(1, malClient.FullSeasonCallCount);
+    }
+
+    [Fact]
+    public async Task RefreshYearAsync_ANeverFetchedPastYearFetchesEachSeasonOnceAndASecondVisitTheSameDayFetchesNothing()
+    {
+        using var db = CreateDb();
+        var malClient = new PerSeasonFakeMalClient(SeasonsInYearOrder.ToDictionary(s => s, _ => new MalSeasonResponse(Edges: [])));
+        var service = CreateService(db, malClient);
+
+        var first = await service.RefreshYearAsync(2020);
+
+        Assert.Equal(SeasonRefreshOutcome.Fetched, first.Outcome);
+        Assert.Equal(SeasonsInYearOrder, malClient.CalledSeasons);
+        Assert.Equal(4, malClient.FullSeasonCallCount);
+
+        var second = await service.RefreshYearAsync(2020);
+
+        Assert.Equal(SeasonRefreshOutcome.Skipped, second.Outcome);
+        Assert.Equal(4, malClient.FullSeasonCallCount); // no further call
     }
 
     // Turns "N whole years ago" into a (year, season) pair anchored to
@@ -866,16 +920,27 @@ public class SeasonBrowseServiceTests
             (jstDayOfWeek, jstTime);
     }
 
-    private sealed class FakeMalClient(List<MalAnimeListEdge>? edges = null, bool throws = false) : IMalClient
+    // With a release source, GetFullSeasonAsync answers only once it is set —
+    // Entered marks the moment a caller is inside MAL, so a test can start a
+    // second caller while the first is held there.
+    private sealed class FakeMalClient(List<MalAnimeListEdge>? edges = null, bool throws = false, TaskCompletionSource? release = null) : IMalClient
     {
         public int FullSeasonCallCount { get; private set; }
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task<List<MalAnimeListEdge>?> GetFullSeasonAsync(int year, string season, string? sort = null, CancellationToken ct = default)
         {
             FullSeasonCallCount++;
+            Entered.TrySetResult();
             if (throws)
                 throw new InvalidOperationException("Simulated MAL failure.");
-            return Task.FromResult(edges);
+            return release is null ? Task.FromResult(edges) : AnswerOnceReleased();
+
+            async Task<List<MalAnimeListEdge>?> AnswerOnceReleased()
+            {
+                await release.Task;
+                return edges;
+            }
         }
 
         public Task<MalPagedResponse<MalAnimeListEdge>> SearchAnimeAsync(string query, int limit = 5, CancellationToken ct = default) =>

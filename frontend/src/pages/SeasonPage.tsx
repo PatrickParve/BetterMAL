@@ -223,8 +223,6 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
   const [refresh, setRefresh] = useState<{ season: string; status: RefreshStatus } | null>(null)
   const refreshStatus = refresh?.season === seasonId ? refresh.status : null
   const refreshing = refreshStatus === 'running'
-  // The refresh settling within the delay leaves no trace on screen.
-  const showUpdating = useDelayedFlag(refreshing)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   // Read by the refresh effect so it re-reads with whatever hideHentai is
@@ -300,6 +298,12 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
             : !refreshSettled
               ? 'fetching'
               : 'fetchFailed'
+
+  // "Updating…" says that the anime on screen are being brought up to date, so
+  // it is drawn only over a grid. A season waiting on its first fetch has its
+  // 'fetching' notice for that same request, and both would describe it. The
+  // refresh settling within the delay leaves no trace on screen.
+  const showUpdating = useDelayedFlag(refreshing && terminalState === 'grid')
 
   // Built from the addressable range's own two ends alone (design D1) — the
   // guard above has already confirmed `year`/`season` sit inside it, so no

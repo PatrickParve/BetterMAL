@@ -34,13 +34,22 @@ function isRankingType(value: string | null): value is TopAnimeRankingType {
 // so switching lists doesn't invalidate or block on another list's cache.
 //
 // A type's first load reads the server's cache (GetRankingAsync — cache-only,
-// never calls MAL) and resolves with it immediately; that load then posts one
-// background refresh (RefreshAsync) for the type. A `fetched` outcome re-reads
-// and replaces the cached rows for that type, in place, with no loading
-// state; `skipped` and `failed` leave the cache exactly as it is. The refresh
-// rides along with a type's first load only — reusing an already-cached type
-// makes no request of any kind — so a list is refreshed at most once per
-// session however often it's re-selected (design D3).
+// never calls MAL). When that read has rows, the load resolves with them
+// immediately and then posts one background refresh (RefreshAsync) for the
+// type. A `fetched` outcome re-reads and replaces the cached rows for that
+// type, in place, with no loading state; `skipped` and `failed` leave the
+// cache exactly as it is. The refresh rides along with a type's first load
+// only — reusing an already-cached type makes no request of any kind — so a
+// list is refreshed at most once per session however often it's re-selected
+// (design D3).
+//
+// A read with no rows means the list has never been fetched, so there is
+// nothing to show yet: the load itself waits on the refresh, then reads again
+// (design D2 of simplify-settings-and-first-fetch-states). Only rows are ever
+// cached, never an empty list, so a first fetch that fails or leaves the list
+// empty rejects with FirstFetchFailed and the type is asked for again the next
+// time it is selected. `fetchingFirstTypes` names the types in that wait, so
+// the page can say the ranking is being fetched from MyAnimeList.
 //
 // A load that fails is not remembered: its in-flight entry is dropped along
 // with a success's, so selecting the list again, Try again, or the server
@@ -48,6 +57,22 @@ function isRankingType(value: string | null): value is TopAnimeRankingType {
 // rejected promise for the rest of the session.
 const cachedItemsByType = new Map<TopAnimeRankingType, TopAnimeItemDto[]>()
 const inFlightLoadByType = new Map<TopAnimeRankingType, Promise<TopAnimeItemDto[]>>()
+
+// The types whose first fetch from MyAnimeList is being waited on right now.
+// Module state like the caches above, so a page that remounts mid-wait still
+// knows. Changed only next to a notifyCacheUpdate() call, which is what
+// redraws a page that is already on screen.
+const fetchingFirstTypes = new Set<TopAnimeRankingType>()
+
+// A list's first fetch did not produce a ranking: MyAnimeList answered
+// `failed`, or the list was still empty after the fetch. Kept apart from the
+// app server's own failures (an ApiError or a network error), which the page
+// shows with Try again, since no control may trigger a fetch from MyAnimeList.
+class FirstFetchFailed extends Error {
+  constructor() {
+    super("The ranking couldn't be fetched from MyAnimeList.")
+  }
+}
 
 // Add/Edit/Delete entries made this session, keyed by anime id, re-applied
 // over any freshly re-read list before it replaces the cached one — a
@@ -95,23 +120,47 @@ function refreshInBackground(type: TopAnimeRankingType) {
 // muted while the new list loads, rather than blanking to a loading line.
 let lastShownType: TopAnimeRankingType | null = null
 
+// Waits for a never-fetched list's first fetch, then reads it again. The type
+// is marked as fetching for exactly the length of the wait. Only a non-empty
+// re-read is cached. A failure of the app's own server (the refresh call or
+// the re-read throwing) passes through unchanged, for the page to show as a
+// failed read.
+async function fetchFirstRanking(type: TopAnimeRankingType): Promise<TopAnimeItemDto[]> {
+  fetchingFirstTypes.add(type)
+  notifyCacheUpdate()
+  try {
+    // `skipped` covers another tab having fetched the list in between.
+    const { outcome } = await refreshTopAnime(type)
+    if (outcome === 'failed') throw new FirstFetchFailed()
+
+    const rows = await getTopAnime(type)
+    if (rows.length === 0) throw new FirstFetchFailed()
+
+    const fresh = applySessionEdits(rows)
+    cachedItemsByType.set(type, fresh)
+    return fresh
+  } finally {
+    fetchingFirstTypes.delete(type)
+    notifyCacheUpdate()
+  }
+}
+
 function loadTopAnimeOnce(type: TopAnimeRankingType): Promise<TopAnimeItemDto[]> {
   const cached = cachedItemsByType.get(type)
   if (cached) return Promise.resolve(cached)
   let inFlight = inFlightLoadByType.get(type)
   if (!inFlight) {
-    inFlight = getTopAnime(type).then(
-      (result) => {
-        cachedItemsByType.set(type, result)
-        inFlightLoadByType.delete(type)
+    inFlight = getTopAnime(type)
+      .then((rows) => {
+        if (rows.length === 0) return fetchFirstRanking(type)
+
+        cachedItemsByType.set(type, rows)
         refreshInBackground(type)
-        return result
-      },
-      (error: unknown) => {
+        return rows
+      })
+      .finally(() => {
         inFlightLoadByType.delete(type)
-        throw error
-      },
-    )
+      })
     inFlightLoadByType.set(type, inFlight)
   }
   return inFlight
@@ -171,17 +220,22 @@ export function TopAnimePage() {
   const [fallback, setFallback] = useState<Display | null>(() => initialFallback(selectedType))
   const cachedForSelected = cachedItemsByType.get(selectedType)
 
-  // The list whose first load failed, if it is the one selected. It is
-  // dropped the moment another list is selected, adjusted during render like
+  // The list whose first load failed, if it is the one selected, and how:
+  // `read` is the app's own server failing (Try again, and a retry once it is
+  // reachable again), `fetch` is MyAnimeList not producing the ranking (no
+  // control, since none may trigger a fetch from MyAnimeList). It is dropped
+  // the moment another list is selected, adjusted during render like
   // usePageData's key change so returning to the list never paints its old
   // failure for a frame before the new load starts.
-  const [failedType, setFailedType] = useState<TopAnimeRankingType | null>(null)
+  const [loadFailure, setLoadFailure] = useState<{ type: TopAnimeRankingType; kind: 'read' | 'fetch' } | null>(null)
   const [renderedType, setRenderedType] = useState(selectedType)
   if (selectedType !== renderedType) {
     setRenderedType(selectedType)
-    setFailedType(null)
+    setLoadFailure(null)
   }
-  const failed = failedType === selectedType && !cachedForSelected
+  const failureKind = loadFailure?.type === selectedType && !cachedForSelected ? loadFailure.kind : null
+  const failed = failureKind !== null
+  const fetchingFirst = fetchingFirstTypes.has(selectedType)
 
   const display: Display | null = cachedForSelected ? { type: selectedType, items: cachedForSelected } : fallback
   const loading = display === null && !failed
@@ -195,10 +249,12 @@ export function TopAnimePage() {
   // below again for the same list.
   const [loadAttempt, setLoadAttempt] = useState(0)
   function runLoadAgain() {
-    setFailedType(null)
+    setLoadFailure(null)
     setLoadAttempt((n) => n + 1)
   }
-  const rearmReconnectRetry = useReconnectRetry(failed, runLoadAgain)
+  // Only a failed read comes back by itself: a failed fetch from MyAnimeList
+  // is retried by opening the list again, not by the connection returning.
+  const rearmReconnectRetry = useReconnectRetry(failureKind === 'read', runLoadAgain)
   function retry() {
     rearmReconnectRetry()
     runLoadAgain()
@@ -225,8 +281,9 @@ export function TopAnimePage() {
         lastShownType = selectedType
         setFallback({ type: selectedType, items: result })
       },
-      () => {
-        if (!cancelled) setFailedType(selectedType)
+      (error: unknown) => {
+        if (cancelled) return
+        setLoadFailure({ type: selectedType, kind: error instanceof FirstFetchFailed ? 'fetch' : 'read' })
       },
     )
 
@@ -378,12 +435,16 @@ export function TopAnimePage() {
         )}
       </div>
 
-      {failed ? (
+      {failureKind === 'read' ? (
         <LoadFailedNotice what="this ranking" onRetry={retry} />
+      ) : failureKind === 'fetch' ? (
+        <p className="top-anime-page__empty">
+          This ranking couldn't be fetched from MyAnimeList — it'll be tried again next time you open it.
+        </p>
       ) : loading ? (
-        <LoadingNotice className="top-anime-page__loading" />
-      ) : items.length === 0 ? (
-        <p className="top-anime-page__empty">No ranking data yet.</p>
+        <LoadingNotice className="top-anime-page__loading">
+          {fetchingFirst ? 'Fetching this ranking from MyAnimeList…' : 'Loading…'}
+        </LoadingNotice>
       ) : (
         <div
           className={muted ? 'top-anime-page__content top-anime-page__content--muted' : 'top-anime-page__content'}

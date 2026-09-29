@@ -23,14 +23,16 @@ namespace AnimeTracker.Api.Tests.Services.Library;
 // affects another.
 public class TopAnimeServiceTests
 {
-    private static AnimeTrackerDbContext CreateDb() =>
+    // A shared name gives two contexts the same in-memory store, which is how
+    // two requests each get their own scoped DbContext over one database.
+    private static AnimeTrackerDbContext CreateDb(string? name = null) =>
         new(new DbContextOptionsBuilder<AnimeTrackerDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .UseInMemoryDatabase(name ?? Guid.NewGuid().ToString())
             .Options);
 
     private static TopAnimeService CreateService(
         AnimeTrackerDbContext db, FakeMalClient malClient, Dictionary<int, int>? airedSoFar = null,
-        IAnimeSearchIndex? searchIndex = null) =>
+        IAnimeSearchIndex? searchIndex = null, RefreshGate? refreshGate = null) =>
         new(
             db,
             malClient,
@@ -38,7 +40,7 @@ public class TopAnimeServiceTests
             new TopAnimeRepository(db),
             new FakeEpisodeScheduleService(airedSoFar),
             new FakeBroadcastLocalTimeConverter(),
-            new RefreshGate(),
+            refreshGate ?? new RefreshGate(),
             searchIndex ?? new FakeAnimeSearchIndex(),
             NullLogger<TopAnimeService>.Instance);
 
@@ -62,6 +64,41 @@ public class TopAnimeServiceTests
         await service.RefreshAsync(TopAnimeRankingType.Movie);
 
         Assert.Equal(["all", "movie"], malClient.RankingCalls);
+    }
+
+    // simplify-settings-and-first-fetch-states design D1: a never-fetched list
+    // costs one MAL request however many callers ask at once. The second
+    // caller meets the first at the RefreshGate and re-checks freshness once
+    // it is in, so it is answered Skipped.
+    [Fact]
+    public async Task RefreshAsync_TwoOverlappingCallsOnANeverFetchedListFetchOnceAndReportFetchedThenSkipped()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var firstDb = CreateDb(dbName);
+        using var secondDb = CreateDb(dbName);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var malClient = new FakeMalClient(new Dictionary<string, List<MalAnimeListEdge>>
+        {
+            ["all"] = [Edge(1, 1)],
+        }, release: release);
+        var gate = new RefreshGate();
+        var firstService = CreateService(firstDb, malClient, refreshGate: gate);
+        var secondService = CreateService(secondDb, malClient, refreshGate: gate);
+
+        var firstCall = firstService.RefreshAsync(TopAnimeRankingType.All);
+        await malClient.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10)); // the first holds the gate, blocked inside MAL
+
+        var secondCall = secondService.RefreshAsync(TopAnimeRankingType.All);
+        await Task.Delay(100);
+        Assert.False(secondCall.IsCompleted); // waiting on the gate, not fetching
+
+        release.SetResult();
+        var first = await firstCall.WaitAsync(TimeSpan.FromSeconds(10));
+        var second = await secondCall.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(TopAnimeRefreshOutcome.Fetched, first.Outcome);
+        Assert.Equal(TopAnimeRefreshOutcome.Skipped, second.Outcome);
+        Assert.Single(malClient.RankingCalls);
     }
 
     [Fact]
@@ -354,23 +391,36 @@ public class TopAnimeServiceTests
             (jstDayOfWeek, jstTime);
     }
 
+    // With a release source, GetRankingAsync answers only once it is set —
+    // Entered marks the moment a caller is inside MAL, so a test can start a
+    // second caller while the first is held there.
     private sealed class FakeMalClient(
         Dictionary<string, List<MalAnimeListEdge>>? rankings = null,
-        HashSet<string>? failing = null) : IMalClient
+        HashSet<string>? failing = null,
+        TaskCompletionSource? release = null) : IMalClient
     {
         private readonly Dictionary<string, List<MalAnimeListEdge>> _rankings = rankings ?? [];
         private readonly HashSet<string> _failing = failing ?? [];
 
         public List<string> RankingCalls { get; } = [];
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task<MalPagedResponse<MalAnimeListEdge>> GetRankingAsync(string rankingType = "all", int limit = 100, CancellationToken ct = default)
         {
             RankingCalls.Add(rankingType);
+            Entered.TrySetResult();
             if (_failing.Contains(rankingType))
                 throw new InvalidOperationException($"Simulated MAL failure for ranking type '{rankingType}'.");
 
             var edges = _rankings.GetValueOrDefault(rankingType, []);
-            return Task.FromResult(new MalPagedResponse<MalAnimeListEdge> { Data = edges });
+            var response = new MalPagedResponse<MalAnimeListEdge> { Data = edges };
+            return release is null ? Task.FromResult(response) : AnswerOnceReleased();
+
+            async Task<MalPagedResponse<MalAnimeListEdge>> AnswerOnceReleased()
+            {
+                await release.Task;
+                return response;
+            }
         }
 
         public Task<MalPagedResponse<MalAnimeListEdge>> SearchAnimeAsync(string query, int limit = 5, CancellationToken ct = default) =>

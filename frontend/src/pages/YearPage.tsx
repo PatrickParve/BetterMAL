@@ -187,8 +187,6 @@ function YearPageView({ year }: { year: number }) {
   const [refresh, setRefresh] = useState<{ year: number; status: RefreshStatus } | null>(null)
   const refreshStatus = refresh?.year === year ? refresh.status : null
   const refreshing = refreshStatus === 'running'
-  // The refresh settling within the delay leaves no trace on screen.
-  const showUpdating = useDelayedFlag(refreshing)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   // Read by the refresh effect so it re-reads with whatever hideHentai is
@@ -263,6 +261,12 @@ function YearPageView({ year }: { year: number }) {
             : !refreshSettled
               ? 'fetching'
               : 'fetchFailed'
+
+  // "Updating…" says that the anime on screen are being brought up to date, so
+  // it is drawn only over a grid. A year waiting on its first fetch has its
+  // 'fetching' notice for that same request, and both would describe it. The
+  // refresh settling within the delay leaves no trace on screen.
+  const showUpdating = useDelayedFlag(refreshing && terminalState === 'grid')
 
   // Built from the addressable range's own two ends alone (design D1) — the
   // guard above has already confirmed `year` sits inside it, so no widening
