@@ -238,9 +238,13 @@
 /* Colours only (design D10) — the app's active accent, shared with the
    shared multi-select trigger's own --active treatment, so every narrowing
    Filter control reads the same way. Sort-group controls never get this
-   modifier: ordering hides nothing. */
+   modifier: ordering hides nothing. The tint is the solid token: this class
+   sits on the score filter's <select>, and these controls are on the page's
+   own background, so it is the same colour as --accent-bg with nothing for a
+   browser that builds a dropdown's list from the select's background to
+   turn white (design D4 of fix-cross-browser-display-issues). */
 .my-list-controls--active {
-  background: var(--accent-bg);
+  background: var(--accent-bg-solid);
   border-color: var(--accent-border);
   color: var(--text-h);
 }

@@ -6,6 +6,11 @@
   --code-bg: #f4f3ec;
   --accent: #aa3bff;
   --accent-bg: rgba(170, 59, 255, 0.1);
+  /* --accent-bg drawn over --bg as one opaque colour, for a dropdown that sits
+     on the page's own background: some browsers build a dropdown's option
+     list from the dropdown's own background, and put white behind a
+     see-through one. Same alpha as --accent-bg in each theme. */
+  --accent-bg-solid: color-mix(in srgb, var(--accent) 10%, var(--bg));
   --accent-border: rgba(170, 59, 255, 0.5);
   /* The one filled-button hover fill (design D5 of highlight-controls-on-hover).
      Declared once here, not repeated in the dark block below: it resolves
@@ -90,6 +95,7 @@
   --mal-border: var(--status-completed-border);
   --mine: var(--accent);
   --mine-bg: var(--accent-bg);
+  --mine-bg-solid: var(--accent-bg-solid);
   --mine-border: var(--accent-border);
 
   /* "On air now" green — a series-timeline/status-pill concept, not a score,
@@ -179,6 +185,7 @@
     --code-bg: #1f2028;
     --accent: #c084fc;
     --accent-bg: rgba(192, 132, 252, 0.15);
+    --accent-bg-solid: color-mix(in srgb, var(--accent) 15%, var(--bg));
     --accent-border: rgba(192, 132, 252, 0.5);
     --social-bg: rgba(47, 48, 58, 0.5);
     --shadow:
@@ -231,6 +238,7 @@
     --mal-border: var(--status-completed-border);
     --mine: var(--accent);
     --mine-bg: var(--accent-bg);
+    --mine-bg-solid: var(--accent-bg-solid);
     --mine-border: var(--accent-border);
 
     /* The year family is the one family whose *direction* flips: it fills
@@ -535,10 +543,33 @@ input[type='date'] {
    find field are borderless inside a bordered wrapper, checkbox/date inputs
    use native rendering), so a global input rule would either do nothing or
    fight those wrappers — the few bare text fields get this same hover
-   written in their own stylesheets instead. */
+   written in their own stylesheets instead. That is the closed dropdown; its
+   opened list is the `option` rule below. */
 select:not(:disabled):hover {
   color: var(--text-h);
   border-color: var(--accent-border);
+}
+
+/* An opened dropdown's list, written once for every dropdown the app renders
+   (design D4 of fix-cross-browser-display-issues; navigation-and-search, "A
+   dropdown's opened list stays readable in every browser"). Windows builds the
+   list from the options' own colours and, where an option has none, from the
+   select's background, putting white behind a see-through one: near-white
+   text on white in the dark theme. So every option carries opaque colours of
+   its own, whatever its select looks like closed. Some selects are see-through
+   on purpose (My List's row score shows its row's tint through it), so the
+   select's background can't be relied on to be opaque. macOS draws a native
+   menu that ignores all of this. An author `color` on `option` also outranks
+   the browser's own greyed-out look, so an option that can't be chosen (the
+   entry editor's unavailable statuses and scores) is dimmed explicitly below,
+   or it would read as pickable. */
+option {
+  background-color: var(--bg);
+  color: var(--text-h);
+}
+
+option:disabled {
+  color: color-mix(in srgb, var(--text) 60%, var(--bg));
 }
 
 /* Content held from the previous period while the next one loads (useHeldData;

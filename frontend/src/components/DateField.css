@@ -55,10 +55,11 @@
 }
 
 /* Same accent tint every other hoverable control in the app uses (e.g.
-   .season-page__nav button, .pagination__page). */
+   .season-page__nav button, .pagination__page), drawn solid because this is a
+   dropdown on the page's own background (see the entry editor's hover rule). */
 .date-field__part:hover {
   border-color: var(--accent-border);
-  background: var(--accent-bg);
+  background: var(--accent-bg-solid);
   color: var(--text-h);
 }
 

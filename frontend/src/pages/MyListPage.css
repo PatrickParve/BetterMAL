@@ -340,6 +340,14 @@
   text-align: center;
 }
 
+/* See-through on purpose (design D4 of fix-cross-browser-display-issues): it
+   rests at `transparent` so the row's own hover tint (.my-list-row:hover)
+   shows through it, and a score I've set draws --mine-bg on top of that tint
+   so it stays darker than the row while I point at it. A solid colour can't
+   keep either look, so this is not switched to --accent-bg-solid or
+   --mine-bg-solid like the dropdowns that sit on the page's plain
+   background. Its option list is kept opaque by the shared `option` rule in
+   index.css instead. */
 .my-list-row__score-select {
   width: 100%;
   box-sizing: border-box;

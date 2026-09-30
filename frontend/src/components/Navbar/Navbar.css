@@ -44,12 +44,18 @@
    that trap can't reopen. A resting translateY(0) or a stray will-change on
    the shown state would bring it back; don't add either (design D1/D4).
 
-   :not(:focus-within) keeps it shown while focus is inside it — what makes
-   tabbing into a hidden navbar bring it back, with no JS. :not(:has(...))
-   covers its two dropdowns separately, because Safari doesn't focus a
-   <button> on click, so a mouse-opened Updates dropdown would otherwise
-   leave no focus inside the navbar for :focus-within to catch (design D4). */
-.navbar--hidden:not(:focus-within):not(:has(.search-bar__dropdown, .updates-menu__dropdown)) {
+   :has(:focus-visible) keeps it shown while keyboard focus is inside it, or
+   focus is in a text field — what makes tabbing into a hidden navbar bring it
+   back, with no JS, and keeps it while I type in the search field. It is
+   :focus-visible rather than :focus-within because Chrome, Edge and Firefox
+   on Windows leave focus on a link or button that was clicked and Safari does
+   not, so :focus-within pinned the navbar shown after any click on it, until
+   I clicked somewhere else on the page (design D3 of
+   fix-cross-browser-display-issues). The two dropdowns are still listed
+   separately: one opened with the mouse leaves focus on a button that isn't
+   focus-visible, so it is this clause that keeps that navbar in view
+   (design D4). */
+.navbar--hidden:not(:has(:focus-visible, .search-bar__dropdown, .updates-menu__dropdown)) {
   transform: translateY(-100%);
 }
 

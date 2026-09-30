@@ -43,10 +43,15 @@
   color: var(--text-h);
 }
 
+/* Hover and score-set tints are the solid tokens (--accent-bg-solid,
+   --mine-bg-solid), not the see-through --accent-bg/--mine-bg: Windows builds
+   a dropdown's option list from the dropdown's own background and puts white
+   behind a see-through one. This form sits on the modal's --bg, so the solid
+   token is the same colour the tint always drew, as one layer. */
 .entry-editor__field select:hover:not(:disabled),
 .entry-editor__field input:hover:not(:disabled) {
   border-color: var(--accent-border);
-  background: var(--accent-bg);
+  background: var(--accent-bg-solid);
 }
 
 /* "Mine" role (design.md decision 9): a score I've actually set looks like
@@ -54,7 +59,7 @@
    styling above — there's no score to colour. */
 .entry-editor__score-select.entry-editor__score-select--mine {
   border-color: var(--mine-border);
-  background: var(--mine-bg);
+  background: var(--mine-bg-solid);
   color: var(--mine);
 }
 

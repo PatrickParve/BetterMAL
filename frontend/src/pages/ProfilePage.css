@@ -362,14 +362,31 @@
    fill by PosterPicture, never by widening the tile. Written as lengths
    rather than percentages so Top series can size its picture area from the
    same width. Declared here, read on the tiles, where this strip is the
-   nearest container. The other three strips below repeat the same pair. */
+   nearest container. The other three strips below repeat the same set.
+
+   The rest is the room a hovered tile needs (design D1, D2 of
+   fix-cross-browser-display-issues). A tile scaled by --strip-pop grows by
+   (pop - 1) / 2 of its own height above and below it, 4% at 1.08, so the
+   growth follows the tile while the strip's 8px of padding does not: a tile
+   past about 200px tall (a window about 1520px wide) would be cut off.
+   --strip-pop-room is what the padding is short by, never below 0, so a
+   strip whose tiles are small enough is exactly the height it was. The tile
+   carries it as a block margin, not the strip as padding, because it is
+   written in --strip-tile-h and a container query unit on the container
+   itself resolves against the container's ancestors: it only resolves on a
+   child. Beside the first and last tile the room is a percentage of the
+   strip's width instead, which needs no container: 0.4% of it is always a
+   little over the 4% of a tile's width a scaled tile grows by, since ten
+   tiles and nine gaps fill that width. */
 .top-anime-strip {
   --strip-tile-w: calc((100cqw - 9 * 10px) / 10);
   --strip-tile-h: calc(var(--strip-tile-w) * 3 / 2);
+  --strip-pop: 1.08;
+  --strip-pop-room: max(0px, calc(var(--strip-tile-h) * (var(--strip-pop) - 1) / 2 - 8px));
   container-type: inline-size;
   display: flex;
   gap: 10px;
-  padding: 8px;
+  padding: 8px max(8px, 0.4%);
   overflow-x: auto;
   overflow-y: hidden;
   /* Stops a flick past the strip's last tile from chaining to the document,
@@ -415,19 +432,21 @@
   flex: 0 0 var(--strip-tile-w);
   height: var(--strip-tile-h);
   min-width: 0;
+  margin-block: var(--strip-pop-room);
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--border);
   transition: transform 0.15s ease;
 }
 
-/* Scale up in place, no border/ring/scrim change — the strip's own padding
-   above reserves room so a scaled-up edge tile doesn't clip against the
-   scroll boundary, and z-index lifts it above its neighbours so it isn't
-   overlapped as it grows into the gap either side. */
+/* Scale up in place, no border/ring/scrim change — the room comes from the
+   tile's own block margin (--strip-pop-room) and the strip's padding, both
+   sized from the tile, so a scaled-up edge tile doesn't clip against the
+   scroll boundary at any window width, and z-index lifts it above its
+   neighbours so it isn't overlapped as it grows into the gap either side. */
 .top-anime-strip__item:hover,
 .top-anime-strip__item:focus-visible {
-  transform: scale(1.08);
+  transform: scale(var(--strip-pop));
   z-index: 1;
   outline: none;
 }
@@ -468,10 +487,12 @@
 .rewatched-strip {
   --strip-tile-w: calc((100cqw - 9 * 10px) / 10);
   --strip-tile-h: calc(var(--strip-tile-w) * 3 / 2);
+  --strip-pop: 1.08;
+  --strip-pop-room: max(0px, calc(var(--strip-tile-h) * (var(--strip-pop) - 1) / 2 - 8px));
   container-type: inline-size;
   display: flex;
   gap: 10px;
-  padding: 8px;
+  padding: 8px max(8px, 0.4%);
   overflow-x: auto;
   overflow-y: hidden;
   /* See .top-anime-strip: stops end-of-strip flicks from chaining to the
@@ -505,6 +526,7 @@
   flex: 0 0 var(--strip-tile-w);
   height: var(--strip-tile-h);
   min-width: 0;
+  margin-block: var(--strip-pop-room);
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -513,7 +535,7 @@
 
 .rewatched-strip__item:hover,
 .rewatched-strip__item:focus-visible {
-  transform: scale(1.08);
+  transform: scale(var(--strip-pop));
   z-index: 1;
   outline: none;
 }
@@ -572,10 +594,20 @@
 .top-series-strip {
   --strip-tile-w: calc((100cqw - 9 * 10px) / 10);
   --strip-tile-h: calc(var(--strip-tile-w) * 3 / 2);
+  --strip-pop: 1.08;
+  /* This strip's tile is its picture plus a footer of two score chips, so it
+     is taller than --strip-tile-h and the room a hovered tile needs follows
+     the whole tile. The constant is how much taller: the chip footer less
+     the 1px the picture and border come to under --strip-tile-h. Measured
+     at 35.09px from a 1280px window up, where the root font, and so the
+     chips, stop growing, and rounded up to 36. It must change if the
+     chips' size does. */
+  --strip-series-tile-h: calc(var(--strip-tile-h) + 36px);
+  --strip-pop-room: max(0px, calc(var(--strip-series-tile-h) * (var(--strip-pop) - 1) / 2 - 8px));
   container-type: inline-size;
   display: flex;
   gap: 10px;
-  padding: 8px;
+  padding: 8px max(8px, 0.4%);
   overflow-x: auto;
   overflow-y: hidden;
   /* See .top-anime-strip: stops end-of-strip flicks from chaining to the
@@ -608,6 +640,7 @@
   box-sizing: border-box;
   flex: 0 0 var(--strip-tile-w);
   min-width: 0;
+  margin-block: var(--strip-pop-room);
   display: flex;
   flex-direction: column;
   border-radius: 8px;
@@ -620,7 +653,7 @@
 
 .top-series-strip__item:hover,
 .top-series-strip__item:focus-visible {
-  transform: scale(1.08);
+  transform: scale(var(--strip-pop));
   z-index: 1;
   outline: none;
 }
@@ -649,17 +682,20 @@
 }
 
 /* Same strip mechanics as top-anime-strip/rewatched-strip/top-series-strip
-   (tile basis, gap, hover-scale, drag-scroll, scrollbar hiding) — four near-
-   identical blocks is deliberate for now (design.md D10). The badge sits
-   over the picture rather than in a footer, so the tile shape follows
+   (tile basis, gap, hover-scale and the room it needs, drag-scroll,
+   scrollbar hiding) — four near-identical blocks is deliberate for now
+   (design.md D10), and the room's variables are copied with them. The badge
+   sits over the picture rather than in a footer, so the tile shape follows
    .rewatched-strip__item's, not .top-series-strip__item's. */
 .time-spent-strip {
   --strip-tile-w: calc((100cqw - 9 * 10px) / 10);
   --strip-tile-h: calc(var(--strip-tile-w) * 3 / 2);
+  --strip-pop: 1.08;
+  --strip-pop-room: max(0px, calc(var(--strip-tile-h) * (var(--strip-pop) - 1) / 2 - 8px));
   container-type: inline-size;
   display: flex;
   gap: 10px;
-  padding: 8px;
+  padding: 8px max(8px, 0.4%);
   overflow-x: auto;
   overflow-y: hidden;
   /* See .top-anime-strip: stops end-of-strip flicks from chaining to the
@@ -693,6 +729,7 @@
   flex: 0 0 var(--strip-tile-w);
   height: var(--strip-tile-h);
   min-width: 0;
+  margin-block: var(--strip-pop-room);
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -701,7 +738,7 @@
 
 .time-spent-strip__item:hover,
 .time-spent-strip__item:focus-visible {
-  transform: scale(1.08);
+  transform: scale(var(--strip-pop));
   z-index: 1;
   outline: none;
 }

@@ -113,11 +113,12 @@
 }
 
 /* "Mine" role (score-presentation): a score I've picked looks like the score
-   it sets, same recipe as .entry-editor__score-select--mine. "No score" keeps
-   the neutral styling above, since there is no score to colour. */
+   it sets, same recipe as .entry-editor__score-select--mine, solid for the
+   same reason (the entry editor's hover rule). "No score" keeps the neutral
+   styling above, since there is no score to colour. */
 .completion-score__select.completion-score__select--mine {
   border-color: var(--mine-border);
-  background: var(--mine-bg);
+  background: var(--mine-bg-solid);
   color: var(--mine);
 }
 
