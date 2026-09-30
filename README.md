@@ -1,345 +1,128 @@
-# Anime Tracker
+# BetterMAL
 
-A personal anime-tracking web app that replaces/augments MyAnimeList's own UI
-with one built exactly to taste. It's a **single-user, local-machine app**:
-no accounts, no auth, no multi-tenancy — every page *is* the editing
-interface. Your list lives in this app's own Postgres database as the source
-of truth, and stays synced with your real MyAnimeList account in both
-directions (a guided first run reads your list from MAL, ongoing edits are
-pushed back to MAL).
+A self-hosted front end for your MyAnimeList list. It keeps your list in its own
+database, adds the views MyAnimeList doesn't have (an airing calendar, whole
+franchises in watch order, recaps and stats), and syncs every change back to
+your MyAnimeList account.
 
-**Stack:** ASP.NET Core (C#) + EF Core API, Postgres, React + TypeScript
-frontend, all wired together with Docker Compose.
+It runs on your own computer with Docker, for one person, with no accounts of
+its own.
 
-## Prerequisites
+## Features
 
-Pick one of the two setups below.
+- **Home**: what you're watching, what airs today, and this season at a glance.
+- **Airing calendar**: a week grid of when the shows on your list air, with
+  per-episode dates from AniList.
+- **Seasons, years and Top Anime**: browse any season or year, or
+  MyAnimeList's rankings, and add anime to your list from there.
+- **Series**: each franchise in watch order on a timeline, with how far behind
+  you are and your scores next to MyAnimeList's.
+- **My list**: grouped by status, with sorting and filters by score, type and
+  more.
+- **Recap and Profile**: recap any season, year or run of years; see your
+  stats, favourite seasons, where your scores differ most from MyAnimeList's,
+  and rank your favourites.
+- **Updates**: news about the shows on your list, such as a sequel announced, a
+  start date or episode count released, or a broadcast moving.
+- **Hide scores**: hide MyAnimeList's scores everywhere, so they don't sway
+  yours.
+- **Pictures**: choose any MyAnimeList picture for an anime or a series, or,
+  with a TMDB key, a full-size poster or backdrop.
+- **Two-way sync**: your edits reach MyAnimeList within seconds, and changes
+  made elsewhere wait for your review before they're applied.
+- **Files**: back up your list, and move your ranking, chosen pictures and edit
+  history to another computer.
 
-**Docker (recommended)** — this is the only setup you need for this option:
+**Stack:** ASP.NET Core 10 (C#) with EF Core, PostgreSQL 17, React 19 with
+TypeScript and Vite, Docker Compose.
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (includes
-  Docker Compose)
+## Quick start
 
-**Running services natively without Docker** — install all of:
+You need [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or
+another Docker with Compose) and a MyAnimeList account.
 
-- [.NET SDK 10](https://dotnet.microsoft.com/download)
-- [Node.js 22+](https://nodejs.org/) (ships with npm)
-- [PostgreSQL 17](https://www.postgresql.org/download/) (or run just the
-  `postgres` service from Docker Compose and run backend/frontend natively —
-  see below)
+### 1. Create a MyAnimeList API app
 
-Check what you already have installed:
+1. Go to https://myanimelist.net/apiconfig and create an app with App Type
+   **other**.
+2. Set the **App Redirect URL** to `http://localhost:5050/callback`.
+3. Save, and copy the **Client ID** and the **Client Secret**.
 
-```bash
-docker --version && docker compose version
-dotnet --version
-node --version && npm --version
-```
-
-## 1. Get a MyAnimeList API key
-
-The app talks to the official MyAnimeList API v2, which requires your own
-app credentials:
-
-1. Log into MyAnimeList and go to https://myanimelist.net/apiconfig
-2. Create a new app (App Type: **other**).
-3. Set the **App Redirect URL** to `http://localhost:5050/callback` (the port
-   must match `BACKEND_PORT` in your `.env` — 5050 is the default).
-4. Save, then copy the generated **Client ID** and **Client Secret**.
-
-**Both values are required.** The app starts without them, but its first
-screen then names each one that is missing (`MAL_CLIENT_ID`,
-`MAL_CLIENT_SECRET`) and offers no way on until you set it in `.env` and
-restart the app. That includes the secret: the app no longer runs with only a
-client id.
-
-After you approve the app on MyAnimeList, its callback returns you to the app
-itself, at `http://localhost:<FRONTEND_PORT>` (5173 by default), so
-`FRONTEND_PORT` has to match where you open the frontend.
-
-## Optional: a TMDB API key (better pictures)
-
-MyAnimeList only publishes its own pictures, which are fairly small. With a
-free [TMDB](https://www.themoviedb.org/) API key, the **Choose picture** picker
-on an anime's or a series' page also offers TMDB's full-resolution posters and
-backdrops — alongside MAL's own, in labelled sections — and any of them can be
-picked as the picture.
-
-1. Create a free account at https://www.themoviedb.org/ and open
-   **Settings → API** (https://www.themoviedb.org/settings/api).
-2. Request an API key for personal, non-commercial use, and copy the **API Key**
-   — the short v3 key, not the long "API Read Access Token".
-3. Set it as `TMDB_API_KEY` in your `.env` (next step), then restart the backend.
-
-It's entirely optional. Leave it empty and the app runs exactly as it does
-without it, making no TMDB request at all. **IMDb links** on the anime and
-series pages work either way: they come from a separate community-maintained
-id mapping the backend downloads once a week, which needs no key.
-
-TMDB's terms allow free use for non-commercial projects, and each installation
-needs its own key — this app isn't meant to be shared with one baked in. In
-return TMDB requires its logo and a notice to be shown in the app. The picker
-shows them wherever it offers TMDB images, and the **Credits** group at the
-bottom of the Settings page always does:
-
-<img src="frontend/assets/TMDB_Logo.svg" alt="The Movie Database (TMDB)" height="20">
-
-*This application uses TMDB and the TMDB APIs but is not endorsed, certified, or
-otherwise approved by TMDB.*
-
-TMDB's terms also limit how long what it sends may be kept, so the app deletes a
-cached list of pictures once its last fetch is more than about five months old,
-and fetches it again the next time a page needs it. A list you open is refreshed
-after 30 days, so only lists nobody opened get that old. A picture you have
-**picked** is not part of that list: it is stored on the anime or series itself,
-so it stays, and keeps showing everywhere, whatever happens to the list it came
-from.
-
-## Fixing a missing or wrong TMDB or IMDb id
-
-The ids come from a community-maintained mapping the backend downloads once a
-week, and it has gaps: a brand-new show may have no TMDB or IMDb id yet, and a few
-entries name the wrong TMDB season. `backend/custom/id-mapping.json` is where
-you fix that. The app reads it on top of the downloaded mapping. Run natively, an
-edit applies within seconds; with Docker the folder is copied into the backend
-image, so apply an edit with `docker compose up -d --build`.
-
-By default an entry only fills a gap, and gives way as soon as the downloaded
-mapping has the ids. With `"override": true` it wins even where the source has a
-(wrong) value. [`backend/custom/README.md`](backend/custom/README.md) has the
-format and how to find the ids.
-
-## 2. Configure environment variables
-
-Copy the example file and fill in your values:
+### 2. Configure
 
 ```bash
 cp .env.example .env
 ```
 
-```dotenv
-# --- MyAnimeList API (both required) ---
-MAL_CLIENT_ID=            # from myanimelist.net/apiconfig
-MAL_CLIENT_SECRET=        # from the same page
+Open `.env` and fill in `MAL_CLIENT_ID` and `MAL_CLIENT_SECRET`. Everything
+else can stay as it is (see [Configuration](#configuration)).
 
-# --- TMDB (optional) ---
-TMDB_API_KEY=             # v3 API key from themoviedb.org → Settings → API; leave empty to run without TMDB
-
-# --- Ports exposed on localhost ---
-BACKEND_PORT=5050         # must match the redirect URI registered with MAL above
-FRONTEND_PORT=5173        # where you open the app; sign-in returns you here
-
-# --- Postgres ---
-POSTGRES_DB=animetracker
-POSTGRES_USER=animetracker
-POSTGRES_PASSWORD=devlocalpassword   # only guards the local database; set before your first `docker compose up`
-POSTGRES_PORT=5434
-```
-
-`.env` is gitignored and must never be committed — it's the only place
-secrets live.
-
-## 3. Run it
-
-### Option A: Docker Compose (recommended)
-
-From the repo root:
+### 3. Start it
 
 ```bash
 docker compose up -d --build
 ```
 
-This builds and starts three containers: `postgres`, `backend`, and
-`frontend`. The backend applies EF Core migrations automatically on startup,
-so the database schema is created for you — no manual migration step needed.
+Open http://localhost:5173 and press **Connect to MyAnimeList**. The first run
+then reads your list and fetches the details of every anime on it, about one
+anime a second, so a long list takes a while. You can close the tab in the
+meantime: the app opens by itself when it's ready.
 
-- Frontend: http://localhost:5173 (or your `FRONTEND_PORT`)
-- Backend API: http://localhost:5050 (or your `BACKEND_PORT`)
-- Postgres: exposed on `localhost:5434` (for a local DB client, if wanted)
+To update after pulling new changes, run the same command again.
+`docker compose down` stops the app, and your data stays in a Docker volume.
 
-All three services use `restart: unless-stopped`, so they come back up
-automatically whenever Docker restarts (e.g. on machine boot). Data persists
-across rebuilds in the named `postgres-data` volume.
+## Optional: better pictures from TMDB
 
-To stop everything:
+With a free TMDB API key, the picture picker also offers TMDB's full-size
+posters and backdrops. See [guides/TMDB.md](guides/TMDB.md).
 
-```bash
-docker compose down
-```
+## Configuration
 
-To view logs:
+All settings live in `.env`, which is git-ignored.
 
-```bash
-docker compose logs -f backend   # or frontend / postgres
-```
+| Variable            | What it is                                                     | Default            |
+| ------------------- | -------------------------------------------------------------- | ------------------ |
+| `MAL_CLIENT_ID`     | Your MyAnimeList app's Client ID                               | *(required)*       |
+| `MAL_CLIENT_SECRET` | Your MyAnimeList app's Client Secret                           | *(required)*       |
+| `TMDB_API_KEY`      | TMDB v3 API key, for TMDB pictures                             | *(empty)*          |
+| `BACKEND_PORT`      | Port of the backend, and part of the redirect URL you gave MAL | `5050`             |
+| `FRONTEND_PORT`     | Port you open the app on                                       | `5173`             |
+| `POSTGRES_DB`       | Database name                                                  | `animetracker`     |
+| `POSTGRES_USER`     | Database user                                                  | `animetracker`     |
+| `POSTGRES_PASSWORD` | Database password; change it before the first start            | `devlocalpassword` |
+| `POSTGRES_PORT`     | Port the database is reachable on from your computer           | `5434`             |
 
-#### Rebuilding the Docker images
+If you change `BACKEND_PORT`, change your MyAnimeList app's redirect URL to
+match.
 
-Whenever you change backend or frontend code, the running containers are
-still using the old image until you rebuild. From the repo root:
+Everything listens on `localhost` only. The app has no login, so don't expose
+it to a network.
 
-```bash
-docker compose up -d --build
-```
+## More
 
-This rebuilds any service whose source changed and recreates its container,
-leaving `postgres` (and its data volume) untouched. It's safe to run any
-time, including with no changes — Docker just reuses cached layers.
+- [guides/SETTINGS.md](guides/SETTINGS.md): what syncs by itself, and what each
+  action on the Settings page does.
+- [guides/DEVELOPMENT.md](guides/DEVELOPMENT.md): running without Docker, the
+  tests, and how the code is laid out.
+- [backend/custom/README.md](backend/custom/README.md): correcting an anime's
+  TMDB or IMDb id.
 
-To target a single service instead of rebuilding everything:
+## Credits
 
-```bash
-docker compose build backend    # or frontend
-docker compose up -d backend    # recreate just that container with the new image
-```
+- Anime data and your list: the
+  [MyAnimeList API](https://myanimelist.net/apiconfig/references/api/v2).
+- Episode air dates: the [AniList](https://anilist.co/) API.
+- The MyAnimeList-to-TMDB/IMDb id mapping:
+  [Fribb/anime-lists](https://github.com/Fribb/anime-lists).
+- Pictures (optional): [TMDB](https://www.themoviedb.org/). This application
+  uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise
+  approved by TMDB.
 
-To force a full rebuild with no cached layers (useful if you suspect a stale
-layer, e.g. after a base-image update):
+BetterMAL is an independent project, not affiliated with or endorsed by
+MyAnimeList or AniList.
 
-```bash
-docker compose build --no-cache backend frontend
-docker compose up -d
-```
+## License
 
-Notes:
-- These commands build the image using each service's `Dockerfile`
-  (`backend/AnimeTracker.Api/Dockerfile`, `frontend/Dockerfile`) — you never
-  need to run `docker build` by hand.
-- `docker compose build` sends your source as a build context (no bind
-  mount), so it works the same everywhere `docker compose` runs, regardless
-  of where the repo lives on disk.
-- The backend image targets .NET 10 and is compiled *inside* the build
-  stage, so you don't need the .NET 10 SDK installed locally to build it —
-  only Docker.
-
-### Option B: Run natively (faster iteration during development)
-
-Start just Postgres via Docker (simplest way to get a matching database):
-
-```bash
-docker compose up -d postgres
-```
-
-Then run the backend. It applies migrations automatically on startup and
-listens on port 5050, or `BACKEND_PORT` from `.env`. Run this way, it reads
-the same repo-root `.env` Docker Compose reads, so the MAL credentials, the
-optional TMDB key and the Postgres settings apply with no extra setup, connecting to the
-`postgres` container on `localhost:<POSTGRES_PORT>`. It looks for `.env` two
-levels up from where it's started, so run it from `backend/AnimeTracker.Api`
-as shown below — without one, it falls back to
-`appsettings.Development.json`, which matches `.env.example`'s defaults, but
-MAL won't connect:
-
-```bash
-cd backend/AnimeTracker.Api
-dotnet run
-```
-
-In a separate terminal, run the frontend (Vite dev server on port 5173, or
-`FRONTEND_PORT` from `.env`, proxying `/api` calls to `localhost:5050`, or
-`BACKEND_PORT` from `.env`, per `vite.config.ts`). The backend sends you back
-to that port after MyAnimeList sign-in, so the dev server has to be the one
-listening on it:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-## 4. The first run
-
-Open the app (http://localhost:5173, or your `FRONTEND_PORT`). A new install
-goes through a guided first run, and nothing else in the app is reachable until
-it has finished: every URL shows the setup screen, and the backend refuses
-every request that isn't part of setup. The screen moves through three states.
-
-1. **Credentials check.** If `MAL_CLIENT_ID` or `MAL_CLIENT_SECRET` isn't set,
-   the screen names the missing one and stops. Set it in `.env`, then restart
-   (`docker compose up -d` with Docker, or start the backend again when running
-   it natively). The backend sends no request to MyAnimeList or AniList until
-   both are set.
-2. **Connect.** One **Connect to MyAnimeList** button starts MyAnimeList's
-   sign-in in the same tab. After you approve the app you land back on the
-   setup screen and setup starts by itself. If the sign-in is cancelled,
-   expires (say the app restarted while you were on MyAnimeList) or fails, you
-   come back to this screen with the reason; press the button again.
-3. **Progress.** Four steps, each with a bar, its counts and, once there is
-   enough progress to go on, an estimate of the time left:
-   - **Reading your list**: your whole MyAnimeList list, 100 entries a page.
-   - **Fetching anime details**: one full request per anime at about one a
-     second, anime you are watching and shows airing now first.
-   - **Building series**: every anime's franchise, with no limit on how much
-     is fetched, so the Series page and the profile's Top series are complete
-     from the start.
-   - **Airing dates**: per-episode dates from AniList. It starts as soon as
-     your list is read and runs alongside the other steps, shows airing now
-     and starting this or next season first, then last season's.
-
-The app opens at Home by itself once the list is read, every anime and series
-is done and the airing dates that matter now are in. The rest of the airing
-dates carry on in the background, and **Settings → Data tools → Library data**
-shows how far they are. An AniList outage never keeps Home closed.
-
-The backend does all the work, so you can close the tab and come back. If the
-app restarts, setup carries on from what the database already holds: at most
-the anime or series being saved is redone, and your list is read once more.
-
-When something goes wrong the screen says so, and a **Retry now** button
-appears:
-
-- An anime that fails for a temporary reason is retried after 1, 5, 15 and 60
-  minutes, then every hour, and keeps its place in the order.
-- A service that stops answering pauses its own steps, says when it tries
-  again, and setup resumes by itself. A service that is limiting requests is
-  shown with the time it resumes. Neither is skipped: a MyAnimeList outage
-  holds Home closed until it ends.
-- If MyAnimeList refuses your login, a **Reconnect** button appears, the steps
-  that don't need the login keep going, and reading your list waits for it.
-- An anime MyAnimeList doesn't have, or lists with a status this app doesn't
-  recognize, is skipped for good. It doesn't hold Home closed, and Library data
-  in Settings lists it.
-
-Setup runs once. An install that was already connected and had list entries
-when this first-run flow arrived is recorded as finished by its upgrade and
-never sees it. To go through it again you need an empty database
-(`docker compose down -v` removes the `postgres-data` volume, and with it
-everything this app holds), then start the app again.
-
-## Environment variable reference
-
-| Variable              | Description                                                              | Default        |
-| ---------------------- | ------------------------------------------------------------------------- | -------------- |
-| `MAL_CLIENT_ID`        | MyAnimeList API app Client ID; setup stops until it's set                | *(required)*   |
-| `MAL_CLIENT_SECRET`    | MyAnimeList API app Client Secret; setup stops until it's set            | *(required)*   |
-| `TMDB_API_KEY`         | TMDB v3 API key — enables TMDB pictures in the picker (optional)         | *(optional)*   |
-| `BACKEND_PORT`         | Host port for the backend API; also the OAuth redirect port              | `5050`         |
-| `FRONTEND_PORT`        | Host port for the frontend; also where MAL sign-in returns to            | `5173`         |
-| `POSTGRES_DB`          | Postgres database name                                                   | `animetracker` |
-| `POSTGRES_USER`        | Postgres user                                                            | `animetracker` |
-| `POSTGRES_PASSWORD`    | Postgres password                                                        | *(required)*   |
-| `POSTGRES_PORT`        | Host port Postgres is exposed on                                        | `5434`         |
-
-## Project structure
-
-```
-backend/    ASP.NET Core Web API (C#), EF Core migrations, MAL integration
-frontend/   React + TypeScript app (Vite)
-```
-
-## Notes
-
-- This app is designed for personal, local-only use — it has no
-  authentication layer, since it assumes a single trusted user on their own
-  machine. It is not intended to be deployed publicly as-is.
-- MAL enforces no fixed rate limit but throttles bursts; the app paces and
-  caches requests to stay well under any practical threshold.
-- The optional TMDB integration only calls TMDB when a page needs a set of
-  pictures it hasn't cached yet (then again after 30 days, or when you press
-  **Refresh data**), never as a background sweep. A cached list of pictures that
-  has gone about five months without a refresh is deleted (TMDB's terms limit how
-  long its data may be kept) and fetched again if a page needs it; a picture you
-  picked is not affected. TMDB's images are shown straight from its own CDN at
-  full resolution, so the picker keeps each group of them closed until you open
-  it. This application uses TMDB and the TMDB APIs but is not endorsed,
-  certified, or otherwise approved by TMDB.
+[MIT](LICENSE). The TMDB logo in `frontend/assets` is TMDB's trademark and isn't
+covered by it. The services above have their own terms, which apply when you
+use them through this app.
