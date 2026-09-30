@@ -24,11 +24,16 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* Wraps rather than squeezing on a window too narrow for the title and the
+   actions to share a row: the whole actions group drops beneath the title,
+   right-aligned (its margin-left: auto), so Rank my whole library stays
+   beside the ✕. */
 .anime-rank__header {
   display: flex;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px 16px;
 }
 
 .anime-rank__header-left {
@@ -38,25 +43,41 @@
   min-width: 0;
 }
 
+/* Shrinks only when it is alone on a line narrower than its natural width (a
+   phone): the save status below gives way, the buttons never do. */
 .anime-rank__header-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  margin-left: auto;
 }
 
-.anime-rank__header-actions button {
-  font: inherit;
-  padding: 8px 16px;
+/* The same ✕ the full edit history closes from (EditHistoryOverlay.css),
+   value for value. */
+.anime-rank__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-h);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text);
   cursor: pointer;
 }
 
-.anime-rank__header-actions button:hover:not(:disabled) {
+.anime-rank__close:hover {
   color: var(--text-h);
+  background: var(--accent-bg);
   border-color: var(--accent-border);
+}
+
+.anime-rank__close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .anime-rank__title {
@@ -112,15 +133,25 @@
   visibility: visible;
 }
 
+/* The look of the profile's Rank button that opens this editor
+   (ProfilePage.css's .profile-box__control) — written here rather than
+   reusing that class, since this editor is mounted from AnimeRankContext and
+   opened from other pages too. */
 .anime-rank__whole-library {
-  align-self: flex-start;
   font: inherit;
-  padding: 8px 16px;
+  font-size: 13px;
+  padding: 6px 12px;
   border-radius: 6px;
-  border: 1px solid var(--accent-border);
-  background: transparent;
-  color: var(--accent);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
   cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.anime-rank__whole-library:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
 }
 
 .anime-rank__score-tabs {
@@ -269,11 +300,6 @@
   cursor: pointer;
 }
 
-.anime-rank__row-buttons button:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
 .anime-rank__row-buttons button:not(:disabled):hover {
   border-color: var(--accent-border);
 }
@@ -364,10 +390,16 @@
   background: rgba(229, 72, 77, 0.1);
 }
 
-/* Reserves its own width from the widest state ("Saving…") so the Close
-   button beside it doesn't shift sideways as this text appears/disappears. */
+/* Reserves its own width from the widest state ("Saving…") so the buttons
+   beside it don't shift sideways as this text appears/disappears, and gives
+   that width up only when the row is too narrow to hold it. */
 .anime-rank__save-status {
-  min-width: 5.5em;
+  width: 5.5em;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 13px;
   color: var(--text);
   opacity: 0.75;

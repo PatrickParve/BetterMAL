@@ -6,7 +6,7 @@
 
 .score-board__header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
@@ -15,21 +15,20 @@
   margin: 0;
 }
 
+/* The same ✕ the full edit history closes from (EditHistoryOverlay.css),
+   value for value. */
 .score-board__close {
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--bg);
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: none;
   color: var(--text);
-  font-size: 20px;
-  line-height: 1;
   cursor: pointer;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
 .score-board__close:hover {
@@ -40,7 +39,7 @@
 
 .score-board__close:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 
 .score-board__slots {
@@ -118,7 +117,9 @@
   opacity: 0.75;
 }
 
-.score-board__slot-empty {
+/* Shown only when no score holds anything at all, as when a restored board
+   reopens over a period whose scores have since been cleared. */
+.score-board__empty {
   margin: 0;
   padding: 4px 2px;
   font-size: 13px;
@@ -290,40 +291,8 @@
   }
 }
 
-/* Portalled hover/focus card (design.md decision 6) — pointer-events: none
-   so it never fights the tile it describes, and a z-index in the same band
-   as .truncated-title__tooltip so it clears .modal-backdrop's 100. */
-.score-board__card {
-  position: fixed;
-  z-index: 1000;
-  pointer-events: none;
-  max-width: min(260px, calc(100vw - 16px));
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-h);
-  box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.score-board__card-title {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-.score-board__card-meta {
-  font-size: 12px;
-  color: var(--text);
-  opacity: 0.8;
-}
-
 /* One query switches every board motion off: the apex sweep and the poster
-   lift alike — the card still appears on hover/focus regardless, since it
-   carries no motion of its own. */
+   lift alike. */
 @media (prefers-reduced-motion: reduce) {
   .score-board__slot--apex .score-board__slot-header::after {
     animation: none;

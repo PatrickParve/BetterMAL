@@ -81,6 +81,15 @@
   color: var(--text);
 }
 
+/* The bare-text-field hover index.css leaves to each stylesheet, the same as
+   My list's find field: accent border and heading-coloured text, with no
+   change of size. */
+.edit-history__search:hover:not(:disabled),
+.edit-history__date:hover:not(:disabled) {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
 .edit-history__date-separator {
   color: var(--text);
   opacity: 0.6;

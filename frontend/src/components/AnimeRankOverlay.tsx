@@ -87,6 +87,15 @@ function MemberPicture({ member }: { member: Member }) {
   return <RowPicture src={member.pictureUrl} className="anime-rank__picture" />
 }
 
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <line x1="6" y1="6" x2="18" y2="18" />
+      <line x1="18" y1="6" x2="6" y2="18" />
+    </svg>
+  )
+}
+
 function toEditableTiers(section: TopAnimeSectionDto): EditableTier[] {
   return section.tiers.map((tier) => ({
     score: tier.score,
@@ -205,8 +214,8 @@ export function AnimeRankOverlay(props: AnimeRankOverlayProps) {
     setDrag(next)
   }
 
-  // While a row is being dragged, smoothly scrolls the header (title,
-  // Close, and — in whole-library mode — the score tabs) out of view,
+  // While a row is being dragged, smoothly scrolls the header (title, its
+  // buttons, and — in whole-library mode — the score tabs) out of view,
   // exactly the way scrolling down normally would: nothing resizes or
   // reflows, so the row being dragged never jumps out from under the
   // pointer, and the topmost cards simply become visible in the space the
@@ -465,23 +474,27 @@ export function AnimeRankOverlay(props: AnimeRankOverlayProps) {
                 </h2>
               </div>
               <div className="anime-rank__header-actions">
-                {/* Every reorder saves itself (moveMember -> scheduleSave) —
-                    there's nothing left to confirm, so this just closes,
-                    flushing first if an edit hasn't saved yet. */}
                 <span className="anime-rank__save-status" aria-live="polite">
                   {saving ? 'Saving…' : ''}
                 </span>
-                <button type="button" onClick={() => void handleDismiss()}>
-                  Close
+                {mode === 'top' && (
+                  <button type="button" className="anime-rank__whole-library" onClick={() => void handleRankWholeLibrary()}>
+                    Rank my whole library
+                  </button>
+                )}
+                {/* Every reorder saves itself (moveMember -> scheduleSave) —
+                    there's nothing left to confirm, so this just closes,
+                    flushing first if an edit hasn't saved yet. */}
+                <button
+                  type="button"
+                  className="anime-rank__close"
+                  aria-label="Close ranking editor"
+                  onClick={() => void handleDismiss()}
+                >
+                  <CloseIcon />
                 </button>
               </div>
             </div>
-
-            {mode === 'top' && (
-              <button type="button" className="anime-rank__whole-library" onClick={() => void handleRankWholeLibrary()}>
-                Rank my whole library
-              </button>
-            )}
 
             {mode === 'all' && scores.length > 0 && (
               <div className="anime-rank__score-tabs" role="tablist" aria-label="Score">
@@ -566,23 +579,28 @@ export function AnimeRankOverlay(props: AnimeRankOverlayProps) {
                               <span className="anime-rank__row-buttons" onPointerDown={(event) => event.stopPropagation()}>
                                 {mode === 'top' ? (
                                   index < boundary ? (
+                                    // A tier's first row has nowhere to step up to and its last
+                                    // nowhere to step down to, so those arrows are left out
+                                    // rather than disabled — the same as the 'all' branch below.
                                     <>
-                                      <button
-                                        type="button"
-                                        aria-label="Move up"
-                                        disabled={index === 0}
-                                        onClick={() => moveMember(tierIndex, index, index - 1)}
-                                      >
-                                        ↑
-                                      </button>
-                                      <button
-                                        type="button"
-                                        aria-label="Move down"
-                                        disabled={index === tier.members.length - 1}
-                                        onClick={() => moveMember(tierIndex, index, index + 1)}
-                                      >
-                                        ↓
-                                      </button>
+                                      {index > 0 && (
+                                        <button
+                                          type="button"
+                                          aria-label="Move up"
+                                          onClick={() => moveMember(tierIndex, index, index - 1)}
+                                        >
+                                          ↑
+                                        </button>
+                                      )}
+                                      {index < tier.members.length - 1 && (
+                                        <button
+                                          type="button"
+                                          aria-label="Move down"
+                                          onClick={() => moveMember(tierIndex, index, index + 1)}
+                                        >
+                                          ↓
+                                        </button>
+                                      )}
                                     </>
                                   ) : (
                                     <button
