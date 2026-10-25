@@ -8,7 +8,7 @@ import { PosterPicture } from '../components/PosterPicture.tsx'
 import { useDelayedFlag } from '../hooks/useDelayedFlag.ts'
 import { useHeldData } from '../hooks/useHeldData.ts'
 import { usePageData } from '../hooks/usePageData.ts'
-import { pickDisplayTitle } from '../utils/anime.ts'
+import { formatEpisodeRange, pickDisplayTitle } from '../utils/anime.ts'
 import { EARLIEST_YEAR, yearsInRange } from '../utils/browseRange.ts'
 import './AiringPage.css'
 
@@ -75,10 +75,7 @@ function dateForMonthYear(referenceDate: string, year: number, month: number): s
 // more than one merged episode of the same anime.
 function formatEpisodeLabel(slot: AiringSlotDto): string {
   if (slot.episodeNumber === null) return 'Ep —'
-  if (slot.episodeNumberEnd !== null && slot.episodeNumberEnd > slot.episodeNumber) {
-    return `Ep ${slot.episodeNumber}-${slot.episodeNumberEnd}`
-  }
-  return `Ep ${slot.episodeNumber}`
+  return formatEpisodeRange(slot.episodeNumber, slot.episodeNumberEnd)
 }
 
 function addDaysIso(iso: string, days: number): string {

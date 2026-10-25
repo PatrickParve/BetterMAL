@@ -224,8 +224,8 @@ builder.Services.AddScoped<IEpisodeScheduleService, EpisodeScheduleService>();
 builder.Services.AddScoped<AniListRelationStore>();
 builder.Services.AddScoped<IEpisodeScheduleRefreshService, EpisodeScheduleRefreshService>();
 builder.Services.AddHostedService<EpisodeScheduleRefreshBackgroundService>();
-builder.Services.AddSingleton<IAiringRefreshTrigger, AiringRefreshTrigger>();
-builder.Services.AddHostedService<AiringRefreshTriggerBackgroundService>();
+builder.Services.AddSingleton<INewEntryRefreshTrigger, NewEntryRefreshTrigger>();
+builder.Services.AddHostedService<NewEntryRefreshBackgroundService>();
 
 // Relation confidence: resolves prequel/sequel/parent-story references and
 // classifies edge confidence; adjudication fetches AniList relations for

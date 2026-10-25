@@ -49,7 +49,9 @@ public class AnimeMetadata
     public int? AniListTotalEpisodes { get; set; } // AniList's reported total, null = not fetched or unknown
     public DateOnly? AiredFrom { get; set; }
     public DateOnly? AiredTo { get; set; }
-    public string? Studio { get; set; }
+    // Every studio MAL credits, in MAL's order. Null means studios were
+    // never given (a lean row); empty means MAL credits none.
+    public List<string>? Studios { get; set; }
     public string? BroadcastDayOfWeek { get; set; } // JST, e.g. "mondays"
     public TimeOnly? BroadcastTime { get; set; } // JST
     public int? PopularityRank { get; set; }

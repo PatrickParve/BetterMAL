@@ -4,6 +4,7 @@ using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Sync;
 using Microsoft.Extensions.Logging.Abstractions;
+using AnimeTracker.Api.Tests.Services.Airing;
 
 namespace AnimeTracker.Api.Tests.Services.Sync;
 
@@ -81,9 +82,10 @@ internal sealed class NoOpEntrySyncScheduler : IEntrySyncScheduler
 
 internal static class HeldChangeServiceTestFactory
 {
-    public static HeldChangeService Create(AnimeTrackerDbContext db, FakeHeldChangeMalClient malClient) => new(
+    public static HeldChangeService Create(
+        AnimeTrackerDbContext db, FakeHeldChangeMalClient malClient, RecordingNewEntryRefreshTrigger? trigger = null) => new(
         db,
         malClient,
         new EntryPushService(db, malClient, new NoOpEntrySyncScheduler(), NullLogger<EntryPushService>.Instance),
-        NullLogger<HeldChangeService>.Instance);
+        trigger ?? new RecordingNewEntryRefreshTrigger(), NullLogger<HeldChangeService>.Instance);
 }

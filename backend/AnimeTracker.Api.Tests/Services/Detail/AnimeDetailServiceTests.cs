@@ -215,6 +215,34 @@ public class AnimeDetailServiceTests
         Assert.Empty(refresh.Calls);
     }
 
+    // --- Studios: every stored studio reaches the response; none reads as an empty list ---
+
+    [Fact]
+    public async Task GetDetailAsync_ReportsEveryStoredStudioInOrder()
+    {
+        using var db = CreateDb();
+        var anime = Anime(1, DateTimeOffset.UtcNow - TimeSpan.FromDays(1));
+        anime.Studios = ["Bones", "Aniplex"];
+        db.AnimeMetadata.Add(anime);
+        await db.SaveChangesAsync();
+
+        var detail = await CreateService(db, new FakeMetadataRefreshService(db)).GetDetailAsync(1);
+
+        Assert.Equal(["Bones", "Aniplex"], detail.Studios);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_ReportsAnEmptyListWhenNoStudiosAreStored()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(Anime(1, DateTimeOffset.UtcNow - TimeSpan.FromDays(1)));
+        await db.SaveChangesAsync();
+
+        var detail = await CreateService(db, new FakeMetadataRefreshService(db)).GetDetailAsync(1);
+
+        Assert.Empty(detail.Studios);
+    }
+
     // --- 8.13: RefreshFailed ---
 
     [Fact]

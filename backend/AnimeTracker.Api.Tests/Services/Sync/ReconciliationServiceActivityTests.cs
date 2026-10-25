@@ -6,6 +6,7 @@ using AnimeTracker.Api.Services.Sync;
 using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using AnimeTracker.Api.Tests.Services.Airing;
 
 namespace AnimeTracker.Api.Tests.Services.Sync;
 
@@ -20,7 +21,7 @@ public class ReconciliationServiceActivityTests
             .Options);
 
     private static ReconciliationService CreateService(AnimeTrackerDbContext db) =>
-        new(new ThrowingMalClient(), db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance);
+        new(new ThrowingMalClient(), db, new ReconciliationRunGate(), new FakeAnimeSearchIndex(), new RecordingNewEntryRefreshTrigger(), NullLogger<ReconciliationService>.Instance);
 
     private static PendingReconciliationDiffEntry DiffEntry(
         int animeId, ReconciliationDiffChangeType changeType, WatchStatus status, int episodesWatched,

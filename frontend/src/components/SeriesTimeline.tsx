@@ -1,6 +1,8 @@
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import type { SeriesEntryDto, SeriesSlotDto } from '../api/types.ts'
+import { useDragScroll } from '../hooks/useDragScroll.ts'
 import { isScoreRevealableStatus, mediaTypeLabel, pickDisplayTitle, STATUS_LABELS } from '../utils/anime.ts'
 import { PosterPicture } from './PosterPicture.tsx'
 import { ScoreChip } from './ScoreChip.tsx'
@@ -80,7 +82,29 @@ function formatAirRange(entry: SeriesEntryDto): string {
 // which is also why a version slot's picker lives here rather than in a
 // second, non-chronological rendering of the main line
 // (rebuild-series-by-story-component task 8.3).
+//
+// The row scrolls by mouse drag as well as natively (series-page "The main
+// line scrolls by dragging"), stopping wherever the drag leaves it. The grab
+// cursor shows only while the row is wider than its box, a ResizeObserver
+// keeping that current across window resizes and a changed pick.
 export function SeriesTimeline({ entries, allEntries, slots, resolvedPick, onPick, onEdit }: SeriesTimelineProps) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [overflowing, setOverflowing] = useState(false)
+  const dragScroll = useDragScroll({ enabled: overflowing })
+
+  useEffect(() => {
+    const node = scrollRef.current
+    if (!node) return
+    const measure = () => setOverflowing(node.scrollWidth > node.clientWidth + 1)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    // The row's own size follows its cards, which a different pick changes
+    // without resizing the scrolling box, so the row is watched too.
+    if (node.firstElementChild) observer.observe(node.firstElementChild)
+    return () => observer.disconnect()
+  }, [])
+
   const entryById = new Map(allEntries.map((entry) => [entry.animeId, entry]))
   const hasSlots = slots.length > 0
 
@@ -112,7 +136,11 @@ export function SeriesTimeline({ entries, allEntries, slots, resolvedPick, onPic
 
   return (
     <div className="series-timeline">
-      <div className={`series-timeline__scroll${hasSlots ? ' series-timeline__scroll--sloted' : ''}`}>
+      <div
+        className={`series-timeline__scroll${hasSlots ? ' series-timeline__scroll--sloted' : ''}${overflowing ? ' series-timeline__scroll--draggable' : ''}`}
+        ref={scrollRef}
+        {...dragScroll}
+      >
         <div className="series-timeline__row" style={hasSlots ? ({ '--picker-rows': maxOptionCount } as CSSProperties) : undefined}>
           {entries.map((entry) => (
             <div className="series-timeline__col" key={entry.animeId}>

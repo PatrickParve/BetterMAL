@@ -3,6 +3,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Sync;
 using Microsoft.EntityFrameworkCore;
+using AnimeTracker.Api.Tests.Services.Airing;
 
 namespace AnimeTracker.Api.Tests.Services.Sync;
 
@@ -131,6 +132,69 @@ public class HeldChangeServiceDeclineTests
         Assert.Equal(WatchStatus.Watching, restored.Status);
         Assert.Equal(5, restored.EpisodesWatched);
         Assert.False(restored.PendingSync);
+    }
+
+    // episode-airing-data "Event-driven refresh triggers": a restored entry is a new
+    // list entry, queued once it is saved; nothing else a decline does creates one.
+    [Fact]
+    public async Task DecliningAHeldRemovalQueuesTheRestoredEntryOnceItIsSaved()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1" };
+        db.AnimeMetadata.Add(anime);
+        db.PendingEntryDeletions.Add(new PendingEntryDeletion
+        {
+            AnimeId = 1, Anime = anime, RequestedAt = DateTimeOffset.UtcNow.AddDays(-1), HeldForReviewAt = DateTimeOffset.UtcNow.AddDays(-1),
+        });
+        await db.SaveChangesAsync();
+        var malClient = new FakeHeldChangeMalClient();
+        malClient.SetStatus(1, new MalListStatus { Status = "watching", NumEpisodesWatched = 5 });
+        var entryExistedWhenQueued = false;
+        var trigger = new RecordingNewEntryRefreshTrigger(id => entryExistedWhenQueued = db.UserAnimeEntries.AsNoTracking().Any(e => e.AnimeId == id));
+
+        await HeldChangeServiceTestFactory.Create(db, malClient, trigger).DeclineAsync(1);
+
+        Assert.Equal([1], trigger.Enqueued);
+        Assert.True(entryExistedWhenQueued);
+    }
+
+    [Fact]
+    public async Task DecliningAHeldRemovalMalNoLongerListsQueuesNothing()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1" };
+        db.AnimeMetadata.Add(anime);
+        db.PendingEntryDeletions.Add(new PendingEntryDeletion
+        {
+            AnimeId = 1, Anime = anime, RequestedAt = DateTimeOffset.UtcNow.AddDays(-1), HeldForReviewAt = DateTimeOffset.UtcNow.AddDays(-1),
+        });
+        await db.SaveChangesAsync();
+        var trigger = new RecordingNewEntryRefreshTrigger();
+
+        await HeldChangeServiceTestFactory.Create(db, new FakeHeldChangeMalClient(), trigger).DeclineAsync(1);
+
+        Assert.Empty(trigger.Enqueued);
+    }
+
+    [Fact]
+    public async Task DecliningAHeldEntryQueuesNothing()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1" };
+        db.AnimeMetadata.Add(anime);
+        db.UserAnimeEntries.Add(new UserAnimeEntry
+        {
+            AnimeId = 1, Anime = anime, Status = WatchStatus.Watching, EpisodesWatched = 3,
+            PendingSync = true, HeldForReviewAt = DateTimeOffset.UtcNow.AddDays(-1),
+        });
+        await db.SaveChangesAsync();
+        var malClient = new FakeHeldChangeMalClient();
+        malClient.SetStatus(1, new MalListStatus { Status = "completed", NumEpisodesWatched = 12 });
+        var trigger = new RecordingNewEntryRefreshTrigger();
+
+        await HeldChangeServiceTestFactory.Create(db, malClient, trigger).DeclineAsync(1);
+
+        Assert.Empty(trigger.Enqueued);
     }
 
     [Fact]

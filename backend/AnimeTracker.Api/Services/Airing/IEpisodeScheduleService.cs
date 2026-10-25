@@ -3,8 +3,9 @@ using AnimeTracker.Api.Models;
 namespace AnimeTracker.Api.Services.Airing;
 
 /// <summary>An episode that airs on a particular local date: the local time of
-/// day, and its number.</summary>
-public record ResolvedEpisode(TimeOnly LocalTime, int EpisodeNumber);
+/// day, its number, and the instant it airs (what the Airing page's grouping
+/// orders and merges by).</summary>
+public record ResolvedEpisode(TimeOnly LocalTime, int EpisodeNumber, DateTimeOffset AirsAtUtc);
 
 /// <summary>Answers "does an episode of this anime air on this local date, and
 /// which one?" — the single source of truth behind the home "Airing today"
@@ -16,17 +17,19 @@ public interface IEpisodeScheduleService
 
     /// <summary>The same local-date read as <see
     /// cref="ResolveOnLocalDateAsync(AnimeMetadata,DateOnly,CancellationToken)"/>,
-    /// for many anime at once. Default implementation loops over the
-    /// per-anime member, so a test double need not restate it — but any
-    /// implementation backed by a database MUST override this with a single
-    /// read (design.md D6), since the default still issues one query per
-    /// anime.</summary>
-    async Task<Dictionary<int, ResolvedEpisode>> ResolveOnLocalDateAsync(IReadOnlyCollection<AnimeMetadata> anime, DateOnly localDate, CancellationToken ct = default)
+    /// for many anime at once — but reporting every stored row on the date per
+    /// anime, in air order, where the per-anime member reports only the
+    /// earliest. The first row of an anime's list is exactly the per-anime
+    /// answer. Default implementation loops over the per-anime member (a list
+    /// of one), so a test double need not restate it — but any implementation
+    /// backed by a database MUST override this with a single read (design.md
+    /// D6), since the default still issues one query per anime.</summary>
+    async Task<Dictionary<int, List<ResolvedEpisode>>> ResolveOnLocalDateAsync(IReadOnlyCollection<AnimeMetadata> anime, DateOnly localDate, CancellationToken ct = default)
     {
-        var result = new Dictionary<int, ResolvedEpisode>();
+        var result = new Dictionary<int, List<ResolvedEpisode>>();
         foreach (var a in anime)
             if (await ResolveOnLocalDateAsync(a, localDate, ct) is { } episode)
-                result[a.Id] = episode;
+                result[a.Id] = [episode];
         return result;
     }
 

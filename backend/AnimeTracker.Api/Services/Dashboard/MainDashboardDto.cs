@@ -48,7 +48,10 @@ public record AiringTodayItemDto(
     string? EnglishTitle,
     string? PictureUrl,
     string LocalTime,
-    int? EpisodeNumber);
+    int? EpisodeNumber,
+    // The last episode of a merged run (AiringDaySlotGrouper); null for a
+    // single episode.
+    int? EpisodeNumberEnd);
 
 public record CurrentSeasonItemDto(
     int AnimeId,

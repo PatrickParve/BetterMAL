@@ -38,7 +38,7 @@ public class MainDashboardServiceBulkReadTests
             },
         ];
         var airedSoFarByAnimeId = new Dictionary<int, int> { [1] = 5, [2] = 12 };
-        var airingTodayByAnimeId = new Dictionary<int, ResolvedEpisode> { [1] = new(new TimeOnly(21, 0), 5) };
+        var airingTodayByAnimeId = new Dictionary<int, List<ResolvedEpisode>> { [1] = [new(new TimeOnly(21, 0), 5, new DateTimeOffset(2026, 10, 25, 21, 0, 0, TimeSpan.Zero))] };
         var scheduleService = new PoisonedEpisodeScheduleService(airedSoFarByAnimeId, airingTodayByAnimeId, animeIdWithNextEpisode: 1, NextInstantOffset);
 
         var service = new MainDashboardService(
@@ -70,7 +70,7 @@ public class MainDashboardServiceBulkReadTests
     // MainDashboardService resolves each fact through its bulk read.
     private sealed class PoisonedEpisodeScheduleService(
         Dictionary<int, int> airedSoFarByAnimeId,
-        Dictionary<int, ResolvedEpisode> airingTodayByAnimeId,
+        Dictionary<int, List<ResolvedEpisode>> airingTodayByAnimeId,
         int animeIdWithNextEpisode,
         TimeSpan nextInstantOffset) : IEpisodeScheduleService
     {
@@ -85,7 +85,7 @@ public class MainDashboardServiceBulkReadTests
         public Task<int?> EpisodesAiredAsOfAsync(AnimeMetadata anime, DateTimeOffset nowUtc, CancellationToken ct = default) =>
             throw new InvalidOperationException("The dashboard must never resolve a single anime's aired count.");
 
-        public Task<Dictionary<int, ResolvedEpisode>> ResolveOnLocalDateAsync(IReadOnlyCollection<AnimeMetadata> anime, DateOnly localDate, CancellationToken ct = default)
+        public Task<Dictionary<int, List<ResolvedEpisode>>> ResolveOnLocalDateAsync(IReadOnlyCollection<AnimeMetadata> anime, DateOnly localDate, CancellationToken ct = default)
         {
             BulkResolveCallCount++;
             return Task.FromResult(anime.Where(a => airingTodayByAnimeId.ContainsKey(a.Id)).ToDictionary(a => a.Id, a => airingTodayByAnimeId[a.Id]));

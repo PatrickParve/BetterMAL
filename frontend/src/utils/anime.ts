@@ -288,6 +288,13 @@ export function formatYearSpan(firstYear: number | null, lastYear: number | null
   return firstYear === lastYear ? String(firstYear) : `${firstYear} – ${lastYear}`
 }
 
+// "Ep 4" for a single episode, "Ep 1-10" for a merged run of the same anime.
+// Shared by the Airing page's slots and Home's Airing today rows, which must
+// read identically for the same slot.
+export function formatEpisodeRange(start: number, end: number | null): string {
+  return end !== null && end > start ? `Ep ${start}-${end}` : `Ep ${start}`
+}
+
 function trimTrailingZeros(value: string): string {
   return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value
 }

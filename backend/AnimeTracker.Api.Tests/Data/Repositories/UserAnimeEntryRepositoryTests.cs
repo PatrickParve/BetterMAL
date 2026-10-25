@@ -45,7 +45,7 @@ internal static class AnimeMetadataFixture
         AniListTotalEpisodes = 13 + id,
         AiredFrom = new DateOnly(2018, 1, 1).AddDays(id),
         AiredTo = new DateOnly(2018, 4, 1).AddDays(id),
-        Studio = $"STUDIO-{id}",
+        Studios = [$"STUDIO-{id}-A", $"STUDIO-{id}-B"],
         BroadcastDayOfWeek = "mondays",
         BroadcastTime = new TimeOnly(23, 30),
         PopularityRank = 500 + id,

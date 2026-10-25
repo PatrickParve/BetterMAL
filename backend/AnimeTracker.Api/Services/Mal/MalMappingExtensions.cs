@@ -92,6 +92,14 @@ public static class MalMappingExtensions
         _ => null,
     };
 
+    /// <summary>Every studio MAL credits the node with, in MAL's order, skipping
+    /// blank names. Null when the node carries no studios field at all; empty
+    /// when MAL credits none.</summary>
+    private static List<string>? StudioNames(this MalAnimeNode node) => node.Studios?
+        .Select(s => s.Name)
+        .Where(name => !string.IsNullOrWhiteSpace(name))
+        .ToList();
+
     /// <summary>Builds a new cached metadata row from a MAL anime node.</summary>
     public static AnimeMetadata ToAnimeMetadata(this MalAnimeNode node, DateTimeOffset now)
     {
@@ -127,7 +135,7 @@ public static class MalMappingExtensions
         target.ResolveTotalEpisodes();
         target.AiredFrom = ParseMalDate(node.StartDate);
         target.AiredTo = ParseMalDate(node.EndDate);
-        target.Studio = node.Studios?.FirstOrDefault()?.Name;
+        target.Studios = node.StudioNames();
         target.BroadcastDayOfWeek = node.Broadcast?.DayOfTheWeek;
         target.BroadcastTime = ParseMalTime(node.Broadcast?.StartTime);
         target.PopularityRank = node.Popularity;
@@ -186,7 +194,7 @@ public static class MalMappingExtensions
 
     /// <summary>Builds a basic cached row from a node of setup's list read
     /// (<see cref="MalClient.SetupListFields"/>): the lean fields, plus airing status, dates,
-    /// broadcast, studio, genres, synopsis, episode duration and source. It has no relations
+    /// broadcast, studios, genres, synopsis, episode duration and source. It has no relations
     /// and no picture set, and leaves <see cref="AnimeMetadata.LastSyncedAt"/> at its default,
     /// so the row still counts as never fully fetched and setup's details step takes it.</summary>
     public static AnimeMetadata ToBasicAnimeMetadata(this MalAnimeNode node, DateTimeOffset now)
@@ -195,7 +203,7 @@ public static class MalMappingExtensions
         metadata.AiringStatus = node.Status;
         metadata.AiredFrom = ParseMalDate(node.StartDate);
         metadata.AiredTo = ParseMalDate(node.EndDate);
-        metadata.Studio = node.Studios?.FirstOrDefault()?.Name;
+        metadata.Studios = node.StudioNames();
         metadata.BroadcastDayOfWeek = node.Broadcast?.DayOfTheWeek;
         metadata.BroadcastTime = ParseMalTime(node.Broadcast?.StartTime);
         metadata.Genres = node.Genres?.Select(g => g.Name).ToList();
@@ -207,7 +215,7 @@ public static class MalMappingExtensions
 
     /// <summary>Lean upsert: writes only listing-page fields (title, picture,
     /// episode count, type, score, rank/popularity) and never touches rich
-    /// detail-page fields (airing status/dates, studio, broadcast, genres,
+    /// detail-page fields (airing status/dates, studios, broadcast, genres,
     /// synopsis, background, related anime) or <see cref="AnimeMetadata.LastSyncedAt"/> —
     /// so a Season/Top-Anime browse can never clobber richer data a full
     /// detail fetch already populated on the same row. `Rating` is written here

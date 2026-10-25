@@ -42,6 +42,7 @@ import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
 import { usePageData } from '../hooks/usePageData.ts'
 import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
 import { LoadingNotice } from '../components/LoadingNotice.tsx'
+import { useDragScroll } from '../hooks/useDragScroll.ts'
 import { useRestorableScroll } from '../hooks/useRestorableScroll.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { formatRewatchTime, formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
@@ -215,15 +216,13 @@ function formatStatValue(key: keyof ProfileDto['stats'], value: number | null): 
   return String(value)
 }
 
-// Drag-to-scroll for a horizontal poster strip: a mouse-down on the strip
-// starts tracking, mouse-move scrolls it and flags a drag once the pointer
-// has moved past a small threshold, and onItemClick suppresses the
-// resulting navigation click so a drag doesn't also open the tile. Scroll
-// offset recording and restoration is `useRestorableScroll`'s; this composes
-// that hook's ref callback with its own. `restoreKey` identifies this
-// strip's section (and, for sections with a view control, the control's
-// current value) so its offset is recorded and restored independently of
-// the page's other strips (design.md decision 3).
+// Scrolling for a horizontal poster strip: drag-to-scroll is `useDragScroll`'s
+// (which also swallows the click ending a drag, so a drag never opens a
+// tile), and scroll offset recording and restoration is
+// `useRestorableScroll`'s; this composes that hook's ref callback with its
+// own. `restoreKey` identifies this strip's section (and, for sections with
+// a view control, the control's current value) so its offset is recorded and
+// restored independently of the page's other strips (design.md decision 3).
 //
 // `fits` says whether every tile fits across the strip's visible width, and
 // drives the strip's `--fits` class. Every tile is the same fixed size
@@ -239,9 +238,9 @@ function formatStatValue(key: keyof ProfileDto['stats'], value: number | null): 
 // `observeTiles` re-measures after a filter switch swaps the tiles.
 function useStripScroll(restoreKey: string) {
   const elRef = useRef<HTMLDivElement | null>(null)
-  const drag = useRef({ isDown: false, startX: 0, scrollLeft: 0, dragged: false })
   const scrollRef = useRestorableScroll(restoreKey, 'horizontal')
   const [fits, setFits] = useState(true)
+  const dragHandlers = useDragScroll({ enabled: !fits })
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const observedTilesRef = useRef<Element[]>([])
 
@@ -282,32 +281,6 @@ function useStripScroll(restoreKey: string) {
     observeTiles()
   })
 
-  function onMouseDown(event: React.MouseEvent<HTMLDivElement>) {
-    const el = elRef.current
-    if (!el) return
-    drag.current = { isDown: true, startX: event.pageX, scrollLeft: el.scrollLeft, dragged: false }
-  }
-
-  function onMouseMove(event: React.MouseEvent<HTMLDivElement>) {
-    const state = drag.current
-    const el = elRef.current
-    if (!state.isDown || !el) return
-    event.preventDefault()
-    const delta = event.pageX - state.startX
-    if (Math.abs(delta) > 3) state.dragged = true
-    el.scrollLeft = state.scrollLeft - delta
-  }
-
-  function onMouseUp() {
-    drag.current.isDown = false
-  }
-
-  function onItemClick(event: React.MouseEvent) {
-    if (drag.current.dragged) {
-      event.preventDefault()
-    }
-  }
-
   // Wiring lives in a ref callback, not an effect: the strip's div mounts
   // and unmounts as its section switches between loading and loaded (the
   // conditional rendering above), so "the DOM node exists" isn't something
@@ -334,8 +307,7 @@ function useStripScroll(restoreKey: string) {
   return {
     fits,
     ref: setRef,
-    handlers: { onMouseDown, onMouseMove, onMouseUp, onMouseLeave: onMouseUp },
-    onItemClick,
+    handlers: dragHandlers,
   }
 }
 
@@ -703,7 +675,6 @@ export function ProfilePage() {
                 to={`/anime/${item.animeId}`}
                 className="top-anime-strip__item"
                 draggable={false}
-                onClick={topAnimeStripScroll.onItemClick}
               >
                 <PosterPicture
                   src={item.pictureUrl}
@@ -785,7 +756,6 @@ export function ProfilePage() {
                 className="top-series-strip__item"
                 draggable={false}
                 title={topSeriesCountsTitle(item)}
-                onClick={topSeriesStripScroll.onItemClick}
               >
                 <PosterPicture
                   src={item.pictureUrl}
@@ -854,7 +824,6 @@ export function ProfilePage() {
                   to={`/series/${item.seriesId}`}
                   className="rewatched-strip__item"
                   draggable={false}
-                  onClick={rewatchedStripScroll.onItemClick}
                 >
                   <PosterPicture
                     src={item.pictureUrl}
@@ -893,7 +862,6 @@ export function ProfilePage() {
                 to={`/anime/${item.animeId}`}
                 className="rewatched-strip__item"
                 draggable={false}
-                onClick={rewatchedStripScroll.onItemClick}
               >
                 <PosterPicture
                   src={item.pictureUrl}
@@ -940,7 +908,6 @@ export function ProfilePage() {
                 to={`/series/${item.seriesId}`}
                 className="time-spent-strip__item"
                 draggable={false}
-                onClick={timeSpentStripScroll.onItemClick}
               >
                 <PosterPicture
                   src={item.pictureUrl}

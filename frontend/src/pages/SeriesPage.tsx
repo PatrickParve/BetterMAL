@@ -1399,7 +1399,7 @@ export function SeriesPage() {
       {mainLineVisible.length > 0 && (
         <section
           ref={mainLineBoxRef}
-          className={`series-box series-page__main-line-box${series.slots.length > 0 ? ' series-page__main-line-box--sloted' : ''}`}
+          className="series-box series-page__main-line-box"
         >
           <h2>Main series</h2>
           <SeriesTimeline

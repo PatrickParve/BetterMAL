@@ -16,7 +16,7 @@ public class UserAnimeEntryEditService(
     AnimeTrackerDbContext db,
     IEntrySyncScheduler syncScheduler,
     IEpisodeScheduleService scheduleService,
-    IAiringRefreshTrigger airingRefreshTrigger,
+    INewEntryRefreshTrigger newEntryRefreshTrigger,
     IAnimeRankingService rankingService,
     IServiceScopeFactory scopeFactory,
     ILogger<UserAnimeEntryEditService> logger) : IUserAnimeEntryEditService
@@ -113,11 +113,12 @@ public class UserAnimeEntryEditService(
         if (triggersSync)
             syncScheduler.ScheduleSync(animeId);
 
-        // Fire-and-forget: any anime just added gets its episode history
-        // fetched now rather than waiting for the hourly catch-up, without delaying
-        // this response on an AniList round-trip.
+        // Fire-and-forget: any anime just added gets its data fetched now
+        // (full MyAnimeList detail if it never had one, then its episode
+        // history) rather than waiting for the hourly catch-up or the metadata
+        // job, without delaying this response on either round-trip.
         if (isNew)
-            airingRefreshTrigger.Enqueue(animeId);
+            newEntryRefreshTrigger.Enqueue(animeId);
 
         return UserAnimeEntryDto.FromEntity(entry);
     }
@@ -141,7 +142,7 @@ public class UserAnimeEntryEditService(
 
         // A removed entry has nothing left to coalesce with, so push it now
         // instead of through the edit debounce — fire-and-forget (like
-        // airingRefreshTrigger.Enqueue above) so the response doesn't wait on
+        // newEntryRefreshTrigger.Enqueue above) so the response doesn't wait on
         // MAL. Runs in its own scope since this request's DbContext will be
         // disposed once the response returns.
         _ = PushRemovalAsync(animeId);

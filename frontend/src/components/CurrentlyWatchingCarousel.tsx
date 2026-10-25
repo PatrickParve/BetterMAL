@@ -3,6 +3,7 @@ import { AnimeCard } from './AnimeCard.tsx'
 import { ProgressBar } from './ProgressBar.tsx'
 import type { CurrentlyWatchingItemDto, IncrementTarget, PhantomCompletion, UserAnimeEntryEditRequest } from '../api/types.ts'
 import { useEpisodeIncrement, useSetEpisodesWatched } from '../context/CompletionPromptContext.tsx'
+import { useDragScroll } from '../hooks/useDragScroll.ts'
 import { episodeCeiling, hasAiredEpisodes, pickDisplayTitle } from '../utils/anime.ts'
 import './CurrentlyWatchingCarousel.css'
 
@@ -32,15 +33,26 @@ function buildCorrectiveEdit(record: {
   return { rewatchCount: completion.rewatchCountAfter - 1, completedAt: completedAtBefore }
 }
 
+// The card-to-card distance along the track, the step an arrow click scrolls
+// by and a released drag settles to; null while there are fewer than two
+// cards to measure it between.
+function cardStep(track: HTMLElement): number | null {
+  const first = track.children[0]
+  const second = track.children[1]
+  if (!first || !second) return null
+  const step = second.getBoundingClientRect().left - first.getBoundingClientRect().left
+  return step > 0 ? step : null
+}
+
 // "Currently watching" row on the main page: a horizontal carousel bounded
 // to exactly 5 visible cards — no part of a 6th card is visible at any
 // resting scroll position, at either end. When more entries exist, the row
 // scrolls as a plain bounded list — it stops at the first card and at the
-// last card, in both
-// arrow-click and native trackpad/touch scrolling. Each card shows the
-// shared watched/total progress bar and count in the card's `footer` slot,
-// outside the card's link, so the whole progress row navigates nowhere while
-// clicking the picture or title still opens the detail page.
+// last card, in arrow-click, mouse-drag and native trackpad/touch scrolling
+// alike. Each card shows the shared watched/total progress bar and count in
+// the card's `footer` slot, outside the card's link, so the whole progress
+// row navigates nowhere while clicking the picture or title still opens the
+// detail page.
 export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCompleted }: CurrentlyWatchingCarouselProps) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [pendingId, setPendingId] = useState<number | null>(null)
@@ -53,6 +65,21 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
   )
   const incrementEpisode = useEpisodeIncrement()
   const setEpisodesWatched = useSetEpisodesWatched()
+
+  // Dragging the track with the mouse scrolls it (main-dashboard "The
+  // Currently watching row scrolls by dragging"); a released drag settles on
+  // the nearest whole card, the same position an arrow click lands on, so no
+  // part of a 6th card shows at rest. Only a drag settles: trackpad and touch
+  // scrolling stay native, and a plain click leaves the position alone.
+  const dragScroll = useDragScroll({
+    enabled: bounds.overflowing,
+    onRelease: (dragged) => {
+      const node = trackRef.current
+      const step = node && cardStep(node)
+      if (!dragged || !node || !step) return
+      node.scrollTo({ left: Math.round(node.scrollLeft / step) * step, behavior: 'smooth' })
+    },
+  })
 
   // Arrows only make sense when the row actually overflows, and each one
   // disables once the row can no longer move further in its direction —
@@ -102,16 +129,12 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
 
   // Step by exactly one card width so an arrow click always lands on the
   // next/previous card, never a partial one — rounding to the nearest card
-  // boundary first keeps this exact even after a manual trackpad/drag scroll
-  // has left the position off-grid.
+  // boundary first keeps this exact even after a manual trackpad scroll has
+  // left the position off-grid.
   function scroll(direction: 1 | -1) {
     const node = trackRef.current
-    if (!node) return
-    const first = node.children[0] as HTMLElement | undefined
-    const second = node.children[1] as HTMLElement | undefined
-    if (!first || !second) return
-    const step = second.getBoundingClientRect().left - first.getBoundingClientRect().left
-    if (step <= 0) return
+    const step = node && cardStep(node)
+    if (!node || !step) return
     const target = Math.round(node.scrollLeft / step) * step + direction * step
     node.scrollTo({ left: target, behavior: 'smooth' })
   }
@@ -189,7 +212,11 @@ export function CurrentlyWatchingCarousel({ items, onEpisodesWatchedChange, onCo
             ‹
           </button>
         )}
-        <div className="carousel__track" ref={trackRef}>
+        <div
+          className={bounds.overflowing ? 'carousel__track carousel__track--draggable' : 'carousel__track'}
+          ref={trackRef}
+          {...dragScroll}
+        >
           {items.map((item) => (
             <AnimeCard
               key={item.animeId}

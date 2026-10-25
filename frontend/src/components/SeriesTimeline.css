@@ -22,15 +22,28 @@
 
 /* A version slot's picker stack needs room, not the row's usual top
    breathing room above it — dropping the top inset lets the picker start
-   right where .series-box's own heading-to-body gap ends, as close to the
-   top of the box as the heading allows (series-versions "The picker SHALL
-   be rendered above the first card of the route it selects"). */
+   right where .series-box's own heading-to-body gap ends, directly below
+   the "Main series" heading on its own line, so no picker button is ever
+   drawn over it whichever column owns the picker or however far the row is
+   scrolled (series-versions "The version picker never covers the Main
+   series heading"; "The picker SHALL be rendered above the first card of the
+   route it selects"). */
 .series-timeline__scroll--sloted {
   padding-top: 0;
 }
 
 .series-timeline__scroll::-webkit-scrollbar {
   display: none;
+}
+
+/* Only a row wider than its box can be dragged (useDragScroll), so only then
+   does it show the grab cursor. */
+.series-timeline__scroll--draggable {
+  cursor: grab;
+}
+
+.series-timeline__scroll--draggable:active {
+  cursor: grabbing;
 }
 
 .series-timeline__row {

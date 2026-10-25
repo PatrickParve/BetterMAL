@@ -88,6 +88,34 @@ function formatAiredRange(from: string | null, to: string | null): string {
   return `${formatDate(from)} – ${formatDate(to)}`;
 }
 
+// The aired-dates field, named and worded for the airing status so it never
+// claims an end that hasn't happened (anime-detail "The Aired field is named
+// for the anime's airing status"). A finished anime, or one with no status
+// recorded, keeps the from–to range with "No info" for an unknown end; one
+// still airing reads "Since {from}" until an end date is stored; one not yet
+// aired reads its start date alone. With no start date there is nothing to
+// say under any status.
+function formatAiredField(
+  airingStatus: string | null,
+  from: string | null,
+  to: string | null,
+): { label: string; value: string } {
+  const label =
+    airingStatus === "currently_airing"
+      ? "Airing"
+      : airingStatus === "not_yet_aired"
+        ? "Airs"
+        : "Aired";
+  if (!from) return { label, value: NO_INFO };
+  if (label === "Aired" || to) {
+    return { label, value: formatAiredRange(from, to) };
+  }
+  return {
+    label,
+    value: label === "Airing" ? `Since ${formatDate(from)}` : formatDate(from),
+  };
+}
+
 function formatRating(rating: string | null): string {
   if (!rating) return NO_INFO;
   return RATING_LABELS[rating] ?? rating;
@@ -490,6 +518,7 @@ export function AnimeDetailPage() {
     detail.entry?.status === "Completed" ||
     detail.entry?.status === "Dropped" ||
     detail.entry?.status === "Rewatching";
+  const aired = formatAiredField(detail.airingStatus, detail.airedFrom, detail.airedTo);
   // The picker's sections: MyAnimeList, then one per TMDB scope (design D12).
   // The control counts every option across them, so a lone MAL picture plus
   // TMDB images still offers a choice, and appears when a TMDB follow-up
@@ -778,8 +807,12 @@ export function AnimeDetailPage() {
                 </dd>
               </div>
               <div>
-                <dt>Studio</dt>
-                <dd>{detail.studio ?? NO_INFO}</dd>
+                <dt>{detail.studios.length > 1 ? "Studios" : "Studio"}</dt>
+                <dd>
+                  {detail.studios.length > 0
+                    ? detail.studios.join(", ")
+                    : NO_INFO}
+                </dd>
               </div>
               <div>
                 <dt>Total time</dt>
@@ -795,8 +828,8 @@ export function AnimeDetailPage() {
                 <dd>{formatRating(detail.rating)}</dd>
               </div>
               <div>
-                <dt>Aired</dt>
-                <dd>{formatAiredRange(detail.airedFrom, detail.airedTo)}</dd>
+                <dt>{aired.label}</dt>
+                <dd>{aired.value}</dd>
               </div>
               <div>
                 <dt>Genres</dt>

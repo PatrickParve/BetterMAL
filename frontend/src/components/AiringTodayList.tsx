@@ -1,19 +1,23 @@
 import { Link } from 'react-router-dom'
 import type { AiringTodayItemDto } from '../api/types.ts'
 import { RowPicture } from './RowPicture.tsx'
-import { pickDisplayTitle } from '../utils/anime.ts'
+import { formatEpisodeRange, pickDisplayTitle } from '../utils/anime.ts'
 import './AiringTodayList.css'
 
 type AiringTodayListProps = {
   items: AiringTodayItemDto[]
 }
 
-// "Airing today" column: my-list anime whose broadcast day, converted to
-// local time, is today. Rendered as a single-column list, not a grid. Each
+// "Airing today" column: my-list anime with a stored episode airing today in
+// local time, one row per slot as the Airing page groups them (an anime's
+// episodes airing together read `Ep N-M`, and a run another anime's episode
+// interrupts is two rows). Rendered as a single-column list, not a grid. Each
 // row is a poster-sized 2:3 thumbnail beside top-aligned text: the
 // `time : Ep N` meta line (time alone when the episode number can't be
 // resolved) starts level with the top of the poster, with the title
-// directly beneath it, clamped to two lines.
+// directly beneath it, clamped to two lines. An anime can have two rows, so a
+// row is keyed by its anime and first episode, the index standing in when
+// the episode is unknown.
 export function AiringTodayList({ items }: AiringTodayListProps) {
   return (
     <section className="dashboard-section">
@@ -22,14 +26,14 @@ export function AiringTodayList({ items }: AiringTodayListProps) {
         <p className="airing-today__empty">Nothing airing today.</p>
       ) : (
         <ul className="airing-today__list">
-          {items.map((item) => (
-            <li key={item.animeId}>
+          {items.map((item, index) => (
+            <li key={`${item.animeId}:${item.episodeNumber ?? `index-${index}`}`}>
               <Link to={`/anime/${item.animeId}`} className="airing-today__row">
                 <RowPicture src={item.pictureUrl} className="airing-today__thumb" tier="tile" />
                 <span className="airing-today__text">
                   <span className="airing-today__meta">
                     {item.localTime}
-                    {item.episodeNumber !== null && ` : Ep ${item.episodeNumber}`}
+                    {item.episodeNumber !== null && ` : ${formatEpisodeRange(item.episodeNumber, item.episodeNumberEnd)}`}
                   </span>
                   <span className="airing-today__title">{pickDisplayTitle(item.title, item.englishTitle)}</span>
                 </span>

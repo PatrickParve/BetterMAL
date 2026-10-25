@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
@@ -12,6 +13,7 @@ public class HeldChangeService(
     AnimeTrackerDbContext db,
     IMalClient malClient,
     IEntryPushService entryPushService,
+    INewEntryRefreshTrigger newEntryRefreshTrigger,
     ILogger<HeldChangeService> logger) : IHeldChangeService
 {
     // design.md D4: "capped at the most recent few per item, with a count of
@@ -272,6 +274,10 @@ public class HeldChangeService(
         }
 
         await db.SaveChangesAsync(ct);
+
+        // A restored entry is a new list entry like any other: queued once it is saved.
+        if (remoteStatus is not null)
+            newEntryRefreshTrigger.Enqueue(removal.AnimeId);
         return new HeldChangeDecisionResult(HeldChangeDecisionOutcome.Applied);
     }
 

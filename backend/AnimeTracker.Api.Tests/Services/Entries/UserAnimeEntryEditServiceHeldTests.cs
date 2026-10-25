@@ -26,7 +26,7 @@ public class UserAnimeEntryEditServiceHeldTests
             db,
             new FakeEntrySyncScheduler(),
             new FakeEpisodeScheduleService(),
-            new FakeAiringRefreshTrigger(),
+            new FakeNewEntryRefreshTrigger(),
             new AnimeRankingService(new UserAnimeEntryRepository(db), new TopAnimeSelectionRepository(db)),
             new FakeServiceScopeFactory(),
             NullLogger<UserAnimeEntryEditService>.Instance);
@@ -57,10 +57,10 @@ public class UserAnimeEntryEditServiceHeldTests
         public void ScheduleSync(int animeId) { }
     }
 
-    private sealed class FakeAiringRefreshTrigger : IAiringRefreshTrigger
+    private sealed class FakeNewEntryRefreshTrigger : INewEntryRefreshTrigger
     {
         public void Enqueue(int animeId) { }
-        public Task<int> WaitAsync(CancellationToken ct) => throw new NotImplementedException();
+        public Task<IReadOnlyList<int>> WaitAsync(CancellationToken ct) => throw new NotImplementedException();
     }
 
     private sealed class FakeServiceScopeFactory : IServiceScopeFactory

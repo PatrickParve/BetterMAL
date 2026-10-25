@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Search;
@@ -12,6 +13,7 @@ public class ReconciliationService(
     AnimeTrackerDbContext db,
     ReconciliationRunGate runGate,
     IAnimeSearchIndex searchIndex,
+    INewEntryRefreshTrigger newEntryRefreshTrigger,
     ILogger<ReconciliationService> logger) : IReconciliationService
 {
     public async Task<ReconciliationResult> RunAsync(IJobProgressSink? progress = null, CancellationToken ct = default)
@@ -207,6 +209,7 @@ public class ReconciliationService(
             .ToDictionaryAsync(e => e.AnimeId, ct);
 
         var now = DateTimeOffset.UtcNow;
+        var createdAnimeIds = new List<int>();
         foreach (var entry in diff.Entries)
         {
             localEntries.TryGetValue(entry.AnimeId, out var local);
@@ -239,6 +242,7 @@ public class ReconciliationService(
             {
                 local = new UserAnimeEntry { AnimeId = entry.AnimeId };
                 db.UserAnimeEntries.Add(local);
+                createdAnimeIds.Add(entry.AnimeId);
             }
 
             // Re-resolve against the entry as it stands now, not as it stood
@@ -256,6 +260,12 @@ public class ReconciliationService(
 
         db.PendingReconciliationDiffs.Remove(diff);
         await db.SaveChangesAsync(ct);
+
+        // Each new entry is queued once it is saved, so the acceptance doesn't
+        // wait on a fetch and the worker sees the entry; a burst of them is
+        // fetched as one batch.
+        foreach (var animeId in createdAnimeIds)
+            newEntryRefreshTrigger.Enqueue(animeId);
         return true;
     }
 

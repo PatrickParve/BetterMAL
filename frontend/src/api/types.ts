@@ -228,6 +228,8 @@ export type AiringTodayItemDto = {
   pictureUrl: string | null
   localTime: string
   episodeNumber: number | null
+  // Last episode of a merged run; null for a single episode.
+  episodeNumberEnd: number | null
 }
 
 export type CurrentSeasonItemDto = {
@@ -1113,7 +1115,7 @@ export type AnimeDetailDto = {
   episodesAired: number | null
   airedFrom: string | null
   airedTo: string | null
-  studio: string | null
+  studios: string[]
   source: string | null
   averageEpisodeDurationSeconds: number | null
   genres: string[] | null

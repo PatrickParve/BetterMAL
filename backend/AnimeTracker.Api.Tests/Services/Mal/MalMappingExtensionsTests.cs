@@ -283,6 +283,71 @@ public class MalMappingExtensionsTests
     }
 
     [Fact]
+    public void ApplyLeanToLeavesTheStoredStudiosAlone()
+    {
+        var anime = new AnimeMetadata { Id = 1, Title = "T", Studios = ["Bones", "Aniplex"] };
+        var node = NodeWithMainPicture("https://mal/main.jpg");
+        node.Studios = [new MalStudio { Id = 9, Name = "Someone Else" }];
+
+        node.ApplyLeanTo(anime, DateTimeOffset.UtcNow);
+
+        Assert.Equal(["Bones", "Aniplex"], anime.Studios);
+    }
+
+    [Fact]
+    public void ApplyToStoresEveryCreditedStudioInMalOrder()
+    {
+        var anime = new AnimeMetadata { Id = 1, Title = "T", Studios = ["Old Studio"] };
+        var node = NodeWithMainPicture("https://mal/main.jpg");
+        node.Studios =
+        [
+            new MalStudio { Id = 4, Name = "Bones" },
+            new MalStudio { Id = 6, Name = "Aniplex" },
+            new MalStudio { Id = 7, Name = "  " },
+        ];
+
+        node.ApplyTo(anime, DateTimeOffset.UtcNow);
+
+        Assert.Equal(["Bones", "Aniplex"], anime.Studios);
+    }
+
+    [Fact]
+    public void ApplyToStoresAnEmptyListWhenMalCreditsNoStudio()
+    {
+        var anime = new AnimeMetadata { Id = 1, Title = "T", Studios = ["Old Studio"] };
+        var node = NodeWithMainPicture("https://mal/main.jpg");
+        node.Studios = [];
+
+        node.ApplyTo(anime, DateTimeOffset.UtcNow);
+
+        Assert.NotNull(anime.Studios);
+        Assert.Empty(anime.Studios);
+    }
+
+    [Fact]
+    public void ABasicRowStoresEveryCreditedStudioInMalOrder()
+    {
+        var node = ListNode();
+        node.Studios = [new MalStudio { Id = 4, Name = "Bones" }, new MalStudio { Id = 6, Name = "Aniplex" }];
+
+        var row = node.ToBasicAnimeMetadata(DateTimeOffset.UtcNow);
+
+        Assert.Equal(["Bones", "Aniplex"], row.Studios);
+    }
+
+    [Fact]
+    public void ABasicRowForAnAnimeWithNoStudioHoldsAnEmptyList()
+    {
+        var node = ListNode();
+        node.Studios = [];
+
+        var row = node.ToBasicAnimeMetadata(DateTimeOffset.UtcNow);
+
+        Assert.NotNull(row.Studios);
+        Assert.Empty(row.Studios);
+    }
+
+    [Fact]
     public void PicturesPresentNodeStoresLargeInMalOrderAndStampsTimestamp()
     {
         var anime = new AnimeMetadata { Id = 1, Title = "T" };
@@ -344,7 +409,7 @@ public class MalMappingExtensionsTests
         Assert.Equal(new DateOnly(2010, 7, 4), row.AiredTo);
         Assert.Equal(DayOfWeek.Sunday, MalMappingExtensions.ParseMalDayOfWeek(row.BroadcastDayOfWeek));
         Assert.Equal(new TimeOnly(17, 0), row.BroadcastTime);
-        Assert.Equal("Bones", row.Studio);
+        Assert.Equal(["Bones"], row.Studios);
         Assert.Equal(["Action", "Adventure"], row.Genres);
         Assert.Equal("Two brothers...", row.Synopsis);
         Assert.Equal(1440, row.AverageEpisodeDurationSeconds);
@@ -369,7 +434,7 @@ public class MalMappingExtensionsTests
 
         Assert.Null(row.AiringStatus);
         Assert.Null(row.AiredFrom);
-        Assert.Null(row.Studio);
+        Assert.Null(row.Studios);
         Assert.Null(row.BroadcastTime);
         Assert.Null(row.Genres);
         Assert.Null(row.Synopsis);

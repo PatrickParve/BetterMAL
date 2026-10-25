@@ -717,11 +717,10 @@ public class SeriesService(
             m => m.Anime.UserEntry!.RewatchCount);
 
         var studios = visibleMainLineAnime
-            .Select(a => a.Studio)
+            .SelectMany(a => a.Studios ?? [])
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .Distinct()
             .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
-            .Select(s => s!)
             .ToList();
         var genres = visibleMainLineAnime
             .SelectMany(a => a.Genres ?? [])

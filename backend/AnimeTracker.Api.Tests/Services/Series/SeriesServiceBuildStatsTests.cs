@@ -295,10 +295,10 @@ public class SeriesServiceBuildStatsTests
     public void StudiosAndGenresExcludeExtras()
     {
         var mainLine = Anime(1, totalEpisodes: 12);
-        mainLine.Studio = "Main Studio";
+        mainLine.Studios = ["Main Studio"];
         mainLine.Genres = ["Action"];
         var extra = Anime(2, totalEpisodes: 1);
-        extra.Studio = "Extra Studio";
+        extra.Studios = ["Extra Studio"];
         extra.Genres = ["Comedy"];
         var mainLineMembers = new List<SeriesMember> { Member(mainLine, isMainLine: true, order: 0) };
         var extraMembers = new List<SeriesMember> { Member(extra, isMainLine: false, order: 0) };
@@ -311,13 +311,72 @@ public class SeriesServiceBuildStatsTests
     }
 
     [Fact]
+    public void AStudioCreditedToSeveralMainLineEntriesIsNamedOnce()
+    {
+        var first = Anime(1, totalEpisodes: 12);
+        first.Studios = ["Studio B", "studio a"];
+        var second = Anime(2, totalEpisodes: 12);
+        second.Studios = ["Studio B"];
+        var third = Anime(3, totalEpisodes: 12);
+        third.Studios = [];
+        var fourth = Anime(4, totalEpisodes: 12);
+        var mainLineMembers = new List<SeriesMember>
+        {
+            Member(first, isMainLine: true, order: 0),
+            Member(second, isMainLine: true, order: 1),
+            Member(third, isMainLine: true, order: 2),
+            Member(fourth, isMainLine: true, order: 3),
+        };
+        var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 12, [3] = 12, [4] = 12 };
+
+        var stats = SeriesService.BuildStats(mainLineMembers, mainLineMembers, [], airedByAnimeId);
+
+        Assert.Equal(["studio a", "Studio B"], stats.Studios);
+    }
+
+    [Fact]
+    public void ACoProducedMainLineEntryNamesBothItsStudios()
+    {
+        var coProduced = Anime(1, totalEpisodes: 12);
+        coProduced.Studios = ["Bones", "Aniplex"];
+        var soloEntry = Anime(2, totalEpisodes: 12);
+        soloEntry.Studios = ["Bones"];
+        var mainLineMembers = new List<SeriesMember>
+        {
+            Member(coProduced, isMainLine: true, order: 0),
+            Member(soloEntry, isMainLine: true, order: 1),
+        };
+        var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 12 };
+
+        var stats = SeriesService.BuildStats(mainLineMembers, mainLineMembers, [], airedByAnimeId);
+
+        Assert.Equal(["Aniplex", "Bones"], stats.Studios);
+    }
+
+    [Fact]
+    public void ACoProducedExtraStillStaysOutOfTheStudios()
+    {
+        var mainLine = Anime(1, totalEpisodes: 12);
+        mainLine.Studios = ["Main Studio"];
+        var extra = Anime(2, totalEpisodes: 1);
+        extra.Studios = ["Extra Studio A", "Extra Studio B"];
+        var mainLineMembers = new List<SeriesMember> { Member(mainLine, isMainLine: true, order: 0) };
+        var extraMembers = new List<SeriesMember> { Member(extra, isMainLine: false, order: 0) };
+        var airedByAnimeId = new Dictionary<int, int?> { [1] = 12, [2] = 1 };
+
+        var stats = SeriesService.BuildStats(mainLineMembers, mainLineMembers, extraMembers, airedByAnimeId);
+
+        Assert.Equal(["Main Studio"], stats.Studios);
+    }
+
+    [Fact]
     public void StudiosAndGenresFollowTheVisibleMainLineOnAVersionSlotPick()
     {
         var alternativeA = Anime(1, totalEpisodes: 12);
-        alternativeA.Studio = "Studio A";
+        alternativeA.Studios = ["Studio A"];
         alternativeA.Genres = ["Action"];
         var alternativeB = Anime(2, totalEpisodes: 12);
-        alternativeB.Studio = "Studio B";
+        alternativeB.Studios = ["Studio B"];
         alternativeB.Genres = ["Comedy"];
         var mainLineMembers = new List<SeriesMember>
         {

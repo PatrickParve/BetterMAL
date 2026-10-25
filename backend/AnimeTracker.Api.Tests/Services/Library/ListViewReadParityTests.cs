@@ -213,7 +213,7 @@ public class ListViewReadParityTests
     private static FakeEpisodeScheduleService BuildScheduleService(DateTimeOffset now) => new(
         airedSoFarByAnimeId: new Dictionary<int, int> { [ReopenCandidateAnimeId] = 6, [9] = 5, [17] = 6 },
         nextAiringInstantByAnimeId: new Dictionary<int, DateTimeOffset> { [ReopenCandidateAnimeId] = now.AddDays(2) },
-        airingTodayByAnimeId: new Dictionary<int, ResolvedEpisode> { [9] = new(new TimeOnly(20, 0), 6) });
+        airingTodayByAnimeId: new Dictionary<int, ResolvedEpisode> { [9] = new(new TimeOnly(20, 0), 6, new DateTimeOffset(2026, 10, 25, 20, 0, 0, TimeSpan.Zero)) });
 
     private static ProfileService BuildProfileService(
         AnimeTrackerDbContext db, IUserAnimeEntryRepository repo, IEpisodeScheduleService schedule, ISeriesBuildTrigger trigger) =>

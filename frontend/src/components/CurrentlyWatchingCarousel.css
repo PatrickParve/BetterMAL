@@ -39,6 +39,16 @@
   display: none;
 }
 
+/* Only a track that overflows can be dragged (useDragScroll), so only then
+   does it show the grab cursor. */
+.carousel__track--draggable {
+  cursor: grab;
+}
+
+.carousel__track--draggable:active {
+  cursor: grabbing;
+}
+
 .carousel__card {
   flex: 0 0 auto;
 }

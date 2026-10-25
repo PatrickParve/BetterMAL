@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Data;
+using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
@@ -26,6 +27,7 @@ public class InitialImportService(
     AnimeTrackerDbContext db,
     ListImportProgress progress,
     IAnimeSearchIndex searchIndex,
+    INewEntryRefreshTrigger newEntryRefreshTrigger,
     ILogger<InitialImportService> logger) : IInitialImportService
 {
     public async Task RunAsync(CancellationToken ct)
@@ -126,6 +128,10 @@ public class InitialImportService(
                 var entry = MalMappingExtensions.ToUserAnimeEntry(animeId, edge.ListStatus, now);
                 db.UserAnimeEntries.Add(entry);
                 await db.SaveChangesAsync(ct);
+
+                // Its cached row may have come from a listing, which never
+                // gave it airing status, end date or broadcast slot.
+                newEntryRefreshTrigger.Enqueue(animeId);
             }
 
             done++;
@@ -171,5 +177,9 @@ public class InitialImportService(
         // as it's committed rather than leaving it out until some later,
         // unrelated write.
         searchIndex.Invalidate();
+
+        // Its episode dates, now that the entry is saved — queued so a whole
+        // import is fetched as one batch rather than anime by anime.
+        newEntryRefreshTrigger.Enqueue(animeId);
     }
 }

@@ -255,8 +255,8 @@ namespace AnimeTracker.Api.Migrations
                     b.Property<string>("Source")
                         .HasColumnType("text");
 
-                    b.Property<string>("Studio")
-                        .HasColumnType("text");
+                    b.PrimitiveCollection<List<string>>("Studios")
+                        .HasColumnType("text[]");
 
                     b.Property<string>("Synopsis")
                         .HasColumnType("text");

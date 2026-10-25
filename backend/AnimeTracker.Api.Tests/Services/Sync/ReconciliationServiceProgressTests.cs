@@ -6,6 +6,7 @@ using AnimeTracker.Api.Services.Sync;
 using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using AnimeTracker.Api.Tests.Services.Airing;
 
 namespace AnimeTracker.Api.Tests.Services.Sync;
 
@@ -21,7 +22,7 @@ public class ReconciliationServiceProgressTests
             .Options);
 
     private static ReconciliationService CreateService(IMalClient malClient, AnimeTrackerDbContext db, ReconciliationRunGate? gate = null) =>
-        new(malClient, db, gate ?? new ReconciliationRunGate(), new FakeAnimeSearchIndex(), NullLogger<ReconciliationService>.Instance);
+        new(malClient, db, gate ?? new ReconciliationRunGate(), new FakeAnimeSearchIndex(), new RecordingNewEntryRefreshTrigger(), NullLogger<ReconciliationService>.Instance);
 
     private static MalUserAnimeListEdge Edge(int animeId) => new()
     {

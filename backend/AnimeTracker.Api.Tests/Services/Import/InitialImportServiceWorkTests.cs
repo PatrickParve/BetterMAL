@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Import;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
@@ -8,6 +9,7 @@ using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using AnimeTracker.Api.Tests.Services.Airing;
 
 namespace AnimeTracker.Api.Tests.Services.Import;
 
@@ -35,10 +37,11 @@ public class InitialImportServiceWorkTests
     }
 
     private static (InitialImportService Service, ListImportProgress Progress) CreateService(
-        AnimeTrackerDbContext db, IMalClient malClient, IAnimeSearchIndex? searchIndex = null)
+        AnimeTrackerDbContext db, IMalClient malClient, IAnimeSearchIndex? searchIndex = null,
+        INewEntryRefreshTrigger? trigger = null)
     {
         var progress = new ListImportProgress();
-        return (new InitialImportService(malClient, db, progress, searchIndex ?? new FakeAnimeSearchIndex(), NullLogger<InitialImportService>.Instance), progress);
+        return (new InitialImportService(malClient, db, progress, searchIndex ?? new FakeAnimeSearchIndex(), trigger ?? new RecordingNewEntryRefreshTrigger(), NullLogger<InitialImportService>.Instance), progress);
     }
 
     [Fact]
@@ -90,6 +93,64 @@ public class InitialImportServiceWorkTests
         Assert.DoesNotContain(1, malClient.DetailsCalledFor); // no redundant fetch
         Assert.Single(await db.UserAnimeEntries.ToListAsync());
         Assert.Equal(JobPhase.Complete, progress.Snapshot.Phase);
+    }
+
+    // episode-airing-data "Event-driven refresh triggers": an anime the import
+    // brings into my list is queued once its entry is saved, in both branches.
+    [Fact]
+    public async Task AnAnimeImportedFromMalIsQueuedOnceItsEntryIsSaved()
+    {
+        using var db = CreateDb();
+        var entryExistedWhenQueued = new Dictionary<int, bool>();
+        var trigger = new RecordingNewEntryRefreshTrigger(id => entryExistedWhenQueued[id] = db.UserAnimeEntries.AsNoTracking().Any(e => e.AnimeId == id));
+        var (service, _) = CreateService(db, new FakeMalClient([Edge(1), Edge(2)]), trigger: trigger);
+
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Equal([1, 2], trigger.Enqueued);
+        Assert.All(entryExistedWhenQueued, queued => Assert.True(queued.Value));
+    }
+
+    [Fact]
+    public async Task ACachedRowWhoseEntryWasMissingIsQueuedToo()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1" });
+        await db.SaveChangesAsync();
+        var trigger = new RecordingNewEntryRefreshTrigger();
+        var (service, _) = CreateService(db, new FakeMalClient([Edge(1, "completed", 12)]), trigger: trigger);
+
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Equal([1], trigger.Enqueued);
+    }
+
+    [Fact]
+    public async Task AnAnimeAlreadyInMyListIsNotQueued()
+    {
+        using var db = CreateDb();
+        SeedExisting(db, 1);
+        await db.SaveChangesAsync();
+        var trigger = new RecordingNewEntryRefreshTrigger();
+        var (service, _) = CreateService(db, new FakeMalClient([Edge(1), Edge(2)]), trigger: trigger);
+
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Equal([2], trigger.Enqueued);
+    }
+
+    [Fact]
+    public async Task AnAnimeWhoseFetchFailedIsNotQueued()
+    {
+        using var db = CreateDb();
+        var malClient = new FakeMalClient([Edge(1), Edge(2)]);
+        malClient.FailDetailsFor(1);
+        var trigger = new RecordingNewEntryRefreshTrigger();
+        var (service, _) = CreateService(db, malClient, trigger: trigger);
+
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Equal([2], trigger.Enqueued); // anime 1 has no entry; the next import run retries it
     }
 
     [Fact]

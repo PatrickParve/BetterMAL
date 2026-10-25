@@ -84,16 +84,29 @@ public class MainDashboardService(
         // nothing airs — the same shape AiringScheduleService.GetWeekAsync
         // uses for its week-wide range query.
         var airingTodayByAnimeId = await scheduleService.ResolveOnLocalDateAsync(entries.Select(e => e.Anime).ToList(), today, ct);
-        var airingToday = new List<(UserAnimeEntry Entry, ResolvedEpisode Episode)>();
+        var airingTodayRows = new List<AiringDaySlotGrouper.Row>();
         foreach (var e in entries)
         {
-            if (airingTodayByAnimeId.TryGetValue(e.AnimeId, out var episode))
-                airingToday.Add((e, episode));
+            if (!airingTodayByAnimeId.TryGetValue(e.AnimeId, out var episodes))
+                continue;
+
+            foreach (var episode in episodes)
+                airingTodayRows.Add(new AiringDaySlotGrouper.Row(
+                    e.AnimeId,
+                    e.Anime.Title,
+                    e.Anime.EnglishTitle,
+                    e.Anime.PictureUrl,
+                    episode.AirsAtUtc,
+                    episode.LocalTime.ToString("HH:mm"),
+                    episode.EpisodeNumber));
         }
 
-        var airingTodayDtos = airingToday
-            .OrderBy(x => x.Episode.LocalTime)
-            .Select(x => new AiringTodayItemDto(x.Entry.AnimeId, x.Entry.Anime.Title, x.Entry.Anime.EnglishTitle, x.Entry.Anime.PictureUrl, x.Episode.LocalTime.ToString("HH:mm"), x.Episode.EpisodeNumber))
+        // Rows are handed over in air order, as the Airing page's range
+        // query hands them over, so the same grouping rule gives the same
+        // slots in the same order for the same day.
+        var airingTodayDtos = AiringDaySlotGrouper.Group(airingTodayRows.OrderBy(r => r.AirsAtUtc).ToList())
+            .Select(slot => new AiringTodayItemDto(
+                slot.AnimeId, slot.Title, slot.EnglishTitle, slot.PictureUrl, slot.LocalTime, slot.EpisodeNumber, slot.EpisodeNumberEnd))
             .ToList();
 
         // Season membership is derived from AiredFrom rather than the cached

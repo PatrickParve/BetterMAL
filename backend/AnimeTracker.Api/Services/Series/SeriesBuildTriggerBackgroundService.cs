@@ -4,7 +4,7 @@ namespace AnimeTracker.Api.Services.Series;
 
 /// <summary>Drains ISeriesBuildTrigger's queue: an anime whose search match
 /// had no stored series gets its franchise built now, so a later search finds
-/// it — mirrors AiringRefreshTriggerBackgroundService's
+/// it — mirrors NewEntryRefreshBackgroundService's
 /// signal-plus-dedicated-loop pattern.</summary>
 public class SeriesBuildTriggerBackgroundService(
     IServiceScopeFactory scopeFactory,
