@@ -3,6 +3,16 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  /* Dragging the row (useDragScroll) otherwise highlights titles and counts
+     along the way; the section's heading sits outside .carousel and stays
+     selectable. */
+  user-select: none;
+}
+
+/* The episode count's field has to stay selectable while it is being edited:
+   it opens with its value selected, and WebKit inherits user-select. */
+.carousel .progress-bar__watched-input {
+  user-select: text;
 }
 
 .carousel__track {
@@ -24,7 +34,15 @@
      poster, showing a sliver of the 6th. */
   box-sizing: border-box;
   max-width: calc(5 * 160px + 4 * 16px + 2 * 6px);
-  padding: 6px;
+  /* The card's hover plate overhangs it by 6px and its shadow reaches about
+     20px further down, but overflow-y: hidden clips at the padding box. A
+     bottom padding of 6px put the plate's last pixel row exactly on that
+     edge, where Safari's pixel snapping of the track's fractional height
+     cut the plate's bottom border and the shadow off. The extra 20px is
+     pulled back out with the negative margin, so the row takes the space it
+     always did and the room sits in the section's own 20px bottom padding. */
+  padding: 6px 6px 26px;
+  margin-bottom: -20px;
   overflow-x: auto;
   overflow-y: hidden;
   /* Stops a flick past the track's end from chaining to the document, and

@@ -18,6 +18,10 @@
   padding: 20px;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  /* Dragging the row (useDragScroll) otherwise highlights titles and dates
+     along the way; the "Main series" heading sits outside this box and stays
+     selectable. */
+  user-select: none;
 }
 
 /* A version slot's picker stack needs room, not the row's usual top
