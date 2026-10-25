@@ -1,7 +1,3 @@
-.updates-menu {
-  position: relative;
-}
-
 /* Same navbar-control-h box as the Settings gear (design.md D9). Settings
    is a NavLink (an anchor, no native chrome), but this is a real <button> —
    without an explicit `background: none` it picks up the browser's default
@@ -48,16 +44,23 @@
   border-color: var(--accent);
 }
 
-/* Absolutely positioned under the button and right-aligned to the navbar
-   edge so it can never overflow the window's right side; a dropdown, not
-   one of the app's Modal overlays, so it doesn't lock the page behind it
+/* Absolutely positioned under the controls' row and right-aligned to the
+   navbar edge so it can never overflow the window's right side: .updates-menu
+   isn't positioned, so top and right resolve against .navbar__controls
+   (Navbar.css), whose right edge is the navbar's in every wrap layout
+   (design D3 of fix-navbar-search-scroll-and-wrapping). A dropdown, not one
+   of the app's Modal overlays, so it doesn't lock the page behind it
    (design.md D8). Below .modal-backdrop's z-index: 100, so opening the
-   history (a real Modal) over it never fights for a stacking layer. */
+   history (a real Modal) over it never fights for a stacking layer.
+   Border-box so the width counts its own padding and border: 442px outer is
+   what 420 + 2×10 + 2×1 came to, and below that it leaves about 20px clear
+   on each side of the window. */
 .updates-menu__dropdown {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  width: min(420px, calc(100vw - 24px));
+  box-sizing: border-box;
+  width: min(442px, calc(100vw - 40px));
   z-index: 50;
   background: var(--bg);
   border: 1px solid var(--border);

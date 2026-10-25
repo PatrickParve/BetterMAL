@@ -6,8 +6,15 @@
      one window width (design.md decision D1). */
   --navbar-control-h: 40px;
   display: flex;
-  align-items: center;
-  gap: 16px;
+  /* Wraps from its contents, not from a breakpoint: the text is drawn in
+     system-ui, so the links are a different width on the Mac (SF) than on
+     Windows (Segoe UI), and any fixed window width would clip on one of them
+     (design D2 of fix-navbar-search-scroll-and-wrapping). flex-start keeps
+     the links level with the controls' row rather than centred between the
+     rows of the right group. */
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 16px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--border);
   /* Sticky rather than fixed keeps the navbar's space in the document flow,
@@ -63,31 +70,56 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  flex: 1;
 }
 
+/* An auto basis counts the links at their full one-row width when the navbar
+   decides where to break, so the right group moves down before the links
+   wrap. Once the links have a row to themselves they can shrink and wrap. */
+.navbar__links--left {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+/* Its basis is its widest item, the controls unit (min-content), so it sits
+   next to the links while the controls fit, then grows into all the free
+   space. wrap-reverse stacks its lines bottom-up: when the search field and
+   the controls don't fit side by side the field, first in the DOM and the
+   tab order, drops beneath the controls, and when the whole group has moved
+   to its own row they fit side by side again. At phone width it puts the
+   controls above the field. */
 .navbar__links--right {
+  flex: 1 1 auto;
+  width: min-content;
+  flex-wrap: wrap-reverse;
   justify-content: flex-end;
+  row-gap: 8px;
 }
 
 /* Flexible basis so the field shares the group with the score toggle,
-   Profile, and Settings without being squeezed to button width; its own
-   max-width (search-bar.css) caps how far it grows. Height matches the rest
-   of the navbar's page controls (design.md decision D2) — scoped here
-   rather than in search-bar.css so the Settings page's own field, which
-   shares the same component, keeps its current size. */
+   Updates, Profile, and Settings without being squeezed to button width; its
+   own max-width (SearchBar.css) caps how far it grows. The 200px floor keeps
+   the "Search anime…" placeholder whole (it measures 181–187px with its
+   padding, magnifier and border across the fluid font range), so the navbar
+   wraps instead of squeezing the field further. Height matches the rest of
+   the navbar's page controls (design.md decision D2) — scoped here rather
+   than in SearchBar.css so the Settings page's own field, which shares the
+   same component, keeps its current size. */
 .navbar__links--right .search-bar {
   flex: 1 1 200px;
-  min-width: 160px;
+  min-width: 200px;
   height: var(--navbar-control-h);
   box-sizing: border-box;
 }
 
-/* The score toggle, Profile, and Settings as one unbroken unit — flex-wrap
-   on the right group (below) is meant to give only the search field its own
-   row; without this wrapper the three controls could individually wrap away
-   from each other once the group narrows. */
+/* The score toggle, Updates, Profile, and Settings as one unbroken unit —
+   the right group's wrapping (above) moves this unit and the search field
+   around as two items; without this wrapper the four controls could
+   individually wrap away from each other once the group narrows. Positioned
+   so the Updates dropdown's right: 0 resolves against this group, whose
+   right edge is the navbar's right edge in every wrap layout (design D3). */
 .navbar__controls {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -327,18 +359,4 @@
    soft border on an active-and-hovered gear. */
 .navbar__settings--active:hover {
   border-color: var(--accent);
-}
-
-@media (max-width: 900px) {
-  .navbar {
-    flex-wrap: wrap;
-  }
-  .navbar__links--right {
-    flex-wrap: wrap;
-  }
-  .navbar__links--right .search-bar {
-    order: 1;
-    flex: 1 1 100%;
-    max-width: none;
-  }
 }

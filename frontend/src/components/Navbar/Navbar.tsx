@@ -72,8 +72,8 @@ export function Navbar() {
 
       <div className="navbar__links navbar__links--right">
         <SearchBar />
-        {/* Grouped so these three wrap as one unit at narrow widths — only
-            the search field gets its own row (Navbar.css). */}
+        {/* Grouped so these four wrap as one unit at narrow widths — the
+            search field drops beneath them first (Navbar.css). */}
         <div className="navbar__controls">
           <button
             type="button"

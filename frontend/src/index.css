@@ -319,10 +319,24 @@ body {
    element brought into view from above lands below the navbar instead of
    under it. It has no effect on an explicit window.scrollTo with
    coordinates, so navbarReveal.ts's scrollWindowTo (restoration, the
-   navbar's own pins) is untouched. Falls back to 0px before the navbar's
+   navbar's own pins) is untouched. Doesn't apply while focus is inside the
+   navbar (the rule below). Falls back to 0px before the navbar's
    height is measured (navbarReveal.ts's measureNavbar). */
 html {
   scroll-padding-top: var(--navbar-height, 0px);
+}
+
+/* Except while focus is inside the navbar itself. The browser keeps a text
+   field's caret clear of the scroll padding after every edit, and the sticky
+   navbar's own search field sits inside that padding, so each key scrolled
+   the page up to "uncover" it (and Chromium centred the page on every Tab
+   between navbar controls). The navbar is shown while it holds focus
+   (Navbar.css), so nothing in it needs uncovering; the padding is back as
+   soon as focus leaves (design D1 of fix-navbar-search-scroll-and-wrapping).
+   :focus rather than :focus-visible so a clicked button, which Chromium
+   leaves focused, and the Updates dropdown's contents are covered too. */
+html:has(.navbar :focus) {
+  scroll-padding-top: 0px;
 }
 
 body {
