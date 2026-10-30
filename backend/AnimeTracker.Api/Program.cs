@@ -6,6 +6,7 @@ using AnimeTracker.Api.Services.Airing.AniList;
 using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Detail;
 using AnimeTracker.Api.Services.Entries;
+using AnimeTracker.Api.Services.Games;
 using AnimeTracker.Api.Services.IdMapping;
 using AnimeTracker.Api.Services.Import;
 using AnimeTracker.Api.Services.Infrastructure;
@@ -268,6 +269,12 @@ builder.Services.AddScoped<IProfileService, ProfileService>();
 // --- Recap ---
 builder.Services.AddScoped<IRecapService, RecapService>();
 builder.Services.AddScoped<IRecapAvailabilityService, RecapAvailabilityService>();
+
+// --- Games (Higher or Lower) ---
+// Random.Shared is safe to use from every request at once; the service takes a
+// Random so its tests can hand it a seeded one.
+builder.Services.AddSingleton(Random.Shared);
+builder.Services.AddScoped<IHigherOrLowerService, HigherOrLowerService>();
 
 // --- Single anime detail page ---
 builder.Services.AddScoped<IAnimeDetailService, AnimeDetailService>();

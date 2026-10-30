@@ -1,0 +1,52 @@
+/* The game screens' one filled button (add-games-higher-or-lower design.md D11):
+   Play on the Games tile and on the setup screen. Its text is --fam-ink rather
+   than white because the dark theme's accent is light and needs dark text. A
+   class only, so it dresses a <button> and the tile's <span> inside its link
+   alike. */
+.game-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 44px;
+  padding: 0 28px;
+  border: none;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--fam-ink);
+  background: var(--accent);
+  transition: background-color 0.15s ease;
+}
+
+.game-button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.game-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.game-button--small {
+  height: 36px;
+  padding: 0 18px;
+  font-size: 14px;
+  border-radius: 8px;
+}
+
+@media (forced-colors: active) {
+  .game-button {
+    border: 1px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+  }
+
+  .game-button:disabled {
+    opacity: 1;
+    border-color: GrayText;
+    color: GrayText;
+  }
+}

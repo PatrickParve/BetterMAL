@@ -31,6 +31,8 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<RelationDiscovery> RelationDiscoveries => Set<RelationDiscovery>();
     public DbSet<AnimeUpdate> AnimeUpdates => Set<AnimeUpdate>();
     public DbSet<AnimeScoreRecord> AnimeScoreRecords => Set<AnimeScoreRecord>();
+    public DbSet<HigherOrLowerRun> HigherOrLowerRuns => Set<HigherOrLowerRun>();
+    public DbSet<HigherOrLowerAppearance> HigherOrLowerAppearances => Set<HigherOrLowerAppearance>();
     public DbSet<AnimeIdMapping> AnimeIdMappings => Set<AnimeIdMapping>();
     public DbSet<AnimeIdMappingSyncState> AnimeIdMappingSyncStates => Set<AnimeIdMappingSyncState>();
     public DbSet<TmdbTvImageSet> TmdbTvImageSets => Set<TmdbTvImageSet>();
@@ -226,6 +228,36 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
             // one that serves "latest record" and an anime's records in order
             // (add-score-history-graph design.md D1).
             entity.HasIndex(e => new { e.AnimeId, e.DetectedAt }).IsUnique();
+        });
+
+        // The two Higher or Lower tables (add-games-higher-or-lower design.md
+        // D2). The run is the game in progress and is deleted when it ends;
+        // its anime foreign keys cascade so a removed anime can't leave a
+        // dangling game, though nothing deletes metadata rows today.
+        modelBuilder.Entity<HigherOrLowerRun>(entity =>
+        {
+            entity.HasOne<AnimeMetadata>()
+                .WithMany()
+                .HasForeignKey(e => e.LeftAnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<AnimeMetadata>()
+                .WithMany()
+                .HasForeignKey(e => e.RightAnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            // A double submit, or a pick from a tab behind the game, must not
+            // advance a round twice: the second save finds Round already moved.
+            entity.Property(e => e.Round).IsConcurrencyToken();
+            entity.Property(e => e.ListScope).HasConversion<string>();
+            // MediaTypes (text[]) and ShownAnimeIds (integer[]) come from the
+            // List<string>/List<int> properties, as Genres and PictureUrls do.
+        });
+
+        modelBuilder.Entity<HigherOrLowerAppearance>(entity =>
+        {
+            entity.HasOne<AnimeMetadata>()
+                .WithMany()
+                .HasForeignKey(e => e.AnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Series>(entity =>

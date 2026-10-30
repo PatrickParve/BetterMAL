@@ -12,6 +12,12 @@ import type {
   HeldChangeDecisionDto,
   HeldChangeDto,
   HeldDecisionJobDto,
+  HigherOrLowerEndDto,
+  HigherOrLowerGameDto,
+  HigherOrLowerPickDto,
+  HigherOrLowerPoolDto,
+  HigherOrLowerSettings,
+  HigherOrLowerStateDto,
   JobStatusDto,
   MainDashboardDto,
   MyListItemDto,
@@ -685,4 +691,48 @@ export function dismissTransferImport(finishedAt: string): Promise<TransferImpor
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ finishedAt }),
   })
+}
+
+// Higher or Lower (add-games-higher-or-lower design.md D3). The game runs on the
+// server, so a pick is sent and the verdict and the next round come back. The
+// first read serves both the Games tile and the game's own page.
+export function getHigherOrLowerState(params: { hideHentai: boolean }): Promise<HigherOrLowerStateDto> {
+  const query = new URLSearchParams({ hideHentai: String(params.hideHentai) })
+  return fetchJson<HigherOrLowerStateDto>(`/api/games/higher-or-lower?${query.toString()}`)
+}
+
+// How many anime some settings leave. `types` repeats once per type, and none
+// means every type; an unset year is left out.
+export function getHigherOrLowerPool(settings: HigherOrLowerSettings): Promise<HigherOrLowerPoolDto> {
+  const query = new URLSearchParams()
+  if (settings.yearFrom !== null) query.set('yearFrom', String(settings.yearFrom))
+  if (settings.yearTo !== null) query.set('yearTo', String(settings.yearTo))
+  for (const type of settings.mediaTypes ?? []) query.append('types', type)
+  query.set('list', settings.list)
+  query.set('hideHentai', String(settings.hideHentai))
+  return fetchJson<HigherOrLowerPoolDto>(`/api/games/higher-or-lower/pool?${query.toString()}`)
+}
+
+// Replaces any game in progress. 400 for settings that can't describe a game,
+// 409 when they leave too few anime to play; both throw ApiError.
+export function startHigherOrLower(settings: HigherOrLowerSettings): Promise<HigherOrLowerGameDto> {
+  return fetchJson<HigherOrLowerGameDto>('/api/games/higher-or-lower/runs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+}
+
+// 404 for a game no longer in progress and 409 for a round it has passed both
+// throw ApiError; the table re-reads the page's state on either.
+export function pickHigherOrLower(runId: number, round: number, animeId: number): Promise<HigherOrLowerPickDto> {
+  return fetchJson<HigherOrLowerPickDto>(`/api/games/higher-or-lower/runs/${runId}/picks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ round, animeId }),
+  })
+}
+
+export function endHigherOrLower(runId: number): Promise<HigherOrLowerEndDto> {
+  return fetchJson<HigherOrLowerEndDto>(`/api/games/higher-or-lower/runs/${runId}/end`, { method: 'POST' })
 }

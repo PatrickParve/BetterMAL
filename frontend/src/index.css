@@ -108,6 +108,16 @@
   --airing-bg: var(--status-watching-bg);
   --airing-border: var(--status-watching-border);
 
+  /* Higher or Lower's verdict colours (add-games-higher-or-lower design.md
+     D11), aliased on the same convention as --mal and --airing: a game's
+     correct answer is green without being the Watching status, and a
+     milestone is gold without being a medal, so each can diverge later
+     without touching the other. Glows mix these with `transparent` through
+     color-mix, so no third value per theme is needed here. */
+  --game-correct: var(--status-watching);
+  --game-wrong: var(--status-dropped);
+  --game-milestone: var(--medal-gold);
+
   /* Section colour families (section-colour-language capability): a family
      names what a section is about, not a rank or a score, so each gets its
      own pair rather than reusing the medal, tier, MAL, or mine tokens in
@@ -240,6 +250,10 @@
     --mine-bg: var(--accent-bg);
     --mine-bg-solid: var(--accent-bg-solid);
     --mine-border: var(--accent-border);
+
+    --game-correct: var(--status-watching);
+    --game-wrong: var(--status-dropped);
+    --game-milestone: var(--medal-gold);
 
     /* The year family is the one family whose *direction* flips: it fills
        toward white here instead of toward black. --fam-ink flips with it
@@ -409,6 +423,22 @@ code {
 
 .scroll-hidden::-webkit-scrollbar {
   display: none;
+}
+
+/* Text for assistive technology only: out of sight and out of the layout, but
+   still read, so a heading or a live announcement needs no visible copy. Clipped
+   rather than moved off-screen, so it can never widen the page or become
+   something to scroll to. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* App-wide score colour-only density (design.md decision 8): the value

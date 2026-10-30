@@ -1424,3 +1424,72 @@ export type TransferImportStatusDto = {
   finishedAt: string | null
   dismissed: boolean
 }
+
+// Higher or Lower (add-games-higher-or-lower design.md D3): mirrors the
+// backend's HigherOrLowerDtos. Enums travel by name, like every enum here.
+export type HigherOrLowerListScope = 'All' | 'OnlyMyList' | 'NotOnMyList'
+
+// What a game plays with. `mediaTypes` null means every type; the same shape is
+// the body of Start and, spread into query parameters, the pool count's query.
+export type HigherOrLowerSettings = {
+  yearFrom: number | null
+  yearTo: number | null
+  mediaTypes: string[] | null
+  list: HigherOrLowerListScope
+  hideHentai: boolean
+}
+
+// One anime on the table. `score` is null until a pick has revealed it: always
+// for the right card, and for the left card in round 1. A hidden score is never
+// in a response at all.
+export type HigherOrLowerCardDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  mediaType: string | null
+  year: number | null
+  inMyList: boolean
+  score: number | null
+}
+
+export type HigherOrLowerGameDto = {
+  id: number
+  round: number
+  streak: number
+  left: HigherOrLowerCardDto
+  right: HigherOrLowerCardDto
+}
+
+export type HigherOrLowerStateDto = {
+  game: HigherOrLowerGameDto | null
+  // The years the eligible anime cover; null when there are none.
+  years: { min: number; max: number } | null
+  // Two posters of popular anime for the Games tile and the setup screen. They
+  // carry no score. Fewer than two on a nearly empty database.
+  pictures: string[]
+}
+
+export type HigherOrLowerPoolDto = {
+  count: number
+  playable: boolean
+}
+
+export type HigherOrLowerEnd = 'Wrong' | 'Cleared'
+
+// The verdict on one pick and, unless the game ended, the whole next round.
+// The scores are those the pick was judged on. `milestoneLevel` is the streak's
+// place in the milestone sequence when it has just reached one.
+export type HigherOrLowerPickDto = {
+  correct: boolean
+  leftScore: number
+  rightScore: number
+  streak: number
+  milestoneLevel: number | null
+  end: HigherOrLowerEnd | null
+  next: HigherOrLowerGameDto | null
+}
+
+export type HigherOrLowerEndDto = {
+  streak: number
+}

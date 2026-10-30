@@ -1,0 +1,56 @@
+.vs-badge {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  font-size: 20px;
+  font-weight: 800;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: var(--fam-ink);
+  background-image: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 62%, black));
+  /* A ring in the page's own colour parts it from whatever it overlaps. */
+  box-shadow:
+    0 0 0 5px var(--bg),
+    var(--shadow);
+}
+
+.vs-badge--lobby {
+  width: 56px;
+  height: 56px;
+  font-size: 18px;
+}
+
+.vs-badge--tile {
+  width: 46px;
+  height: 46px;
+  font-size: 15px;
+  box-shadow:
+    0 0 0 4px var(--bg),
+    var(--shadow);
+}
+
+@media (max-width: 640px) {
+  /* The table's medallion sits over a 10px gap between the cards, so it
+     shrinks to leave them room. The tile and setup sizes keep their own. */
+  .vs-badge--table {
+    width: 44px;
+    height: 44px;
+    font-size: 15px;
+    box-shadow:
+      0 0 0 3px var(--bg),
+      var(--shadow);
+  }
+}
+
+@media (forced-colors: active) {
+  .vs-badge {
+    background-image: none;
+    border: 2px solid CanvasText;
+    color: CanvasText;
+    box-shadow: none;
+  }
+}

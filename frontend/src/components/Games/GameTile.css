@@ -1,0 +1,77 @@
+.game-tile {
+  display: grid;
+  grid-template-columns: 228px minmax(0, 1fr);
+  gap: 20px;
+  align-items: center;
+  padding: 20px;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--accent-bg), transparent 62%);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.game-tile:hover {
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow);
+}
+
+/* The posters fan a further 3 degrees on hover. */
+.game-tile:hover .poster-pair__poster--a {
+  transform: translate(-98%, -50%) rotate(-10deg);
+}
+
+.game-tile:hover .poster-pair__poster--b {
+  transform: translate(-2%, -50%) rotate(10deg);
+}
+
+.game-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.game-tile__body {
+  min-width: 0;
+}
+
+.game-tile__name {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: normal;
+  color: var(--text-h);
+}
+
+.game-tile__text {
+  margin: 4px 0 0;
+  font-size: 15px;
+}
+
+.game-tile__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.game-tile__streak {
+  font-size: 14px;
+}
+
+.game-tile__streak b {
+  margin-left: 2px;
+  font-size: 20px;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .game-tile {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

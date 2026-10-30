@@ -10,7 +10,7 @@ import './Navbar.css'
 type NavLinkSpec = { to: string; label: string; end?: boolean }
 
 // One ordered list, so the left group's order (navigation-and-search: Home,
-// My List, Series, Recap, Top, Season, Year, Airing) reads directly from
+// My List, Series, Recap, Top, Season, Year, Airing, Games) reads directly from
 // this source rather than from where three separate constants happened to
 // sit around the three dynamically-linked entries (Recap, Season, Year).
 // Series and Home both need `end` — NavbarPageLink's underlying NavLink
@@ -18,7 +18,10 @@ type NavLinkSpec = { to: string; label: string; end?: boolean }
 // (/series/:animeId) too, and Home current on every route. Every entry here
 // renders through NavbarPageLink (below), which layers the current-page
 // click rule (navigation-and-search "The current page's navbar link returns
-// me to the top"; design D5) on top of NavLink's own matching.
+// me to the top"; design D5) on top of NavLink's own matching. Games goes last
+// and takes no `end`: every other link leads to a way of looking at anime and
+// this one to playing, and without `end` it stays marked inside a game at
+// /games/higher-or-lower (add-games-higher-or-lower D14).
 function leftNavLinks(recapLink: string, seasonLink: string, yearLink: string): NavLinkSpec[] {
   return [
     { to: '/', label: 'Home', end: true },
@@ -29,6 +32,7 @@ function leftNavLinks(recapLink: string, seasonLink: string, yearLink: string): 
     { to: seasonLink, label: 'Season' },
     { to: yearLink, label: 'Year' },
     { to: '/airing', label: 'Airing' },
+    { to: '/games', label: 'Games' },
   ]
 }
 

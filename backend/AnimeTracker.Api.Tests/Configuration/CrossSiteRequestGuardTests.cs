@@ -139,6 +139,8 @@ public class CrossSiteRequestGuardTests
         "api/anime/search/page",             // writes: may enqueue a background series build (AnimeSearchService.ScheduleSeriesBuildForTopMatch)
         "api/app-status",
         "api/dashboard",
+        "api/games/higher-or-lower",         // read-only: the game in progress and two posters from stored data, nothing written (HigherOrLowerService.GetStateAsync)
+        "api/games/higher-or-lower/pool",    // read-only: a count of stored anime, nothing written (HigherOrLowerService.GetPoolAsync)
         "api/health",
         "api/mal-auth/start",
         "api/mal-auth/status",

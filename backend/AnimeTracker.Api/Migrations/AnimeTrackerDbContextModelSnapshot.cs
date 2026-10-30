@@ -424,6 +424,77 @@ namespace AnimeTracker.Api.Migrations
                     b.ToTable("EpisodeAirings");
                 });
 
+            modelBuilder.Entity("AnimeTracker.Api.Models.HigherOrLowerAppearance", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AnimeId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnimeId");
+
+                    b.ToTable("HigherOrLowerAppearances");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.HigherOrLowerRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("HideHentai")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LeftAnimeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LeftStays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ListScope")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.PrimitiveCollection<List<string>>("MediaTypes")
+                        .HasColumnType("text[]");
+
+                    b.Property<int>("RightAnimeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Round")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<int>>("ShownAnimeIds")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.Property<int>("Streak")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("YearFrom")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("YearTo")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LeftAnimeId");
+
+                    b.HasIndex("RightAnimeId");
+
+                    b.ToTable("HigherOrLowerRuns");
+                });
+
             modelBuilder.Entity("AnimeTracker.Api.Models.OAuthToken", b =>
                 {
                     b.Property<int>("Id")
@@ -1013,6 +1084,30 @@ namespace AnimeTracker.Api.Migrations
                     b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", null)
                         .WithMany()
                         .HasForeignKey("AnimeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.HigherOrLowerAppearance", b =>
+                {
+                    b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", null)
+                        .WithMany()
+                        .HasForeignKey("AnimeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.HigherOrLowerRun", b =>
+                {
+                    b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", null)
+                        .WithMany()
+                        .HasForeignKey("LeftAnimeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", null)
+                        .WithMany()
+                        .HasForeignKey("RightAnimeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
