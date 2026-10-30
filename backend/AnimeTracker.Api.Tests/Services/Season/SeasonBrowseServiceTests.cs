@@ -16,6 +16,7 @@ using SeasonBrowseService = AnimeTracker.Api.Services.Season.SeasonBrowseService
 using SeasonCalendar = AnimeTracker.Api.Services.Season.SeasonCalendar;
 using SeasonRefreshOutcome = AnimeTracker.Api.Services.Season.SeasonRefreshOutcome;
 using YearRefreshResultDto = AnimeTracker.Api.Services.Season.YearRefreshResultDto;
+using AnimeTracker.Api.Tests.Services.ScoreHistory;
 
 namespace AnimeTracker.Api.Tests.Services.Season;
 
@@ -36,7 +37,7 @@ public class SeasonBrowseServiceTests
         new(
             db,
             malClient,
-            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), new SeriesBuildTrigger()),
+            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), new SeriesBuildTrigger(), ScoreRecorderTestKit.Create(db)),
             new SeasonRepository(db),
             new FakeBroadcastLocalTimeConverter(),
             refreshGate ?? new RefreshGate(),
@@ -376,6 +377,46 @@ public class SeasonBrowseServiceTests
                 StartSeason = new MalStartSeason { Year = year, Season = season },
             },
         };
+
+    // add-score-history-graph design D2/D4: a listing's edges can name one
+    // anime twice inside one unit of work, and two rows for one instant would
+    // break the unique index and fail the whole season save. (InMemory doesn't
+    // enforce that index, so the count is what is asserted.) The anime is
+    // already known to be airing: a listing never carries a status of its own.
+    [Fact]
+    public async Task RefreshAsync_AListingNamingOneAnimeTwiceSavesAndStoresOneScoreRecord()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1, Title = "Anime 1", AiringStatus = "currently_airing", MalScore = 8.0, LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60),
+        });
+        await db.SaveChangesAsync();
+
+        var edge = SeasonEdge(1, 2027, "winter", numEpisodes: 12, startDate: "2027-01-12");
+        edge.Node.Mean = 8.1;
+        var malClient = new FakeMalClient([edge, edge]);
+
+        var result = await CreateService(db, malClient).RefreshAsync(2027, "winter");
+
+        Assert.Equal(SeasonRefreshOutcome.Fetched, result.Outcome);
+        var record = Assert.Single(await db.AnimeScoreRecords.AsNoTracking().ToListAsync());
+        Assert.Equal((1, 8.1), (record.AnimeId, record.Score));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_AListingScoreForAnAnimeWithNoStatusStoresNoScoreRecord()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1", MalScore = 8.0 }); // known only from a listing
+        await db.SaveChangesAsync();
+
+        var edge = SeasonEdge(1, 2027, "winter", numEpisodes: 12, startDate: "2027-01-12");
+        edge.Node.Mean = 8.1;
+        await CreateService(db, new FakeMalClient([edge, SeasonEdge(2, 2027, "winter")])).RefreshAsync(2027, "winter");
+
+        Assert.Empty(await db.AnimeScoreRecords.AsNoTracking().ToListAsync());
+    }
 
     // Design D4: season browsing writes AiredFrom by hand, outside ApplyLeanTo
     // — so before this change a genuine premiere move on a browsed anime was

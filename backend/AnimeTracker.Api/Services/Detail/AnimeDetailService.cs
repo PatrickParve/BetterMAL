@@ -8,6 +8,7 @@ using AnimeTracker.Api.Services.IdMapping;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Relations;
+using AnimeTracker.Api.Services.ScoreHistory;
 using AnimeTracker.Api.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,6 +29,7 @@ public class AnimeDetailService(
     RefreshGate refreshGate,
     ITmdbArtworkService tmdbArtwork,
     IAnimeIdMappingResolver idMappings,
+    IScoreHistoryService scoreHistory,
     ILogger<AnimeDetailService> logger) : IAnimeDetailService
 {
     public async Task<AnimeDetailDto> GetDetailAsync(int animeId, CancellationToken ct = default)
@@ -122,9 +124,14 @@ public class AnimeDetailService(
         var tmdb = inMyList ? await tmdbArtwork.GetAnimePicturesAsync(animeId, ct) : null;
         var tmdbFetchPending = inMyList && await tmdbArtwork.IsAnimeFetchDueAsync(animeId, ct);
 
+        // Read here, after any visit fetch above has saved, so the very fetch
+        // that just recorded a change is what the control reflects
+        // (add-score-history-graph design.md D6).
+        var hasScoreHistory = await scoreHistory.AnimeHasChangedAsync(animeId, ct);
+
         return AnimeDetailDto.FromEntity(
             anime, episodesAired, nextEpisode, aniListId, relatedMetadataByAnimeId, inSeries, refreshFailed, relations,
-            picturesFetchPending, tmdb, tmdbFetchPending, imdbIds);
+            picturesFetchPending, tmdb, tmdbFetchPending, imdbIds, hasScoreHistory);
     }
 
     private static bool NeedsFullDetailFetch(AnimeMetadata? anime) =>

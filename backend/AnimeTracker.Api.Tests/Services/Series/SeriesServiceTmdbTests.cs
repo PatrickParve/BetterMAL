@@ -10,6 +10,7 @@ using AnimeTracker.Api.Tests.Services.IdMapping;
 using AnimeTracker.Api.Tests.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 using static AnimeTracker.Api.Tests.Services.Tmdb.TmdbTestData;
+using AnimeTracker.Api.Tests.Services.ScoreHistory;
 
 namespace AnimeTracker.Api.Tests.Services.Series;
 
@@ -31,7 +32,8 @@ public class SeriesServiceTmdbTests
     private static SeriesService CreateService(
         AnimeTrackerDbContext db, FakeTmdbClient client, string apiKey = "test-key", ICustomIdMappings? custom = null) =>
         new(db, graphBuilder: null!, new RefreshGate(), new FakeEpisodeScheduleService(), new NoOpAnimeRankingService(),
-            ArtworkService(db, client, apiKey, custom: custom), TestIdMappings.Resolver(db, custom));
+            ArtworkService(db, client, apiKey, custom: custom), TestIdMappings.Resolver(db, custom),
+            ScoreHistoryServiceTestKit.Create(db));
 
     // Series 1: a main line of two seasons of TV 1429 (anime 1 is the root),
     // and the film 635302 among the extras.

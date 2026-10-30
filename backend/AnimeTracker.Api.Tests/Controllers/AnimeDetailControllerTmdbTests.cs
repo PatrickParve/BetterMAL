@@ -25,7 +25,7 @@ public class AnimeDetailControllerTmdbTests
     // The detail, artwork-selection and picture-refresh dependencies belong to
     // the other actions, which these tests never call.
     private static AnimeDetailController CreateController(AnimeTrackerDbContext db, FakeTmdbClient client, string apiKey = "test-key") =>
-        new(detailService: null!, artworkSelectionService: null!, pictureRefreshService: null!,
+        new(detailService: null!, scoreHistoryService: null!, artworkSelectionService: null!, pictureRefreshService: null!,
             tmdbArtwork: ArtworkService(db, client, apiKey), metadataRepository: new AnimeMetadataRepository(db));
 
     // The action answers with an anonymous { tmdb, tmdbFetchPending }, as its

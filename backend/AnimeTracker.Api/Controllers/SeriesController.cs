@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Jobs;
+using AnimeTracker.Api.Services.ScoreHistory;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Tmdb;
 using Microsoft.AspNetCore.Mvc;
@@ -10,6 +11,7 @@ namespace AnimeTracker.Api.Controllers;
 [ApiController]
 public class SeriesController(
     ISeriesService seriesService,
+    IScoreHistoryService scoreHistoryService,
     SeriesListService seriesListService,
     ISeriesBulkBuildTrigger bulkBuildTrigger,
     SeriesBulkBuildProgress bulkBuildProgress,
@@ -37,6 +39,23 @@ public class SeriesController(
             return Ok(await seriesService.GetSeriesAsync(animeId, ct));
         }
         catch (SeriesNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
+    /// <summary>A series' MAL score history: its main line's average over
+    /// time, with a marker for each entry that first aired while it was
+    /// recorded (add-score-history-graph design.md D6, D7). A stored-data read:
+    /// it makes no MyAnimeList request, builds nothing and writes nothing.</summary>
+    [HttpGet("api/series/{seriesId:int}/score-history")]
+    public async Task<IActionResult> GetScoreHistory(int seriesId, CancellationToken ct)
+    {
+        try
+        {
+            return Ok(await scoreHistoryService.GetSeriesHistoryAsync(seriesId, ct));
+        }
+        catch (SeriesIdNotFoundException)
         {
             return NotFound();
         }

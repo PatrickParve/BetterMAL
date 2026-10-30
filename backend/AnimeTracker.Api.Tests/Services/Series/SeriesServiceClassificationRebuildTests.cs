@@ -11,6 +11,7 @@ using AnimeTracker.Api.Tests.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using SeriesModel = AnimeTracker.Api.Models.Series;
+using AnimeTracker.Api.Tests.Services.ScoreHistory;
 
 namespace AnimeTracker.Api.Tests.Services.Series;
 
@@ -42,7 +43,8 @@ public class SeriesServiceClassificationRebuildTests
             new FakeEpisodeScheduleService(),
             new NoOpAnimeRankingService(),
             TmdbTestData.ArtworkService(db, new FakeTmdbClient(), apiKey: ""),
-            TestIdMappings.Resolver(db));
+            TestIdMappings.Resolver(db),
+            ScoreHistoryServiceTestKit.Create(db));
 
     [Fact]
     public async Task SeriesBuiltBeforeClassificationRevisionIsRebuiltOnRead()

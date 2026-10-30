@@ -10,6 +10,7 @@ using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Tests.Services.Tmdb;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using AnimeTracker.Api.Services.ScoreHistory;
 
 namespace AnimeTracker.Api.Tests.Controllers;
 
@@ -26,7 +27,7 @@ public class SeriesControllerBulkBuildTests
             new DbContextOptionsBuilder<AnimeTrackerDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
         var listService = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService(), new UnusedAnimeRankingService());
         return new SeriesController(
-            new UnusedSeriesService(), listService, trigger, tracker, new UnusedArtworkSelectionService(),
+            new UnusedSeriesService(), new UnusedScoreHistoryService(), listService, trigger, tracker, new UnusedArtworkSelectionService(),
             new UnusedPictureRefreshService(), new FakeTmdbArtworkService(), new UnusedAnimeMetadataRepository());
     }
 
@@ -100,6 +101,18 @@ public class SeriesControllerBulkBuildTests
         public Task<string?> AdoptSeriesPictureAsync(int seriesId, string? pictureUrl, DateTimeOffset modifiedAt, CancellationToken ct = default) =>
             throw new NotImplementedException();
         public Task CheckSeriesPictureAsync(int seriesId, string pictureUrl, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+    }
+
+    private sealed class UnusedScoreHistoryService : IScoreHistoryService
+    {
+        public Task<ScoreHistoryDto> GetAnimeHistoryAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<ScoreHistoryDto> GetSeriesHistoryAsync(int seriesId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<bool> AnimeHasChangedAsync(int animeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<bool> SeriesHasChangedAsync(int seriesId, CancellationToken ct = default) =>
             throw new NotImplementedException();
     }
 

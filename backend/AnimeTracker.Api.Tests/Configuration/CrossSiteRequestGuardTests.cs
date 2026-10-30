@@ -134,6 +134,7 @@ public class CrossSiteRequestGuardTests
     [
         "api/airing",
         "api/anime/{animeId:int}",
+        "api/anime/{animeId:int}/score-history", // read-only: stored records, no outside call, nothing written (ScoreHistoryService)
         "api/anime/search",                  // writes: may enqueue a background series build (AnimeSearchService.ScheduleSeriesBuildForTopMatch)
         "api/anime/search/page",             // writes: may enqueue a background series build (AnimeSearchService.ScheduleSeriesBuildForTopMatch)
         "api/app-status",
@@ -157,6 +158,7 @@ public class CrossSiteRequestGuardTests
         "api/season/{year:int}/{season}",
         "api/series/by-anime/{animeId:int}", // writes: builds/refreshes the series from MAL when missing, partial, or stale (SeriesService.GetSeriesAsync)
         "api/series/list",
+        "api/series/{seriesId:int}/score-history", // read-only: stored records, no outside call, nothing written (ScoreHistoryService)
         "api/setup/status",                  // read-only: counts and the coordinator's in-memory state, no outside call (SetupStatusService)
         "api/sync/held",                  // writes: clears held changes MAL already agrees with (HeldChangeService.GetHeldAsync, design D8a)
         "api/sync/reconcile/pending",

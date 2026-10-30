@@ -54,4 +54,34 @@ public class AiredEpisodeGateTests
         // it is a union, not a lookup keyed on "finished_airing" specifically.
         Assert.True(AiredEpisodeGate.EverythingHasAired(Anime("not_yet_aired"), episodesAired: null));
     }
+
+    // add-score-history-graph design.md D3: HasConfirmedAiring, the stricter
+    // "known to have aired" test score recording reads.
+
+    [Fact]
+    public void ConfirmedAiringIsFalseForAnUnknownStatusWhereHasAiredIsTrue()
+    {
+        Assert.True(AiredEpisodeGate.HasAired(Anime(null), episodesAired: null));
+        Assert.False(AiredEpisodeGate.HasConfirmedAiring(Anime(null), episodesAired: null));
+    }
+
+    [Fact]
+    public void ConfirmedAiringIsTrueForANotYetAiredStatusWithAnAiredEpisodeOnRecord()
+    {
+        Assert.True(AiredEpisodeGate.HasConfirmedAiring(Anime("not_yet_aired"), episodesAired: 1));
+    }
+
+    [Fact]
+    public void ConfirmedAiringIsFalseForANotYetAiredStatusWithNoAiredCount()
+    {
+        Assert.False(AiredEpisodeGate.HasConfirmedAiring(Anime("not_yet_aired"), episodesAired: null));
+    }
+
+    [Theory]
+    [InlineData("currently_airing")]
+    [InlineData("finished_airing")]
+    public void ConfirmedAiringIsTrueForBothAiredStatusesWithNoAiredCount(string status)
+    {
+        Assert.True(AiredEpisodeGate.HasConfirmedAiring(Anime(status), episodesAired: null));
+    }
 }

@@ -26,7 +26,7 @@ public class SeriesControllerTmdbTests
     // build, artwork-selection, picture-refresh and metadata dependencies
     // belong to the other actions.
     private static SeriesController CreateController(AnimeTrackerDbContext db, FakeTmdbClient client, string apiKey = "test-key") =>
-        new(seriesService: new FakeSeriesService(db), seriesListService: null!, bulkBuildTrigger: null!, bulkBuildProgress: null!,
+        new(seriesService: new FakeSeriesService(db), scoreHistoryService: null!, seriesListService: null!, bulkBuildTrigger: null!, bulkBuildProgress: null!,
             artworkSelectionService: null!, pictureRefreshService: null!,
             tmdbArtwork: ArtworkService(db, client, apiKey), metadataRepository: null!);
 

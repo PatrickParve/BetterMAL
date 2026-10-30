@@ -1,9 +1,12 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Mal;
+using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
+using AnimeTracker.Api.Tests.Services.ScoreHistory;
 
 namespace AnimeTracker.Api.Tests.Services.Updates;
 
@@ -20,7 +23,7 @@ public class AnimeMetadataChangeDetectorTests
             .Options);
 
     private static AnimeMetadataChangeDetector CreateDetector(AnimeTrackerDbContext db, ISeriesBuildTrigger trigger) =>
-        new(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), trigger);
+        new(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), trigger, ScoreRecorderTestKit.Create(db));
 
     [Fact]
     public async Task AFirstFullDetailFetchWritesZeroDiscoveriesButStillEnqueuesTheBuild()
@@ -230,5 +233,95 @@ public class AnimeMetadataChangeDetectorTests
         Assert.Equal(new TimeOnly(12, 0), update.PreviousBroadcastTime);
         Assert.Equal("tuesdays", update.NewBroadcastDayOfWeek);
         Assert.Equal(new TimeOnly(13, 30), update.NewBroadcastTime);
+    }
+
+    // add-score-history-graph design D4: the detector also feeds the score
+    // recorder, outside the HadFullDetail gate that silences everything above.
+
+    [Fact]
+    public async Task AFullDetailWriteRecordsTheScoreItWrote()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata
+        {
+            Id = 1, Title = "Anime 1", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60),
+            AiringStatus = "currently_airing", MalScore = 8.10,
+        };
+        db.AnimeMetadata.Add(anime);
+        await db.SaveChangesAsync();
+
+        var detector = CreateDetector(db, new SeriesBuildTrigger());
+        var before = detector.Snapshot(anime);
+        var now = DateTimeOffset.UtcNow;
+        new MalAnimeNode { Id = 1, Title = "Anime 1", Status = "currently_airing", Mean = 8.25 }.ApplyTo(anime, now);
+
+        await detector.RecordAsync(anime, before, now);
+        await db.SaveChangesAsync();
+
+        var record = Assert.Single(await db.AnimeScoreRecords.AsNoTracking().ToListAsync());
+        Assert.Equal((1, 8.25, now), (record.AnimeId, record.Score, record.DetectedAt));
+    }
+
+    [Fact]
+    public async Task AListingWriteRecordsTheScoreForAnAnimeWhoseStatusIsAlreadyKnown()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata
+        {
+            Id = 1, Title = "Anime 1", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-60),
+            AiringStatus = "currently_airing", MalScore = 8.10,
+        };
+        db.AnimeMetadata.Add(anime);
+        await db.SaveChangesAsync();
+
+        var detector = CreateDetector(db, new SeriesBuildTrigger());
+        var before = detector.SnapshotListing(anime);
+        var now = DateTimeOffset.UtcNow;
+        new MalAnimeNode { Id = 1, Title = "Anime 1", Mean = 8.18 }.ApplyLeanTo(anime, now); // a listing never carries a status
+
+        await detector.RecordAsync(anime, before, now);
+        await db.SaveChangesAsync();
+
+        Assert.Equal(8.18, Assert.Single(await db.AnimeScoreRecords.AsNoTracking().ToListAsync()).Score);
+    }
+
+    [Fact]
+    public async Task AListingWriteForAnAnimeNeverFullyFetchedRecordsNothing()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = default, MalScore = 7.5 }; // listing-only: no status
+        db.AnimeMetadata.Add(anime);
+        await db.SaveChangesAsync();
+
+        var detector = CreateDetector(db, new SeriesBuildTrigger());
+        var before = detector.SnapshotListing(anime);
+        var now = DateTimeOffset.UtcNow;
+        new MalAnimeNode { Id = 1, Title = "Anime 1", Mean = 7.6 }.ApplyLeanTo(anime, now);
+
+        await detector.RecordAsync(anime, before, now);
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await db.AnimeScoreRecords.AsNoTracking().ToListAsync());
+    }
+
+    [Fact]
+    public async Task AFirstFullFetchOfAListingOnlyRowStartsItsHistory()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Anime 1", LastSyncedAt = default, MalScore = 7.5 };
+        db.AnimeMetadata.Add(anime);
+        await db.SaveChangesAsync();
+
+        var detector = CreateDetector(db, new SeriesBuildTrigger());
+        var before = detector.Snapshot(anime);
+        Assert.False(before.HadFullDetail); // the gate that silences the updates feed for this write
+        var now = DateTimeOffset.UtcNow;
+        new MalAnimeNode { Id = 1, Title = "Anime 1", Status = "finished_airing", Mean = 7.6 }.ApplyTo(anime, now);
+
+        await detector.RecordAsync(anime, before, now);
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await db.AnimeUpdates.AsNoTracking().ToListAsync());
+        Assert.Equal(7.6, Assert.Single(await db.AnimeScoreRecords.AsNoTracking().ToListAsync()).Score);
     }
 }

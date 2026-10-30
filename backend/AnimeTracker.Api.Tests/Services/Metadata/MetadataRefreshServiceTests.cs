@@ -15,6 +15,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using AnimeTracker.Api.Tests.Services.ScoreHistory;
+using AnimeTracker.Api.Services.ScoreHistory;
 
 namespace AnimeTracker.Api.Tests.Services.Metadata;
 
@@ -35,7 +37,8 @@ public class MetadataRefreshServiceTests
         AnimeTrackerDbContext db, IMalClient malClient, ISeriesBuildTrigger? seriesBuildTrigger = null,
         IAnimeSearchIndex? searchIndex = null) =>
         new(db, malClient,
-            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), seriesBuildTrigger ?? new SeriesBuildTrigger()),
+            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), seriesBuildTrigger ?? new SeriesBuildTrigger(), ScoreRecorderTestKit.Create(db)),
+            ScoreRecorderTestKit.Create(db),
             searchIndex ?? new FakeAnimeSearchIndex(),
             NullLogger<MetadataRefreshService>.Instance);
 
@@ -264,6 +267,57 @@ public class MetadataRefreshServiceTests
         await service.RefreshOneAsync(1); // no cached row for anime 1 -> the insert branch
 
         Assert.Equal(1, searchIndex.InvalidateCallCount);
+    }
+
+    // --- add-score-history-graph tasks 2.3/2.4: score records ---
+
+    [Fact]
+    public async Task RefreshOneAsync_TheInsertBranchStoresTheFirstScoreRecordWithTheNewRow()
+    {
+        using var db = CreateDb();
+        var node = DetailNode(1);
+        node.Mean = 8.25;
+        var service = CreateService(db, new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = node }));
+
+        await service.RefreshOneAsync(1); // no cached row -> the insert branch, which skips the detector
+
+        var record = Assert.Single(await db.AnimeScoreRecords.AsNoTracking().ToListAsync());
+        Assert.Equal((1, 8.25), (record.AnimeId, record.Score));
+    }
+
+    [Fact]
+    public async Task RefreshOneAsync_TheInsertBranchOfAnUnairedAnimeStoresNoScoreRecord()
+    {
+        using var db = CreateDb();
+        var node = DetailNode(1);
+        node.Status = "not_yet_aired";
+        node.Mean = 7.2;
+        var service = CreateService(db, new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = node }));
+
+        await service.RefreshOneAsync(1);
+
+        Assert.Empty(await db.AnimeScoreRecords.AsNoTracking().ToListAsync());
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_AChangedScoreIsRecordedThroughTheDetector()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1, Title = "Anime 1", LastSyncedAt = FullyFetchedLongAgo, AiringStatus = "finished_airing", MalScore = 8.0,
+        });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1 });
+        db.AnimeScoreRecords.Add(new AnimeScoreRecord { AnimeId = 1, Score = 8.0, DetectedAt = FullyFetchedLongAgo });
+        await db.SaveChangesAsync();
+
+        var node = DetailNode(1);
+        node.Mean = 8.1;
+        var service = CreateService(db, new FakeMalClient(new Dictionary<int, MalAnimeNode> { [1] = node }));
+
+        await service.RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
+
+        Assert.Equal([8.0, 8.1], (await db.AnimeScoreRecords.AsNoTracking().OrderBy(r => r.DetectedAt).ToListAsync()).Select(r => r.Score));
     }
 
     [Fact]
@@ -778,6 +832,172 @@ public class MetadataRefreshServiceTests
         Assert.Empty(malClient.Calls);
     }
 
+    // --- add-score-history-graph 3.1/3.2 (design D8): my series' main lines widen the candidates ---
+
+    // A stored series with the given members, main line unless listed in `extras`.
+    private static void SeedSeries(AnimeTrackerDbContext db, int seriesId, int[] mainLine, int[]? extras = null)
+    {
+        db.Series.Add(new Models.Series { Id = seriesId, BuiltAt = DateTimeOffset.UtcNow });
+        var order = 0;
+        foreach (var animeId in mainLine)
+            db.SeriesMembers.Add(new SeriesMember { SeriesId = seriesId, AnimeId = animeId, IsMainLine = true, IsPrimary = true, Order = order++ });
+        foreach (var animeId in extras ?? [])
+            db.SeriesMembers.Add(new SeriesMember { SeriesId = seriesId, AnimeId = animeId, IsMainLine = false, IsPrimary = true, Order = order++, RelationGroup = "SideStory" });
+    }
+
+    // A series of two seasons: the first in my list as Completed and fresh, so only the second can be what is selected.
+    private static void SeedMyFinishedSeasonOne(AnimeTrackerDbContext db, WatchStatus status = WatchStatus.Completed)
+    {
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Season 1", AiringStatus = "finished_airing", AiredTo = new DateOnly(2020, 3, 1), LastSyncedAt = DateTimeOffset.UtcNow });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = status });
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_AnAiringMainLineEntryOutsideMyListIsSelectedAndFetchedWithoutThePictureSet()
+    {
+        using var db = CreateDb();
+        SeedMyFinishedSeasonOne(db);
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 2, Title = "Season 2", AiringStatus = "currently_airing", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-2) });
+        SeedSeries(db, 1, mainLine: [1, 2]);
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [2] = FieldNode(2, "currently_airing") });
+        var tally = new MalCallTally();
+
+        await CreateService(db, malClient).RefreshStaleBatchAsync(10, skipAnimeId: null, tally);
+
+        Assert.Equal([2], malClient.Calls);
+        Assert.Equal(1, tally.Succeeded);
+        Assert.Null(malClient.FieldsRequested[2]); // only list anime fetch their picture set
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_AFinishedMainLineEntryInsideItsTierIsNotSelected()
+    {
+        using var db = CreateDb();
+        SeedMyFinishedSeasonOne(db);
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 2, Title = "Season 2", AiringStatus = "finished_airing", AiredTo = new DateOnly(2021, 3, 1),
+            LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-5), // the longest tier is 28 days
+        });
+        SeedSeries(db, 1, mainLine: [1, 2]);
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode>());
+
+        await CreateService(db, malClient).RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
+
+        Assert.Empty(malClient.Calls);
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_AFinishedMainLineEntryPastItsTierIsSelected()
+    {
+        using var db = CreateDb();
+        SeedMyFinishedSeasonOne(db);
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 2, Title = "Season 2", AiringStatus = "finished_airing", AiredTo = new DateOnly(2021, 3, 1),
+            LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-40),
+        });
+        SeedSeries(db, 1, mainLine: [1, 2]);
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [2] = DetailNode(2) });
+
+        await CreateService(db, malClient).RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
+
+        Assert.Equal([2], malClient.Calls);
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_AnExtraOfASeriesOfMineIsNotSelected()
+    {
+        using var db = CreateDb();
+        SeedMyFinishedSeasonOne(db);
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 2, Title = "Side story", AiringStatus = "currently_airing", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-2) });
+        SeedSeries(db, 1, mainLine: [1], extras: [2]);
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode>());
+
+        await CreateService(db, malClient).RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
+
+        Assert.Empty(malClient.Calls); // due on its tier, but an extra does not qualify by sitting in the series
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_ASeriesWhoseOnlyEntriesAreDroppedDoesNotQualifyItsMainLine()
+    {
+        using var db = CreateDb();
+        SeedMyFinishedSeasonOne(db, WatchStatus.Dropped);
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 2, Title = "Season 2", AiringStatus = "currently_airing", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-2) });
+        SeedSeries(db, 1, mainLine: [1, 2]);
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode>());
+
+        await CreateService(db, malClient).RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
+
+        Assert.Empty(malClient.Calls);
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_ASeriesWithNoEntryOfMineDoesNotQualifyItsMainLine()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Season 1", AiringStatus = "finished_airing", LastSyncedAt = DateTimeOffset.UtcNow });
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 2, Title = "Season 2", AiringStatus = "currently_airing", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-2) });
+        SeedSeries(db, 1, mainLine: [1, 2]); // only exists because it was visited
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode>());
+
+        await CreateService(db, malClient).RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
+
+        Assert.Empty(malClient.Calls);
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_AnEntryThatOnlyQualifiesThroughAnExtraOnMyListIsSelected()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Season 1", AiringStatus = "finished_airing", LastSyncedAt = DateTimeOffset.UtcNow });
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 3, Title = "Movie", AiringStatus = "finished_airing", LastSyncedAt = DateTimeOffset.UtcNow });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 3, Status = WatchStatus.Watching }); // the only entry of mine is an extra
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 2, Title = "Season 2", AiringStatus = "currently_airing", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-2) });
+        SeedSeries(db, 1, mainLine: [1, 2], extras: [3]);
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [2] = FieldNode(2, "currently_airing") });
+
+        await CreateService(db, malClient).RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
+
+        Assert.Equal([2], malClient.Calls); // not season 1 (fresh), not the movie (fresh and mine): only the due main-line entry
+    }
+
+    [Fact]
+    public async Task RefreshStaleBatchAsync_AMainLineEntryOfTwoSeriesQualifiesThroughEitherOne()
+    {
+        using var db = CreateDb();
+        // Anime 2 is a main-line member of series 1 (no entry of mine) and of
+        // series 5 (where season 5 is mine): one qualifying series is enough.
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Season 1", AiringStatus = "finished_airing", LastSyncedAt = DateTimeOffset.UtcNow });
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 5, Title = "Other telling", AiringStatus = "finished_airing", LastSyncedAt = DateTimeOffset.UtcNow });
+        db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 5, Status = WatchStatus.Completed });
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 2, Title = "Shared", AiringStatus = "currently_airing", LastSyncedAt = DateTimeOffset.UtcNow.AddDays(-2) });
+        SeedSeries(db, 1, mainLine: [1, 2]);
+        SeedSeries(db, 5, mainLine: [5, 2]);
+        await db.SaveChangesAsync();
+
+        var malClient = new FakeMalClient(new Dictionary<int, MalAnimeNode> { [2] = FieldNode(2, "currently_airing") });
+
+        await CreateService(db, malClient).RefreshStaleBatchAsync(10, skipAnimeId: null, new MalCallTally());
+
+        Assert.Equal([2], malClient.Calls);
+    }
+
     // --- 3.5: an outage-type failure ends the pass (design D1-D3, D6) ---
 
     [Fact]
@@ -1060,7 +1280,8 @@ public class MetadataRefreshServiceTests
             .AddSingleton(db)
             .AddSingleton<IMalClient>(malClient)
             .AddSingleton<IAnimeMetadataChangeDetector>(new AnimeMetadataChangeDetector(
-                db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), new SeriesBuildTrigger()))
+                db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), new SeriesBuildTrigger(), ScoreRecorderTestKit.Create(db)))
+            .AddSingleton<IAnimeScoreRecorder>(ScoreRecorderTestKit.Create(db))
             .AddSingleton<IAnimeSearchIndex>(new FakeAnimeSearchIndex())
             .AddSingleton<ILogger<MetadataRefreshService>>(NullLogger<MetadataRefreshService>.Instance)
             .AddSingleton<ITmdbClient>(tmdbClient)
@@ -1078,10 +1299,12 @@ public class MetadataRefreshServiceTests
     private sealed class FakeMalClient(Dictionary<int, MalAnimeNode> responses, Dictionary<int, Exception>? failures = null) : IMalClient
     {
         public List<int> Calls { get; } = [];
+        public Dictionary<int, IReadOnlyCollection<string>?> FieldsRequested { get; } = [];
 
         public Task<MalAnimeNode> GetAnimeDetailsAsync(int animeId, IReadOnlyCollection<string>? fields = null, CancellationToken ct = default)
         {
             Calls.Add(animeId);
+            FieldsRequested[animeId] = fields;
             if (failures is not null && failures.TryGetValue(animeId, out var failure))
                 throw failure;
             return Task.FromResult(responses[animeId]);

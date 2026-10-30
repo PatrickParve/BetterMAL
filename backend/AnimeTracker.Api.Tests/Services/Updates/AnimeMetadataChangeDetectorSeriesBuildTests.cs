@@ -10,6 +10,7 @@ using AnimeTracker.Api.Services.Updates;
 using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using AnimeTracker.Api.Tests.Services.ScoreHistory;
 
 namespace AnimeTracker.Api.Tests.Services.Updates;
 
@@ -31,7 +32,7 @@ public class AnimeMetadataChangeDetectorSeriesBuildTests
         new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db)));
 
     private static MetadataRefreshService CreateService(AnimeTrackerDbContext db, IMalClient malClient, ISeriesBuildTrigger trigger) =>
-        new(db, malClient, new AnimeMetadataChangeDetector(db, CreateRecorder(db), trigger), new FakeAnimeSearchIndex(), NullLogger<MetadataRefreshService>.Instance);
+        new(db, malClient, new AnimeMetadataChangeDetector(db, CreateRecorder(db), trigger, ScoreRecorderTestKit.Create(db)), ScoreRecorderTestKit.Create(db), new FakeAnimeSearchIndex(), NullLogger<MetadataRefreshService>.Instance);
 
     private static MalAnimeNode DetailNode(int id, params (int RelatedId, string RelationType)[] relations) => new()
     {
@@ -103,7 +104,7 @@ public class AnimeMetadataChangeDetectorSeriesBuildTests
         await db.SaveChangesAsync();
 
         var trigger = new SeriesBuildTrigger();
-        var detector = new AnimeMetadataChangeDetector(db, CreateRecorder(db), trigger);
+        var detector = new AnimeMetadataChangeDetector(db, CreateRecorder(db), trigger, ScoreRecorderTestKit.Create(db));
 
         var before = detector.SnapshotListing(anime);
         new MalAnimeNode { Id = 1, Title = "Anime 1", MediaType = "tv", NumEpisodes = 12 }.ApplyLeanTo(anime, now);
@@ -160,7 +161,7 @@ public class AnimeMetadataChangeDetectorSeriesBuildTests
         await db.SaveChangesAsync();
 
         var trigger = new FetchesFarEndOnEnqueueTrigger(options, farEndId: 2);
-        var detector = new AnimeMetadataChangeDetector(db, CreateRecorder(db), trigger);
+        var detector = new AnimeMetadataChangeDetector(db, CreateRecorder(db), trigger, ScoreRecorderTestKit.Create(db));
         var before = detector.Snapshot(anime);
 
         anime.RelatedAnime.Add(new AnimeRelatedAnime { AnimeId = 1, RelatedAnimeId = 2, RelationType = "sequel", Title = "Anime 2" });

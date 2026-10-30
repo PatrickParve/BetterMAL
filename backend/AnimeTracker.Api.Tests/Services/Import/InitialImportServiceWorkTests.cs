@@ -10,6 +10,7 @@ using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using AnimeTracker.Api.Tests.Services.Airing;
+using AnimeTracker.Api.Tests.Services.ScoreHistory;
 
 namespace AnimeTracker.Api.Tests.Services.Import;
 
@@ -41,7 +42,7 @@ public class InitialImportServiceWorkTests
         INewEntryRefreshTrigger? trigger = null)
     {
         var progress = new ListImportProgress();
-        return (new InitialImportService(malClient, db, progress, searchIndex ?? new FakeAnimeSearchIndex(), trigger ?? new RecordingNewEntryRefreshTrigger(), NullLogger<InitialImportService>.Instance), progress);
+        return (new InitialImportService(malClient, db, progress, ScoreRecorderTestKit.Create(db), searchIndex ?? new FakeAnimeSearchIndex(), trigger ?? new RecordingNewEntryRefreshTrigger(), NullLogger<InitialImportService>.Instance), progress);
     }
 
     [Fact]
@@ -93,6 +94,41 @@ public class InitialImportServiceWorkTests
         Assert.DoesNotContain(1, malClient.DetailsCalledFor); // no redundant fetch
         Assert.Single(await db.UserAnimeEntries.ToListAsync());
         Assert.Equal(JobPhase.Complete, progress.Snapshot.Phase);
+    }
+
+    // add-score-history-graph design D4: the import skips the change detector,
+    // but a first score starts a score history all the same.
+    [Fact]
+    public async Task AnImportedAiredAnimeStoresItsFirstScoreRecordWithTheRow()
+    {
+        using var db = CreateDb();
+        var edge = new MalUserAnimeListEdge
+        {
+            Node = new MalAnimeNode { Id = 1, Title = "Anime 1", Status = "finished_airing", Mean = 8.12 },
+            ListStatus = new MalListStatus { Status = "completed", NumEpisodesWatched = 12 },
+        };
+        var (service, _) = CreateService(db, new FakeMalClient([edge]));
+
+        await service.RunAsync(CancellationToken.None);
+
+        var record = Assert.Single(await db.AnimeScoreRecords.AsNoTracking().ToListAsync());
+        Assert.Equal((1, 8.12), (record.AnimeId, record.Score));
+    }
+
+    [Fact]
+    public async Task AnImportedAnimeNotYetAiredStoresNoScoreRecord()
+    {
+        using var db = CreateDb();
+        var edge = new MalUserAnimeListEdge
+        {
+            Node = new MalAnimeNode { Id = 1, Title = "Anime 1", Status = "not_yet_aired", Mean = 7.2 },
+            ListStatus = new MalListStatus { Status = "plan_to_watch" },
+        };
+        var (service, _) = CreateService(db, new FakeMalClient([edge]));
+
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Empty(await db.AnimeScoreRecords.AsNoTracking().ToListAsync());
     }
 
     // episode-airing-data "Event-driven refresh triggers": an anime the import

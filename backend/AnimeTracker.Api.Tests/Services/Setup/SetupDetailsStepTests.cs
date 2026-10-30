@@ -111,6 +111,29 @@ public class SetupDetailsStepTests
         Assert.Equal(3, await db.AnimeRelatedAnime.CountAsync());
     }
 
+    // add-score-history-graph design D4: setup records no news, but a first score starts a
+    // score history ("A score written by setup SHALL be recorded even though setup records no
+    // updates"), saved with the details it came from.
+    [Fact]
+    public async Task EachFetchedAnimeStoresItsFirstScoreRecordAndStillRecordsNoUpdate()
+    {
+        using var kit = new SetupRunKit();
+        await kit.SeedAnimeAsync(1);
+        await kit.SeedAnimeAsync(2, airing: "not_yet_aired");
+        kit.Mal.Details[1] = new MalAnimeNode { Id = 1, Title = "Full 1", Status = "finished_airing", NumEpisodes = 12, Mean = 8.12 };
+        kit.Mal.Details[2] = new MalAnimeNode { Id = 2, Title = "Full 2", Status = "not_yet_aired", Mean = 7.2 };
+        var (step, _) = Create(kit);
+
+        await using var running = Start(step);
+        await running.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        await using var db = kit.NewDb();
+        var record = Assert.Single(await db.AnimeScoreRecords.AsNoTracking().ToListAsync()); // nothing for the unaired one
+        Assert.Equal((1, 8.12), (record.AnimeId, record.Score));
+        Assert.Empty(await db.AnimeUpdates.ToListAsync());
+        Assert.Equal([1, 2], await FetchedAsync(kit));
+    }
+
     // Every fetch takes three seconds of the kit's clock, and the fetch of a listed id blocks until
     // the test lets it go, so a test looks at what the step has published at a chosen moment.
     private static Dictionary<int, TaskCompletionSource> ThreeSecondFetches(SetupRunKit kit, params int[] blockedIds)

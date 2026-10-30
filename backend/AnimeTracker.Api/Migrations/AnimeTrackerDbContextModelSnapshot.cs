@@ -306,6 +306,31 @@ namespace AnimeTracker.Api.Migrations
                     b.ToTable("AnimeRelatedAnime");
                 });
 
+            modelBuilder.Entity("AnimeTracker.Api.Models.AnimeScoreRecord", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AnimeId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("DetectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("Score")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnimeId", "DetectedAt")
+                        .IsUnique();
+
+                    b.ToTable("AnimeScoreRecords");
+                });
+
             modelBuilder.Entity("AnimeTracker.Api.Models.AnimeUpdate", b =>
                 {
                     b.Property<long>("Id")
@@ -961,6 +986,15 @@ namespace AnimeTracker.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Anime");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.AnimeScoreRecord", b =>
+                {
+                    b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", null)
+                        .WithMany()
+                        .HasForeignKey("AnimeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AnimeTracker.Api.Models.AnimeUpdate", b =>

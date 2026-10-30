@@ -12,6 +12,23 @@ public static class AiredEpisodeGate
     public static bool HasAired(AnimeMetadata anime, int? episodesAired) =>
         episodesAired is { } aired ? aired >= 1 : anime.AiringStatus != "not_yet_aired";
 
+    /// <summary>add-score-history-graph design.md D3: whether an episode is
+    /// <em>known</em> to have aired, the proof score recording needs. Stricter
+    /// than <see cref="HasAired"/> in exactly one way: an unknown status is not
+    /// aired. <see cref="HasAired"/> asks "can we prove nothing has aired?" and
+    /// so lets an unknown status through, because the editing rules can't prove
+    /// otherwise; recording asks "can we prove something has?", and using the
+    /// lenient test would start histories for every listing-only row that
+    /// happens to carry a score, anime that haven't aired included. A stored
+    /// aired row still beats a late `not_yet_aired`.</summary>
+    public static bool HasConfirmedAiring(AnimeMetadata anime, int? episodesAired) =>
+        HasConfirmedAiring(anime.AiringStatus, episodesAired);
+
+    /// <summary>The same test for a caller that has read only the status, so it
+    /// need not load an entity to ask.</summary>
+    public static bool HasConfirmedAiring(string? airingStatus, int? episodesAired) =>
+        episodesAired is { } aired ? aired >= 1 : airingStatus is "currently_airing" or "finished_airing";
+
     /// <summary>design.md D3: whether every episode of an anime has aired — the
     /// fact "Completed" and rewatching eligibility are decided on. A union, not
     /// a replacement of the status-only test it supersedes: the status arm

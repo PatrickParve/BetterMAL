@@ -87,7 +87,12 @@ public record AnimeDetailDto(
     // fallback) exists. RelatedAnime above is unaffected by this.
     ResolvedRelationDto? Prequel,
     ResolvedRelationDto? Sequel,
-    ResolvedRelationDto? ParentStory)
+    ResolvedRelationDto? ParentStory,
+    // True once this anime's score history holds a change, which is what the
+    // Score history control on the page is shown for (add-score-history-graph
+    // design.md D6). The points are a separate read that most page views never
+    // make. Offered for any anime that qualifies, in my list or not.
+    bool HasScoreHistory)
 {
     public static AnimeDetailDto FromEntity(
         AnimeMetadata anime,
@@ -101,7 +106,8 @@ public record AnimeDetailDto(
         bool picturesFetchPending,
         AnimeTmdbPicturesDto? tmdb,
         bool tmdbFetchPending,
-        List<string> imdbIds)
+        List<string> imdbIds,
+        bool hasScoreHistory)
     {
         (int Year, string Season)? season = anime.AiredFrom is { } airedFrom
             ? SeasonCalendar.GetSeasonFor(airedFrom)
@@ -145,6 +151,7 @@ public record AnimeDetailDto(
             refreshFailed,
             ResolvedRelationDto.FromResolved(relations.Prequel),
             ResolvedRelationDto.FromResolved(relations.Sequel),
-            ResolvedRelationDto.FromResolved(relations.ParentStory));
+            ResolvedRelationDto.FromResolved(relations.ParentStory),
+            hasScoreHistory);
     }
 }

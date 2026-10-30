@@ -20,6 +20,7 @@ using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Recap;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.ScoreHistory;
 using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Season;
 using AnimeTracker.Api.Services.Series;
@@ -142,6 +143,8 @@ builder.Services.AddHostedService<ReconciliationBackgroundService>();
 // --- Metadata & score refresh ---
 builder.Services.AddScoped<IAnimeUpdateRelevance, AnimeUpdateRelevance>();
 builder.Services.AddScoped<IAnimeUpdateRecorder, AnimeUpdateRecorder>();
+builder.Services.AddScoped<IAnimeScoreRecorder, AnimeScoreRecorder>();
+builder.Services.AddScoped<IScoreHistoryService, ScoreHistoryService>();
 builder.Services.AddScoped<IAnimeMetadataChangeDetector, AnimeMetadataChangeDetector>();
 builder.Services.AddScoped<IAnnouncementResolutionService, AnnouncementResolutionService>();
 builder.Services.AddScoped<IAnimeUpdateService, AnimeUpdateService>();

@@ -10,6 +10,7 @@ using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Auth;
 using AnimeTracker.Api.Services.Mal.Dto;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.ScoreHistory;
 using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Setup;
@@ -340,6 +341,10 @@ internal sealed class SetupRunKit : IDisposable
         services.AddSingleton<IAnimeSearchIndex>(SearchIndex);
         services.AddScoped<IMalTokenStore>(_ => Tokens);
         services.AddSingleton<IBroadcastLocalTimeConverter, BroadcastLocalTimeConverter>();
+        // What the details step's score recorder reads aired episodes through.
+        services.AddScoped<IEpisodeAiringRepository, EpisodeAiringRepository>();
+        services.AddScoped<IEpisodeScheduleService, EpisodeScheduleService>();
+        services.AddScoped<IAnimeScoreRecorder, AnimeScoreRecorder>();
         _provider = services.BuildServiceProvider();
 
         ScopeFactory = _provider.GetRequiredService<IServiceScopeFactory>();

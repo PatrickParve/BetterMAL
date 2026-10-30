@@ -1031,6 +1031,35 @@ export type SeriesDto = {
   // only. Cache only: the series page's own follow-up request fetches what is
   // due (refreshSeriesTmdbPictures).
   tmdb: SeriesTmdbPicturesDto
+  // True once the main line's score history holds a change — what the Score
+  // history control is shown for (add-score-history-graph design.md D6). The
+  // points are a separate read (getSeriesScoreHistory).
+  hasScoreHistory: boolean
+}
+
+// One point of a score history: a local calendar date as yyyy-MM-dd, which is
+// split rather than handed to Date so a viewer's timezone can never move it
+// (add-score-history-graph design.md D6, D9).
+export type ScoreHistoryPointDto = {
+  date: string
+  score: number
+}
+
+// A main-line entry that first aired while the series' line was recorded,
+// drawn above the line as its picture. date is always one of the points'.
+export type ScoreHistoryMarkerDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  date: string
+}
+
+// Mirrors backend Services/ScoreHistory/ScoreHistoryDto.cs: oldest point
+// first. An anime's own read carries no markers, so one overlay draws both.
+export type ScoreHistoryDto = {
+  points: ScoreHistoryPointDto[]
+  markers: ScoreHistoryMarkerDto[]
 }
 
 // getSeries resolves to this rather than throwing on a 404 — "not part of a
@@ -1151,6 +1180,10 @@ export type AnimeDetailDto = {
   prequel: ResolvedRelationDto | null
   sequel: ResolvedRelationDto | null
   parentStory: ResolvedRelationDto | null
+  // True once this anime's score history holds a change — what the Score
+  // history control is shown for, in my list or not (add-score-history-graph
+  // design.md D6). The points are a separate read (getAnimeScoreHistory).
+  hasScoreHistory: boolean
 }
 
 // Mirrors backend Services/Recap/RecapPeriod.cs / RecapEntrySelector.cs.

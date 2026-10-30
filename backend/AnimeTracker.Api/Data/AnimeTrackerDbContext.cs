@@ -30,6 +30,7 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<AniListRelation> AniListRelations => Set<AniListRelation>();
     public DbSet<RelationDiscovery> RelationDiscoveries => Set<RelationDiscovery>();
     public DbSet<AnimeUpdate> AnimeUpdates => Set<AnimeUpdate>();
+    public DbSet<AnimeScoreRecord> AnimeScoreRecords => Set<AnimeScoreRecord>();
     public DbSet<AnimeIdMapping> AnimeIdMappings => Set<AnimeIdMapping>();
     public DbSet<AnimeIdMappingSyncState> AnimeIdMappingSyncStates => Set<AnimeIdMappingSyncState>();
     public DbSet<TmdbTvImageSet> TmdbTvImageSets => Set<TmdbTvImageSet>();
@@ -212,6 +213,19 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => e.DetectedAt);
             entity.HasIndex(e => e.AnimeId);
+        });
+
+        modelBuilder.Entity<AnimeScoreRecord>(entity =>
+        {
+            entity.HasOne<AnimeMetadata>()
+                .WithMany()
+                .HasForeignKey(e => e.AnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            // Unique, and ordered by instant within an anime: the index that
+            // keeps two records of one anime from sharing a moment is the same
+            // one that serves "latest record" and an anime's records in order
+            // (add-score-history-graph design.md D1).
+            entity.HasIndex(e => new { e.AnimeId, e.DetectedAt }).IsUnique();
         });
 
         modelBuilder.Entity<Series>(entity =>

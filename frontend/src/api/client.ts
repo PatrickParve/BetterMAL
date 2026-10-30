@@ -22,6 +22,7 @@ import type {
   RecapQuery,
   RewatchedSectionDto,
   RewatchedSeriesSectionDto,
+  ScoreHistoryDto,
   SearchPageDto,
   SeasonBoundsDto,
   SeasonPageDto,
@@ -381,6 +382,17 @@ export function putTopAnimeOrder(
 
 export function getAnimeDetail(animeId: number): Promise<AnimeDetailDto> {
   return fetchJson<AnimeDetailDto>(`/api/anime/${animeId}`)
+}
+
+// Stored-data reads of an anime's or a series' MAL score history: no MAL call,
+// nothing written (add-score-history-graph design.md D6). The overlay asks
+// only once the history may be shown, so a hidden one is never requested.
+export function getAnimeScoreHistory(animeId: number): Promise<ScoreHistoryDto> {
+  return fetchJson<ScoreHistoryDto>(`/api/anime/${animeId}/score-history`)
+}
+
+export function getSeriesScoreHistory(seriesId: number): Promise<ScoreHistoryDto> {
+  return fetchJson<ScoreHistoryDto>(`/api/series/${seriesId}/score-history`)
 }
 
 export function refreshAnime(animeId: number): Promise<void> {

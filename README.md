@@ -26,6 +26,9 @@ its own.
   start date or episode count released, or a broadcast moving.
 - **Hide scores**: hide MyAnimeList's scores everywhere, so they don't sway
   yours.
+- **Score history**: a graph of how an anime's MyAnimeList score, or a
+  franchise's average, has moved. It starts when the app does, as MyAnimeList
+  keeps no history of its own.
 - **Pictures**: choose any MyAnimeList picture for an anime or a series, or,
   with a TMDB key, a full-size poster or backdrop.
 - **Two-way sync**: your edits reach MyAnimeList within seconds, and changes

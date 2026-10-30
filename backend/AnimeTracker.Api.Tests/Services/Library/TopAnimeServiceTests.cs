@@ -14,6 +14,7 @@ using AnimeTracker.Api.Services.Updates;
 using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using AnimeTracker.Api.Tests.Services.ScoreHistory;
 
 namespace AnimeTracker.Api.Tests.Services.Library;
 
@@ -36,7 +37,7 @@ public class TopAnimeServiceTests
         new(
             db,
             malClient,
-            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), new SeriesBuildTrigger()),
+            new AnimeMetadataChangeDetector(db, new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))), new SeriesBuildTrigger(), ScoreRecorderTestKit.Create(db)),
             new TopAnimeRepository(db),
             new FakeEpisodeScheduleService(airedSoFar),
             new FakeBroadcastLocalTimeConverter(),

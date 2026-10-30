@@ -14,6 +14,7 @@ using AnimeTracker.Api.Tests.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using static AnimeTracker.Api.Tests.Services.Tmdb.TmdbTestData;
+using AnimeTracker.Api.Tests.Services.ScoreHistory;
 
 namespace AnimeTracker.Api.Tests.Services.Detail;
 
@@ -49,6 +50,7 @@ public class AnimeDetailServiceTests
             new RefreshGate(),
             tmdb ?? ArtworkService(db, new FakeTmdbClient(), apiKey: "", custom: custom),
             TestIdMappings.Resolver(db, custom),
+            ScoreHistoryServiceTestKit.Create(db),
             NullLogger<AnimeDetailService>.Instance);
 
     private static AnimeMetadata Anime(
@@ -525,7 +527,63 @@ public class AnimeDetailServiceTests
         Assert.Equal(["tt2560140"], detail.ImdbIds); // the source has caught up: its ids apply
     }
 
-    private sealed class FakeMetadataRefreshService(AnimeTrackerDbContext db, bool throwOnRefresh = false, bool setsPicturesSyncedAt = false) : IMetadataRefreshService
+    // --- add-score-history-graph task 4.4: HasScoreHistory ---
+
+    private static void AddRecords(AnimeTrackerDbContext db, int animeId, params (int DaysAgo, double Score)[] records)
+    {
+        foreach (var (daysAgo, score) in records)
+            db.AnimeScoreRecords.Add(new AnimeScoreRecord { AnimeId = animeId, Score = score, DetectedAt = DateTimeOffset.UtcNow.AddDays(-daysAgo) });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetDetailAsync_AnAnimeWhoseScoreHasChangedOffersScoreHistory_InMyListOrNot(bool inMyList)
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(Anime(1, DateTimeOffset.UtcNow));
+        if (inMyList)
+            db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Dropped });
+        AddRecords(db, 1, (5, 8.0), (1, 8.1));
+        await db.SaveChangesAsync();
+
+        var dto = await CreateService(db, new FakeMetadataRefreshService(db)).GetDetailAsync(1);
+
+        Assert.True(dto.HasScoreHistory);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_AnAnimeWithOneRecordOrNoneOffersNoScoreHistory()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(Anime(1, DateTimeOffset.UtcNow));
+        db.AnimeMetadata.Add(Anime(2, DateTimeOffset.UtcNow));
+        AddRecords(db, 1, (5, 8.0));
+        await db.SaveChangesAsync();
+        var service = CreateService(db, new FakeMetadataRefreshService(db));
+
+        Assert.False((await service.GetDetailAsync(1)).HasScoreHistory);
+        Assert.False((await service.GetDetailAsync(2)).HasScoreHistory);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_AChangeTheVisitFetchJustRecordedIsOfferedOnThatSameRead()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(Anime(1, DateTimeOffset.UtcNow - TimeSpan.FromDays(60)));
+        AddRecords(db, 1, (60, 8.0));
+        await db.SaveChangesAsync();
+        var refresh = new FakeMetadataRefreshService(db, recordsScoreOnRefresh: 8.1);
+
+        var dto = await CreateService(db, refresh).GetDetailAsync(1);
+
+        Assert.Contains(1, refresh.Calls); // the visit fetched, and saved a second, different score
+        Assert.True(dto.HasScoreHistory);
+    }
+
+    private sealed class FakeMetadataRefreshService(
+        AnimeTrackerDbContext db, bool throwOnRefresh = false, bool setsPicturesSyncedAt = false, double? recordsScoreOnRefresh = null)
+        : IMetadataRefreshService
     {
         public List<int> Calls { get; } = [];
 
@@ -542,6 +600,8 @@ public class AnimeDetailServiceTests
             anime.LastSyncedAt = DateTimeOffset.UtcNow;
             if (setsPicturesSyncedAt)
                 anime.PicturesSyncedAt = DateTimeOffset.UtcNow;
+            if (recordsScoreOnRefresh is { } score)
+                db.AnimeScoreRecords.Add(new AnimeScoreRecord { AnimeId = animeId, Score = score, DetectedAt = DateTimeOffset.UtcNow });
             await db.SaveChangesAsync(ct);
         }
     }

@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.ScoreHistory;
 using AnimeTracker.Api.Services.Series;
 using Microsoft.EntityFrameworkCore;
 
@@ -83,12 +84,20 @@ public interface IAnimeMetadataChangeDetector
     /// <para>Each discovery records whether its newly-related anime had ever
     /// been fully fetched, read from committed data before the series rebuild
     /// queued here can fetch that anime
-    /// (<see cref="RelationDiscovery.RelatedAnimeHadFullDetail"/>).</para></summary>
+    /// (<see cref="RelationDiscovery.RelatedAnimeHadFullDetail"/>).</para>
+    ///
+    /// <para>The score is recorded through <see cref="IAnimeScoreRecorder"/> as
+    /// well, in the same unit of work (add-score-history-graph design.md D4).
+    /// Unlike everything above, that is not a comparison against
+    /// <paramref name="before"/>, so the first-full-fetch baseline does not
+    /// silence it: a listing-only row's first full fetch is exactly when it
+    /// becomes trackable.</para></summary>
     Task RecordAsync(AnimeMetadata anime, AnimeMetadataSnapshot before, DateTimeOffset now, CancellationToken ct = default);
 }
 
 public class AnimeMetadataChangeDetector(
-    AnimeTrackerDbContext db, IAnimeUpdateRecorder updateRecorder, ISeriesBuildTrigger seriesBuildTrigger)
+    AnimeTrackerDbContext db, IAnimeUpdateRecorder updateRecorder, ISeriesBuildTrigger seriesBuildTrigger,
+    IAnimeScoreRecorder scoreRecorder)
     : IAnimeMetadataChangeDetector
 {
     public AnimeMetadataSnapshot Snapshot(AnimeMetadata anime) => new(
@@ -141,6 +150,14 @@ public class AnimeMetadataChangeDetector(
             await RecordDiscoveries(anime.Id, newEdges, now, ct);
 
         await RecordFieldUpdates(anime, before, now, ct);
+
+        // add-score-history-graph design.md D4: outside the HadFullDetail gate
+        // RecordFieldUpdates opens with. That gate asks whether this write is
+        // news, and a score history is not news: the recorder compares the
+        // score with the anime's own latest record, so a listing-only row's
+        // first full fetch (before.HadFullDetail false) is precisely when it
+        // becomes trackable.
+        await scoreRecorder.RecordAsync(anime, now, ct);
 
         // split-series-by-version tasks 9.1/9.2, design.md D4: the enqueue
         // stays outside both gates above, unconditionally, per spec ("The

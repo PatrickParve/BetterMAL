@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Services.ScoreHistory;
 using AnimeTracker.Api.Services.Search;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,7 +18,8 @@ namespace AnimeTracker.Api.Services.Setup;
 /// with exactly the anime not yet saved.</description></item>
 /// <item><description><b>No news.</b> The change detector is not called: this is a first full
 /// fetch, so it would record nothing, and its unconditional series-build enqueue is what setup
-/// must not do, since it builds every series itself.</description></item>
+/// must not do, since it builds every series itself. The score recorder is called directly, since a
+/// first score starts a score history and is not news.</description></item>
 /// <item><description><b>A 404 is permanent</b>: the anime is marked not found
 /// (<see cref="AnimeTracker.Api.Models.AnimeMetadata.LastRefreshFailedAt"/>), no longer counts as
 /// left, and doesn't hold Home. Anything else is temporary and goes on the retry ladder, an
@@ -73,6 +75,7 @@ internal sealed class SetupDetailsStep(SetupWorkerContext context, MalServiceHea
         var db = scope.ServiceProvider.GetRequiredService<AnimeTrackerDbContext>();
         var malClient = scope.ServiceProvider.GetRequiredService<IMalClient>();
         var searchIndex = scope.ServiceProvider.GetRequiredService<IAnimeSearchIndex>();
+        var scoreRecorder = scope.ServiceProvider.GetRequiredService<IAnimeScoreRecorder>();
 
         // Every anime here is a list anime, so it always qualifies for the with-pictures
         // field set (the same fetch the scheduled refresh makes for one).
@@ -85,7 +88,13 @@ internal sealed class SetupDetailsStep(SetupWorkerContext context, MalServiceHea
             ?? throw new InvalidOperationException($"Anime {animeId} has no stored row to fill in.");
 
         // ApplyTo writes the picture set too, and clears a not-found mark.
-        details.ApplyTo(anime, DateTimeOffset.UtcNow);
+        var now = DateTimeOffset.UtcNow;
+        details.ApplyTo(anime, now);
+
+        // Setup records no news, but a first score starts a score history, and
+        // it is saved with the details it came from (add-score-history-graph
+        // design.md D4).
+        await scoreRecorder.RecordAsync(anime, now, ct);
         await db.SaveChangesAsync(ct);
 
         searchIndex.Invalidate();

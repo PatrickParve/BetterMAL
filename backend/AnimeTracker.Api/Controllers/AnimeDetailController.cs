@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Detail;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Services.ScoreHistory;
 using AnimeTracker.Api.Services.Tmdb;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,6 +11,7 @@ namespace AnimeTracker.Api.Controllers;
 [ApiController]
 public class AnimeDetailController(
     IAnimeDetailService detailService,
+    IScoreHistoryService scoreHistoryService,
     IArtworkSelectionService artworkSelectionService,
     IPictureRefreshService pictureRefreshService,
     ITmdbArtworkService tmdbArtwork,
@@ -30,6 +32,15 @@ public class AnimeDetailController(
             return NotFound();
         }
     }
+
+    /// <summary>One anime's MAL score history as dated points (add-score-history-graph
+    /// design.md D6). A stored-data read: it makes no MyAnimeList request and
+    /// writes nothing. An anime with no records, or no such anime, has no points
+    /// — a 200 with an empty list rather than a 404, since the page only asks
+    /// once it has been told the anime has changed.</summary>
+    [HttpGet("api/anime/{animeId:int}/score-history")]
+    public async Task<IActionResult> GetScoreHistory(int animeId, CancellationToken ct) =>
+        Ok(await scoreHistoryService.GetAnimeHistoryAsync(animeId, ct));
 
     [HttpPut("api/anime/{animeId:int}/picture")]
     public async Task<IActionResult> SetPicture(int animeId, [FromBody] SetPictureRequest request, CancellationToken ct)

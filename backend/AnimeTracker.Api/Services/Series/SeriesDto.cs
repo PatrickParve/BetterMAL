@@ -227,4 +227,9 @@ public record SeriesDto(
     // TMDB mapping (what the "TMDB has no match" note reads), and PendingCount,
     // how many of its sets are due — 0 while no API key is configured. Its
     // MyAnimeList twin is PicturesPendingCount above.
-    SeriesTmdbPicturesDto Tmdb);
+    SeriesTmdbPicturesDto Tmdb,
+    // True once the main line's score history holds a change, which is what
+    // the Score history control on the page is shown for (add-score-history-graph
+    // design.md D6). The points themselves are a separate read that most page
+    // views never make; this flag is the only part the page read carries.
+    bool HasScoreHistory);

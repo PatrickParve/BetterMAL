@@ -13,6 +13,7 @@ using AnimeTracker.Api.Tests.Services.Setup;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using AnimeTracker.Api.Tests.Services.ScoreHistory;
 
 namespace AnimeTracker.Api.Tests.Services.Metadata;
 
@@ -423,8 +424,10 @@ public class MetadataRefreshBackgroundServiceTests
         {
             _db = new AnimeTrackerDbContext(options);
             var changeDetector = new AnimeMetadataChangeDetector(
-                _db, new AnimeUpdateRecorder(_db, new AnimeUpdateRelevance(_db, new RelationResolver(_db))), new SeriesBuildTrigger());
-            var metadataRefresh = new MetadataRefreshService(_db, malClient, changeDetector, searchIndex, NullLogger<MetadataRefreshService>.Instance);
+                _db, new AnimeUpdateRecorder(_db, new AnimeUpdateRelevance(_db, new RelationResolver(_db))), new SeriesBuildTrigger(),
+                ScoreRecorderTestKit.Create(_db));
+            var metadataRefresh = new MetadataRefreshService(
+                _db, malClient, changeDetector, ScoreRecorderTestKit.Create(_db), searchIndex, NullLogger<MetadataRefreshService>.Instance);
             var resolution = new AnnouncementResolutionService(
                 _db, metadataRefresh, new AnimeUpdateRecorder(_db, new AnimeUpdateRelevance(_db, new RelationResolver(_db))), NullLogger<AnnouncementResolutionService>.Instance);
             ServiceProvider = new FakeServiceProvider(metadataRefresh, resolution);

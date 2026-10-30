@@ -388,7 +388,8 @@ public class SeriesBulkBuildBackgroundServiceTests
             [], [],
             [], [],
             null, null, [], [], 0,
-            new SeriesTmdbPicturesDto(false, false, [], 0));
+            new SeriesTmdbPicturesDto(false, false, [], 0),
+            HasScoreHistory: false);
     }
 
     private sealed class FakeUserAnimeEntryRepository(List<UserAnimeEntry> entries) : IUserAnimeEntryRepository

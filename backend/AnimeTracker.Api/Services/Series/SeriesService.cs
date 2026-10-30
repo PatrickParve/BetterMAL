@@ -7,6 +7,7 @@ using AnimeTracker.Api.Services.IdMapping;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Profile;
 using AnimeTracker.Api.Services.Ranking;
+using AnimeTracker.Api.Services.ScoreHistory;
 using AnimeTracker.Api.Services.Tmdb;
 using AnimeTracker.Api.Services.Watching;
 using Microsoft.EntityFrameworkCore;
@@ -28,7 +29,8 @@ public class SeriesService(
     IEpisodeScheduleService scheduleService,
     IAnimeRankingService rankingService,
     ITmdbArtworkService tmdbArtwork,
-    IAnimeIdMappingResolver idMappings) : ISeriesService
+    IAnimeIdMappingResolver idMappings,
+    IScoreHistoryService scoreHistory) : ISeriesService
 {
     private static readonly TimeSpan StaleAfter = TimeSpan.FromDays(30);
 
@@ -266,7 +268,10 @@ public class SeriesService(
             pictureOptions,
             titleOptions,
             picturesPendingCount,
-            tmdb);
+            tmdb,
+            // From the same builder the overlay's read uses, and only the part
+            // that decides a flag: the series page never loads the points.
+            await scoreHistory.SeriesHasChangedAsync(series.Id, ct));
     }
 
     // --- Version slots (design.md D4/D5/D6, tasks 7.2-7.3) ---

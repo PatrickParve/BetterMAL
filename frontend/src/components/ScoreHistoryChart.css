@@ -1,0 +1,157 @@
+/* The score history graph (add-score-history-graph design.md D10, D11). Colours
+   come only from --mal, --border, --text, --text-h and --bg, so both themes
+   work with no rules of their own. The box's height is set by the component
+   from the plot, the labels and the marker rail, all of which are fixed or
+   known from the width alone. */
+.score-history-chart {
+  position: relative;
+  width: 100%;
+  flex: 0 0 auto;
+  /* A touch drag over the graph scrubs along it; the overlay still scrolls
+     when the drag is vertical. */
+  touch-action: pan-y;
+}
+
+.score-history-chart__svg {
+  display: block;
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.score-history-chart__grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.score-history-chart__tick,
+.score-history-chart__date,
+.score-history-chart__year {
+  fill: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A year's line runs down through the date row, so a date near it would be
+   struck through. The halo in the page's own colour masks the line behind
+   the text. */
+.score-history-chart__date {
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.score-history-chart__year {
+  fill: var(--text-h);
+  font-weight: 600;
+}
+
+.score-history-chart__year-line {
+  stroke: var(--text);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.5;
+}
+
+.score-history-chart__line {
+  fill: none;
+  stroke: var(--mal);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.score-history-chart__dot {
+  fill: var(--mal);
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+
+.score-history-chart__last {
+  fill: var(--text-h);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-history-chart__leader {
+  stroke: var(--text);
+  stroke-width: 1;
+  opacity: 0.55;
+}
+
+.score-history-chart__crosshair line {
+  stroke: var(--text);
+  stroke-width: 1;
+  opacity: 0.6;
+}
+
+.score-history-chart__crosshair circle {
+  fill: var(--mal);
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+
+/* The whole plot is the hit area; it paints nothing. */
+.score-history-chart__hit {
+  fill: transparent;
+  cursor: crosshair;
+}
+
+/* The pictures sit above the svg so they take the press, and are positioned
+   from the same numbers the leaders are drawn from. */
+.score-history-chart__marker {
+  position: absolute;
+  display: block;
+  width: 52px;
+  height: 72px;
+  border-radius: 4px;
+  line-height: 0;
+}
+
+.score-history-chart__marker:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.score-history-chart__poster {
+  width: 52px;
+  height: 72px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+}
+
+.score-history-chart__poster--placeholder {
+  border: 1px solid var(--border);
+  background: var(--border);
+}
+
+.score-history-chart__tooltip {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.score-history-chart__tooltip-score {
+  color: var(--mal);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-history-chart__tooltip-date {
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}

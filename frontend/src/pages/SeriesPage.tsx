@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   ApiError,
   getSeries,
+  getSeriesScoreHistory,
   moveFavouriteAdjacent,
   rebuildSeries,
   refreshSeriesPictures,
@@ -29,6 +30,7 @@ import { malSections, pickerOptionCount, seriesTmdbSections } from '../component
 import { ProgressBar } from '../components/ProgressBar.tsx'
 import { RevealControl } from '../components/RevealControl.tsx'
 import { ScoreChip } from '../components/ScoreChip.tsx'
+import { ScoreHistoryOverlay } from '../components/ScoreHistoryOverlay.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
 import { SeriesCompletionBadge } from '../components/SeriesCompletionBadge.tsx'
 import { SeriesExtraTile } from '../components/SeriesExtraTile.tsx'
@@ -466,8 +468,13 @@ export function SeriesPage() {
   // since both are hooks (react/rules-of-hooks) — unlike highestMalSettled
   // (derived from `series`, computed after the guards near highestMalEntries
   // below), neither depends on data having loaded.
-  const { hidden } = useScoreVisibility()
+  const { hidden, alwaysShowCompletedScores } = useScoreVisibility()
   const [highestMalRevealed, revealHighestMal] = useScoreReveal()
+  // The Score history overlay's own reveal, held here so closing and reopening
+  // keeps it and leaving the page drops it (add-score-history-graph design.md
+  // D12). It is separate from the highest-MAL stat's reveal above.
+  const [showScoreHistory, setShowScoreHistory] = useState(false)
+  const [historyRevealed, revealHistory] = useScoreReveal()
 
   // Bounded pool backfill (design D6) — mirrors the anime detail page's
   // picture backfill: fire once per series while members remain unfetched,
@@ -1113,6 +1120,19 @@ export function SeriesPage() {
 
   return (
     <div className="series-page">
+      {showScoreHistory && (
+        <ScoreHistoryOverlay
+          title={displayTitle}
+          subtitle="MAL · Main series"
+          load={() => getSeriesScoreHistory(series.seriesId)}
+          // Withheld by the same condition that withholds the "MAL · Main
+          // series" chip's average, so the two can never disagree.
+          visible={!hidden || historyRevealed || (malGroupRevealed(series.mainLine, series) && alwaysShowCompletedScores)}
+          onReveal={revealHistory}
+          onClose={() => setShowScoreHistory(false)}
+        />
+      )}
+
       {showPicturePicker && (
         <PicturePickerOverlay
           title="Choose picture"
@@ -1206,6 +1226,11 @@ export function SeriesPage() {
         <div className="series-page__stats-header">
           <h2>Series stats</h2>
           <div className="series-page__rebuild-row">
+            {series.hasScoreHistory && (
+              <button type="button" className="series-page__stats-action" onClick={() => setShowScoreHistory(true)}>
+                Score history
+              </button>
+            )}
             {showPicturePickerButton && (
               <button
                 type="button"

@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import {
   ApiError,
   getAnimeDetail,
+  getAnimeScoreHistory,
   refreshAnime,
   refreshAnimePictures,
   refreshAnimeTmdbPictures,
@@ -26,6 +27,7 @@ import {
 import { ProgressBar } from "../components/ProgressBar.tsx";
 import { RelatedAnimeOverlay } from "../components/RelatedAnimeOverlay.tsx";
 import { RevealControl } from "../components/RevealControl.tsx";
+import { ScoreHistoryOverlay } from "../components/ScoreHistoryOverlay.tsx";
 import { ScoreValue } from "../components/ScoreValue.tsx";
 import { SpaceWrappedTitle } from "../components/SpaceWrappedTitle.tsx";
 import { useEntryEditor } from "../context/EntryEditorContext.tsx";
@@ -237,6 +239,13 @@ export function AnimeDetailPage() {
   const [actionPending, setActionPending] = useState(false);
   const [showRelatedOverlay, setShowRelatedOverlay] = useState(false);
   const [showPicturePicker, setShowPicturePicker] = useState(false);
+  // The Score history overlay's own reveal, held here rather than in the
+  // overlay so closing and reopening it keeps what was revealed and leaving
+  // the page drops it (add-score-history-graph design.md D12). It is separate
+  // from the score's and the rank's reveals on this page.
+  const [showScoreHistory, setShowScoreHistory] = useState(false);
+  const [historyRevealed, revealHistory] = useScoreReveal();
+  const { hidden, alwaysShowCompletedScores } = useScoreVisibility();
   const { openGroups, seedOpenGroups, toggleGroup } = usePickerOpenGroups(animeId);
   const { openEditor } = useEntryEditor();
   const increment = useEpisodeIncrement();
@@ -638,6 +647,20 @@ export function AnimeDetailPage() {
         />
       )}
 
+      {showScoreHistory && (
+        <ScoreHistoryOverlay
+          title={pickDisplayTitle(detail.title, detail.englishTitle)}
+          load={() => getAnimeScoreHistory(detail.animeId)}
+          visible={
+            !hidden ||
+            historyRevealed ||
+            (isScoreRevealableStatus(detail.entry?.status) && alwaysShowCompletedScores)
+          }
+          onReveal={revealHistory}
+          onClose={() => setShowScoreHistory(false)}
+        />
+      )}
+
       {showPicturePicker && (
         <PicturePickerOverlay
           title="Choose picture"
@@ -730,6 +753,15 @@ export function AnimeDetailPage() {
             >
               {refreshing ? "Refreshing…" : "Refresh data"}
             </button>
+            {detail.hasScoreHistory && (
+              <button
+                type="button"
+                className="anime-detail-page__action"
+                onClick={() => setShowScoreHistory(true)}
+              >
+                Score history
+              </button>
+            )}
             {showPicturePickerButton && (
               <button
                 type="button"

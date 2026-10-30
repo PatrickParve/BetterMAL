@@ -3,6 +3,7 @@ using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Jobs;
 using AnimeTracker.Api.Services.Mal;
 using AnimeTracker.Api.Services.Mal.Dto;
+using AnimeTracker.Api.Services.ScoreHistory;
 using AnimeTracker.Api.Services.Search;
 using Microsoft.EntityFrameworkCore;
 
@@ -26,6 +27,7 @@ public class InitialImportService(
     IMalClient malClient,
     AnimeTrackerDbContext db,
     ListImportProgress progress,
+    IAnimeScoreRecorder scoreRecorder,
     IAnimeSearchIndex searchIndex,
     INewEntryRefreshTrigger newEntryRefreshTrigger,
     ILogger<InitialImportService> logger) : IInitialImportService
@@ -167,7 +169,13 @@ public class InitialImportService(
             animeId, fields: [MalClient.FullDetailWithPicturesAnimeFields], ct: ct);
         var now = DateTimeOffset.UtcNow;
 
-        db.AnimeMetadata.Add(details.ToAnimeMetadata(now));
+        var metadata = details.ToAnimeMetadata(now);
+        db.AnimeMetadata.Add(metadata);
+
+        // An imported anime's score starts its history when it has aired
+        // (add-score-history-graph design.md D4), saved with its row.
+        await scoreRecorder.RecordAsync(metadata, now, ct);
+
         var entry = MalMappingExtensions.ToUserAnimeEntry(animeId, listStatus, now);
         db.UserAnimeEntries.Add(entry);
 
