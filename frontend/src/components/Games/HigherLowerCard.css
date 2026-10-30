@@ -146,17 +146,6 @@
   font-size: 13px;
 }
 
-.higher-lower-card__details {
-  font-size: 13px;
-  color: var(--text);
-  text-decoration: none;
-}
-
-.higher-lower-card__details:hover {
-  color: var(--text-h);
-  text-decoration: underline;
-}
-
 /* The verdict: a ring and a glow in the verdict colour. Correct pulses once,
    wrong shakes once. */
 .higher-lower-card--correct .higher-lower-card__frame {

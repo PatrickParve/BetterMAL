@@ -13,16 +13,10 @@
   gap: 6px;
 }
 
+/* A plain outlined button (GameButton.css), left-aligned above the name. */
 .higher-lower-lobby__back {
   align-self: flex-start;
   margin-bottom: 2px;
-  font-size: 13px;
-  color: var(--text);
-  text-decoration: none;
-}
-
-.higher-lower-lobby__back:hover {
-  color: var(--text-h);
 }
 
 .higher-lower-lobby__title {
@@ -45,37 +39,6 @@
   min-width: 0;
 }
 
-/* How the last game went: shown once, then gone. */
-.higher-lower-lobby__result {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 12px;
-  padding: 18px 22px;
-  border: 1px solid var(--accent-border);
-  border-radius: 14px;
-  background: linear-gradient(135deg, var(--accent-bg), transparent 75%);
-}
-
-.higher-lower-lobby__result-count {
-  font-size: 44px;
-  line-height: 1;
-  font-weight: 800;
-  color: var(--text-h);
-  font-variant-numeric: tabular-nums;
-}
-
-.higher-lower-lobby__result-label {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-h);
-}
-
-.higher-lower-lobby__result-line {
-  flex-basis: 100%;
-  margin: 0;
-  font-size: 14px;
-}
 
 .higher-lower-lobby__panel {
   display: flex;

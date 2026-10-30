@@ -437,7 +437,7 @@ public class HigherOrLowerServicePickTests
     // ---- rotation (design D8) ----
 
     [Fact]
-    public async Task TheHigherAnimeStaysFromTheLeft()
+    public async Task InTheFirstRoundTheHigherAnimeStaysFromTheLeft()
     {
         using var db = CreateDb();
         await SeedTableAsync(db, left: 9.0, right: 5.0);
@@ -446,50 +446,38 @@ public class HigherOrLowerServicePickTests
         var result = await Service(db).PickAsync(run.Id, 1, 1);
 
         Assert.Equal(1, result.Next!.Left.AnimeId);
+        Assert.Equal(9.0, result.Next.Left.Score);
         Assert.NotEqual(2, result.Next.Right.AnimeId);
         Assert.Equal(1, (await StoredRunAsync(db))!.LeftStays);
     }
 
     [Fact]
-    public async Task TheHigherAnimeStaysFromTheRightAndMovesLeft()
+    public async Task InTheFirstRoundTheHigherAnimeStaysFromTheRightAndMovesLeft()
     {
         using var db = CreateDb();
         await SeedTableAsync(db, left: 5.0, right: 9.0);
-        var run = await AddRunAsync(db, 1, 2, leftStays: 1);
+        var run = await AddRunAsync(db, 1, 2, leftStays: 0);
 
         var result = await Service(db).PickAsync(run.Id, 1, 2);
 
         Assert.Equal(2, result.Next!.Left.AnimeId);
         Assert.Equal(9.0, result.Next.Left.Score);
         Assert.DoesNotContain(result.Next.Right.AnimeId, new[] { 1, 2 });
-        // The anime that takes over has stayed once, whatever count the one it replaced had.
+        // The anime that takes over has stayed once, so it is on its second round next.
         Assert.Equal(1, (await StoredRunAsync(db))!.LeftStays);
     }
 
     [Fact]
-    public async Task AnAnimeStaysASecondTime()
+    public async Task AfterTheFirstRoundTheNewAnimeStaysThoughItScoredLower()
     {
         using var db = CreateDb();
-        await SeedTableAsync(db, left: 9.0, right: 5.0);
+        await SeedTableAsync(db, left: 9.0, right: 6.0);
         var run = await AddRunAsync(db, 1, 2, round: 2, streak: 1, leftStays: 1);
 
         var result = await Service(db).PickAsync(run.Id, 2, 1);
 
-        Assert.Equal(1, result.Next!.Left.AnimeId);
-        Assert.Equal(2, (await StoredRunAsync(db))!.LeftStays);
-    }
-
-    [Fact]
-    public async Task AnAnimeLeavesAfterTwoStaysThoughItScoredHigherAgain()
-    {
-        using var db = CreateDb();
-        await SeedTableAsync(db, left: 9.0, right: 6.0);
-        var run = await AddRunAsync(db, 1, 2, round: 3, streak: 2, leftStays: 2);
-
-        var result = await Service(db).PickAsync(run.Id, 3, 1);
-
         Assert.True(result.Correct);
-        // The lower-scored anime takes over the left, score shown, and 1 is off the table.
+        // 1 scored higher but has been on screen twice: the new anime takes over.
         Assert.Equal(2, result.Next!.Left.AnimeId);
         Assert.Equal(6.0, result.Next.Left.Score);
         Assert.DoesNotContain(1, new[] { result.Next.Left.AnimeId, result.Next.Right.AnimeId });
@@ -497,11 +485,25 @@ public class HigherOrLowerServicePickTests
     }
 
     [Fact]
-    public async Task ARunOfRoundsFollowsTheRotationAndEachNewAnimeCountsItsOwnStays()
+    public async Task AfterTheFirstRoundTheNewAnimeStaysWhenItScoredHigher()
+    {
+        using var db = CreateDb();
+        await SeedTableAsync(db, left: 6.0, right: 9.0);
+        var run = await AddRunAsync(db, 1, 2, round: 2, streak: 1, leftStays: 1);
+
+        var result = await Service(db).PickAsync(run.Id, 2, 2);
+
+        Assert.Equal(2, result.Next!.Left.AnimeId);
+        Assert.Equal(9.0, result.Next.Left.Score);
+        Assert.Equal(1, (await StoredRunAsync(db))!.LeftStays);
+    }
+
+    [Fact]
+    public async Task ARunOfRoundsFollowsTheRotation()
     {
         using var db = CreateDb();
         await SeedTableAsync(db, left: 9.0, right: 6.0, others: 40);
-        var run = await AddRunAsync(db, 1, 2);
+        await AddRunAsync(db, 1, 2);
         var service = Service(db);
 
         async Task<HigherOrLowerGameDto> StepAsync(HigherOrLowerGameDto table, int picked, double newRightScore)
@@ -514,43 +516,36 @@ public class HigherOrLowerServicePickTests
 
         var round1 = (await service.GetStateAsync(false)).Game!;
 
-        // 1 is the highest anime in the game. It stays in rounds 1 and 2 ...
+        // Round 1: 1 is the higher anime, so it stays.
         var round2 = await StepAsync(round1, picked: 1, newRightScore: 7.0);
         Assert.Equal(1, round2.Left.AnimeId);
-        var round3 = await StepAsync(round2, picked: 1, newRightScore: 7.0);
-        Assert.Equal(1, round3.Left.AnimeId);
-        Assert.Equal(2, (await StoredRunAsync(db))!.LeftStays);
 
-        // ... and in round 3 it leaves though it scored higher again. The right anime
-        // takes over with its own count of one.
-        var y = round3.Right.AnimeId;
-        var round4 = await StepAsync(round3, picked: 1, newRightScore: 8.0);
-        Assert.Equal(y, round4.Left.AnimeId);
-        Assert.Equal(7.0, round4.Left.Score);
+        // Round 2: 1 is on screen for the second time and leaves though it scored
+        // higher. The new anime Y takes over.
+        var y = round2.Right.AnimeId;
+        var round3 = await StepAsync(round2, picked: 1, newRightScore: 8.0);
+        Assert.Equal(y, round3.Left.AnimeId);
+        Assert.Equal(7.0, round3.Left.Score);
         Assert.Equal(1, (await StoredRunAsync(db))!.LeftStays);
 
-        // Round 4: the new right anime scores higher than Y, so it takes over.
-        var z = round4.Right.AnimeId;
+        // Round 3: Z scores higher than Y and takes over.
+        var z = round3.Right.AnimeId;
+        var round4 = await StepAsync(round3, picked: z, newRightScore: 5.0);
+        Assert.Equal(z, round4.Left.AnimeId);
+        Assert.Equal(8.0, round4.Left.Score);
+
+        // Round 4: Z is on its second round and leaves though it scored higher than
+        // the new anime W.
+        var w = round4.Right.AnimeId;
         var round5 = await StepAsync(round4, picked: z, newRightScore: 6.5);
-        Assert.Equal(z, round5.Left.AnimeId);
-        Assert.Equal(8.0, round5.Left.Score);
+        Assert.Equal(w, round5.Left.AnimeId);
+        Assert.Equal(5.0, round5.Left.Score);
         Assert.Equal(1, (await StoredRunAsync(db))!.LeftStays);
-
-        // Z then has the higher score in its next two rounds: it stays through the
-        // first and leaves after the second, the other anime taking over.
-        var round6 = await StepAsync(round5, picked: z, newRightScore: 6.6);
-        Assert.Equal(z, round6.Left.AnimeId);
-        Assert.Equal(2, (await StoredRunAsync(db))!.LeftStays);
-
-        var v = round6.Right.AnimeId;
-        var round7 = await StepAsync(round6, picked: z, newRightScore: 5.0);
-        Assert.Equal(v, round7.Left.AnimeId);
-        Assert.Equal(1, (await StoredRunAsync(db))!.LeftStays);
-        Assert.Equal(6, (await StoredRunAsync(db))!.Streak);
+        Assert.Equal(4, (await StoredRunAsync(db))!.Streak);
     }
 
     [Fact]
-    public async Task ATieKeepsTheLeftAnime()
+    public async Task InTheFirstRoundATieKeepsTheLeftAnime()
     {
         using var db = CreateDb();
         await SeedTableAsync(db, left: 7.0, right: 7.0);
@@ -563,20 +558,20 @@ public class HigherOrLowerServicePickTests
     }
 
     [Fact]
-    public async Task ATieDoesNotKeepALeftAnimeThatHasStayedTwice()
+    public async Task AfterTheFirstRoundATieDoesNotKeepTheLeftAnime()
     {
         using var db = CreateDb();
         await SeedTableAsync(db, left: 7.0, right: 7.0);
-        var run = await AddRunAsync(db, 1, 2, round: 3, leftStays: 2);
+        var run = await AddRunAsync(db, 1, 2, round: 2, leftStays: 1);
 
-        var result = await Service(db).PickAsync(run.Id, 3, 1);
+        var result = await Service(db).PickAsync(run.Id, 2, 1);
 
         Assert.Equal(2, result.Next!.Left.AnimeId);
         Assert.Equal(1, (await StoredRunAsync(db))!.LeftStays);
     }
 
     [Fact]
-    public async Task NoAnimeIsOnScreenForMoreThanThreeRoundsOverALongGame()
+    public async Task NoAnimeIsOnScreenForMoreThanTwoRoundsOverALongGame()
     {
         using var db = CreateDb();
         await SeedAsync(db, 200);
@@ -591,14 +586,14 @@ public class HigherOrLowerServicePickTests
         {
             var onTable = new[] { table.Left.AnimeId, table.Right.AnimeId };
             inARow = onTable.ToDictionary(id => id, id => inARow.GetValueOrDefault(id) + 1);
-            Assert.All(inARow, kv => Assert.True(kv.Value <= 3, $"anime {kv.Key} was on screen {kv.Value} rounds running"));
+            Assert.All(inARow, kv => Assert.True(kv.Value <= 2, $"anime {kv.Key} was on screen {kv.Value} rounds running"));
         }
         // Picking the higher each time, the game was never lost.
         Assert.True(last.Correct);
     }
 
     [Fact]
-    public async Task TheHigherAnimeAlwaysSurvivesTheRoundUnlessItIsAtItsLimit()
+    public async Task OnlyTheFirstRoundIsDecidedByTheScores()
     {
         using var db = CreateDb();
         await SeedAsync(db, 200);
@@ -608,20 +603,13 @@ public class HigherOrLowerServicePickTests
 
         var (tables, _) = await PlayHigherAsync(db, service, first, maxPicks: 50);
 
-        var leaving = 0;
-        for (var i = 0; i + 1 < tables.Count; i++)
-        {
-            var (l, r) = (tables[i].Left.AnimeId, tables[i].Right.AnimeId);
-            var higher = scores[l] >= scores[r] ? l : r;
-            var nextLeft = tables[i + 1].Left.AnimeId;
-            if (nextLeft == higher)
-                continue;
-            // The higher anime left: only possible if it was the left one at its limit.
-            leaving++;
-            Assert.Equal(l, higher);
-            Assert.Equal(r, nextLeft);
-        }
-        Assert.True(leaving > 0, "no anime reached its limit in 50 rounds");
+        Assert.True(tables.Count >= 30, $"the game ended after {tables.Count} rounds");
+        // Round 1: the higher anime moves on to the left.
+        var (l, r) = (tables[0].Left.AnimeId, tables[0].Right.AnimeId);
+        Assert.Equal(scores[l] >= scores[r] ? l : r, tables[1].Left.AnimeId);
+        // Every later round: the new anime on the right takes over, whatever it scored.
+        for (var i = 1; i + 1 < tables.Count; i++)
+            Assert.Equal(tables[i].Right.AnimeId, tables[i + 1].Left.AnimeId);
     }
 
     // ---- the next anime ----

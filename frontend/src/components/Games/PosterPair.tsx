@@ -24,6 +24,7 @@ export function PosterPair({ pictures, size }: PosterPairProps) {
           className={`poster-pair__poster poster-pair__poster--${slot}`}
           placeholderClassName={`poster-pair__poster poster-pair__poster--${slot} poster-pair__poster--placeholder`}
           draggable={false}
+          tier="tile"
         />
       ))}
       <span className="poster-pair__vs">

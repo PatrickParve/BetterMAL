@@ -1,5 +1,4 @@
 import { useEffect, useId, useState } from 'react'
-import { Link } from 'react-router-dom'
 import type { HigherOrLowerCardDto } from '../../api/types.ts'
 import { mediaTypeLabel, pickDisplayTitle } from '../../utils/anime.ts'
 import { PosterPicture } from '../PosterPicture.tsx'
@@ -57,8 +56,7 @@ function useDisplayedScore(score: number | null, counting: boolean): number | nu
 
 // One anime on the table (higher-or-lower "A round shows two anime side by
 // side"). The picture, score pill, title and meta line are one button, which is
-// the pick; the actions row sits outside it so Add to list and Details are never
-// a pick. The score pill is its own markup rather than ScoreValue: the game
+// the pick; the actions row sits outside it so Add to list is never a pick. The score pill is its own markup rather than ScoreValue: the game
 // shows a revealed score whatever the hide toggle says, with no reveal control,
 // and it keeps the MAL blue even on the card that glows green (design.md D12).
 // The pill is the same size hidden and shown, so a reveal moves nothing.
@@ -128,9 +126,6 @@ export function HigherLowerCard({
             + Add to list
           </button>
         )}
-        <Link className="higher-lower-card__details" to={`/anime/${card.animeId}`}>
-          Details
-        </Link>
       </div>
     </article>
   )

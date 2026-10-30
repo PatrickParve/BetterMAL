@@ -8,6 +8,7 @@ import { useScoreVisibility } from '../../context/ScoreVisibilityContext.tsx'
 import { useHeldData } from '../../hooks/useHeldData.ts'
 import { usePageData } from '../../hooks/usePageData.ts'
 import { MEDIA_TYPE_ORDER, mediaTypeLabel } from '../../utils/anime.ts'
+import { preloadPictures } from '../../utils/preloadPictures.ts'
 import { HIGHER_OR_LOWER } from './games.ts'
 import {
   LIST_SCOPES,
@@ -21,29 +22,23 @@ import { PosterPair } from './PosterPair.tsx'
 import './GameButton.css'
 import './HigherLowerLobby.css'
 
-// How the last game ended, kept in memory only and shown once (higher-or-lower
-// "The setup screen shows how the last game went"). `cleared` is a game that ran
-// out of anime, which is a win.
-export type HigherOrLowerResult = {
-  streak: number
-  cleared: boolean
-}
+// The longest Play waits for the first pair's pictures; a slow one is drawn when it comes.
+const FIRST_PAIR_WAIT_MS = 1200
 
 type HigherLowerLobbyProps = {
   state: HigherOrLowerStateDto
   settings: HigherOrLowerLobbySettings
   onSettingsChange: (settings: HigherOrLowerLobbySettings) => void
-  result: HigherOrLowerResult | null
   onStarted: (game: HigherOrLowerGameDto, played: HigherOrLowerLobbySettings) => void
 }
 
 // The setup screen (higher-or-lower "Higher or Lower opens on its setup
 // screen"): the game's name, line of text and poster pair beside the settings,
-// the count they leave, and Play. Two columns where they fit, stacked below with
+// the count they leave, and Play. It shows nothing about a game just played. Two columns where they fit, stacked below with
 // the posters left out so the settings stay near the top. The count is its own
 // read keyed on the settings, held across the next one so changing a setting
 // never flashes it empty (D10).
-export function HigherLowerLobby({ state, settings, onSettingsChange, result, onStarted }: HigherLowerLobbyProps) {
+export function HigherLowerLobby({ state, settings, onSettingsChange, onStarted }: HigherLowerLobbyProps) {
   const { hideHentai } = useContentFilter()
   const { hidden: scoresHidden } = useScoreVisibility()
   const reportFailure = useActionFailure()
@@ -65,7 +60,11 @@ export function HigherLowerLobby({ state, settings, onSettingsChange, result, on
     if (starting || tooFew) return
     setStarting(true)
     try {
-      onStarted(await startHigherOrLower({ ...settings, hideHentai }), settings)
+      const game = await startHigherOrLower({ ...settings, hideHentai })
+      // The first two pictures download before the table replaces this screen, so
+      // it opens with them drawn rather than filling them in a beat later.
+      await preloadPictures([game.left.pictureUrl, game.right.pictureUrl], 'card', FIRST_PAIR_WAIT_MS)
+      onStarted(game, settings)
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) setRefusedKey(key)
       else
@@ -83,8 +82,8 @@ export function HigherLowerLobby({ state, settings, onSettingsChange, result, on
   return (
     <div className="higher-lower-lobby">
       <div className="higher-lower-lobby__intro">
-        <Link to="/games" className="higher-lower-lobby__back">
-          ‹ Games
+        <Link to="/games" className="game-outline-button higher-lower-lobby__back">
+          ← Games
         </Link>
         <h1 className="higher-lower-lobby__title">{HIGHER_OR_LOWER.name}</h1>
         <p className="higher-lower-lobby__text">{HIGHER_OR_LOWER.text}</p>
@@ -94,16 +93,6 @@ export function HigherLowerLobby({ state, settings, onSettingsChange, result, on
       </div>
 
       <div className="higher-lower-lobby__setup">
-        {result !== null && (
-          <div className="higher-lower-lobby__result" role="status">
-            <span className="higher-lower-lobby__result-count">{result.streak.toLocaleString('en-US')}</span>
-            <span className="higher-lower-lobby__result-label">in a row</span>
-            {result.cleared && (
-              <p className="higher-lower-lobby__result-line">You got through every anime in these settings.</p>
-            )}
-          </div>
-        )}
-
         <div className="higher-lower-lobby__panel">
           <div className="higher-lower-lobby__field">
             <span className="higher-lower-lobby__label">Release year</span>

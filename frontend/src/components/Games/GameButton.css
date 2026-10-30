@@ -50,3 +50,40 @@
     color: GrayText;
   }
 }
+
+/* The app's outlined button (My List's Reset and Recap a period, the load
+   failure's Try again): a neutral fill and its own border, the border taking
+   the accent and the label the heading colour on hover, with no change of size.
+   For the game screens' End game, Back to start and Games, so they read as every
+   other plain button here. A class only, so it dresses a <button> and a link
+   alike. */
+.game-outline-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  height: var(--control-h);
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.game-outline-button:hover:not([aria-disabled='true']) {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.game-outline-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.game-outline-button[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: default;
+}

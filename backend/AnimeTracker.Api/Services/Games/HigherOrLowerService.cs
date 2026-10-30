@@ -15,8 +15,11 @@ public class HigherOrLowerService(AnimeTrackerDbContext db, Random random) : IHi
     private const int PopularPosterPool = 200;
     private const int PostersOnTheTile = 2;
 
-    // An anime can stay for two rounds, then it has to go (design D8).
-    private const int MaxStays = 2;
+    // An anime is on screen for two rounds at most, its first appearance counting
+    // as one, so it can stay once and then it has to go (design D8). Only the
+    // first round has two new anime to choose between; after it the left anime
+    // has always stayed once, and the new one on the right always takes over.
+    private const int MaxStays = 1;
 
     private static readonly IReadOnlySet<int> NoAnime = new HashSet<int>();
 
@@ -144,9 +147,10 @@ public class HigherOrLowerService(AnimeTrackerDbContext db, Random random) : IHi
         var streak = run.Streak + 1;
         var milestoneLevel = HigherOrLowerMilestones.Level(streak);
 
-        // The higher score stays, the left one on a tie, unless the left anime has
-        // already stayed twice. An anime that takes over from the right has stayed
-        // once by doing so (design D8).
+        // In the first round the higher score stays, the left one on a tie. After
+        // that the left anime has already stayed once, so it leaves whatever it
+        // scored and the new one on the right takes over. An anime that takes over
+        // has stayed once by doing so (design D8).
         var leftStays = HigherOrLowerPicker.Hundredths(leftScore) >= HigherOrLowerPicker.Hundredths(rightScore)
             && run.LeftStays < MaxStays;
         var stayerId = leftStays ? run.LeftAnimeId : run.RightAnimeId;

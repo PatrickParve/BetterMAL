@@ -14,24 +14,15 @@
   margin: 0 auto;
 }
 
+/* A plain outlined button (GameButton.css) at the HUD's left. */
 .higher-lower-table__end {
   justify-self: start;
-  padding: 4px 0;
-  border: none;
-  background: none;
-  font: inherit;
-  font-size: 13px;
-  color: var(--text);
 }
 
-.higher-lower-table__end:hover:not([aria-disabled='true']) {
-  color: var(--text-h);
-  text-decoration: underline;
-}
-
-.higher-lower-table__end[aria-disabled='true'] {
-  opacity: 0.5;
-  cursor: default;
+/* Play again, at the HUD's right once a game has ended: the filled button, since
+   it is what I most likely want next. */
+.higher-lower-table__again {
+  justify-self: end;
 }
 
 .higher-lower-table__streak {
@@ -79,8 +70,14 @@
   }
 }
 
-.higher-lower-table__prompt {
+/* One line's room under the HUD, the one a message about how a game ended
+   takes, so the cards never move when it appears. */
+.higher-lower-table__note {
   margin: 2px 0 18px;
+  /* Unitless, so a line of text is exactly as tall as the room kept for it: the
+     root's 145% would inherit as a fixed length taller than 1.45em. */
+  line-height: 1.45;
+  min-height: 1.45em;
   text-align: center;
   font-size: 15px;
 }
