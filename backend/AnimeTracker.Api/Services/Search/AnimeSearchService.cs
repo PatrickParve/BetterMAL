@@ -39,7 +39,8 @@ public class AnimeSearchService(
     /// equal footing (same fields, same popularity ordering).</summary>
     private sealed record SearchCandidate(int Id, string Title, string? EnglishTitle, string? PictureUrl, int? PopularityRank);
 
-    public async Task<List<AnimeSearchResultDto>> SearchAsync(string query, int limit, bool includeLive, CancellationToken ct = default)
+    public async Task<List<AnimeSearchResultDto>> SearchAsync(
+        string query, int limit, bool includeLive, bool includeSeries = true, CancellationToken ct = default)
     {
         var (term, exact) = ParseQuery(query);
         // A term that normalizes to nothing (e.g. "!!!") must match nothing,
@@ -113,7 +114,12 @@ public class AnimeSearchService(
         if (includeLive)
             ScheduleSeriesBuildForTopMatch(term, rankedAnime.FirstOrDefault()?.Id, seriesIndex);
 
-        var seriesRows = seriesIndex.Match(term, exact).Take(Math.Min(MaxSeriesRowsInDropdown, limit)).ToList();
+        // Leaving series out is the caller's choice and costs the build above
+        // nothing: the build is part of how the search works, not of what it
+        // lists (add-guess-the-anime design.md D7).
+        var seriesRows = includeSeries
+            ? seriesIndex.Match(term, exact).Take(Math.Min(MaxSeriesRowsInDropdown, limit)).ToList()
+            : [];
         var animeRows = rankedAnime.Take(Math.Max(limit - seriesRows.Count, 0));
 
         return seriesRows.Select(AnimeSearchResultDto.ForSeries)

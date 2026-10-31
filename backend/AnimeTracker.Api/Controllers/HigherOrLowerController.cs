@@ -30,16 +30,16 @@ public class HigherOrLowerController(IHigherOrLowerService service) : Controller
         [FromQuery] int? yearFrom,
         [FromQuery] int? yearTo,
         [FromQuery] string[]? types,
-        [FromQuery] HigherOrLowerListScope list = HigherOrLowerListScope.All,
+        [FromQuery] GameListScope list = GameListScope.All,
         [FromQuery] bool hideHentai = false,
         CancellationToken ct = default)
     {
-        var settings = new HigherOrLowerSettings(yearFrom, yearTo, types?.ToList(), list, hideHentai);
+        var settings = new GameSettings(yearFrom, yearTo, types?.ToList(), list, hideHentai);
         try
         {
             return Ok(await service.GetPoolAsync(settings, ct));
         }
-        catch (HigherOrLowerSettingsException ex)
+        catch (GameSettingsException ex)
         {
             return BadRequest(new { error = ex.Message });
         }
@@ -49,13 +49,13 @@ public class HigherOrLowerController(IHigherOrLowerService service) : Controller
     /// progress. 400 for settings that can't describe a game; 409 when they leave
     /// fewer than two different scores.</summary>
     [HttpPost("api/games/higher-or-lower/runs")]
-    public async Task<IActionResult> Start([FromBody] HigherOrLowerSettings settings, CancellationToken ct = default)
+    public async Task<IActionResult> Start([FromBody] GameSettings settings, CancellationToken ct = default)
     {
         try
         {
             return Ok(await service.StartAsync(settings, ct));
         }
-        catch (HigherOrLowerSettingsException ex)
+        catch (GameSettingsException ex)
         {
             return BadRequest(new { error = ex.Message });
         }

@@ -1,4 +1,4 @@
-.higher-lower-lobby {
+.game-lobby {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 680px);
   gap: 20px 56px;
@@ -7,32 +7,32 @@
   margin: 0 auto;
 }
 
-.higher-lower-lobby__intro {
+.game-lobby__intro {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
 /* A plain outlined button (GameButton.css), left-aligned above the name. */
-.higher-lower-lobby__back {
+.game-lobby__back {
   align-self: flex-start;
   margin-bottom: 2px;
 }
 
-.higher-lower-lobby__title {
+.game-lobby__title {
   margin: 0;
   font-size: 24px;
   font-weight: 600;
   letter-spacing: normal;
 }
 
-.higher-lower-lobby__text {
+.game-lobby__text {
   margin: 0;
   max-width: 34ch;
   font-size: 16px;
 }
 
-.higher-lower-lobby__setup {
+.game-lobby__setup {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -40,7 +40,7 @@
 }
 
 
-.higher-lower-lobby__panel {
+.game-lobby__panel {
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -49,13 +49,13 @@
   border-radius: 14px;
 }
 
-.higher-lower-lobby__field {
+.game-lobby__field {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.higher-lower-lobby__label {
+.game-lobby__label {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -64,7 +64,7 @@
   opacity: 0.7;
 }
 
-.higher-lower-lobby__years {
+.game-lobby__years {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -73,7 +73,7 @@
 
 /* The page-header-design filter height, from the one shared definition. The
    global select hover (index.css) supplies the border change. */
-.higher-lower-lobby__select {
+.game-lobby__select {
   height: var(--control-h);
   padding: 0 10px;
   border: 1px solid var(--border);
@@ -84,13 +84,13 @@
   font-size: 14px;
 }
 
-.higher-lower-lobby__pills {
+.game-lobby__pills {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.higher-lower-lobby__pill {
+.game-lobby__pill {
   height: var(--control-h);
   box-sizing: border-box;
   padding: 0 11px;
@@ -106,19 +106,19 @@
     color 0.15s ease;
 }
 
-.higher-lower-lobby__pill:hover {
+.game-lobby__pill:hover {
   color: var(--text-h);
   border-color: var(--accent-border);
 }
 
-.higher-lower-lobby__pill[aria-pressed='true'] {
+.game-lobby__pill[aria-pressed='true'] {
   background: var(--accent-bg);
   border-color: var(--accent-border);
   color: var(--text-h);
   font-weight: 600;
 }
 
-.higher-lower-lobby__segments {
+.game-lobby__segments {
   display: grid;
   grid-template-columns: repeat(3, auto);
   gap: 3px;
@@ -127,7 +127,7 @@
   border-radius: 10px;
 }
 
-.higher-lower-lobby__segment {
+.game-lobby__segment {
   height: calc(var(--control-h) - 2px);
   padding: 0 8px;
   border: none;
@@ -139,18 +139,18 @@
   white-space: nowrap;
 }
 
-.higher-lower-lobby__segment:hover {
+.game-lobby__segment:hover {
   color: var(--text-h);
   background: var(--accent-bg);
 }
 
-.higher-lower-lobby__segment[aria-pressed='true'] {
+.game-lobby__segment[aria-pressed='true'] {
   background: var(--accent);
   color: var(--fam-ink);
   font-weight: 600;
 }
 
-.higher-lower-lobby__start {
+.game-lobby__start {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -158,52 +158,52 @@
 }
 
 /* Reserves the line, so the count arriving moves nothing. */
-.higher-lower-lobby__count {
+.game-lobby__count {
   margin: 0;
   min-height: 1.45em;
   font-size: 14px;
 }
 
-.higher-lower-lobby__count b {
+.game-lobby__count b {
   font-size: 20px;
   color: var(--text-h);
   font-variant-numeric: tabular-nums;
 }
 
-.higher-lower-lobby__note {
+.game-lobby__note {
   margin: 0;
   font-size: 13px;
   text-align: right;
 }
 
 @media (max-width: 960px) {
-  .higher-lower-lobby {
+  .game-lobby {
     grid-template-columns: minmax(0, 1fr);
   }
 
   /* The posters go so the settings stay near the top. */
-  .higher-lower-lobby__art {
+  .game-lobby__art {
     display: none;
   }
 }
 
 @media (max-width: 640px) {
-  .higher-lower-lobby__panel {
+  .game-lobby__panel {
     padding: 16px;
   }
 
-  .higher-lower-lobby__segments {
+  .game-lobby__segments {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .higher-lower-lobby__segment {
+  .game-lobby__segment {
     white-space: normal;
   }
 }
 
 @media (forced-colors: active) {
-  .higher-lower-lobby__pill[aria-pressed='true'],
-  .higher-lower-lobby__segment[aria-pressed='true'] {
+  .game-lobby__pill[aria-pressed='true'],
+  .game-lobby__segment[aria-pressed='true'] {
     border: 2px solid Highlight;
     background: Canvas;
     color: CanvasText;

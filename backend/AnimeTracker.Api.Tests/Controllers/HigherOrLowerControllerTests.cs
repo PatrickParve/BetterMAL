@@ -37,7 +37,7 @@ public class HigherOrLowerControllerTests
     {
         var fake = new FakeService
         {
-            State = new HigherOrLowerStateDto(Game, new HigherOrLowerYearsDto(1963, 2026), ["https://img/1.jpg", "https://img/2.jpg"]),
+            State = new HigherOrLowerStateDto(Game, new GameYearsDto(1963, 2026), ["https://img/1.jpg", "https://img/2.jpg"]),
         };
         await using var host = await TestHost.StartAsync(fake);
 
@@ -108,7 +108,7 @@ public class HigherOrLowerControllerTests
     [Fact]
     public async Task ThePoolRouteBindsEverySettingFromTheQuery()
     {
-        var fake = new FakeService { Pool = new HigherOrLowerPoolDto(1234, true) };
+        var fake = new FakeService { Pool = new GamePoolDto(1234, true) };
         await using var host = await TestHost.StartAsync(fake);
 
         var response = await host.Client.GetAsync(
@@ -119,7 +119,7 @@ public class HigherOrLowerControllerTests
         Assert.Equal(2010, settings.YearFrom);
         Assert.Equal(2015, settings.YearTo);
         Assert.Equal(["tv", "movie"], settings.MediaTypes);
-        Assert.Equal(HigherOrLowerListScope.OnlyMyList, settings.List);
+        Assert.Equal(GameListScope.OnlyMyList, settings.List);
         Assert.True(settings.HideHentai);
         using var json = await Json(response);
         Assert.Equal(1234, json.RootElement.GetProperty("count").GetInt32());
@@ -160,15 +160,15 @@ public class HigherOrLowerControllerTests
         Assert.Null(settings.YearFrom);
         Assert.Null(settings.YearTo);
         Assert.True(settings.MediaTypes is null or { Count: 0 });
-        Assert.Equal(HigherOrLowerListScope.All, settings.List);
+        Assert.Equal(GameListScope.All, settings.List);
         Assert.False(settings.HideHentai);
     }
 
     [Theory]
-    [InlineData("All", HigherOrLowerListScope.All)]
-    [InlineData("OnlyMyList", HigherOrLowerListScope.OnlyMyList)]
-    [InlineData("NotOnMyList", HigherOrLowerListScope.NotOnMyList)]
-    public async Task TheListSettingIsReadByName(string value, HigherOrLowerListScope expected)
+    [InlineData("All", GameListScope.All)]
+    [InlineData("OnlyMyList", GameListScope.OnlyMyList)]
+    [InlineData("NotOnMyList", GameListScope.NotOnMyList)]
+    public async Task TheListSettingIsReadByName(string value, GameListScope expected)
     {
         var fake = new FakeService();
         await using var host = await TestHost.StartAsync(fake);
@@ -193,7 +193,7 @@ public class HigherOrLowerControllerTests
     [Fact]
     public async Task ThePoolRouteAnswersBadRequestForSettingsThatCannotDescribeAGame()
     {
-        var fake = new FakeService { Throw = new HigherOrLowerSettingsException("The release years run backwards: 2020 is after 2010.") };
+        var fake = new FakeService { Throw = new GameSettingsException("The release years run backwards: 2020 is after 2010.") };
         await using var host = await TestHost.StartAsync(fake);
 
         var response = await host.Client.GetAsync("api/games/higher-or-lower/pool?yearFrom=2020&yearTo=2010");
@@ -224,7 +224,7 @@ public class HigherOrLowerControllerTests
         Assert.Equal(2010, settings.YearFrom);
         Assert.Equal(2015, settings.YearTo);
         Assert.Equal(["tv", "movie"], settings.MediaTypes);
-        Assert.Equal(HigherOrLowerListScope.NotOnMyList, settings.List);
+        Assert.Equal(GameListScope.NotOnMyList, settings.List);
         Assert.True(settings.HideHentai);
         using var json = await Json(response);
         Assert.Equal(3, json.RootElement.GetProperty("id").GetInt32());
@@ -282,7 +282,7 @@ public class HigherOrLowerControllerTests
     [Fact]
     public async Task StartAnswersBadRequestForSettingsThatCannotDescribeAGame()
     {
-        var fake = new FakeService { Throw = new HigherOrLowerSettingsException("0 is not a release year.") };
+        var fake = new FakeService { Throw = new GameSettingsException("0 is not a release year.") };
         await using var host = await TestHost.StartAsync(fake);
 
         var response = await host.Client.PostAsJsonAsync("api/games/higher-or-lower/runs", new { yearFrom = 0, list = "All" });
@@ -492,14 +492,14 @@ public class HigherOrLowerControllerTests
     {
         public Exception? Throw { get; init; }
         public HigherOrLowerStateDto State { get; init; } = new(null, null, []);
-        public HigherOrLowerPoolDto Pool { get; init; } = new(0, false);
+        public GamePoolDto Pool { get; init; } = new(0, false);
         public HigherOrLowerGameDto Started { get; init; } = Game;
         public HigherOrLowerPickDto Picked { get; init; } = new(true, 8, 7, 1, null, null, Game);
         public HigherOrLowerEndDto Ended { get; init; } = new(0);
 
         public bool? StateHideHentai { get; private set; }
-        public HigherOrLowerSettings? PoolSettings { get; private set; }
-        public HigherOrLowerSettings? StartSettings { get; private set; }
+        public GameSettings? PoolSettings { get; private set; }
+        public GameSettings? StartSettings { get; private set; }
         public (int Id, int Round, int AnimeId)? PickCall { get; private set; }
         public int? EndedId { get; private set; }
 
@@ -509,13 +509,13 @@ public class HigherOrLowerControllerTests
             return Task.FromResult(State);
         }
 
-        public Task<HigherOrLowerPoolDto> GetPoolAsync(HigherOrLowerSettings settings, CancellationToken ct = default)
+        public Task<GamePoolDto> GetPoolAsync(GameSettings settings, CancellationToken ct = default)
         {
             PoolSettings = settings;
-            return Throw is null ? Task.FromResult(Pool) : Task.FromException<HigherOrLowerPoolDto>(Throw);
+            return Throw is null ? Task.FromResult(Pool) : Task.FromException<GamePoolDto>(Throw);
         }
 
-        public Task<HigherOrLowerGameDto> StartAsync(HigherOrLowerSettings settings, CancellationToken ct = default)
+        public Task<HigherOrLowerGameDto> StartAsync(GameSettings settings, CancellationToken ct = default)
         {
             StartSettings = settings;
             return Throw is null ? Task.FromResult(Started) : Task.FromException<HigherOrLowerGameDto>(Throw);

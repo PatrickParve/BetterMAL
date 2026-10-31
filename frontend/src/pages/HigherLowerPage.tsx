@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react'
-import { getHigherOrLowerState, startHigherOrLower } from '../api/client.ts'
-import type { HigherOrLowerGameDto, HigherOrLowerStateDto } from '../api/types.ts'
-import { HigherLowerLobby } from '../components/Games/HigherLowerLobby.tsx'
+import { getHigherOrLowerPool, getHigherOrLowerState, startHigherOrLower } from '../api/client.ts'
+import type { GameSettings, HigherOrLowerGameDto, HigherOrLowerStateDto } from '../api/types.ts'
+import { GameLobby } from '../components/Games/GameLobby.tsx'
+import { HIGHER_OR_LOWER } from '../components/Games/games.ts'
 import { HigherLowerTable } from '../components/Games/HigherLowerTable.tsx'
+import { PosterPair } from '../components/Games/PosterPair.tsx'
 import {
   readStoredSettings,
   withinYears,
   writeStoredSettings,
-  type HigherOrLowerLobbySettings,
-} from '../components/Games/higherLowerSettings.ts'
+  type GameLobbySettings,
+} from '../components/Games/gameSettings.ts'
 import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
 import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { useContentFilter } from '../context/ContentFilterContext.tsx'
@@ -26,6 +28,18 @@ import './HigherLowerPage.css'
 // The longest the page waits for its pictures; a slow one is drawn when it comes.
 const PRELOAD_WAIT_MS = 1200
 
+// The settings this game last played with in this browser; each game keeps its own.
+const SETTINGS_KEY = 'bettermal.higherOrLower.settings'
+
+// Starts a game, and holds the setup screen until the first two pictures have
+// downloaded, so the table opens with them drawn rather than filling them in a
+// beat later.
+async function startWithPictures(settings: GameSettings): Promise<HigherOrLowerGameDto> {
+  const game = await startHigherOrLower(settings)
+  await preloadPictures([game.left.pictureUrl, game.right.pictureUrl], 'card', PRELOAD_WAIT_MS)
+  return game
+}
+
 export function HigherLowerPage() {
   const { hideHentai } = useContentFilter()
   const { data, setData, reload, failed, retry } = usePageData<HigherOrLowerStateDto>(
@@ -42,13 +56,13 @@ export function HigherLowerPage() {
 
   // Seeded from what was last played with in this browser, and from the history
   // entry's snapshot on Back, so the settings survive the table and back.
-  const [initialSettings] = useState(readStoredSettings)
-  const [chosen, setSettings] = useRestorableState<HigherOrLowerLobbySettings>('settings', initialSettings)
+  const [initialSettings] = useState(() => readStoredSettings(SETTINGS_KEY))
+  const [chosen, setSettings] = useRestorableState<GameLobbySettings>('settings', initialSettings)
   const years = data?.years ?? null
   const settings = useMemo(() => withinYears(chosen, years), [chosen, years])
 
-  function handleStarted(game: HigherOrLowerGameDto, played: HigherOrLowerLobbySettings) {
-    writeStoredSettings(played)
+  function handleStarted(game: HigherOrLowerGameDto, played: GameLobbySettings) {
+    writeStoredSettings(SETTINGS_KEY, played)
     setData((prev) => (prev === null ? prev : { ...prev, game }))
   }
 
@@ -59,9 +73,7 @@ export function HigherLowerPage() {
   // A new game with the settings this one was played with, which are the ones the
   // setup screen last played with. Throws on a refusal, which the table reports.
   async function handlePlayAgain() {
-    const game = await startHigherOrLower({ ...settings, hideHentai })
-    await preloadPictures([game.left.pictureUrl, game.right.pictureUrl], 'card', PRELOAD_WAIT_MS)
-    handleStarted(game, settings)
+    handleStarted(await startWithPictures({ ...settings, hideHentai }), settings)
   }
 
   // Over, or ended with End game: the server holds no game any more.
@@ -83,10 +95,14 @@ export function HigherLowerPage() {
         />
       )}
       {data !== null && data.game === null && (
-        <HigherLowerLobby
-          state={data}
+        <GameLobby
+          game={HIGHER_OR_LOWER}
+          art={<PosterPair pictures={data.pictures} size="lobby" badge={HIGHER_OR_LOWER.badge} />}
+          years={data.years}
           settings={settings}
           onSettingsChange={setSettings}
+          readPool={getHigherOrLowerPool}
+          start={startWithPictures}
           onStarted={handleStarted}
         />
       )}

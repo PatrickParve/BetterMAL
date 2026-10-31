@@ -13,16 +13,16 @@ public interface IHigherOrLowerService
     Task<HigherOrLowerStateDto> GetStateAsync(bool hideHentai, CancellationToken ct = default);
 
     /// <summary>How many anime these settings leave, and whether that is enough to
-    /// play. Throws <see cref="HigherOrLowerSettingsException"/> for settings that
+    /// play. Throws <see cref="GameSettingsException"/> for settings that
     /// can't describe a game.</summary>
-    Task<HigherOrLowerPoolDto> GetPoolAsync(HigherOrLowerSettings settings, CancellationToken ct = default);
+    Task<GamePoolDto> GetPoolAsync(GameSettings settings, CancellationToken ct = default);
 
     /// <summary>Starts a game, replacing any in progress, and returns its first
-    /// round. Throws <see cref="HigherOrLowerSettingsException"/> for settings that
+    /// round. Throws <see cref="GameSettingsException"/> for settings that
     /// can't describe a game and <see cref="HigherOrLowerNotPlayableException"/>
     /// for ones that leave fewer than two different scores; a refused start leaves
     /// a game in progress as it was.</summary>
-    Task<HigherOrLowerGameDto> StartAsync(HigherOrLowerSettings settings, CancellationToken ct = default);
+    Task<HigherOrLowerGameDto> StartAsync(GameSettings settings, CancellationToken ct = default);
 
     /// <summary>Judges one pick and moves the game on. Throws
     /// <see cref="HigherOrLowerRunNotFoundException"/> for a game no longer in

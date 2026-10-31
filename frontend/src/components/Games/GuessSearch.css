@@ -1,0 +1,35 @@
+/* The navbar search's field and dropdown (SearchBar.css), with two differences: it
+   is capped and centred in the bar rather than the navbar's 360px, so the list
+   leaves the rows either side of it readable while I type, and it has no submit
+   button, since Enter guesses. */
+.search-bar.guess-search {
+  justify-self: center;
+  max-width: 560px;
+  min-width: 0;
+}
+
+/* Five rows show, whatever the search found, and the rest scroll. The rows are the
+   navbar dropdown's 56px, so five of them are exactly its height. */
+.guess-search .search-bar__dropdown {
+  max-height: calc(5 * 56px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The highlighted row, by key or by pointer: one rule for both, as .search-bar__result's
+   hover rule is the same colour, so a pointer resting on one row while the keys
+   sit on another never shows two. */
+.guess-search__option--active {
+  background: var(--accent-bg);
+}
+
+.guess-search__option {
+  cursor: pointer;
+}
+
+@media (forced-colors: active) {
+  .guess-search__option--active {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}

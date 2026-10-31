@@ -18,7 +18,13 @@ public class HigherOrLowerServiceTests
         Converters = { new JsonStringEnumConverter() },
     };
 
-    private static HigherOrLowerService Service(AnimeTrackerDbContext db, int seed = 11) => new(db, new Random(seed));
+    // The lobby reads share the service's Random, as they do in the app, so a
+    // seeded draw gives the posters the same stream it always did.
+    private static HigherOrLowerService Service(AnimeTrackerDbContext db, int seed = 11)
+    {
+        var random = new Random(seed);
+        return new HigherOrLowerService(db, random, new GameLobbyReads(db, random));
+    }
 
     // ---- the read both pages open on ----
 
@@ -113,7 +119,7 @@ public class HigherOrLowerServiceTests
 
         var years = (await Service(db).GetStateAsync(false)).Years;
 
-        Assert.Equal(new HigherOrLowerYearsDto(1989, 2024), years);
+        Assert.Equal(new GameYearsDto(1989, 2024), years);
     }
 
     [Fact]
@@ -125,8 +131,8 @@ public class HigherOrLowerServiceTests
             Anime(2, airedFrom: new DateOnly(1985, 1, 1), rating: "rx"));
         await db.SaveChangesAsync();
 
-        Assert.Equal(new HigherOrLowerYearsDto(1985, 2000), (await Service(db).GetStateAsync(false)).Years);
-        Assert.Equal(new HigherOrLowerYearsDto(2000, 2000), (await Service(db).GetStateAsync(true)).Years);
+        Assert.Equal(new GameYearsDto(1985, 2000), (await Service(db).GetStateAsync(false)).Years);
+        Assert.Equal(new GameYearsDto(2000, 2000), (await Service(db).GetStateAsync(true)).Years);
     }
 
     [Fact]
@@ -235,8 +241,8 @@ public class HigherOrLowerServiceTests
         var all = await Service(db).GetPoolAsync(AnyAnime);
         var tv = await Service(db).GetPoolAsync(AnyAnime with { MediaTypes = ["tv"] });
 
-        Assert.Equal(new HigherOrLowerPoolDto(3, true), all);
-        Assert.Equal(new HigherOrLowerPoolDto(2, true), tv);
+        Assert.Equal(new GamePoolDto(3, true), all);
+        Assert.Equal(new GamePoolDto(2, true), tv);
     }
 
     [Fact]
@@ -246,7 +252,7 @@ public class HigherOrLowerServiceTests
         db.AnimeMetadata.Add(Anime(1));
         await db.SaveChangesAsync();
 
-        Assert.Equal(new HigherOrLowerPoolDto(1, false), await Service(db).GetPoolAsync(AnyAnime));
+        Assert.Equal(new GamePoolDto(1, false), await Service(db).GetPoolAsync(AnyAnime));
     }
 
     [Fact]
@@ -256,7 +262,7 @@ public class HigherOrLowerServiceTests
         db.AnimeMetadata.AddRange(Anime(1, score: 7.5), Anime(2, score: 7.5), Anime(3, score: 7.5));
         await db.SaveChangesAsync();
 
-        Assert.Equal(new HigherOrLowerPoolDto(3, false), await Service(db).GetPoolAsync(AnyAnime));
+        Assert.Equal(new GamePoolDto(3, false), await Service(db).GetPoolAsync(AnyAnime));
     }
 
     [Fact]
@@ -264,7 +270,7 @@ public class HigherOrLowerServiceTests
     {
         using var db = CreateDb();
 
-        Assert.Equal(new HigherOrLowerPoolDto(0, false), await Service(db).GetPoolAsync(AnyAnime));
+        Assert.Equal(new GamePoolDto(0, false), await Service(db).GetPoolAsync(AnyAnime));
     }
 
     [Fact]
@@ -272,7 +278,7 @@ public class HigherOrLowerServiceTests
     {
         using var db = CreateDb();
 
-        await Assert.ThrowsAsync<HigherOrLowerSettingsException>(
+        await Assert.ThrowsAsync<GameSettingsException>(
             () => Service(db).GetPoolAsync(AnyAnime with { YearFrom = 2020, YearTo = 2010 }));
     }
 
@@ -348,13 +354,13 @@ public class HigherOrLowerServiceTests
             db.AnimeMetadata.Add(Anime(id, score: 5 + id / 10.0, mediaType: "tv", airedFrom: new DateOnly(2020, 5, 1)));
         await db.SaveChangesAsync();
 
-        await Service(db).StartAsync(new HigherOrLowerSettings(2019, 2021, ["tv", "ova"], HigherOrLowerListScope.NotOnMyList, true));
+        await Service(db).StartAsync(new GameSettings(2019, 2021, ["tv", "ova"], GameListScope.NotOnMyList, true));
 
         var run = await db.HigherOrLowerRuns.AsNoTracking().SingleAsync();
         Assert.Equal(2019, run.YearFrom);
         Assert.Equal(2021, run.YearTo);
         Assert.Equal(["tv", "ova"], run.MediaTypes);
-        Assert.Equal(HigherOrLowerListScope.NotOnMyList, run.ListScope);
+        Assert.Equal(GameListScope.NotOnMyList, run.ListScope);
         Assert.True(run.HideHentai);
     }
 
@@ -404,7 +410,7 @@ public class HigherOrLowerServiceTests
         using var db = CreateDb();
         await SeedAsync(db, 10);
 
-        await Assert.ThrowsAsync<HigherOrLowerSettingsException>(
+        await Assert.ThrowsAsync<GameSettingsException>(
             () => Service(db).StartAsync(AnyAnime with { YearFrom = 2020, YearTo = 2010 }));
 
         Assert.Empty(await db.HigherOrLowerRuns.ToListAsync());
@@ -493,7 +499,7 @@ public class HigherOrLowerServiceTests
         var timesTwentyOne = 0;
         for (var seed = 0; seed < 300; seed++)
         {
-            var game = await Service(db, seed).StartAsync(AnyAnime with { List = HigherOrLowerListScope.All });
+            var game = await Service(db, seed).StartAsync(AnyAnime with { List = GameListScope.All });
             foreach (var id in new[] { game.Left.AnimeId, game.Right.AnimeId })
             {
                 if (id == 1) timesOne++;
@@ -624,8 +630,8 @@ public class HigherOrLowerServiceTests
         await db.SaveChangesAsync();
         var service = Service(db);
 
-        Assert.Equal(new HigherOrLowerPoolDto(2, true), await service.GetPoolAsync(AnyAnime));
-        Assert.Equal(new HigherOrLowerYearsDto(2020, 2021), (await service.GetStateAsync(false)).Years);
+        Assert.Equal(new GamePoolDto(2, true), await service.GetPoolAsync(AnyAnime));
+        Assert.Equal(new GameYearsDto(2020, 2021), (await service.GetStateAsync(false)).Years);
         for (var seed = 0; seed < 20; seed++)
         {
             var game = await Service(db, seed).StartAsync(AnyAnime);
@@ -641,7 +647,7 @@ public class HigherOrLowerServiceTests
             Anime(1, score: 6.0), Anime(2, score: 7.0, airingStatus: "not_yet_aired"), Anime(3, score: 8.0, airingStatus: "not_yet_aired"));
         await db.SaveChangesAsync();
 
-        Assert.Equal(new HigherOrLowerPoolDto(1, false), await Service(db).GetPoolAsync(AnyAnime));
+        Assert.Equal(new GamePoolDto(1, false), await Service(db).GetPoolAsync(AnyAnime));
         await Assert.ThrowsAsync<HigherOrLowerNotPlayableException>(() => Service(db).StartAsync(AnyAnime));
     }
 
@@ -656,7 +662,7 @@ public class HigherOrLowerServiceTests
         });
         await db.SaveChangesAsync();
 
-        Assert.Equal(new HigherOrLowerPoolDto(2, true), await Service(db).GetPoolAsync(AnyAnime));
+        Assert.Equal(new GamePoolDto(2, true), await Service(db).GetPoolAsync(AnyAnime));
     }
 
     // ---- two tabs ----
@@ -702,5 +708,28 @@ public class HigherOrLowerServiceTests
     {
         await SeedAsync(db, 20);
         return await Service(db).StartAsync(AnyAnime);
+    }
+
+    // ---- playable ----
+
+    [Fact]
+    public void FewerThanTwoDifferentScoresIsNotPlayable()
+    {
+        Assert.False(HigherOrLowerService.IsPlayable([]));
+        Assert.False(HigherOrLowerService.IsPlayable([7.5]));
+        Assert.False(HigherOrLowerService.IsPlayable([7.5, 7.5, 7.5]));
+    }
+
+    [Fact]
+    public void ScoresThatDifferOnlyBelowTheSecondDecimalAreTheSame()
+    {
+        Assert.False(HigherOrLowerService.IsPlayable([7.85, 7.8500000001, 7.854]));
+    }
+
+    [Fact]
+    public void TwoDifferentScoresArePlayable()
+    {
+        Assert.True(HigherOrLowerService.IsPlayable([7.5, 7.51]));
+        Assert.True(HigherOrLowerService.IsPlayable([7.5, 7.5, 9.0]));
     }
 }

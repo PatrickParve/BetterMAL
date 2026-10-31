@@ -170,6 +170,102 @@ public class AnimeSearchServiceTests
         Assert.Equal([1, 2], results.Select(r => r.Id)); // unaffected: most-popular prefix match first
     }
 
+    // --- Choosing from anime only (add-guess-the-anime design.md D7) ---
+
+    private static List<AnimeTitleProjection> GundamIndex(int count) =>
+        [.. Enumerable.Range(1, count).Select(i => new AnimeTitleProjection(i, $"Gundam {i}", null, null, i * 10))];
+
+    [Fact]
+    public async Task SearchAsync_WithoutSeriesListsOnlyAnimeAndFillsTheLimit()
+    {
+        using var db = CreateDb();
+        AddSeries(db, rootAnimeId: 201, rootTitle: "Gundam Series One", rootPopularityRank: 1);
+        AddSeries(db, rootAnimeId: 202, rootTitle: "Gundam Series Two", rootPopularityRank: 50);
+        await db.SaveChangesAsync();
+        var service = CreateService(db, GundamIndex(8));
+
+        var results = await service.SearchAsync("gundam", limit: 5, includeLive: true, includeSeries: false);
+
+        // The two series would have taken two of the five rows.
+        Assert.Equal([1, 2, 3, 4, 5], results.Select(r => r.Id));
+        Assert.All(results, r => Assert.Equal("anime", r.Kind));
+    }
+
+    [Fact]
+    public async Task SearchAsync_WithoutSeriesStillSchedulesTheSeriesBuild()
+    {
+        using var db = CreateDb();
+        // A stored series that matches the query, but not the top match's own.
+        AddSeries(db, rootAnimeId: 600, rootTitle: "Gundam Wing", rootPopularityRank: 5);
+        await db.SaveChangesAsync();
+        var trigger = new FakeSeriesBuildTrigger();
+        var service = CreateService(
+            db, [new(500, "Gundam Unicorn", null, null, 1)], trigger: trigger);
+
+        var results = await service.SearchAsync("gundam", limit: 5, includeLive: true, includeSeries: false);
+
+        Assert.Equal([500], trigger.Enqueued);
+        Assert.Equal([500], results.Select(r => r.Id));
+    }
+
+    [Fact]
+    public async Task SearchAsync_ALimitAboveFiveListsThatManyAnime()
+    {
+        using var db = CreateDb();
+        var service = CreateService(db, GundamIndex(20));
+
+        var results = await service.SearchAsync("gundam", limit: 15, includeLive: true, includeSeries: false);
+
+        Assert.Equal(15, results.Count);
+        Assert.Equal(Enumerable.Range(1, 15), results.Select(r => r.Id));
+    }
+
+    [Fact]
+    public async Task SearchAsync_ALimitOfSixtyListsEveryMatchUpToSixty()
+    {
+        using var db = CreateDb();
+        var service = CreateService(db, GundamIndex(75));
+
+        var results = await service.SearchAsync("gundam", limit: 60, includeLive: true, includeSeries: false);
+
+        Assert.Equal(60, results.Count);
+        Assert.Equal(Enumerable.Range(1, 60), results.Select(r => r.Id));
+    }
+
+    [Fact]
+    public async Task SearchAsync_ALimitAboveFiveKeepsTheTwoSeriesCap()
+    {
+        using var db = CreateDb();
+        AddSeries(db, rootAnimeId: 201, rootTitle: "Gundam Series One", rootPopularityRank: 1);
+        AddSeries(db, rootAnimeId: 202, rootTitle: "Gundam Series Two", rootPopularityRank: 2);
+        AddSeries(db, rootAnimeId: 203, rootTitle: "Gundam Series Three", rootPopularityRank: 3);
+        await db.SaveChangesAsync();
+        var service = CreateService(db, GundamIndex(20));
+
+        var results = await service.SearchAsync("gundam", limit: 15, includeLive: true);
+
+        Assert.Equal(15, results.Count);
+        Assert.Equal(2, results.Count(r => r.Kind == "series"));
+    }
+
+    [Fact]
+    public async Task SearchAsync_AskingForSeriesIsTheSameAsLeavingItOut()
+    {
+        using var db = CreateDb();
+        AddSeries(db, rootAnimeId: 201, rootTitle: "Gundam Series One", rootPopularityRank: 1);
+        AddSeries(db, rootAnimeId: 202, rootTitle: "Gundam Series Two", rootPopularityRank: 50);
+        AddSeries(db, rootAnimeId: 203, rootTitle: "Gundam Series Three", rootPopularityRank: 100);
+        await db.SaveChangesAsync();
+        var service = CreateService(db, GundamIndex(8));
+
+        var left = await service.SearchAsync("gundam", limit: 5, includeLive: true);
+        var asked = await service.SearchAsync("gundam", limit: 5, includeLive: true, includeSeries: true);
+
+        // Two series and three anime: the cap and the five-row budget, as before.
+        Assert.Equal(["series", "series", "anime", "anime", "anime"], left.Select(r => r.Kind));
+        Assert.Equal(left.Select(r => (r.Kind, r.Id)), asked.Select(r => (r.Kind, r.Id)));
+    }
+
     // --- 8.3 Results-page composition ---
 
     [Fact]

@@ -1,0 +1,408 @@
+/* Picture and title, year, season, genres, episodes, studio, type and MAL score,
+   in the order they were asked for (add-guess-the-anime design.md D11). The board's
+   heading row uses the same template, so the heading and every row line up. */
+.guess-row,
+.guess-head {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 1.4fr)
+    66px 74px
+    minmax(150px, 1.3fr)
+    66px
+    minmax(96px, 0.8fr)
+    66px 78px;
+  column-gap: 10px;
+  align-items: center;
+  padding-inline: var(--guess-pad, 12px);
+}
+
+.guess-row {
+  padding-block: 8px;
+  border-bottom: 1px solid var(--border);
+  list-style: none;
+}
+
+/* A row slides up into place, which is all that is animated on the board. */
+.guess-row--reveal {
+  animation: guess-row-reveal 240ms ease-out;
+}
+
+@keyframes guess-row-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* The answer: every value in it is green, so the row says so in its frame too. */
+.guess-row--answer {
+  margin-top: -1px;
+  border: 1px solid color-mix(in srgb, var(--game-correct) 55%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--game-correct) 7%, transparent);
+}
+
+/* The answer revealed after a loss or a give-up. It must not read as a win, so it
+   is set apart from the guesses, framed in a neutral dashed line with none of the
+   green, and tagged in words; its stats are drawn plain (GuessRow.tsx). */
+.guess-row--answer-lost {
+  margin-top: 16px;
+  border: 1px dashed color-mix(in srgb, var(--text) 55%, transparent);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.guess-row__tag {
+  align-self: flex-start;
+  padding: 1px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--text-h);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.guess-row__anime {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.guess-row__picture-link {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.guess-row__picture {
+  /* Geometry lives in the shared .row-picture rule (RowPicture.css,
+     artwork-presentation); this sets the box that rule reads. */
+  --row-picture-w: 56px;
+  --row-picture-h: 80px;
+  border-radius: 6px;
+}
+
+.guess-row__text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.guess-row__link {
+  min-width: 0;
+  color: var(--text-h);
+  text-decoration: none;
+}
+
+.guess-row__link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.guess-row__title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.guess-row__add {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.guess-row__add:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+
+.guess-row__add:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.guess-row__add:disabled {
+  opacity: 0.6;
+}
+
+.guess-row__in-list {
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* The stats are one `dl` at every width; in the columns each `div` is transparent
+   to the grid, so the seven values sit in its columns. */
+.guess-stats {
+  display: contents;
+}
+
+.guess-stat {
+  display: contents;
+}
+
+.guess-stat dt {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.guess-stat dd {
+  margin: 0;
+  min-width: 0;
+}
+
+/* A value is plain text until it matches, when it takes the green. The match is a
+   bordered, tinted box in heavier text as well as a colour, so it doesn't rest on
+   colour alone. The negative margin puts the text, not the box, on the column's
+   edge. */
+.guess-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  box-sizing: border-box;
+  min-height: 26px;
+  padding: 2px 7px;
+  margin-left: -7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 14px;
+  line-height: 1.25;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.guess-value--same {
+  color: var(--game-correct-text);
+  font-weight: 600;
+  border-color: color-mix(in srgb, var(--game-correct) 50%, transparent);
+  background: color-mix(in srgb, var(--game-correct) 10%, transparent);
+}
+
+/* On the answer's row, which is tinted itself, a see-through box would stack its tint
+   on the row's and drop the MAL blue inside it to 4.3:1 in the light theme. The box is
+   drawn over the page instead, as it is on every other row: 4.6:1. */
+.guess-row--answer .guess-value--same {
+  background: color-mix(in srgb, var(--game-correct) 10%, var(--bg));
+}
+
+/* A MAL score keeps the MAL blue whether or not it matches, the green being the
+   box around it (score-presentation). */
+.guess-value--score,
+.guess-value--same.guess-value--score {
+  color: var(--mal);
+}
+
+.guess-value--unknown {
+  color: var(--text);
+  opacity: 0.7;
+}
+
+.guess-value--pending {
+  color: var(--text);
+  animation: guess-value-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes guess-value-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.guess-arrow {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+}
+
+.guess-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  margin-left: -7px;
+}
+
+.guess-tags .guess-value {
+  margin-left: 0;
+  min-height: 22px;
+  padding: 0 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.guess-tags .guess-value--same {
+  color: var(--game-correct-text);
+}
+
+/* Too narrow for the columns: a row becomes a card. Everything sits beside the
+   picture: the title, the five short stats on one line with their labels above,
+   then the genres and the studio, which say what they are without one. */
+@media (max-width: 1023px) {
+  .guess-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 12px;
+    align-items: start;
+    padding-block: 10px;
+  }
+
+  .guess-row__anime {
+    display: contents;
+  }
+
+  .guess-row__picture-link {
+    grid-row: 1 / span 2;
+  }
+
+  .guess-row__picture {
+    --row-picture-w: 64px;
+    --row-picture-h: 92px;
+  }
+
+  .guess-row__text {
+    grid-column: 2;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 10px;
+  }
+
+  .guess-stats {
+    display: flex;
+    flex-wrap: wrap;
+    grid-column: 2;
+    gap: 4px 16px;
+    margin-top: 4px;
+  }
+
+  .guess-stat {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  /* Genres and studio take a line each, after the short stats. */
+  .guess-stat--wide {
+    flex: 0 0 100%;
+    order: 1;
+  }
+
+  .guess-stat dt {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.75;
+  }
+
+  .guess-stat--wide dt {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .guess-value {
+    min-height: 22px;
+    padding: 0 5px;
+    margin-left: -5px;
+  }
+
+  .guess-tags {
+    margin-left: -5px;
+  }
+
+  .guess-tags .guess-value {
+    padding: 0 5px;
+  }
+}
+
+@media (max-width: 640px) {
+  .guess-row {
+    column-gap: 10px;
+  }
+
+  .guess-row__picture {
+    --row-picture-w: 56px;
+    --row-picture-h: 80px;
+  }
+
+  .guess-stats {
+    gap: 2px 8px;
+  }
+
+  .guess-value {
+    font-size: 13px;
+  }
+}
+
+/* Reduced motion: a row simply appears, and the pending dots hold still. */
+@media (prefers-reduced-motion: reduce) {
+  .guess-row--reveal {
+    animation: none;
+  }
+
+  .guess-value--pending {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* Forced colours drops the tints, so a match keeps its border in a system colour
+   and the answer keeps its frame. */
+@media (forced-colors: active) {
+  .guess-value--same {
+    border-color: Highlight;
+    color: CanvasText;
+    background: transparent;
+  }
+
+  .guess-tags .guess-value--same,
+  .guess-value--score,
+  .guess-value--same.guess-value--score {
+    color: CanvasText;
+  }
+
+  .guess-row--answer {
+    border-color: Highlight;
+    background: transparent;
+  }
+
+  .guess-row--answer .guess-value--same {
+    background: transparent;
+  }
+
+  .guess-row--answer-lost {
+    border-color: GrayText;
+    background: transparent;
+  }
+
+  .guess-row__tag {
+    border-color: CanvasText;
+  }
+}

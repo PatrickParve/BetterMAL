@@ -1,10 +1,12 @@
 namespace AnimeTracker.Api.Services.Games;
 
-/// <summary>The two factors of an anime's weight in a Higher or Lower draw
+/// <summary>The two factors of an anime's weight in a game's draw
 /// (add-games-higher-or-lower design.md D5 and D6): weight = popularity ×
-/// freshness. The constants are named here so the tuning lives in one place; the
-/// tests pin the curves' shape rather than these exact values.</summary>
-public static class HigherOrLowerWeights
+/// freshness. Freshness and the cooldown are every game's; <see cref="Popularity"/>
+/// is Higher or Lower's own curve, which a game with a different one hands the
+/// picker instead. The constants are named here so the tuning lives in one place;
+/// the tests pin the curves' shape rather than these exact values.</summary>
+public static class GameWeights
 {
     /// <summary>An anime not on my list carries full popularity weight down to
     /// this rank, about the point where a typical MAL user has heard of most of
@@ -22,11 +24,11 @@ public static class HigherOrLowerWeights
     public const int MinCooldown = 1;
     public const int MaxCooldown = 400;
 
-    /// <summary>1 for anime on my list, however unpopular, and down to
-    /// <see cref="FullWeightRank"/>; past it <c>(FullWeightRank / rank)²</c>,
-    /// never below <see cref="PopularityFloor"/>. A null rank means popularity
-    /// is unknown, which is no evidence the anime is familiar, so it takes the
-    /// floor.</summary>
+    /// <summary>Higher or Lower's curve: 1 for anime on my list, however
+    /// unpopular, and down to <see cref="FullWeightRank"/>; past it
+    /// <c>(FullWeightRank / rank)²</c>, never below <see cref="PopularityFloor"/>.
+    /// A null rank means popularity is unknown, which is no evidence the anime is
+    /// familiar, so it takes the floor.</summary>
     public static double Popularity(int? popularityRank, bool onMyList)
     {
         if (onMyList)
@@ -59,4 +61,16 @@ public static class HigherOrLowerWeights
     /// <see cref="MinCooldown"/>–<see cref="MaxCooldown"/>.</summary>
     public static int Cooldown(int poolSize) =>
         Math.Clamp(poolSize / PoolShareDivisor, MinCooldown, MaxCooldown);
+
+    /// <summary>How many shown ago each anime of a list of recent appearances
+    /// was, 0 for the latest. <paramref name="latestFirst"/> is the anime ids in
+    /// the order they were shown, newest first; an anime shown more than once
+    /// counts from its latest showing, so a later duplicate is ignored.</summary>
+    public static Dictionary<int, int> RoundsAgo(IReadOnlyList<int> latestFirst)
+    {
+        var roundsAgo = new Dictionary<int, int>();
+        for (var i = 0; i < latestFirst.Count; i++)
+            roundsAgo.TryAdd(latestFirst[i], i);
+        return roundsAgo;
+    }
 }

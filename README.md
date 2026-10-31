@@ -30,7 +30,9 @@ its own.
   franchise's average, has moved. It starts when the app does, as MyAnimeList
   keeps no history of its own.
 - **Games**: Higher or Lower, a quick game of guessing which of two anime has
-  the higher MyAnimeList score, and how many you can get in a row.
+  the higher MyAnimeList score, and how many you can get in a row; and Guess the
+  Anime, where you find a hidden anime in ten guesses, each one showing how close
+  it was.
 - **Pictures**: choose any MyAnimeList picture for an anime or a series, or,
   with a TMDB key, a full-size poster or backdrop.
 - **Two-way sync**: your edits reach MyAnimeList within seconds, and changes

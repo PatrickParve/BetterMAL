@@ -10,7 +10,7 @@ namespace AnimeTracker.Api.Tests.Services.Games;
 // starts from.
 internal static class HigherOrLowerTestKit
 {
-    public static readonly HigherOrLowerSettings AnyAnime = new(null, null, null, HigherOrLowerListScope.All, false);
+    public static readonly GameSettings AnyAnime = new(null, null, null, GameListScope.All, false);
 
     /// <summary>The instant the pool tests ask "has it aired by now?" at.</summary>
     public static readonly DateTimeOffset Now = new(2026, 10, 30, 12, 0, 0, TimeSpan.Zero);
@@ -69,7 +69,7 @@ internal static class HigherOrLowerTestKit
     /// <see cref="AnyAnime"/>; the shown list defaults to the two on the table.</summary>
     public static async Task<HigherOrLowerRun> AddRunAsync(
         AnimeTrackerDbContext db, int left, int right, int round = 1, int streak = 0, int leftStays = 0,
-        int[]? shown = null, HigherOrLowerSettings? settings = null)
+        int[]? shown = null, GameSettings? settings = null)
     {
         var s = settings ?? AnyAnime;
         var run = new HigherOrLowerRun

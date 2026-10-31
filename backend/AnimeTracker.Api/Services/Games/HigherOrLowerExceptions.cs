@@ -1,9 +1,5 @@
 namespace AnimeTracker.Api.Services.Games;
 
-/// <summary>The settings can't describe a game at all, as with a range running
-/// backwards. The controller answers 400.</summary>
-public class HigherOrLowerSettingsException(string message) : Exception(message);
-
 /// <summary>The settings are valid but leave fewer than two different scores, so
 /// no first pair can be drawn. The controller answers 409.</summary>
 public class HigherOrLowerNotPlayableException()

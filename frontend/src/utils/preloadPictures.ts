@@ -14,7 +14,7 @@ const inFlight = new Set<HTMLImageElement>()
 // that only want the head start leave the promise alone.
 export function preloadPictures(
   urls: (string | null | undefined)[],
-  tier: Exclude<PictureTier, 'row'>,
+  tier: PictureTier,
   maxWaitMs: number,
 ): Promise<void> {
   const loads = urls

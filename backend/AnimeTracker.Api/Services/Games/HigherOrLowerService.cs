@@ -9,12 +9,9 @@ namespace AnimeTracker.Api.Services.Games;
 /// row, deleted however the game ends, so nothing about a finished game
 /// survives; <see cref="HigherOrLowerAppearance"/> rows, which hold only which
 /// anime were shown, outlive it to hold them back.</summary>
-public class HigherOrLowerService(AnimeTrackerDbContext db, Random random) : IHigherOrLowerService
+public class HigherOrLowerService(AnimeTrackerDbContext db, Random random, GameLobbyReads lobby)
+    : IHigherOrLowerService
 {
-    // The tile's art is two posters out of this many of the most popular anime.
-    private const int PopularPosterPool = 200;
-    private const int PostersOnTheTile = 2;
-
     // An anime is on screen for two rounds at most, its first appearance counting
     // as one, so it can stay once and then it has to go (design D8). Only the
     // first round has two new anime to choose between; after it the left anime
@@ -28,46 +25,42 @@ public class HigherOrLowerService(AnimeTrackerDbContext db, Random random) : IHi
         var run = await db.HigherOrLowerRuns.AsNoTracking().OrderByDescending(r => r.Id).FirstOrDefaultAsync(ct);
         var game = run is null ? null : await BuildGameAsync(run, ct);
 
-        var eligible = HigherOrLowerPool.Query(
-            db, new HigherOrLowerSettings(null, null, null, HigherOrLowerListScope.All, hideHentai), DateTimeOffset.UtcNow);
-        var earliest = await eligible.MinAsync(a => a.AiredFrom, ct);
-        var latest = await eligible.MaxAsync(a => a.AiredFrom, ct);
-        var years = earliest is { } min && latest is { } max ? new HigherOrLowerYearsDto(min.Year, max.Year) : null;
+        var years = await lobby.YearsAsync(hideHentai, ct);
 
-        return new HigherOrLowerStateDto(game, years, await PopularPostersAsync(hideHentai, ct));
+        return new HigherOrLowerStateDto(game, years, await lobby.PopularPostersAsync(hideHentai, ct: ct));
     }
 
-    public async Task<HigherOrLowerPoolDto> GetPoolAsync(HigherOrLowerSettings settings, CancellationToken ct = default)
+    public async Task<GamePoolDto> GetPoolAsync(GameSettings settings, CancellationToken ct = default)
     {
         settings = settings.Normalized();
         settings.Validate();
 
-        var query = HigherOrLowerPool.Query(db, settings, DateTimeOffset.UtcNow);
+        var query = GamePool.Query(db, settings, DateTimeOffset.UtcNow);
         var count = await query.CountAsync(ct);
         if (count < 2)
-            return new HigherOrLowerPoolDto(count, false);
+            return new GamePoolDto(count, false);
 
         // A few hundred distinct scores at most, however many anime there are.
         var scores = await query.Select(a => a.MalScore!.Value).Distinct().ToListAsync(ct);
-        return new HigherOrLowerPoolDto(count, HigherOrLowerPool.IsPlayable(scores));
+        return new GamePoolDto(count, IsPlayable(scores));
     }
 
-    public async Task<HigherOrLowerGameDto> StartAsync(HigherOrLowerSettings settings, CancellationToken ct = default)
+    public async Task<HigherOrLowerGameDto> StartAsync(GameSettings settings, CancellationToken ct = default)
     {
         settings = settings.Normalized();
         settings.Validate();
 
         // Everything that can refuse comes before anything is deleted, so a
         // refused Start leaves a game in progress as it was.
-        var pool = await HigherOrLowerPool.Query(db, settings, DateTimeOffset.UtcNow).ToCandidates().ToListAsync(ct);
-        if (!HigherOrLowerPool.IsPlayable(pool.Select(c => c.Score)))
+        var pool = await GamePool.Query(db, settings, DateTimeOffset.UtcNow).ToCandidates().ToListAsync(ct);
+        if (!IsPlayable(pool.Select(c => c.Score)))
             throw new HigherOrLowerNotPlayableException();
 
         var recent = await RecentAsync(pool.Count, ct);
-        var left = HigherOrLowerPicker.Pick(pool, NoAnime, avoidScore: null, recent, random);
+        var left = GamePicker.Pick(pool, NoAnime, avoidScore: null, recent, GameWeights.Popularity, random);
         var right = left is null
             ? null
-            : HigherOrLowerPicker.Pick(pool, new HashSet<int> { left.AnimeId }, left.Score, recent, random);
+            : GamePicker.Pick(pool, new HashSet<int> { left.AnimeId }, left.Score, recent, GameWeights.Popularity, random);
         if (left is null || right is null)
             throw new HigherOrLowerNotPlayableException();
 
@@ -135,7 +128,7 @@ public class HigherOrLowerService(AnimeTrackerDbContext db, Random random) : IHi
         var pickedScore = animeId == run.LeftAnimeId ? leftScore : rightScore;
         var otherScore = animeId == run.LeftAnimeId ? rightScore : leftScore;
         // A tie counts as right: nobody is blamed for a score that moved.
-        var correct = HigherOrLowerPicker.Hundredths(pickedScore) >= HigherOrLowerPicker.Hundredths(otherScore);
+        var correct = GamePicker.Hundredths(pickedScore) >= GamePicker.Hundredths(otherScore);
 
         if (!correct)
         {
@@ -151,7 +144,7 @@ public class HigherOrLowerService(AnimeTrackerDbContext db, Random random) : IHi
         // that the left anime has already stayed once, so it leaves whatever it
         // scored and the new one on the right takes over. An anime that takes over
         // has stayed once by doing so (design D8).
-        var leftStays = HigherOrLowerPicker.Hundredths(leftScore) >= HigherOrLowerPicker.Hundredths(rightScore)
+        var leftStays = GamePicker.Hundredths(leftScore) >= GamePicker.Hundredths(rightScore)
             && run.LeftStays < MaxStays;
         var stayerId = leftStays ? run.LeftAnimeId : run.RightAnimeId;
         var stayerScore = leftStays ? leftScore : rightScore;
@@ -159,10 +152,10 @@ public class HigherOrLowerService(AnimeTrackerDbContext db, Random random) : IHi
 
         // The next anime comes from the pool as the settings and my list stand
         // now, never repeats one this game has shown, and never ties the stayer.
-        var pool = await HigherOrLowerPool.Query(db, HigherOrLowerSettings.From(run), DateTimeOffset.UtcNow)
+        var pool = await GamePool.Query(db, GameSettings.From(run), DateTimeOffset.UtcNow)
             .ToCandidates().ToListAsync(ct);
         var recent = await RecentAsync(pool.Count, ct);
-        var next = HigherOrLowerPicker.Pick(pool, run.ShownAnimeIds.ToHashSet(), stayerScore, recent, random);
+        var next = GamePicker.Pick(pool, run.ShownAnimeIds.ToHashSet(), stayerScore, recent, GameWeights.Popularity, random);
 
         if (next is null)
         {
@@ -230,38 +223,29 @@ public class HigherOrLowerService(AnimeTrackerDbContext db, Random random) : IHi
     {
         var recentIds = await db.HigherOrLowerAppearances.AsNoTracking()
             .OrderByDescending(a => a.Id)
-            .Take(HigherOrLowerWeights.Cooldown(poolSize))
+            .Take(GameWeights.Cooldown(poolSize))
             .Select(a => a.AnimeId)
             .ToListAsync(ct);
 
-        var roundsAgo = new Dictionary<int, int>();
-        for (var i = 0; i < recentIds.Count; i++)
-            roundsAgo.TryAdd(recentIds[i], i);
-        return roundsAgo;
+        return GameWeights.RoundsAgo(recentIds);
     }
 
-    private async Task<List<string>> PopularPostersAsync(bool hideHentai, CancellationToken ct)
+    /// <summary>Playable means at least two different scores at the two decimals
+    /// shown: with fewer, no first pair can be drawn. It is Higher or Lower's rule
+    /// alone; a game that needs only one anime has no use for it.</summary>
+    internal static bool IsPlayable(IEnumerable<double> scores)
     {
-        var popular = db.AnimeMetadata.AsNoTracking().Where(a => a.PictureUrl != null && a.PopularityRank != null);
-        if (hideHentai)
-            popular = popular.Where(a => a.Rating != HigherOrLowerPool.HentaiRating);
-
-        var candidates = await popular
-            .OrderBy(a => a.PopularityRank)
-            .Take(PopularPosterPool)
-            .Select(a => a.PictureUrl!)
-            .ToListAsync(ct);
-
-        // With fewer than two, the tile is still drawn with what there is.
-        var chosen = new List<string>();
-        while (chosen.Count < PostersOnTheTile && candidates.Count > 0)
+        long? first = null;
+        foreach (var score in scores)
         {
-            var i = random.Next(candidates.Count);
-            chosen.Add(candidates[i]);
-            candidates.RemoveAt(i);
+            var hundredths = GamePicker.Hundredths(score);
+            if (first is null)
+                first = hundredths;
+            else if (hundredths != first)
+                return true;
         }
 
-        return chosen;
+        return false;
     }
 
     private async Task<HigherOrLowerGameDto> BuildGameAsync(HigherOrLowerRun run, CancellationToken ct)

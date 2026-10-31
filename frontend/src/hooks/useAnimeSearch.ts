@@ -6,8 +6,11 @@ import { useDebouncedValue } from './useDebouncedValue.ts'
 const LOCAL_DEBOUNCE_MS = 120
 const LIVE_DEBOUNCE_MS = 300
 
-// Two-stage debounced type-ahead search backing both the navbar SearchBar
-// and the settings-page anime-refresh picker.
+// Two-stage debounced type-ahead search backing the navbar SearchBar, the
+// settings-page anime-refresh picker and Guess the Anime's field. The options
+// are the last one's (add-guess-the-anime design.md D7): `series: false` leaves
+// series rows out and `limit` asks for more than five, and both are off by
+// default so the other two callers' requests are exactly what they were.
 //
 // A response fills the rows; an interaction opens the dropdown. `open` is a
 // plain boolean that only reopen() (typing, focusing) sets true and only
@@ -29,9 +32,14 @@ const LIVE_DEBOUNCE_MS = 300
 // response is always accepted, and a live response is accepted only if the
 // query it was issued for still matches the one the local stage last
 // committed.
-export function useAnimeSearch(query: string) {
+export function useAnimeSearch(query: string, options?: { series?: boolean; limit?: number }) {
   const [results, setResults] = useState<AnimeSearchResult[]>([])
   const [open, setOpen] = useState(false)
+  // The query the rows on screen were fetched for, mirrored from the ref below so
+  // a render can tell whether they belong to what's in the field now.
+  const [displayedQuery, setDisplayedQuery] = useState<string | null>(null)
+  const series = options?.series
+  const limit = options?.limit
   const trimmedQuery = query.trim()
   const localQuery = useDebouncedValue(trimmedQuery, LOCAL_DEBOUNCE_MS)
   const liveQuery = useDebouncedValue(trimmedQuery, LIVE_DEBOUNCE_MS)
@@ -48,23 +56,26 @@ export function useAnimeSearch(query: string) {
     if (localQuery.length === 0) {
       setResults([])
       displayedQueryRef.current = null
+      setDisplayedQuery(null)
       return
     }
 
     const controller = new AbortController()
-    searchAnime(localQuery, 'local', controller.signal)
+    searchAnime(localQuery, 'local', controller.signal, { series, limit })
       .then((matches) => {
         setResults(matches)
         displayedQueryRef.current = localQuery
+        setDisplayedQuery(localQuery)
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return
         setResults([])
         displayedQueryRef.current = localQuery
+        setDisplayedQuery(localQuery)
       })
 
     return () => controller.abort()
-  }, [open, localQuery])
+  }, [open, localQuery, series, limit])
 
   // The merged live stage. Only ever replaces what is on screen — it never
   // clears it — so a live failure or a superseded response just leaves the
@@ -73,7 +84,7 @@ export function useAnimeSearch(query: string) {
     if (!open || liveQuery.length === 0) return
 
     const controller = new AbortController()
-    searchAnime(liveQuery, 'full', controller.signal)
+    searchAnime(liveQuery, 'full', controller.signal, { series, limit })
       .then((matches) => {
         if (displayedQueryRef.current !== liveQuery) return // local has moved on; discard
         setResults(matches)
@@ -83,7 +94,7 @@ export function useAnimeSearch(query: string) {
       })
 
     return () => controller.abort()
-  }, [open, liveQuery])
+  }, [open, liveQuery, series, limit])
 
   function dismiss() {
     setOpen(false)
@@ -96,9 +107,15 @@ export function useAnimeSearch(query: string) {
     if (displayedQueryRef.current !== trimmedQuery) {
       setResults([])
       displayedQueryRef.current = null
+      setDisplayedQuery(null)
     }
     setOpen(true)
   }
 
-  return { results, open, dismiss, reopen }
+  // True when the rows on screen are for what is in the field: not for a query
+  // typed since, and not for none at all. Guess the Anime's Enter reads it, so a
+  // fast typist can't guess the previous word's top hit (design.md D16).
+  const rowsAreCurrent = trimmedQuery.length > 0 && displayedQuery === trimmedQuery
+
+  return { results, open, dismiss, reopen, rowsAreCurrent }
 }

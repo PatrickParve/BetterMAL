@@ -33,6 +33,16 @@
     var(--shadow);
 }
 
+/* The question mark is upright and larger than VS's italic letters. */
+.vs-badge--question {
+  font-size: 24px;
+  font-style: normal;
+}
+
+.vs-badge--question.vs-badge--lobby {
+  font-size: 28px;
+}
+
 @media (max-width: 640px) {
   /* The table's medallion sits over a 10px gap between the cards, so it
      shrinks to leave them room. The tile and setup sizes keep their own. */

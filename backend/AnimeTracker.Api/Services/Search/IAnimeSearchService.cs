@@ -11,8 +11,13 @@ public interface IAnimeSearchService
     /// the same ranking, the same 5-row budget, and the same 2-series cap as the
     /// merged stage, drawn from stored anime and stored series only — no MAL call
     /// in the path. With it true, MAL candidates are merged in as they are
-    /// today.</summary>
-    Task<List<AnimeSearchResultDto>> SearchAsync(string query, int limit, bool includeLive, CancellationToken ct = default);
+    /// today.
+    ///
+    /// With <paramref name="includeSeries"/> false no series row is listed, so all
+    /// <paramref name="limit"/> rows are anime. The series build a merged-stage
+    /// search schedules is unchanged: it never depends on what is listed.</summary>
+    Task<List<AnimeSearchResultDto>> SearchAsync(
+        string query, int limit, bool includeLive, bool includeSeries = true, CancellationToken ct = default);
 
     Task<SearchPageDto> SearchPageAsync(string query, string sortKey, int offset, int limit, CancellationToken ct = default);
 }

@@ -270,11 +270,14 @@ builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<IRecapService, RecapService>();
 builder.Services.AddScoped<IRecapAvailabilityService, RecapAvailabilityService>();
 
-// --- Games (Higher or Lower) ---
-// Random.Shared is safe to use from every request at once; the service takes a
-// Random so its tests can hand it a seeded one.
+// --- Games ---
+// Random.Shared is safe to use from every request at once; the services take a
+// Random so their tests can hand them a seeded one.
 builder.Services.AddSingleton(Random.Shared);
+builder.Services.AddScoped<GameLobbyReads>();
 builder.Services.AddScoped<IHigherOrLowerService, HigherOrLowerService>();
+builder.Services.AddScoped<IGameAnimeDetails, GameAnimeDetails>();
+builder.Services.AddScoped<IGuessTheAnimeService, GuessTheAnimeService>();
 
 // --- Single anime detail page ---
 builder.Services.AddScoped<IAnimeDetailService, AnimeDetailService>();

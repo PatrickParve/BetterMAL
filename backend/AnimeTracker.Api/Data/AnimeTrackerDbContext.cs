@@ -33,6 +33,8 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<AnimeScoreRecord> AnimeScoreRecords => Set<AnimeScoreRecord>();
     public DbSet<HigherOrLowerRun> HigherOrLowerRuns => Set<HigherOrLowerRun>();
     public DbSet<HigherOrLowerAppearance> HigherOrLowerAppearances => Set<HigherOrLowerAppearance>();
+    public DbSet<GuessTheAnimeRun> GuessTheAnimeRuns => Set<GuessTheAnimeRun>();
+    public DbSet<GuessTheAnimeAppearance> GuessTheAnimeAppearances => Set<GuessTheAnimeAppearance>();
     public DbSet<AnimeIdMapping> AnimeIdMappings => Set<AnimeIdMapping>();
     public DbSet<AnimeIdMappingSyncState> AnimeIdMappingSyncStates => Set<AnimeIdMappingSyncState>();
     public DbSet<TmdbTvImageSet> TmdbTvImageSets => Set<TmdbTvImageSet>();
@@ -253,6 +255,32 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
         });
 
         modelBuilder.Entity<HigherOrLowerAppearance>(entity =>
+        {
+            entity.HasOne<AnimeMetadata>()
+                .WithMany()
+                .HasForeignKey(e => e.AnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // The two Guess the Anime tables (add-guess-the-anime design.md D2), the
+        // same shape as Higher or Lower's: the run is the game in progress and
+        // is deleted when it ends, and the answer's foreign key cascades so a
+        // removed anime can't leave a dangling game.
+        modelBuilder.Entity<GuessTheAnimeRun>(entity =>
+        {
+            entity.HasOne<AnimeMetadata>()
+                .WithMany()
+                .HasForeignKey(e => e.AnswerAnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            // A double submit, or a guess from a tab behind the game, must not
+            // be counted twice: the second save finds GuessCount already moved.
+            entity.Property(e => e.GuessCount).IsConcurrencyToken();
+            entity.Property(e => e.ListScope).HasConversion<string>();
+            // MediaTypes (text[]) and GuessedAnimeIds (integer[]) come from the
+            // List<string>/List<int> properties, as Genres and PictureUrls do.
+        });
+
+        modelBuilder.Entity<GuessTheAnimeAppearance>(entity =>
         {
             entity.HasOne<AnimeMetadata>()
                 .WithMany()

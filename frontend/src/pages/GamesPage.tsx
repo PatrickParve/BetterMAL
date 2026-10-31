@@ -1,6 +1,6 @@
-import { getHigherOrLowerState } from '../api/client.ts'
-import type { HigherOrLowerStateDto } from '../api/types.ts'
-import { GAMES } from '../components/Games/games.ts'
+import { getGuessTheAnimeState, getHigherOrLowerState } from '../api/client.ts'
+import type { GuessTheAnimeStateDto, HigherOrLowerStateDto } from '../api/types.ts'
+import { GUESS_THE_ANIME, HIGHER_OR_LOWER } from '../components/Games/games.ts'
 import { GameTile } from '../components/Games/GameTile.tsx'
 import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
 import { LoadingNotice } from '../components/LoadingNotice.tsx'
@@ -10,24 +10,47 @@ import { preloadPictures } from '../utils/preloadPictures.ts'
 import './GamesPage.css'
 
 // The games available, one tile each (games-page). Only games that exist are
-// drawn, with no placeholder for one still to come. The one read is Higher or
-// Lower's own state, which holds its Continue streak and the two posters for
-// its tile, so the page needs no route of its own; when a second game exists a
-// `GET /api/games` can fold the two together (add-games-higher-or-lower design.md
-// D3). It is keyed on Hide NSFW, which shapes the posters. The read waits a
-// moment for the two posters to download, so the tile appears with its pictures
-// instead of drawing them in a beat later.
+// drawn, with no placeholder for one still to come. Each game's own state holds
+// its Continue progress and the two posters for its tile, so the page reads both
+// at once inside its one `usePageData` and needs no route of its own
+// (add-guess-the-anime design.md D3: a read takes about 12ms, so the two in a
+// `Promise.all` cost nothing over one). It is keyed on Hide NSFW, which shapes
+// the posters. The read waits a moment for the four posters to download, so the
+// tiles appear with their pictures instead of drawing them in a beat later; a
+// failed read fails the page, which shows the shared notice.
 // The longest the page waits for its pictures; a slow one is drawn when it comes.
 const PRELOAD_WAIT_MS = 1200
 
+type GamesData = {
+  higherOrLower: HigherOrLowerStateDto
+  guessTheAnime: GuessTheAnimeStateDto
+}
+
 export function GamesPage() {
   const { hideHentai } = useContentFilter()
-  const { data, failed, retry } = usePageData<HigherOrLowerStateDto>(`higher-or-lower:${hideHentai}`, () =>
-    getHigherOrLowerState({ hideHentai }).then(async (state) => {
-      await preloadPictures(state.pictures, 'tile', PRELOAD_WAIT_MS)
-      return state
-    }),
-  )
+  const { data, failed, retry } = usePageData<GamesData>(`games:${hideHentai}`, async () => {
+    const [higherOrLower, guessTheAnime] = await Promise.all([
+      getHigherOrLowerState({ hideHentai }),
+      getGuessTheAnimeState({ hideHentai }),
+    ])
+    await preloadPictures([...higherOrLower.pictures, ...guessTheAnime.pictures], 'tile', PRELOAD_WAIT_MS)
+    return { higherOrLower, guessTheAnime }
+  })
+
+  const streak =
+    data?.higherOrLower.game == null ? null : (
+      <>
+        Streak <b>{data.higherOrLower.game.streak.toLocaleString('en-US')}</b>
+      </>
+    )
+
+  // The guess a game in progress is on: one past the rows made.
+  const guess =
+    data?.guessTheAnime.game == null ? null : (
+      <>
+        Guess <b>{data.guessTheAnime.game.rows.length + 1}</b> of {data.guessTheAnime.game.maxGuesses}
+      </>
+    )
 
   return (
     <div className="games-page">
@@ -37,9 +60,8 @@ export function GamesPage() {
 
       {data && (
         <div className="games-page__grid">
-          {GAMES.map((game) => (
-            <GameTile key={game.to} game={game} pictures={data.pictures} streak={data.game?.streak ?? null} />
-          ))}
+          <GameTile game={HIGHER_OR_LOWER} pictures={data.higherOrLower.pictures} progress={streak} />
+          <GameTile game={GUESS_THE_ANIME} pictures={data.guessTheAnime.pictures} progress={guess} />
         </div>
       )}
       {failed && <LoadFailedNotice what="the games" onRetry={retry} />}

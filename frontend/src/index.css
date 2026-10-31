@@ -118,6 +118,12 @@
   --game-wrong: var(--status-dropped);
   --game-milestone: var(--medal-gold);
 
+  /* --game-correct as the colour of words (add-guess-the-anime design.md D11).
+     It was chosen for glows, and the light theme's green is 3.30:1 on the page,
+     too pale for text; darkened it is 5.51:1. The dark theme's is already
+     10.26:1, so it is the same colour there. */
+  --game-correct-text: color-mix(in srgb, var(--game-correct) 74%, black);
+
   /* Section colour families (section-colour-language capability): a family
      names what a section is about, not a rank or a score, so each gets its
      own pair rather than reusing the medal, tier, MAL, or mine tokens in
@@ -254,6 +260,7 @@
     --game-correct: var(--status-watching);
     --game-wrong: var(--status-dropped);
     --game-milestone: var(--medal-gold);
+    --game-correct-text: var(--game-correct);
 
     /* The year family is the one family whose *direction* flips: it fills
        toward white here instead of toward black. --fam-ink flips with it

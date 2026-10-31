@@ -1425,17 +1425,18 @@ export type TransferImportStatusDto = {
   dismissed: boolean
 }
 
-// Higher or Lower (add-games-higher-or-lower design.md D3): mirrors the
-// backend's HigherOrLowerDtos. Enums travel by name, like every enum here.
-export type HigherOrLowerListScope = 'All' | 'OnlyMyList' | 'NotOnMyList'
+// The games (add-games-higher-or-lower design.md D3): mirrors the backend's
+// GameSettings, GamePoolDto and HigherOrLowerDtos. Enums travel by name, like
+// every enum here.
+export type GameListScope = 'All' | 'OnlyMyList' | 'NotOnMyList'
 
 // What a game plays with. `mediaTypes` null means every type; the same shape is
 // the body of Start and, spread into query parameters, the pool count's query.
-export type HigherOrLowerSettings = {
+export type GameSettings = {
   yearFrom: number | null
   yearTo: number | null
   mediaTypes: string[] | null
-  list: HigherOrLowerListScope
+  list: GameListScope
   hideHentai: boolean
 }
 
@@ -1470,7 +1471,9 @@ export type HigherOrLowerStateDto = {
   pictures: string[]
 }
 
-export type HigherOrLowerPoolDto = {
+// How many anime some settings leave, and whether that is enough to play; each
+// game says what is enough.
+export type GamePoolDto = {
   count: number
   playable: boolean
 }
@@ -1492,4 +1495,83 @@ export type HigherOrLowerPickDto = {
 
 export type HigherOrLowerEndDto = {
   streak: number
+}
+
+// Guess the Anime (add-guess-the-anime design.md D3): mirrors the backend's
+// GuessTheAnimeDtos. The answer is in no response until the game has ended.
+
+// From the answer's side: `AnswerHigher` means the answer's number is higher than
+// the guess's, so the arrow points up.
+export type GuessCompared = 'Same' | 'AnswerHigher' | 'AnswerLower'
+
+// A numeric stat of a guess: year, episode count or MAL score. `value` is null
+// when it isn't known, and `compared` is null whenever the two numbers can't be
+// compared (unknown on the guess or on the answer), so an unknown is never green
+// and never has an arrow.
+export type GuessNumberDto = {
+  value: number | null
+  compared: GuessCompared | null
+}
+
+// A one-valued text stat: season (lower case, as the Season page's) or type.
+export type GuessTextDto = {
+  value: string | null
+  same: boolean
+}
+
+// One genre or studio, and whether the answer has it too.
+export type GuessTagDto = {
+  name: string
+  same: boolean
+}
+
+export type GuessTheAnimeRowDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  year: GuessNumberDto
+  season: GuessTextDto
+  genres: GuessTagDto[]
+  episodes: GuessNumberDto
+  studios: GuessTagDto[]
+  mediaType: GuessTextDto
+  score: GuessNumberDto
+}
+
+// The answer once a game has ended: its row, every stat the same, and whether it
+// is on my list.
+export type GuessTheAnimeAnswerDto = {
+  row: GuessTheAnimeRowDto
+  inMyList: boolean
+}
+
+export type GuessTheAnimeGameDto = {
+  id: number
+  maxGuesses: number
+  rows: GuessTheAnimeRowDto[]
+}
+
+export type GuessTheAnimeStateDto = {
+  game: GuessTheAnimeGameDto | null
+  // The years the eligible anime cover; null when there are none.
+  years: { min: number; max: number } | null
+  // Two posters of popular anime for the Games tile and the setup screen, never
+  // the answer's.
+  pictures: string[]
+}
+
+// Why a game ended with a guess: it was the answer, or the tenth and wrong.
+export type GuessTheAnimeEnd = 'Guessed' | 'OutOfGuesses'
+
+// The row of one guess and, when it ended the game, how, with the answer. On a win
+// the answer's row is the guess's own.
+export type GuessTheAnimeGuessDto = {
+  row: GuessTheAnimeRowDto
+  end: GuessTheAnimeEnd | null
+  answer: GuessTheAnimeAnswerDto | null
+}
+
+export type GuessTheAnimeEndDto = {
+  answer: GuessTheAnimeAnswerDto
 }

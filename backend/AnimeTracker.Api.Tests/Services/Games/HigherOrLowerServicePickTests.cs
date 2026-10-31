@@ -19,7 +19,13 @@ public class HigherOrLowerServicePickTests
         Converters = { new JsonStringEnumConverter() },
     };
 
-    private static HigherOrLowerService Service(AnimeTrackerDbContext db, int seed = 11) => new(db, new Random(seed));
+    // The lobby reads share the service's Random, as they do in the app, so a
+    // seeded draw gives the posters the same stream it always did.
+    private static HigherOrLowerService Service(AnimeTrackerDbContext db, int seed = 11)
+    {
+        var random = new Random(seed);
+        return new HigherOrLowerService(db, random, new GameLobbyReads(db, random));
+    }
 
     /// <summary>Anime 1 and 2 with the given scores, plus <paramref name="others"/>
     /// more (ids 3 upward) each with a score of its own.</summary>
@@ -699,7 +705,7 @@ public class HigherOrLowerServicePickTests
             db.AnimeMetadata.AddRange(
                 Anime(1, score: 9.0), Anime(2, score: 5.0), Anime(3, score: 6.0), Anime(4, score: 6.5));
             await db.SaveChangesAsync();
-            var run = await AddRunAsync(db, 1, 2, settings: AnyAnime with { List = HigherOrLowerListScope.NotOnMyList });
+            var run = await AddRunAsync(db, 1, 2, settings: AnyAnime with { List = GameListScope.NotOnMyList });
             // While the game is under way, 3 is added to my list.
             db.UserAnimeEntries.Add(OnList(3));
             await db.SaveChangesAsync();

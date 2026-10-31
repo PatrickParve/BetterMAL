@@ -1,0 +1,177 @@
+/* The board is as tall as the window under the navbar and the page does not scroll:
+   only the list of guesses does (add-guess-the-anime design.md D12). The bar, with
+   the field, stays where it is because nothing above it moves, and the column
+   headings stay at the top of the list because they are inside it, so they line up
+   with the rows whatever a scrollbar takes. Its height is the window's, less the
+   navbar and the page's own 24px above and below, and one more pixel so rounding
+   never makes the page scroll. On a window too short for that, the board keeps a
+   least height and the page scrolls like any other. It is narrower than the window
+   (1,040px) so a row's eight columns don't spread out across a wide screen. */
+.guess-page {
+  --guess-bar-h: 60px;
+  --guess-pad: 12px;
+  display: flex;
+  flex-direction: column;
+  max-width: 1040px;
+  height: calc(100svh - var(--navbar-height, 65px) - 49px);
+  min-height: 360px;
+  margin: 0 auto;
+}
+
+/* Above the list, so the field's dropdown, which hangs out of the bar over the
+   headings and the rows, is painted over them. */
+.guess-bar {
+  position: relative;
+  z-index: 20;
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr minmax(0, 560px) 1fr;
+  align-items: center;
+  gap: 14px;
+  box-sizing: border-box;
+  height: var(--guess-bar-h);
+  background: var(--bg);
+}
+
+.guess-bar > :first-child {
+  justify-self: start;
+}
+
+.guess-bar > :last-child {
+  justify-self: end;
+}
+
+/* Which guess I'm on, as Higher or Lower's streak is drawn. */
+.guess-bar__count {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.guess-bar__label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.guess-bar__value {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The verdict takes the field's place once the game has ended. */
+.guess-bar__verdict {
+  margin: 0;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.guess-bar__verdict--won {
+  color: var(--game-correct-text);
+}
+
+/* A loss or a give-up, in the game's red, so it can't be taken for a win. */
+.guess-bar__verdict--lost {
+  color: var(--game-wrong);
+}
+
+.guess-bar__end,
+.guess-bar__again {
+  white-space: nowrap;
+}
+
+/* The list: the one thing on the page that scrolls, with the column headings at its
+   top in the rows' own grid (GuessRow.css), so they line up. Its scrollbar is hidden:
+   it still scrolls with the wheel, a trackpad, a finger and the keys, and with no bar
+   there is no room for one to take, so the headings and the rows are the same width
+   always. It is positioned so the screen-reader labels in each row, which are
+   absolute, are contained and clipped by it: without that they sit outside its
+   clipping at their static positions and make the page itself taller than the
+   window. */
+.guess-scroll {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.guess-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.guess-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-block: 6px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.guess-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Below 1024px a row is a card, which needs no headings. The bar's three parts
+   share a line. */
+@media (max-width: 1023px) {
+  .guess-page {
+    --guess-pad: 10px;
+  }
+
+  .guess-head {
+    display: none;
+  }
+
+  .guess-bar {
+    gap: 10px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+}
+
+/* Below 641px the bar is two lines, with the field or the verdict underneath. */
+@media (max-width: 640px) {
+  /* The page's 24px gutter is more than a phone can spare: the board takes 8px of it,
+     which leaves the 16px the design's measurements were made with, and is what keeps
+     the five short stats on one line at 375px. */
+  .guess-page {
+    --guess-pad: 2px;
+    margin-inline: -8px;
+  }
+
+  .guess-row--answer {
+    --guess-pad: 8px;
+  }
+
+  .guess-bar {
+    height: auto;
+    padding: 8px 0;
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+    row-gap: 8px;
+  }
+
+  .guess-bar .guess-search,
+  .guess-bar .guess-bar__verdict {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    max-width: none;
+  }
+}
+

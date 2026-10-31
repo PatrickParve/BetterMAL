@@ -6,7 +6,7 @@ namespace AnimeTracker.Api.Tests.Services.Games;
 
 // add-games-higher-or-lower task 3.1: what settings can describe a game at all.
 // Whether enough anime match them is another question, which the data answers.
-public class HigherOrLowerSettingsTests
+public class GameSettingsTests
 {
     [Fact]
     public void TheDefaultsAreValid()
@@ -28,7 +28,7 @@ public class HigherOrLowerSettingsTests
     [Fact]
     public void AFromAfterTheToIsRefused()
     {
-        var ex = Assert.Throws<HigherOrLowerSettingsException>(
+        var ex = Assert.Throws<GameSettingsException>(
             () => (AnyAnime with { YearFrom = 2016, YearTo = 2015 }).Validate());
 
         Assert.Contains("2016", ex.Message);
@@ -42,15 +42,15 @@ public class HigherOrLowerSettingsTests
     [InlineData(null, 99_999)]
     public void AYearThatIsNotAYearIsRefused(int? from, int? to)
     {
-        Assert.Throws<HigherOrLowerSettingsException>(
+        Assert.Throws<GameSettingsException>(
             () => (AnyAnime with { YearFrom = from, YearTo = to }).Validate());
     }
 
     [Fact]
     public void AnUnknownListSettingIsRefused()
     {
-        Assert.Throws<HigherOrLowerSettingsException>(
-            () => (AnyAnime with { List = (HigherOrLowerListScope)7 }).Validate());
+        Assert.Throws<GameSettingsException>(
+            () => (AnyAnime with { List = (GameListScope)7 }).Validate());
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public class HigherOrLowerSettingsTests
     [Fact]
     public void NormalizingChangesNothingElse()
     {
-        var settings = new HigherOrLowerSettings(2010, 2015, ["ova"], HigherOrLowerListScope.NotOnMyList, true);
+        var settings = new GameSettings(2010, 2015, ["ova"], GameListScope.NotOnMyList, true);
 
         Assert.Equal(settings, settings.Normalized(), new SettingsComparer());
     }
@@ -81,26 +81,26 @@ public class HigherOrLowerSettingsTests
     {
         var run = new HigherOrLowerRun
         {
-            YearFrom = 2000, YearTo = 2009, MediaTypes = ["tv"], ListScope = HigherOrLowerListScope.OnlyMyList, HideHentai = true,
+            YearFrom = 2000, YearTo = 2009, MediaTypes = ["tv"], ListScope = GameListScope.OnlyMyList, HideHentai = true,
         };
 
-        var settings = HigherOrLowerSettings.From(run);
+        var settings = GameSettings.From(run);
 
         Assert.Equal(2000, settings.YearFrom);
         Assert.Equal(2009, settings.YearTo);
         Assert.Equal(["tv"], settings.MediaTypes);
-        Assert.Equal(HigherOrLowerListScope.OnlyMyList, settings.List);
+        Assert.Equal(GameListScope.OnlyMyList, settings.List);
         Assert.True(settings.HideHentai);
     }
 
     // The record's own equality compares MediaTypes by reference.
-    private class SettingsComparer : IEqualityComparer<HigherOrLowerSettings>
+    private class SettingsComparer : IEqualityComparer<GameSettings>
     {
-        public bool Equals(HigherOrLowerSettings? a, HigherOrLowerSettings? b) =>
+        public bool Equals(GameSettings? a, GameSettings? b) =>
             a is not null && b is not null
             && a.YearFrom == b.YearFrom && a.YearTo == b.YearTo && a.List == b.List && a.HideHentai == b.HideHentai
             && (a.MediaTypes ?? []).SequenceEqual(b.MediaTypes ?? []);
 
-        public int GetHashCode(HigherOrLowerSettings s) => HashCode.Combine(s.YearFrom, s.YearTo, s.List, s.HideHentai);
+        public int GetHashCode(GameSettings s) => HashCode.Combine(s.YearFrom, s.YearTo, s.List, s.HideHentai);
     }
 }

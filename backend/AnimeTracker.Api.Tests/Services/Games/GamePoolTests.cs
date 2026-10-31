@@ -6,13 +6,13 @@ using static AnimeTracker.Api.Tests.Services.Games.HigherOrLowerTestKit;
 
 namespace AnimeTracker.Api.Tests.Services.Games;
 
-// add-games-higher-or-lower design D4: HigherOrLowerPool.Query is the one
+// add-games-higher-or-lower design D4: GamePool.Query is the one
 // definition of "eligible" behind the count, the start and every pick, so each
 // setting is pinned here against rows that sit either side of it.
-public class HigherOrLowerPoolTests
+public class GamePoolTests
 {
-    private static async Task<List<int>> IdsAsync(AnimeTrackerDbContext db, HigherOrLowerSettings settings) =>
-        await HigherOrLowerPool.Query(db, settings, Now).OrderBy(a => a.Id).Select(a => a.Id).ToListAsync();
+    private static async Task<List<int>> IdsAsync(AnimeTrackerDbContext db, GameSettings settings) =>
+        await GamePool.Query(db, settings, Now).OrderBy(a => a.Id).Select(a => a.Id).ToListAsync();
 
     // ---- what makes a row eligible at all ----
 
@@ -144,8 +144,8 @@ public class HigherOrLowerPoolTests
         db.UserAnimeEntries.AddRange(OnList(1), OnList(2));
         await db.SaveChangesAsync();
 
-        Assert.Equal([1], await IdsAsync(db, AnyAnime with { List = HigherOrLowerListScope.OnlyMyList }));
-        Assert.Empty(await IdsAsync(db, AnyAnime with { List = HigherOrLowerListScope.NotOnMyList }));
+        Assert.Equal([1], await IdsAsync(db, AnyAnime with { List = GameListScope.OnlyMyList }));
+        Assert.Empty(await IdsAsync(db, AnyAnime with { List = GameListScope.NotOnMyList }));
     }
 
     // ---- release years ----
@@ -286,7 +286,7 @@ public class HigherOrLowerPoolTests
         using var db = CreateDb();
         await SeedEveryStatusAsync(db);
 
-        var ids = await IdsAsync(db, AnyAnime with { List = HigherOrLowerListScope.OnlyMyList });
+        var ids = await IdsAsync(db, AnyAnime with { List = GameListScope.OnlyMyList });
 
         Assert.Equal([1, 2, 3, 4, 5, 6], ids);
     }
@@ -297,7 +297,7 @@ public class HigherOrLowerPoolTests
         using var db = CreateDb();
         await SeedEveryStatusAsync(db);
 
-        var ids = await IdsAsync(db, AnyAnime with { List = HigherOrLowerListScope.NotOnMyList });
+        var ids = await IdsAsync(db, AnyAnime with { List = GameListScope.NotOnMyList });
 
         Assert.Equal([7, 8], ids);
     }
@@ -308,7 +308,7 @@ public class HigherOrLowerPoolTests
         using var db = CreateDb();
         await SeedEveryStatusAsync(db);
 
-        Assert.Equal(Enumerable.Range(1, 8), await IdsAsync(db, AnyAnime with { List = HigherOrLowerListScope.All }));
+        Assert.Equal(Enumerable.Range(1, 8), await IdsAsync(db, AnyAnime with { List = GameListScope.All }));
     }
 
     [Fact]
@@ -319,7 +319,7 @@ public class HigherOrLowerPoolTests
         db.UserAnimeEntries.AddRange(OnList(1), OnList(2), OnList(3));
         await db.SaveChangesAsync();
 
-        Assert.Equal([1], await IdsAsync(db, AnyAnime with { List = HigherOrLowerListScope.OnlyMyList }));
+        Assert.Equal([1], await IdsAsync(db, AnyAnime with { List = GameListScope.OnlyMyList }));
     }
 
     // ---- Hide NSFW ----
@@ -360,7 +360,7 @@ public class HigherOrLowerPoolTests
         db.UserAnimeEntries.Add(OnList(2));
         await db.SaveChangesAsync();
 
-        var settings = new HigherOrLowerSettings(2020, 2020, ["tv"], HigherOrLowerListScope.NotOnMyList, true);
+        var settings = new GameSettings(2020, 2020, ["tv"], GameListScope.NotOnMyList, true);
 
         Assert.Equal([1], await IdsAsync(db, settings));
     }
@@ -375,33 +375,10 @@ public class HigherOrLowerPoolTests
         db.UserAnimeEntries.Add(OnList(2));
         await db.SaveChangesAsync();
 
-        var candidates = await HigherOrLowerPool.Query(db, AnyAnime, Now).OrderBy(a => a.Id).ToCandidates().ToListAsync();
+        var candidates = await GamePool.Query(db, AnyAnime, Now).OrderBy(a => a.Id).ToCandidates().ToListAsync();
 
         Assert.Equal(
             [new PickCandidate(1, 8.31, 42, false), new PickCandidate(2, 6.5, null, true)],
             candidates);
-    }
-
-    // ---- playable ----
-
-    [Fact]
-    public void FewerThanTwoDifferentScoresIsNotPlayable()
-    {
-        Assert.False(HigherOrLowerPool.IsPlayable([]));
-        Assert.False(HigherOrLowerPool.IsPlayable([7.5]));
-        Assert.False(HigherOrLowerPool.IsPlayable([7.5, 7.5, 7.5]));
-    }
-
-    [Fact]
-    public void ScoresThatDifferOnlyBelowTheSecondDecimalAreTheSame()
-    {
-        Assert.False(HigherOrLowerPool.IsPlayable([7.85, 7.8500000001, 7.854]));
-    }
-
-    [Fact]
-    public void TwoDifferentScoresArePlayable()
-    {
-        Assert.True(HigherOrLowerPool.IsPlayable([7.5, 7.51]));
-        Assert.True(HigherOrLowerPool.IsPlayable([7.5, 7.5, 9.0]));
     }
 }

@@ -33,6 +33,13 @@
   transform: translate(-50%, -50%);
 }
 
+/* A game about naming an anime hides its posters: blurred and scaled up inside
+   their frames, so the frames' edges stay crisp. */
+.poster-pair--question .poster-picture__art {
+  filter: blur(7px) saturate(1.1);
+  transform: scale(1.14);
+}
+
 /* The larger pair on the setup screen. */
 .poster-pair--lobby {
   width: 300px;

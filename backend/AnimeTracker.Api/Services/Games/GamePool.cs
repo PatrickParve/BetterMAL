@@ -4,11 +4,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.Games;
 
-/// <summary>Which stored anime a Higher or Lower game can show
+/// <summary>Which stored anime a game can use, for every game on the Games page
 /// (add-games-higher-or-lower design.md D4). <see cref="Query"/> is the one
 /// definition behind the count, the start and every pick, so what the setup
 /// screen counts is exactly what a game draws from.</summary>
-public static class HigherOrLowerPool
+public static class GamePool
 {
     // MAL's rating for Hentai, as the season read filters on it.
     internal const string HentaiRating = "rx";
@@ -33,7 +33,7 @@ public static class HigherOrLowerPool
     /// passes Hide NSFW, as it does in the season read: only a confirmed rx is
     /// left out.</summary>
     public static IQueryable<AnimeMetadata> Query(
-        AnimeTrackerDbContext db, HigherOrLowerSettings settings, DateTimeOffset nowUtc)
+        AnimeTrackerDbContext db, GameSettings settings, DateTimeOffset nowUtc)
     {
         var query = db.AnimeMetadata.AsNoTracking()
             .Where(a => a.MalScore > 0 && a.PictureUrl != null)
@@ -60,8 +60,8 @@ public static class HigherOrLowerPool
 
         query = settings.List switch
         {
-            HigherOrLowerListScope.OnlyMyList => query.Where(a => a.UserEntry != null),
-            HigherOrLowerListScope.NotOnMyList => query.Where(a => a.UserEntry == null),
+            GameListScope.OnlyMyList => query.Where(a => a.UserEntry != null),
+            GameListScope.NotOnMyList => query.Where(a => a.UserEntry == null),
             _ => query,
         };
 
@@ -74,21 +74,4 @@ public static class HigherOrLowerPool
     /// <summary>The four columns a draw needs, rather than whole rows.</summary>
     public static IQueryable<PickCandidate> ToCandidates(this IQueryable<AnimeMetadata> query) =>
         query.Select(a => new PickCandidate(a.Id, a.MalScore!.Value, a.PopularityRank, a.UserEntry != null));
-
-    /// <summary>Playable means at least two different scores at the two decimals
-    /// shown: with fewer, no first pair can be drawn.</summary>
-    public static bool IsPlayable(IEnumerable<double> scores)
-    {
-        long? first = null;
-        foreach (var score in scores)
-        {
-            var hundredths = HigherOrLowerPicker.Hundredths(score);
-            if (first is null)
-                first = hundredths;
-            else if (hundredths != first)
-                return true;
-        }
-
-        return false;
-    }
 }

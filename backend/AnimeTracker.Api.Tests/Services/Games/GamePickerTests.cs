@@ -5,7 +5,7 @@ namespace AnimeTracker.Api.Tests.Services.Games;
 // add-games-higher-or-lower design D5-D7 and the higher-or-lower-anime-selection
 // spec. The picker is pure apart from its Random, so each case hands it a seeded
 // one and counts draws.
-public class HigherOrLowerPickerTests
+public class GamePickerTests
 {
     private static readonly IReadOnlySet<int> NoneUsed = new HashSet<int>();
     private static readonly IReadOnlyDictionary<int, int> NoneRecent = new Dictionary<int, int>();
@@ -25,7 +25,7 @@ public class HigherOrLowerPickerTests
         var counts = new Dictionary<int, int>();
         for (var i = 0; i < draws; i++)
         {
-            var picked = HigherOrLowerPicker.Pick(pool, used ?? NoneUsed, avoid, recent ?? NoneRecent, random);
+            var picked = GamePicker.Pick(pool, used ?? NoneUsed, avoid, recent ?? NoneRecent, GameWeights.Popularity, random);
             Assert.NotNull(picked);
             counts[picked.AnimeId] = counts.GetValueOrDefault(picked.AnimeId) + 1;
         }
@@ -86,8 +86,8 @@ public class HigherOrLowerPickerTests
     [InlineData(2.72, 2.73, false)]
     public void SameScoreMeansTheSameTwoDecimals(double a, double b, bool same)
     {
-        Assert.Equal(same, HigherOrLowerPicker.SameScore(a, b));
-        Assert.Equal(same, HigherOrLowerPicker.SameScore(b, a));
+        Assert.Equal(same, GamePicker.SameScore(a, b));
+        Assert.Equal(same, GamePicker.SameScore(b, a));
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class HigherOrLowerPickerTests
     {
         var pool = new List<PickCandidate> { Candidate(1, score: 7.85) };
 
-        var picked = HigherOrLowerPicker.Pick(pool, NoneUsed, avoidScore: null, NoneRecent, new Random(1));
+        var picked = GamePicker.Pick(pool, NoneUsed, avoidScore: null, NoneRecent, GameWeights.Popularity, new Random(1));
 
         Assert.Equal(1, picked?.AnimeId);
     }
@@ -105,7 +105,7 @@ public class HigherOrLowerPickerTests
     [Fact]
     public void AnEmptyPoolReturnsNull()
     {
-        Assert.Null(HigherOrLowerPicker.Pick([], NoneUsed, null, NoneRecent, new Random(1)));
+        Assert.Null(GamePicker.Pick([], NoneUsed, null, NoneRecent, GameWeights.Popularity, new Random(1)));
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public class HigherOrLowerPickerTests
     {
         var pool = new List<PickCandidate> { Candidate(1), Candidate(2, score: 8) };
 
-        Assert.Null(HigherOrLowerPicker.Pick(pool, new HashSet<int> { 1, 2 }, null, NoneRecent, new Random(1)));
+        Assert.Null(GamePicker.Pick(pool, new HashSet<int> { 1, 2 }, null, NoneRecent, GameWeights.Popularity, new Random(1)));
     }
 
     [Fact]
@@ -121,7 +121,7 @@ public class HigherOrLowerPickerTests
     {
         var pool = new List<PickCandidate> { Candidate(1, score: 7.85), Candidate(2, score: 7.85) };
 
-        Assert.Null(HigherOrLowerPicker.Pick(pool, NoneUsed, 7.85, NoneRecent, new Random(1)));
+        Assert.Null(GamePicker.Pick(pool, NoneUsed, 7.85, NoneRecent, GameWeights.Popularity, new Random(1)));
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public class HigherOrLowerPickerTests
     {
         var pool = new List<PickCandidate> { Candidate(1, score: 7.0), Candidate(2, score: 8.0) };
 
-        Assert.Null(HigherOrLowerPicker.Pick(pool, new HashSet<int> { 1 }, 8.0, NoneRecent, new Random(1)));
+        Assert.Null(GamePicker.Pick(pool, new HashSet<int> { 1 }, 8.0, NoneRecent, GameWeights.Popularity, new Random(1)));
     }
 
     [Fact]
@@ -299,7 +299,7 @@ public class HigherOrLowerPickerTests
         {
             var random = new Random(seed);
             return Enumerable.Range(0, 20).Select(_ =>
-                HigherOrLowerPicker.Pick(pool, NoneUsed, null, NoneRecent, random)!.AnimeId).ToArray();
+                GamePicker.Pick(pool, NoneUsed, null, NoneRecent, GameWeights.Popularity, random)!.AnimeId).ToArray();
         }
 
         Assert.Equal(Sequence(3), Sequence(3));

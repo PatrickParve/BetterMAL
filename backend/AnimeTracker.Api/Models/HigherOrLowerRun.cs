@@ -1,15 +1,5 @@
 namespace AnimeTracker.Api.Models;
 
-/// <summary>Which anime a Higher or Lower game may draw on, by whether they are
-/// on my list (add-games-higher-or-lower design.md D4). Stored by name, as
-/// WatchStatus is.</summary>
-public enum HigherOrLowerListScope
-{
-    All,
-    OnlyMyList,
-    NotOnMyList,
-}
-
 /// <summary>The one Higher or Lower game in progress, and nothing else about it
 /// (add-games-higher-or-lower design.md D2). Deleted when the game ends, however
 /// it ends, so "in progress" is simply "a row exists" and no best score, past
@@ -45,6 +35,6 @@ public class HigherOrLowerRun
     /// <summary>Null means every type.</summary>
     public List<string>? MediaTypes { get; set; }
 
-    public HigherOrLowerListScope ListScope { get; set; }
+    public GameListScope ListScope { get; set; }
     public bool HideHentai { get; set; }
 }

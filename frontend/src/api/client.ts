@@ -8,6 +8,12 @@ import type {
   AnimeUpdateDto,
   AppStatusDto,
   AppStatusSeenRequest,
+  GamePoolDto,
+  GameSettings,
+  GuessTheAnimeEndDto,
+  GuessTheAnimeGameDto,
+  GuessTheAnimeGuessDto,
+  GuessTheAnimeStateDto,
   HealthStatus,
   HeldChangeDecisionDto,
   HeldChangeDto,
@@ -15,8 +21,6 @@ import type {
   HigherOrLowerEndDto,
   HigherOrLowerGameDto,
   HigherOrLowerPickDto,
-  HigherOrLowerPoolDto,
-  HigherOrLowerSettings,
   HigherOrLowerStateDto,
   JobStatusDto,
   MainDashboardDto,
@@ -105,12 +109,23 @@ async function performFetch(input: string, init?: RequestInit): Promise<Response
       res = await fetch(input, { ...init, headers })
     }
   } catch (err) {
-    reportUnreachable()
+    // A request the page cancelled itself, such as a search the next keystroke
+    // superseded, never failed to reach the backend.
+    if (!(err instanceof DOMException && err.name === 'AbortError')) reportUnreachable()
     throw err
   }
-  if (res.status >= 500) reportUnreachable()
+  if (res.status >= 500 && !answeredByTheApp(res)) reportUnreachable()
   else reportReachable()
   return res
+}
+
+// A 502 whose body is the app's own `{ "error": ... }` JSON is the backend
+// answering that a call it made to MyAnimeList failed (Guess the Anime's start
+// and guess), not the backend being down: a proxy in front of a dead backend
+// answers 502 in HTML. Every other 5xx still counts as an outage
+// (connection-status).
+function answeredByTheApp(res: Response): boolean {
+  return res.status === 502 && (res.headers.get('Content-Type') ?? '').includes('application/json')
 }
 
 // Thrown by fetchJson/fetchVoid on a non-ok response, carrying the `{ "error"
@@ -195,14 +210,24 @@ export function getHealth(): Promise<HealthStatus> {
 
 // `stage: 'local'` requests the cache-only stage (`&stage=local`); `'full'`
 // omits the param so the URL — and the de-duplication in fetchRaw above —
-// matches today's merged call byte-for-byte.
+// matches today's merged call byte-for-byte. The options are Guess the Anime's
+// (add-guess-the-anime design.md D7) and are off by default for the same reason:
+// `series: false` leaves series rows out and `limit` asks for more than the
+// navbar's five (the server clamps it to 15). With neither set the URL is the
+// navbar's and Settings' exactly.
 export function searchAnime(
   query: string,
   stage: 'local' | 'full',
   signal?: AbortSignal,
+  options?: { series?: boolean; limit?: number },
 ): Promise<AnimeSearchResult[]> {
   const stageParam = stage === 'local' ? '&stage=local' : ''
-  return fetchJson<AnimeSearchResult[]>(`/api/anime/search?q=${encodeURIComponent(query)}${stageParam}`, { signal })
+  const seriesParam = options?.series === false ? '&series=false' : ''
+  const limitParam = options?.limit === undefined ? '' : `&limit=${options.limit}`
+  return fetchJson<AnimeSearchResult[]>(
+    `/api/anime/search?q=${encodeURIComponent(query)}${stageParam}${seriesParam}${limitParam}`,
+    { signal },
+  )
 }
 
 export function getSearchPage(
@@ -703,19 +728,19 @@ export function getHigherOrLowerState(params: { hideHentai: boolean }): Promise<
 
 // How many anime some settings leave. `types` repeats once per type, and none
 // means every type; an unset year is left out.
-export function getHigherOrLowerPool(settings: HigherOrLowerSettings): Promise<HigherOrLowerPoolDto> {
+export function getHigherOrLowerPool(settings: GameSettings): Promise<GamePoolDto> {
   const query = new URLSearchParams()
   if (settings.yearFrom !== null) query.set('yearFrom', String(settings.yearFrom))
   if (settings.yearTo !== null) query.set('yearTo', String(settings.yearTo))
   for (const type of settings.mediaTypes ?? []) query.append('types', type)
   query.set('list', settings.list)
   query.set('hideHentai', String(settings.hideHentai))
-  return fetchJson<HigherOrLowerPoolDto>(`/api/games/higher-or-lower/pool?${query.toString()}`)
+  return fetchJson<GamePoolDto>(`/api/games/higher-or-lower/pool?${query.toString()}`)
 }
 
 // Replaces any game in progress. 400 for settings that can't describe a game,
 // 409 when they leave too few anime to play; both throw ApiError.
-export function startHigherOrLower(settings: HigherOrLowerSettings): Promise<HigherOrLowerGameDto> {
+export function startHigherOrLower(settings: GameSettings): Promise<HigherOrLowerGameDto> {
   return fetchJson<HigherOrLowerGameDto>('/api/games/higher-or-lower/runs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -735,4 +760,50 @@ export function pickHigherOrLower(runId: number, round: number, animeId: number)
 
 export function endHigherOrLower(runId: number): Promise<HigherOrLowerEndDto> {
   return fetchJson<HigherOrLowerEndDto>(`/api/games/higher-or-lower/runs/${runId}/end`, { method: 'POST' })
+}
+
+// Guess the Anime (add-guess-the-anime design.md D3). The game runs on the server,
+// so a guess is sent and its comparison comes back; the answer is in no response
+// until the game ends. Searching has no call here: the field uses searchAnime.
+export function getGuessTheAnimeState(params: { hideHentai: boolean }): Promise<GuessTheAnimeStateDto> {
+  const query = new URLSearchParams({ hideHentai: String(params.hideHentai) })
+  return fetchJson<GuessTheAnimeStateDto>(`/api/games/guess-the-anime?${query.toString()}`)
+}
+
+// How many anime some settings leave; the same query as Higher or Lower's.
+export function getGuessTheAnimePool(settings: GameSettings): Promise<GamePoolDto> {
+  const query = new URLSearchParams()
+  if (settings.yearFrom !== null) query.set('yearFrom', String(settings.yearFrom))
+  if (settings.yearTo !== null) query.set('yearTo', String(settings.yearTo))
+  for (const type of settings.mediaTypes ?? []) query.append('types', type)
+  query.set('list', settings.list)
+  query.set('hideHentai', String(settings.hideHentai))
+  return fetchJson<GamePoolDto>(`/api/games/guess-the-anime/pool?${query.toString()}`)
+}
+
+// Replaces any game in progress. 400 for settings that can't describe a game, 409
+// when they leave no anime, and 502, with a reason, when no answer could be
+// settled; all throw ApiError.
+export function startGuessTheAnime(settings: GameSettings): Promise<GuessTheAnimeGameDto> {
+  return fetchJson<GuessTheAnimeGameDto>('/api/games/guess-the-anime/runs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+}
+
+// `number` is the guess this is, 1-based. 404 for a game no longer in progress and
+// 409 for a guess it has passed throw ApiError and the board re-reads the page's
+// state; 400 for an anime already guessed and 502 for details that couldn't be
+// fetched throw ApiError and count nothing.
+export function guessTheAnime(runId: number, number: number, animeId: number): Promise<GuessTheAnimeGuessDto> {
+  return fetchJson<GuessTheAnimeGuessDto>(`/api/games/guess-the-anime/runs/${runId}/guesses`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ number, animeId }),
+  })
+}
+
+export function endGuessTheAnime(runId: number): Promise<GuessTheAnimeEndDto> {
+  return fetchJson<GuessTheAnimeEndDto>(`/api/games/guess-the-anime/runs/${runId}/end`, { method: 'POST' })
 }

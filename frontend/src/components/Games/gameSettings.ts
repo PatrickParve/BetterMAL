@@ -1,28 +1,28 @@
-import type { HigherOrLowerListScope, HigherOrLowerSettings } from '../../api/types.ts'
+import type { GameListScope, GameSettings } from '../../api/types.ts'
 import { MEDIA_TYPE_ORDER } from '../../utils/anime.ts'
 
-// What the setup screen chooses. Hide NSFW is the app-wide setting, read when a
-// game starts, so it isn't one of these (add-games-higher-or-lower design.md D2:
-// a game keeps the Hide NSFW setting it started with).
-export type HigherOrLowerLobbySettings = Omit<HigherOrLowerSettings, 'hideHentai'>
+// What the setup screen chooses, the same for every game. Hide NSFW is the
+// app-wide setting, read when a game starts, so it isn't one of these
+// (add-games-higher-or-lower design.md D2: a game keeps the Hide NSFW setting it
+// started with).
+export type GameLobbySettings = Omit<GameSettings, 'hideHentai'>
 
-export const LIST_SCOPES: { value: HigherOrLowerListScope; label: string }[] = [
+export const LIST_SCOPES: { value: GameListScope; label: string }[] = [
   { value: 'All', label: 'All anime' },
   { value: 'OnlyMyList', label: 'Only my list' },
   { value: 'NotOnMyList', label: 'Not in my list' },
 ]
 
-export const DEFAULT_SETTINGS: HigherOrLowerLobbySettings = {
+export const DEFAULT_SETTINGS: GameLobbySettings = {
   yearFrom: null,
   yearTo: null,
   mediaTypes: null,
   list: 'All',
 }
 
-// A per-browser preference, as bettermal.hideNsfw is, so nothing on the server
-// has to outlive the game for the setup screen to remember it (design.md D2).
-const STORAGE_KEY = 'bettermal.higherOrLower.settings'
-
+// Each game keeps its own settings, as a per-browser preference like
+// bettermal.hideNsfw, so nothing on the server has to outlive the game for the
+// setup screen to remember them (design.md D2). The game names its key.
 function asYear(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) ? value : null
 }
@@ -31,9 +31,9 @@ function asYear(value: unknown): number | null {
 // longer means anything (a type that was renamed, a hand-edited entry) falls
 // back to its default rather than breaking the screen. Storage can throw (a
 // private window, blocked site data), and then there is simply nothing stored.
-export function readStoredSettings(): HigherOrLowerLobbySettings {
+export function readStoredSettings(storageKey: string): GameLobbySettings {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
+    const raw = window.localStorage.getItem(storageKey)
     if (raw === null) return DEFAULT_SETTINGS
     const stored = JSON.parse(raw) as Record<string, unknown> | null
     if (stored === null || typeof stored !== 'object') return DEFAULT_SETTINGS
@@ -53,9 +53,9 @@ export function readStoredSettings(): HigherOrLowerLobbySettings {
   }
 }
 
-export function writeStoredSettings(settings: HigherOrLowerLobbySettings): void {
+export function writeStoredSettings(storageKey: string, settings: GameLobbySettings): void {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+    window.localStorage.setItem(storageKey, JSON.stringify(settings))
   } catch {
     // Nothing to remember it in: the next visit opens on the defaults.
   }
@@ -65,9 +65,9 @@ export function writeStoredSettings(settings: HigherOrLowerLobbySettings): void 
 // narrowed it) can't be chosen in the selects, so it counts as Any instead of
 // leaving a select showing a value it doesn't offer.
 export function withinYears(
-  settings: HigherOrLowerLobbySettings,
+  settings: GameLobbySettings,
   years: { min: number; max: number } | null,
-): HigherOrLowerLobbySettings {
+): GameLobbySettings {
   const inside = (year: number | null) => (year !== null && years !== null && year >= years.min && year <= years.max ? year : null)
   const yearFrom = inside(settings.yearFrom)
   const yearTo = inside(settings.yearTo)
@@ -77,12 +77,12 @@ export function withinYears(
 
 // Setting one end past the other moves the other to match, so the range is
 // never backwards (higher-or-lower "The setup screen sets what a game plays with").
-export function withYearFrom(settings: HigherOrLowerLobbySettings, year: number | null): HigherOrLowerLobbySettings {
+export function withYearFrom(settings: GameLobbySettings, year: number | null): GameLobbySettings {
   const yearTo = year !== null && settings.yearTo !== null && year > settings.yearTo ? year : settings.yearTo
   return { ...settings, yearFrom: year, yearTo }
 }
 
-export function withYearTo(settings: HigherOrLowerLobbySettings, year: number | null): HigherOrLowerLobbySettings {
+export function withYearTo(settings: GameLobbySettings, year: number | null): GameLobbySettings {
   const yearFrom = year !== null && settings.yearFrom !== null && year < settings.yearFrom ? year : settings.yearFrom
   return { ...settings, yearFrom, yearTo: year }
 }
@@ -90,7 +90,7 @@ export function withYearTo(settings: HigherOrLowerLobbySettings, year: number | 
 // With All pressed (null), pressing a type selects that type alone. Later
 // presses add or remove types. Removing the last one, or pressing every type,
 // returns to All. Kept in MEDIA_TYPE_ORDER so the same choice is the same list.
-export function withTypeToggled(settings: HigherOrLowerLobbySettings, type: string): HigherOrLowerLobbySettings {
+export function withTypeToggled(settings: GameLobbySettings, type: string): GameLobbySettings {
   if (settings.mediaTypes === null) return { ...settings, mediaTypes: [type] }
   const chosen = settings.mediaTypes.includes(type)
     ? settings.mediaTypes.filter((t) => t !== type)
@@ -100,6 +100,6 @@ export function withTypeToggled(settings: HigherOrLowerLobbySettings, type: stri
 }
 
 // The pool read's identity: everything the count depends on.
-export function settingsKey(settings: HigherOrLowerLobbySettings, hideHentai: boolean): string {
+export function settingsKey(settings: GameLobbySettings, hideHentai: boolean): string {
   return JSON.stringify([settings.yearFrom, settings.yearTo, settings.mediaTypes, settings.list, hideHentai])
 }

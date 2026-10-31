@@ -59,11 +59,11 @@
   margin-top: 14px;
 }
 
-.game-tile__streak {
+.game-tile__progress {
   font-size: 14px;
 }
 
-.game-tile__streak b {
+.game-tile__progress b {
   margin-left: 2px;
   font-size: 20px;
   color: var(--text-h);

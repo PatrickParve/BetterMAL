@@ -424,6 +424,66 @@ namespace AnimeTracker.Api.Migrations
                     b.ToTable("EpisodeAirings");
                 });
 
+            modelBuilder.Entity("AnimeTracker.Api.Models.GuessTheAnimeAppearance", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AnimeId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnimeId");
+
+                    b.ToTable("GuessTheAnimeAppearances");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.GuessTheAnimeRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AnswerAnimeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("GuessCount")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<int>>("GuessedAnimeIds")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.Property<bool>("HideHentai")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ListScope")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.PrimitiveCollection<List<string>>("MediaTypes")
+                        .HasColumnType("text[]");
+
+                    b.Property<int?>("YearFrom")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("YearTo")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnswerAnimeId");
+
+                    b.ToTable("GuessTheAnimeRuns");
+                });
+
             modelBuilder.Entity("AnimeTracker.Api.Models.HigherOrLowerAppearance", b =>
                 {
                     b.Property<long>("Id")
@@ -1084,6 +1144,24 @@ namespace AnimeTracker.Api.Migrations
                     b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", null)
                         .WithMany()
                         .HasForeignKey("AnimeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.GuessTheAnimeAppearance", b =>
+                {
+                    b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", null)
+                        .WithMany()
+                        .HasForeignKey("AnimeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.GuessTheAnimeRun", b =>
+                {
+                    b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", null)
+                        .WithMany()
+                        .HasForeignKey("AnswerAnimeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

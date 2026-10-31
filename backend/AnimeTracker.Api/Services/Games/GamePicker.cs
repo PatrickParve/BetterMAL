@@ -4,10 +4,10 @@ namespace AnimeTracker.Api.Services.Games;
 /// columns the pool is projected to, not the whole row.</summary>
 public record PickCandidate(int AnimeId, double Score, int? PopularityRank, bool OnMyList);
 
-/// <summary>The weighted random draw behind every anime a Higher or Lower game
-/// shows (add-games-higher-or-lower design.md D5-D7). Pure apart from the
+/// <summary>The weighted random draw behind every anime a game shows
+/// (add-games-higher-or-lower design.md D5-D7). Pure apart from the
 /// <see cref="Random"/> it is handed, so a seeded one makes it repeatable.</summary>
-public static class HigherOrLowerPicker
+public static class GamePicker
 {
     /// <summary>Two scores are the same when they match at the two decimals the
     /// player sees, so floating-point noise can't make two shown 7.85s differ.
@@ -22,19 +22,21 @@ public static class HigherOrLowerPicker
     /// left. An anime in <paramref name="usedInGame"/> is out, as is any whose
     /// score matches <paramref name="avoidScore"/> to two decimals (the score of
     /// the anime that stays, or null for the game's first anime). The rest are
-    /// weighted popularity × freshness: <paramref name="roundsAgo"/> maps an
-    /// anime to how many cards ago it was last shown (0 for the latest), and an
-    /// anime missing from it was not shown recently. The cooldown's length
-    /// follows the pool's size, so the whole pool is passed, not just what is
-    /// still eligible.</summary>
+    /// weighted popularity × freshness: <paramref name="popularity"/> is the
+    /// game's own curve, taking a popularity rank and whether the anime is on my
+    /// list; <paramref name="roundsAgo"/> maps an anime to how many cards ago it
+    /// was last shown (0 for the latest), and an anime missing from it was not
+    /// shown recently. The cooldown's length follows the pool's size, so the
+    /// whole pool is passed, not just what is still eligible.</summary>
     public static PickCandidate? Pick(
         IReadOnlyList<PickCandidate> pool,
         IReadOnlySet<int> usedInGame,
         double? avoidScore,
         IReadOnlyDictionary<int, int> roundsAgo,
+        Func<int?, bool, double> popularity,
         Random random)
     {
-        var cooldown = HigherOrLowerWeights.Cooldown(pool.Count);
+        var cooldown = GameWeights.Cooldown(pool.Count);
         var weights = new double[pool.Count];
         var total = 0.0;
 
@@ -46,9 +48,9 @@ public static class HigherOrLowerPicker
             if (avoidScore is { } avoid && SameScore(candidate.Score, avoid))
                 continue;
 
-            var weight = HigherOrLowerWeights.Popularity(candidate.PopularityRank, candidate.OnMyList);
+            var weight = popularity(candidate.PopularityRank, candidate.OnMyList);
             if (roundsAgo.TryGetValue(candidate.AnimeId, out var ago))
-                weight *= HigherOrLowerWeights.Freshness(ago, cooldown);
+                weight *= GameWeights.Freshness(ago, cooldown);
 
             weights[i] = weight;
             total += weight;
