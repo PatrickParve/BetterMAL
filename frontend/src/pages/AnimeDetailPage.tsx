@@ -16,6 +16,7 @@ import type {
   IncrementTarget,
   NextEpisodeEtaDto,
 } from "../api/types.ts";
+import { AnimeThemesSection } from "../components/AnimeThemes/AnimeThemesSection.tsx";
 import { LoadFailedNotice } from "../components/LoadFailedNotice.tsx";
 import { LoadingNotice } from "../components/LoadingNotice.tsx";
 import { PicturePickerOverlay } from "../components/PicturePickerOverlay.tsx";
@@ -946,6 +947,15 @@ export function AnimeDetailPage() {
               )}
             </section>
           )}
+
+          {/* The last box, so a long list pushes nothing else down. The themes come
+              with this page's own read from the stored catalogue: no request to
+              AnimeThemes is made for them, on any anime's page (anime-themes). */}
+          <AnimeThemesSection
+            subject="anime"
+            ready={detail.themes.ready}
+            groups={[{ animeId: detail.animeId, title: null, themes: detail.themes.themes }]}
+          />
         </div>
       </div>
     </div>

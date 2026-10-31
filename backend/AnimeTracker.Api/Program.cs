@@ -3,6 +3,7 @@ using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Airing.AniList;
+using AnimeTracker.Api.Services.AnimeThemes;
 using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Detail;
 using AnimeTracker.Api.Services.Entries;
@@ -212,6 +213,17 @@ builder.Services.AddScoped<ITmdbArtworkService, TmdbArtworkService>();
 // mapping sync above, in a scope of its own.
 builder.Services.AddScoped<ITmdbCachePurgeService, TmdbCachePurgeService>();
 
+// --- AnimeThemes catalogue (spec `anime-themes`) ---
+// Openings and endings, stored as text and links and refreshed weekly, one slow
+// request at a time. A hosted service of its own, on its own hourly tick: the
+// read can take many minutes, so it must not hold up the airing work, and it
+// calls neither MAL nor AniList, so it doesn't wait for first-run setup. Nothing
+// else reads AnimeThemes' API: every page uses the stored rows.
+builder.Services.AddHttpClient<IAnimeThemesClient, AnimeThemesClient>(AnimeThemesClient.Configure);
+builder.Services.AddScoped<IAnimeThemesCatalogueSyncService, AnimeThemesCatalogueSyncService>();
+builder.Services.AddHostedService<AnimeThemesCatalogueBackgroundService>();
+builder.Services.AddScoped<IAnimeThemesReads, AnimeThemesReads>();
+
 // --- Airing schedule ---
 builder.Services.AddScoped<IAiringScheduleService, AiringScheduleService>();
 
@@ -278,6 +290,20 @@ builder.Services.AddScoped<GameLobbyReads>();
 builder.Services.AddScoped<IHigherOrLowerService, HigherOrLowerService>();
 builder.Services.AddScoped<IGameAnimeDetails, GameAnimeDetails>();
 builder.Services.AddScoped<IGuessTheAnimeService, GuessTheAnimeService>();
+
+// Guess the Opening/Ending (spec `guess-the-theme`). It draws, judges and reveals from the stored
+// catalogue, so it makes no MyAnimeList or AniList request. The relay is the one thing that reads
+// AnimeThemes' media hosts: a song's audio and video, read ahead and held in memory for the game
+// that wants them (singletons, since that outlives a request), and a one-byte check of a file that
+// failed to load. A named client that follows no redirect and keeps no cookie, since the host sets
+// cookies and a redirect could leave the allow-listed host.
+builder.Services.AddScoped<GuessTheThemeDraw>();
+builder.Services.AddScoped<IGuessTheThemeService, GuessTheThemeService>();
+builder.Services.AddHttpClient(AnimeThemesMediaRelay.HttpClientName, AnimeThemesMediaRelay.Configure)
+    .ConfigurePrimaryHttpMessageHandler(AnimeThemesMediaRelay.CreateHandler);
+builder.Services.AddSingleton<IAnimeThemesMediaRelay, AnimeThemesMediaRelay>();
+builder.Services.AddSingleton<IAnimeThemesMediaHold, AnimeThemesMediaHold>();
+builder.Services.AddSingleton<GuessTheThemeOnDeck>();
 
 // --- Single anime detail page ---
 builder.Services.AddScoped<IAnimeDetailService, AnimeDetailService>();

@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.AnimeThemes;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.IdMapping;
 using AnimeTracker.Api.Services.Scheduling;
@@ -34,7 +35,7 @@ public class EpisodeScheduleRefreshBackgroundServiceTests
     // dependency would; the purge is left out of the tests that are not about it.
     private static ServiceProvider BuildProvider(
         List<Event> events, Func<AnimeIdMappingSyncOutcome>? mappingSync, Func<int>? tmdbPurge = null,
-        Func<Exception>? catchUpFailure = null)
+        Func<Exception>? catchUpFailure = null, Action<IServiceCollection>? configure = null)
     {
         var dbName = Guid.NewGuid().ToString();
         var services = new ServiceCollection();
@@ -57,6 +58,7 @@ public class EpisodeScheduleRefreshBackgroundServiceTests
         services.AddSingleton<IBroadcastLocalTimeConverter, BroadcastLocalTimeConverter>();
         services.AddScoped<IEpisodeScheduleService, UnusedEpisodeScheduleService>();
         services.AddScoped<IAiringWatchStatusService, NoopAiringWatchStatusService>();
+        configure?.Invoke(services);
         return services.BuildServiceProvider();
     }
 
@@ -303,7 +305,65 @@ public class EpisodeScheduleRefreshBackgroundServiceTests
         Assert.Contains(events, e => e.What == "airing-refresh");
     }
 
+    // anime-themes spec, "The airing work doesn't wait": the AnimeThemes catalogue has
+    // a hosted service of its own, so nothing the airing tick runs reaches it. A
+    // tripwire is registered for everything that could, and an iteration that runs
+    // every step must resolve and call none of it.
+    [Fact]
+    public async Task NothingTheAiringTickRunsReachesAnimeThemes()
+    {
+        var events = new List<Event>();
+        var reached = new List<string>();
+        using var provider = BuildProvider(
+            events, () => AnimeIdMappingSyncOutcome.Synced, tmdbPurge: () => 0,
+            configure: services =>
+            {
+                services.AddScoped<IAnimeThemesClient>(_ =>
+                {
+                    reached.Add("client resolved");
+                    return new TripwireAnimeThemesClient(reached);
+                });
+                services.AddScoped<IAnimeThemesCatalogueSyncService>(_ =>
+                {
+                    reached.Add("sync resolved");
+                    return new TripwireAnimeThemesSync(reached);
+                });
+            });
+
+        await CreateService(provider).RunIterationAsync(CancellationToken.None);
+
+        // Every step ran, so a quiet tripwire means they have nothing to do with it.
+        Assert.Equal(["mapping-sync", "tmdb-purge", "airing-catchup", "airing-refresh"], events.Select(e => e.What));
+        Assert.Empty(reached);
+    }
+
+    [Fact]
+    public void TheAiringServiceDependsOnNothingFromAnimeThemes()
+    {
+        var parameters = typeof(EpisodeScheduleRefreshBackgroundService).GetConstructors().Single().GetParameters();
+
+        Assert.DoesNotContain(parameters, p => p.ParameterType.Namespace!.Contains("AnimeThemes", StringComparison.Ordinal));
+    }
+
     // --- Fakes ---
+
+    private sealed class TripwireAnimeThemesClient(List<string> reached) : IAnimeThemesClient
+    {
+        public Task<AnimeThemesPage> GetPageAsync(int page, CancellationToken ct = default)
+        {
+            reached.Add("client called");
+            throw new InvalidOperationException("AnimeThemes was called from the airing tick.");
+        }
+    }
+
+    private sealed class TripwireAnimeThemesSync(List<string> reached) : IAnimeThemesCatalogueSyncService
+    {
+        public Task<AnimeThemesCatalogueSyncOutcome> SyncIfDueAsync(CancellationToken ct = default)
+        {
+            reached.Add("sync called");
+            throw new InvalidOperationException("AnimeThemes was called from the airing tick.");
+        }
+    }
 
     private sealed class FakeMappingSync(AnimeTrackerDbContext db, List<Event> events, Func<AnimeIdMappingSyncOutcome> run)
         : IAnimeIdMappingSyncService

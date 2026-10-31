@@ -1,6 +1,7 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.AnimeThemes;
 using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.IdMapping;
@@ -30,7 +31,8 @@ public class SeriesService(
     IAnimeRankingService rankingService,
     ITmdbArtworkService tmdbArtwork,
     IAnimeIdMappingResolver idMappings,
-    IScoreHistoryService scoreHistory) : ISeriesService
+    IScoreHistoryService scoreHistory,
+    IAnimeThemesReads animeThemes) : ISeriesService
 {
     private static readonly TimeSpan StaleAfter = TimeSpan.FromDays(30);
 
@@ -271,7 +273,14 @@ public class SeriesService(
             tmdb,
             // From the same builder the overlay's read uses, and only the part
             // that decides a flag: the series page never loads the points.
-            await scoreHistory.SeriesHasChangedAsync(series.Id, ct));
+            await scoreHistory.SeriesHasChangedAsync(series.Id, ct),
+            // Openings and endings of the main line only (spec series-page "The
+            // series page lists the main line's openings and endings"): every
+            // main-line member, each version slot's alternatives included, in
+            // main-line order, so a route switch is the client's filter and needs no
+            // request. mainLineMembers holds no extra, and a version neighbour is
+            // one. One local query however large the series, never AnimeThemes.
+            await animeThemes.GetForSeriesAsync(mainLineMembers.Select(m => m.AnimeId).ToList(), ct));
     }
 
     // --- Version slots (design.md D4/D5/D6, tasks 7.2-7.3) ---

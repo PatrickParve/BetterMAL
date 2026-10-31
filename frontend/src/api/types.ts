@@ -995,6 +995,51 @@ export type SeriesTmdbPicturesDto = {
   pendingCount: number
 }
 
+// Openings and endings (add-anime-themes-and-guess-the-theme design.md D5): mirrors
+// the backend's AnimeThemesDtos. They come from the stored catalogue with the
+// page's own read, so no page ever asks AnimeThemes for them. A field that
+// AnimeThemes doesn't know is null (or an empty list), and the row leaves it out.
+export type AnimeThemeKind = 'Opening' | 'Ending'
+
+export type AnimeThemeDto = {
+  // AnimeThemes' own id for the theme; it names a row within an anime.
+  id: number
+  kind: AnimeThemeKind
+  // Their slug: OP1, ED2, OP1-BD.
+  label: string
+  songTitle: string | null
+  artists: string[]
+  // Where the theme plays, as AnimeThemes writes it ("1-12, 13-24"); null for a film.
+  episodes: string | null
+  // The flags of the version that plays, and whether its video has no credits over it.
+  nsfw: boolean
+  spoiler: boolean
+  clean: boolean
+  // https links on AnimeThemes' two media hosts, played by the browser from there.
+  videoUrl: string | null
+  audioUrl: string | null
+}
+
+// `ready` is whether a catalogue refresh has ever finished: it tells "the songs
+// aren't here yet" from "this anime has none".
+export type AnimeThemesDto = {
+  ready: boolean
+  themes: AnimeThemeDto[]
+}
+
+export type SeriesThemeGroupDto = {
+  animeId: number
+  themes: AnimeThemeDto[]
+}
+
+// One group for every main-line member that has themes, each alternative of a
+// version slot included, in main-line order. The page picks the groups its route
+// shows, so switching route costs no request.
+export type SeriesThemesDto = {
+  ready: boolean
+  groups: SeriesThemeGroupDto[]
+}
+
 export type SeriesDto = {
   seriesId: number
   rootAniListId: number | null
@@ -1035,6 +1080,9 @@ export type SeriesDto = {
   // history control is shown for (add-score-history-graph design.md D6). The
   // points are a separate read (getSeriesScoreHistory).
   hasScoreHistory: boolean
+  // The main line's openings and endings, every alternative of a version slot
+  // included and nothing from the extras.
+  themes: SeriesThemesDto
 }
 
 // One point of a score history: a local calendar date as yyyy-MM-dd, which is
@@ -1184,6 +1232,9 @@ export type AnimeDetailDto = {
   // history control is shown for, in my list or not (add-score-history-graph
   // design.md D6). The points are a separate read (getAnimeScoreHistory).
   hasScoreHistory: boolean
+  // The anime's openings and endings, for every anime whether or not it is on
+  // my list.
+  themes: AnimeThemesDto
 }
 
 // Mirrors backend Services/Recap/RecapPeriod.cs / RecapEntrySelector.cs.
@@ -1574,4 +1625,104 @@ export type GuessTheAnimeGuessDto = {
 
 export type GuessTheAnimeEndDto = {
   answer: GuessTheAnimeAnswerDto
+}
+
+// Guess the Opening/Ending (add-anime-themes-and-guess-the-theme design.md D7):
+// mirrors the backend's GuessTheThemeDtos. Until a song is revealed nothing in a
+// response names it or its anime, not even an id: the anime, title, label, picture
+// and video exist only in a reveal.
+export type GameThemeChoice = 'All' | 'Openings' | 'Endings'
+
+// What the game plays with: the shared settings and which themes are drawn. The
+// same shape is the body of Start and, spread into query parameters, the pool
+// count's query.
+export type GuessTheThemeSettings = GameSettings & { themes: GameThemeChoice }
+
+// Listening: a length is being guessed. Revealed: the song has been guessed and its
+// reveal is on screen, waiting for Next song.
+export type GuessTheThemePhase = 'Listening' | 'Revealed'
+
+// An anime guessed wrong this round. Only a stored anime has one; a guess of one
+// the app hasn't stored keeps just its id (in `guessedIds`).
+export type GuessTheThemeCardDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+}
+
+// What a song was. `heardSeconds` is the length it was guessed at, and null when
+// it wasn't (a loss, or giving up).
+export type GuessTheThemeRevealDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  kind: AnimeThemeKind
+  label: string
+  songTitle: string | null
+  artists: string[]
+  videoUrl: string
+  inMyList: boolean
+  heardSeconds: number | null
+  // The app's own address for the video, which starts at once from what has been read
+  // ahead; `videoUrl` is the file itself, for when that can't be played.
+  playUrl: string
+}
+
+// A game in progress. `move` is the number every move sends back. `lengths` is the
+// ladder, in seconds, sent so it lives in one place. `round` names the song in the
+// clip's address and is shown nowhere. `reveal` is set only in the Revealed phase,
+// and `nextRound` is the song already drawn for after the one being played, a number
+// to load its audio by and nothing more: null where no further song could be drawn.
+export type GuessTheThemeGameDto = {
+  id: number
+  move: number
+  lengths: number[]
+  round: number
+  step: number
+  phase: GuessTheThemePhase
+  reveal: GuessTheThemeRevealDto | null
+  nextRound: number | null
+  guessedIds: number[]
+  guessed: GuessTheThemeCardDto[]
+}
+
+export type GuessTheThemeStateDto = {
+  game: GuessTheThemeGameDto | null
+  // The years the eligible anime cover; null when there are none.
+  years: { min: number; max: number } | null
+  // Two posters of popular anime for the Games tile and the setup screen, never
+  // the anime of a song in play.
+  pictures: string[]
+  // Whether a catalogue refresh has ever finished: before that, the setup screen
+  // says the songs are on their way and not that there are too few anime.
+  catalogueReady: boolean
+}
+
+// Wrong and Skipped go on to the next length. Right goes on to a reveal. Lost is a
+// wrong guess or a skip at the last length. Cleared is a right guess, or a
+// replacement, with no song left to draw.
+export type GuessTheThemeOutcome = 'Wrong' | 'Skipped' | 'Right' | 'Lost' | 'Cleared'
+
+// What a guess or a skip did. `game` is the game after it where it goes on, and
+// null where it has ended. `reveal` is set only where the game has ended (Lost,
+// Cleared): after a right guess the reveal is inside `game`.
+export type GuessTheThemeMoveDto = {
+  outcome: GuessTheThemeOutcome
+  game: GuessTheThemeGameDto | null
+  reveal: GuessTheThemeRevealDto | null
+}
+
+// The answer when the game was ended during a round, and null during a reveal,
+// where it is already on screen.
+export type GuessTheThemeEndDto = {
+  reveal: GuessTheThemeRevealDto | null
+}
+
+// A replaced song: the game on the new song, or Cleared with no game where no
+// other song could be drawn.
+export type GuessTheThemeReplaceDto = {
+  outcome: 'Cleared' | null
+  game: GuessTheThemeGameDto | null
 }

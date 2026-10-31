@@ -389,7 +389,8 @@ public class SeriesBulkBuildBackgroundServiceTests
             [], [],
             null, null, [], [], 0,
             new SeriesTmdbPicturesDto(false, false, [], 0),
-            HasScoreHistory: false);
+            HasScoreHistory: false,
+            Themes: new AnimeTracker.Api.Services.AnimeThemes.SeriesThemesDto(false, []));
     }
 
     private sealed class FakeUserAnimeEntryRepository(List<UserAnimeEntry> entries) : IUserAnimeEntryRepository

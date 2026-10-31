@@ -31,14 +31,24 @@ public class GameLobbyReads(AnimeTrackerDbContext db, Random random)
     /// <paramref name="exceptAnimeId"/> is left out whatever its popularity: Guess
     /// the Anime passes its answer, so the poster of the anime being hidden can't
     /// turn up in its own state.</summary>
+    public Task<List<string>> PopularPostersAsync(
+        bool hideHentai, int? exceptAnimeId = null, CancellationToken ct = default) =>
+        PopularPostersAsync(hideHentai, exceptAnimeId is { } except ? [except] : [], ct);
+
+    /// <summary>The same, leaving out every anime in <paramref name="exceptAnimeIds"/>. Guess
+    /// the Opening/Ending passes the anime of every song it has drawn and not yet revealed,
+    /// which is two once a right guess has drawn the next one.</summary>
     public async Task<List<string>> PopularPostersAsync(
-        bool hideHentai, int? exceptAnimeId = null, CancellationToken ct = default)
+        bool hideHentai, IReadOnlyCollection<int> exceptAnimeIds, CancellationToken ct = default)
     {
         var popular = db.AnimeMetadata.AsNoTracking().Where(a => a.PictureUrl != null && a.PopularityRank != null);
         if (hideHentai)
             popular = popular.Where(a => a.Rating != GamePool.HentaiRating);
-        if (exceptAnimeId is { } except)
-            popular = popular.Where(a => a.Id != except);
+        if (exceptAnimeIds.Count > 0)
+        {
+            var except = exceptAnimeIds.ToArray();
+            popular = popular.Where(a => !except.Contains(a.Id));
+        }
 
         var candidates = await popular
             .OrderBy(a => a.PopularityRank)

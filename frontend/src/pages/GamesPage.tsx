@@ -1,6 +1,6 @@
-import { getGuessTheAnimeState, getHigherOrLowerState } from '../api/client.ts'
-import type { GuessTheAnimeStateDto, HigherOrLowerStateDto } from '../api/types.ts'
-import { GUESS_THE_ANIME, HIGHER_OR_LOWER } from '../components/Games/games.ts'
+import { getGuessTheAnimeState, getGuessTheThemeState, getHigherOrLowerState } from '../api/client.ts'
+import type { GuessTheAnimeStateDto, GuessTheThemeStateDto, HigherOrLowerStateDto } from '../api/types.ts'
+import { GUESS_THE_ANIME, GUESS_THE_THEME, HIGHER_OR_LOWER } from '../components/Games/games.ts'
 import { GameTile } from '../components/Games/GameTile.tsx'
 import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
 import { LoadingNotice } from '../components/LoadingNotice.tsx'
@@ -11,11 +11,11 @@ import './GamesPage.css'
 
 // The games available, one tile each (games-page). Only games that exist are
 // drawn, with no placeholder for one still to come. Each game's own state holds
-// its Continue progress and the two posters for its tile, so the page reads both
+// its Continue progress and the two posters for its tile, so the page reads them all
 // at once inside its one `usePageData` and needs no route of its own
-// (add-guess-the-anime design.md D3: a read takes about 12ms, so the two in a
+// (add-guess-the-anime design.md D3: a read takes about 12ms, so the three in a
 // `Promise.all` cost nothing over one). It is keyed on Hide NSFW, which shapes
-// the posters. The read waits a moment for the four posters to download, so the
+// the posters. The read waits a moment for the six posters to download, so the
 // tiles appear with their pictures instead of drawing them in a beat later; a
 // failed read fails the page, which shows the shared notice.
 // The longest the page waits for its pictures; a slow one is drawn when it comes.
@@ -24,17 +24,23 @@ const PRELOAD_WAIT_MS = 1200
 type GamesData = {
   higherOrLower: HigherOrLowerStateDto
   guessTheAnime: GuessTheAnimeStateDto
+  guessTheTheme: GuessTheThemeStateDto
 }
 
 export function GamesPage() {
   const { hideHentai } = useContentFilter()
   const { data, failed, retry } = usePageData<GamesData>(`games:${hideHentai}`, async () => {
-    const [higherOrLower, guessTheAnime] = await Promise.all([
+    const [higherOrLower, guessTheAnime, guessTheTheme] = await Promise.all([
       getHigherOrLowerState({ hideHentai }),
       getGuessTheAnimeState({ hideHentai }),
+      getGuessTheThemeState({ hideHentai }),
     ])
-    await preloadPictures([...higherOrLower.pictures, ...guessTheAnime.pictures], 'tile', PRELOAD_WAIT_MS)
-    return { higherOrLower, guessTheAnime }
+    await preloadPictures(
+      [...higherOrLower.pictures, ...guessTheAnime.pictures, ...guessTheTheme.pictures],
+      'tile',
+      PRELOAD_WAIT_MS,
+    )
+    return { higherOrLower, guessTheAnime, guessTheTheme }
   })
 
   const streak =
@@ -62,6 +68,12 @@ export function GamesPage() {
         <div className="games-page__grid">
           <GameTile game={HIGHER_OR_LOWER} pictures={data.higherOrLower.pictures} progress={streak} />
           <GameTile game={GUESS_THE_ANIME} pictures={data.guessTheAnime.pictures} progress={guess} />
+          {/* Keeps no count of any kind: a game in progress is Continue and nothing beside it. */}
+          <GameTile
+            game={GUESS_THE_THEME}
+            pictures={data.guessTheTheme.pictures}
+            progress={data.guessTheTheme.game === null ? null : true}
+          />
         </div>
       )}
       {failed && <LoadFailedNotice what="the games" onRetry={retry} />}

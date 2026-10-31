@@ -27,6 +27,7 @@ import { SeriesPage } from './pages/SeriesPage.tsx'
 import { GamesPage } from './pages/GamesPage.tsx'
 import { HigherLowerPage } from './pages/HigherLowerPage.tsx'
 import { GuessTheAnimePage } from './pages/GuessTheAnimePage.tsx'
+import { GuessTheThemePage } from './pages/GuessTheThemePage.tsx'
 
 // Mounted once the "Connect to MAL" gate in App.tsx confirms a token is on
 // file. Providers here (score visibility, entry editor, content filter) are
@@ -66,6 +67,7 @@ export function AppShell() {
                         <Route path="/games" element={<GamesPage />} />
                         <Route path="/games/higher-or-lower" element={<HigherLowerPage />} />
                         <Route path="/games/guess-the-anime" element={<GuessTheAnimePage />} />
+                        <Route path="/games/guess-the-theme" element={<GuessTheThemePage />} />
                         <Route path="*" element={<HomePage />} />
                       </Routes>
                     </main>

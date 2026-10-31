@@ -8,7 +8,7 @@ import './GameTile.css'
 type GameTileProps = {
   game: GameListing
   pictures: string[]
-  /** How far the game in progress has got, in the game's own words, or null when there is none. */
+  /** How far the game in progress has got, in the game's own words, or null when there is none. `true` is a game in progress that keeps no count: Continue, and nothing beside it. */
   progress: ReactNode | null
 }
 
@@ -17,7 +17,8 @@ type GameTileProps = {
 // Continue with the game's progress beside it while a game is in progress, and
 // Play otherwise, with no score or result of any kind, since none is kept once a
 // game ends. Each game says what its progress is: a streak, a guess number. The
-// button is a span, not a button, because it sits inside the link.
+// button is a span, not a button, because it sits inside the link. A game that
+// keeps no count at all (Guess the Opening/Ending) passes `true`.
 export function GameTile({ game, pictures, progress }: GameTileProps) {
   return (
     <Link to={game.to} className="game-tile">
@@ -27,7 +28,7 @@ export function GameTile({ game, pictures, progress }: GameTileProps) {
         <p className="game-tile__text">{game.text}</p>
         <div className="game-tile__foot">
           <span className="game-button game-button--small">{progress === null ? 'Play' : 'Continue'}</span>
-          {progress !== null && <span className="game-tile__progress">{progress}</span>}
+          {progress !== null && progress !== true && <span className="game-tile__progress">{progress}</span>}
         </div>
       </div>
     </Link>

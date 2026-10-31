@@ -1,0 +1,59 @@
+/* The player under a row: the browser's own controls on the video or the audio,
+   and a switch between the two. It is as wide as the row, up to a size that a
+   video needs no more than. */
+.theme-player {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 0 4px;
+  min-width: 0;
+}
+
+/* A video keeps its own proportions: the width is the row's and the height follows,
+   capped so a tall picture never fills the window, and the player letterboxes inside
+   the black box if it is capped. */
+.theme-player__video {
+  display: block;
+  width: 100%;
+  max-width: 640px;
+  max-height: 360px;
+  border-radius: 8px;
+  background: #000;
+}
+
+.theme-player__audio {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+}
+
+.theme-player__note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.theme-player__switch {
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.theme-player__switch:hover {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+.theme-player__switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

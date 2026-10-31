@@ -14,6 +14,12 @@ import type {
   GuessTheAnimeGameDto,
   GuessTheAnimeGuessDto,
   GuessTheAnimeStateDto,
+  GuessTheThemeEndDto,
+  GuessTheThemeGameDto,
+  GuessTheThemeMoveDto,
+  GuessTheThemeReplaceDto,
+  GuessTheThemeSettings,
+  GuessTheThemeStateDto,
   HealthStatus,
   HeldChangeDecisionDto,
   HeldChangeDto,
@@ -121,9 +127,9 @@ async function performFetch(input: string, init?: RequestInit): Promise<Response
 
 // A 502 whose body is the app's own `{ "error": ... }` JSON is the backend
 // answering that a call it made to MyAnimeList failed (Guess the Anime's start
-// and guess), not the backend being down: a proxy in front of a dead backend
-// answers 502 in HTML. Every other 5xx still counts as an outage
-// (connection-status).
+// and guess), or to AnimeThemes (Guess the Opening/Ending's clip and replace),
+// not the backend being down: a proxy in front of a dead backend answers 502 in
+// HTML. Every other 5xx still counts as an outage (connection-status).
 function answeredByTheApp(res: Response): boolean {
   return res.status === 502 && (res.headers.get('Content-Type') ?? '').includes('application/json')
 }
@@ -806,4 +812,104 @@ export function guessTheAnime(runId: number, number: number, animeId: number): P
 
 export function endGuessTheAnime(runId: number): Promise<GuessTheAnimeEndDto> {
   return fetchJson<GuessTheAnimeEndDto>(`/api/games/guess-the-anime/runs/${runId}/end`, { method: 'POST' })
+}
+
+// Guess the Opening/Ending (add-anime-themes-and-guess-the-theme design.md D7). The
+// game runs on the server, so a guess or a skip is sent and the next state comes
+// back; nothing that names a song is in any response until it is revealed. Every
+// move carries the game's `move` number: a double press, or a tab behind the game,
+// fails on it with a 409 and the board reads the game again with no notice.
+// Searching has no call here: the field uses searchAnime.
+export function getGuessTheThemeState(params: { hideHentai: boolean }): Promise<GuessTheThemeStateDto> {
+  const query = new URLSearchParams({ hideHentai: String(params.hideHentai) })
+  return fetchJson<GuessTheThemeStateDto>(`/api/games/guess-the-theme?${query.toString()}`)
+}
+
+// How many anime some settings leave; the other games' query plus which themes.
+export function getGuessTheThemePool(settings: GuessTheThemeSettings): Promise<GamePoolDto> {
+  const query = new URLSearchParams()
+  if (settings.yearFrom !== null) query.set('yearFrom', String(settings.yearFrom))
+  if (settings.yearTo !== null) query.set('yearTo', String(settings.yearTo))
+  for (const type of settings.mediaTypes ?? []) query.append('types', type)
+  query.set('list', settings.list)
+  query.set('themes', settings.themes)
+  query.set('hideHentai', String(settings.hideHentai))
+  return fetchJson<GamePoolDto>(`/api/games/guess-the-theme/pool?${query.toString()}`)
+}
+
+// Replaces any game in progress. 400 for settings that can't describe a game and
+// 409 when they leave no song to play; both throw ApiError.
+export function startGuessTheTheme(settings: GuessTheThemeSettings): Promise<GuessTheThemeGameDto> {
+  return fetchJson<GuessTheThemeGameDto>('/api/games/guess-the-theme/runs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+}
+
+// Has a song ready for these settings, so Play can start on it at once. The setup
+// screen asks while it's open, and nothing depends on the answer.
+export function prepareGuessTheTheme(settings: GuessTheThemeSettings): Promise<void> {
+  return fetchVoid('/api/games/guess-the-theme/prepare', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+}
+
+// 404 for a game no longer in progress and 409 for a move the game has passed or a
+// guess during a reveal throw ApiError, and the board reads the game again; 400 for
+// an anime already guessed this round counts nothing.
+export function guessTheTheme(runId: number, move: number, animeId: number): Promise<GuessTheThemeMoveDto> {
+  return fetchJson<GuessTheThemeMoveDto>(`/api/games/guess-the-theme/runs/${runId}/guesses`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ move, animeId }),
+  })
+}
+
+export function skipGuessTheTheme(runId: number, move: number): Promise<GuessTheThemeMoveDto> {
+  return fetchJson<GuessTheThemeMoveDto>(`/api/games/guess-the-theme/runs/${runId}/skips`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ move }),
+  })
+}
+
+// Next song, from a reveal. Answers with the game on the song already drawn.
+export function nextGuessTheTheme(runId: number, move: number): Promise<GuessTheThemeGameDto> {
+  return fetchJson<GuessTheThemeGameDto>(`/api/games/guess-the-theme/runs/${runId}/next`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ move }),
+  })
+}
+
+export function endGuessTheTheme(runId: number): Promise<GuessTheThemeEndDto> {
+  return fetchJson<GuessTheThemeEndDto>(`/api/games/guess-the-theme/runs/${runId}/end`, { method: 'POST' })
+}
+
+// Another song for the round being played, whose file has gone (a 410 from the
+// clip). 409 when the server finds the file there after all and 502, with a reason,
+// when it couldn't check; both throw ApiError.
+export function replaceGuessTheThemeSong(runId: number, round: number): Promise<GuessTheThemeReplaceDto> {
+  return fetchJson<GuessTheThemeReplaceDto>(`/api/games/guess-the-theme/runs/${runId}/replace`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ round }),
+  })
+}
+
+// The first part of a round's song, as the bytes of an Ogg file for the browser to
+// decode (D9). It goes through performFetch like every other call, so reachability
+// and ApiError work the same: a 410 (the file has gone) and a 502 with a reason
+// (AnimeThemes didn't answer) leave the app reachable, and throw ApiError. It
+// skips fetchRaw's sharing of identical requests, which would clone a 768 KiB body
+// for nobody. A body that fails part way rejects, which the board treats as a song
+// that couldn't be loaded.
+export async function getGuessTheThemeClip(runId: number, round: number, signal?: AbortSignal): Promise<ArrayBuffer> {
+  const url = `/api/games/guess-the-theme/runs/${runId}/clip?round=${round}`
+  const res = await performFetch(url, { signal })
+  if (!res.ok) throw new ApiError(url, res.status, await readErrorReason(res))
+  return res.arrayBuffer()
 }

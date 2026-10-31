@@ -35,6 +35,10 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<HigherOrLowerAppearance> HigherOrLowerAppearances => Set<HigherOrLowerAppearance>();
     public DbSet<GuessTheAnimeRun> GuessTheAnimeRuns => Set<GuessTheAnimeRun>();
     public DbSet<GuessTheAnimeAppearance> GuessTheAnimeAppearances => Set<GuessTheAnimeAppearance>();
+    public DbSet<GuessTheThemeRun> GuessTheThemeRuns => Set<GuessTheThemeRun>();
+    public DbSet<GuessTheThemeRound> GuessTheThemeRounds => Set<GuessTheThemeRound>();
+    public DbSet<AnimeTheme> AnimeThemes => Set<AnimeTheme>();
+    public DbSet<AnimeThemesSyncState> AnimeThemesSyncStates => Set<AnimeThemesSyncState>();
     public DbSet<AnimeIdMapping> AnimeIdMappings => Set<AnimeIdMapping>();
     public DbSet<AnimeIdMappingSyncState> AnimeIdMappingSyncStates => Set<AnimeIdMappingSyncState>();
     public DbSet<TmdbTvImageSet> TmdbTvImageSets => Set<TmdbTvImageSet>();
@@ -286,6 +290,56 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
                 .WithMany()
                 .HasForeignKey(e => e.AnimeId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // The two Guess the Opening/Ending tables (add-anime-themes-and-guess-the-theme
+        // design.md D7). The run is the game in progress and is deleted when it
+        // ends, taking its rounds with it. A round is a drawn song, the one being
+        // played and the next one, keyed on the run and its number; its anime
+        // foreign key cascades so a removed anime can't leave a dangling game,
+        // though nothing deletes metadata rows today.
+        modelBuilder.Entity<GuessTheThemeRun>(entity =>
+        {
+            // Every move bumps Moves, so a double press, or a move from a tab behind
+            // the game, finds it already moved and fails on the token.
+            entity.Property(e => e.Moves).IsConcurrencyToken();
+            entity.Property(e => e.Phase).HasConversion<string>();
+            entity.Property(e => e.ListScope).HasConversion<string>();
+            entity.Property(e => e.Themes).HasConversion<string>();
+            // MediaTypes (text[]), RoundGuesses and PlayedSongIds (integer[]) come
+            // from the List<string>/List<int> properties, as Genres and PictureUrls do.
+        });
+
+        modelBuilder.Entity<GuessTheThemeRound>(entity =>
+        {
+            entity.HasKey(e => new { e.RunId, e.Number });
+            entity.HasOne<GuessTheThemeRun>()
+                .WithMany(r => r.Rounds)
+                .HasForeignKey(e => e.RunId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<AnimeMetadata>()
+                .WithMany()
+                .HasForeignKey(e => e.AnimeId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.Property(e => e.Kind).HasConversion<string>();
+            // Artists (text[]) and AcceptedAnimeIds (integer[]) come from the
+            // List<string>/List<int> properties.
+        });
+
+        // The AnimeThemes catalogue (spec `anime-themes`, design.md D1): one row
+        // per opening or ending of each MAL id, written only by the weekly sync.
+        // Both key parts are supplied by it, so neither is DB-generated. Deliberately
+        // no FK to AnimeMetadata, as AnimeIdMapping has none: most rows name anime the
+        // app may never store.
+        modelBuilder.Entity<AnimeTheme>(entity =>
+        {
+            entity.HasKey(e => new { e.AnimeId, e.ThemeId });
+            entity.Property(e => e.AnimeId).ValueGeneratedNever();
+            entity.Property(e => e.ThemeId).ValueGeneratedNever();
+            entity.Property(e => e.Kind).HasConversion<string>();
+            // Which other anime use a song (AcceptedAnimeIds), and which songs a
+            // pool holds, both read by song id. Artists is text[], from the List<string>.
+            entity.HasIndex(e => e.SongId);
         });
 
         modelBuilder.Entity<Series>(entity =>

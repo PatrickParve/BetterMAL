@@ -1,3 +1,4 @@
+using AnimeTracker.Api.Services.AnimeThemes;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Tmdb;
 
@@ -232,4 +233,11 @@ public record SeriesDto(
     // the Score history control on the page is shown for (add-score-history-graph
     // design.md D6). The points themselves are a separate read that most page
     // views never make; this flag is the only part the page read carries.
-    bool HasScoreHistory);
+    bool HasScoreHistory,
+    // The main line's openings and endings, from the stored AnimeThemes catalogue
+    // (anime-themes spec): one group per main-line member that has any, in
+    // main-line order, with every version slot's alternatives included so that
+    // switching the picked route is the client's filter and costs no request.
+    // Extras are never here, and a version neighbour is an extra. A local read,
+    // never a request to AnimeThemes, however large the series.
+    SeriesThemesDto Themes);

@@ -23,4 +23,9 @@
     <ProjectReference Include="..\AnimeTracker.Api\AnimeTracker.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Recordings of real third-party answers, read by the tests that parse them. -->
+    <None Update="Services\AnimeThemes\Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

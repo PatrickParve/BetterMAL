@@ -1,0 +1,91 @@
+/* Six marks in a row, narrow enough that all six fit a 320px window: they share the
+   row and shrink to fit, and never wrap. */
+.theme-ladder {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  max-width: 420px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.theme-ladder__mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 6px 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.theme-ladder__length {
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.theme-ladder__mark svg {
+  display: block;
+}
+
+/* Still to come: a quiet outline and a small dot. */
+.theme-ladder__mark--upcoming {
+  opacity: 0.7;
+}
+
+/* The length being listened to: a heavy accent border and a filled dot. */
+.theme-ladder__mark--current {
+  border: 2px solid var(--accent);
+  padding: 5px 1px;
+  background: var(--accent-bg);
+  color: var(--text-h);
+}
+
+/* A wrong guess: the game's red, a cross, and a solid border. */
+.theme-ladder__mark--wrong {
+  border-color: color-mix(in srgb, var(--game-wrong) 60%, transparent);
+  background: color-mix(in srgb, var(--game-wrong) 8%, transparent);
+  color: var(--game-wrong);
+}
+
+/* A skip: neutral, a skip glyph, and a dashed border, so it is not mistaken for a miss. */
+.theme-ladder__mark--skipped {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--text) 55%, transparent);
+  color: var(--text);
+}
+
+/* Gone, with no word of how: a cross in the neutral colour. */
+.theme-ladder__mark--gone {
+  border-color: color-mix(in srgb, var(--text) 40%, transparent);
+  color: var(--text);
+}
+
+@media (forced-colors: active) {
+  .theme-ladder__mark {
+    border-color: GrayText;
+    color: CanvasText;
+    background: transparent;
+  }
+
+  .theme-ladder__mark--current {
+    border: 3px solid Highlight;
+    padding: 4px 0;
+  }
+
+  .theme-ladder__mark--wrong {
+    border-color: CanvasText;
+  }
+
+  .theme-ladder__mark--skipped {
+    border-style: dashed;
+    border-color: CanvasText;
+  }
+}

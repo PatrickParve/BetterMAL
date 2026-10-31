@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.AnimeThemes;
 using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Relations;
@@ -92,7 +93,12 @@ public record AnimeDetailDto(
     // Score history control on the page is shown for (add-score-history-graph
     // design.md D6). The points are a separate read that most page views never
     // make. Offered for any anime that qualifies, in my list or not.
-    bool HasScoreHistory)
+    bool HasScoreHistory,
+    // The anime's openings and endings, from the stored AnimeThemes catalogue
+    // (anime-themes spec): a local read, never a request to AnimeThemes, for any
+    // anime in my list or not. Ready is false until a catalogue refresh has
+    // finished, which is what tells "not loaded yet" from "this anime has none".
+    AnimeThemesDto Themes)
 {
     public static AnimeDetailDto FromEntity(
         AnimeMetadata anime,
@@ -107,7 +113,8 @@ public record AnimeDetailDto(
         AnimeTmdbPicturesDto? tmdb,
         bool tmdbFetchPending,
         List<string> imdbIds,
-        bool hasScoreHistory)
+        bool hasScoreHistory,
+        AnimeThemesDto themes)
     {
         (int Year, string Season)? season = anime.AiredFrom is { } airedFrom
             ? SeasonCalendar.GetSeasonFor(airedFrom)
@@ -152,6 +159,7 @@ public record AnimeDetailDto(
             ResolvedRelationDto.FromResolved(relations.Prequel),
             ResolvedRelationDto.FromResolved(relations.Sequel),
             ResolvedRelationDto.FromResolved(relations.ParentStory),
-            hasScoreHistory);
+            hasScoreHistory,
+            themes);
     }
 }

@@ -8,6 +8,7 @@ using AnimeTracker.Api.Tests.Services.IdMapping;
 using AnimeTracker.Api.Tests.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 using SeriesModel = AnimeTracker.Api.Models.Series;
+using AnimeTracker.Api.Tests.Services.AnimeThemes;
 using AnimeTracker.Api.Tests.Services.ScoreHistory;
 
 namespace AnimeTracker.Api.Tests.Services.Series;
@@ -30,7 +31,8 @@ public class SeriesServiceYearSpanTests
     private static SeriesService CreateService(AnimeTrackerDbContext db) =>
         new(db, graphBuilder: null!, new RefreshGate(), new FakeEpisodeScheduleService(), new NoOpAnimeRankingService(),
             TmdbTestData.ArtworkService(db, new FakeTmdbClient(), apiKey: ""), TestIdMappings.Resolver(db),
-            ScoreHistoryServiceTestKit.Create(db));
+            ScoreHistoryServiceTestKit.Create(db),
+            AnimeThemesReadsTestKit.Create(db));
 
     private static void AddAnime(AnimeTrackerDbContext db, int id, DateOnly? airedFrom, DateOnly? airedTo) =>
         db.AnimeMetadata.Add(new AnimeMetadata

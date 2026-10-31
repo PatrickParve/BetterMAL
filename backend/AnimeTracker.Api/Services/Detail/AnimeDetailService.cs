@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.AnimeThemes;
 using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.IdMapping;
@@ -30,6 +31,7 @@ public class AnimeDetailService(
     ITmdbArtworkService tmdbArtwork,
     IAnimeIdMappingResolver idMappings,
     IScoreHistoryService scoreHistory,
+    IAnimeThemesReads animeThemes,
     ILogger<AnimeDetailService> logger) : IAnimeDetailService
 {
     public async Task<AnimeDetailDto> GetDetailAsync(int animeId, CancellationToken ct = default)
@@ -129,9 +131,16 @@ public class AnimeDetailService(
         // (add-score-history-graph design.md D6).
         var hasScoreHistory = await scoreHistory.AnimeHasChangedAsync(animeId, ct);
 
+        // Openings and endings (spec anime-detail "The detail page lists the
+        // anime's openings and endings"): rows of the stored catalogue, read for
+        // any anime, in my list or not. A local read like every one above, so
+        // this page never calls AnimeThemes and its one read per visit is
+        // unchanged.
+        var themes = await animeThemes.GetForAnimeAsync(animeId, ct);
+
         return AnimeDetailDto.FromEntity(
             anime, episodesAired, nextEpisode, aniListId, relatedMetadataByAnimeId, inSeries, refreshFailed, relations,
-            picturesFetchPending, tmdb, tmdbFetchPending, imdbIds, hasScoreHistory);
+            picturesFetchPending, tmdb, tmdbFetchPending, imdbIds, hasScoreHistory, themes);
     }
 
     private static bool NeedsFullDetailFetch(AnimeMetadata? anime) =>

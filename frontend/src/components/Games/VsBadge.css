@@ -64,3 +64,21 @@
     box-shadow: none;
   }
 }
+
+/* The musical note on Guess the Opening/Ending's disc: drawn, not typed, so it is the
+   same shape in every browser's fonts. */
+.vs-badge__note {
+  display: block;
+  width: 26px;
+  height: 26px;
+}
+
+.vs-badge--tile .vs-badge__note {
+  width: 22px;
+  height: 22px;
+}
+
+.vs-badge--lobby .vs-badge__note {
+  width: 28px;
+  height: 28px;
+}

@@ -23,6 +23,7 @@ import type {
   UserAnimeEntryDto,
 } from '../api/types.ts'
 import { AiringProgressBar } from '../components/AiringProgressBar.tsx'
+import { AnimeThemesSection, type ThemeGroup } from '../components/AnimeThemes/AnimeThemesSection.tsx'
 import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
 import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { PicturePickerOverlay } from '../components/PicturePickerOverlay.tsx'
@@ -830,6 +831,15 @@ export function SeriesPage() {
   // deliberately keep reading `scores` above, untouched by any pick.
   const resolvedPick = resolveSeriesPick(series.slots, pick)
   const mainLineVisible = visibleMainLine(series.mainLine, resolvedPick)
+  // The themes of the entries that route shows, in the order the timeline shows them,
+  // each group named after its anime. An entry with no themes has no group.
+  const themesByAnime = new Map(series.themes.groups.map((group) => [group.animeId, group.themes]))
+  const themeGroups: ThemeGroup[] = mainLineVisible.flatMap((entry) => {
+    const themes = themesByAnime.get(entry.animeId)
+    return themes === undefined
+      ? []
+      : [{ animeId: entry.animeId, title: pickDisplayTitle(entry.title, entry.englishTitle), themes }]
+  })
   // deriveSeriesStats replaces the pick-scoped snapshot's edit-sensitive
   // fields with client computations over the page's own entry arrays
   // (design.md decision 5), so an in-place edit and a route switch can never
@@ -1536,6 +1546,12 @@ export function SeriesPage() {
           })}
         </section>
       )}
+
+      {/* The last box. The groups are the main line's picked route, so switching the
+          picker changes them with no request, and a theme playing in a group the
+          switch removes stops. The themes arrived with this page's read, from the
+          stored catalogue, however many entries the series has (anime-themes). */}
+      <AnimeThemesSection subject="series" ready={series.themes.ready} groups={themeGroups} />
     </div>
   )
 }

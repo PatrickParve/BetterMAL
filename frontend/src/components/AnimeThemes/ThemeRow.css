@@ -1,0 +1,131 @@
+.theme-row {
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+/* The row being played, set apart by its fill and by its stop control. */
+.theme-row--playing {
+  background: var(--accent-bg);
+}
+
+.theme-row__line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* OP1, ED2, OP1-BD: a chip of a steady least width, so titles start in one column. */
+.theme-row__label {
+  flex: none;
+  box-sizing: border-box;
+  min-width: 48px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--code-bg);
+  color: var(--text-h);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.theme-row__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.theme-row__title,
+.theme-row__meta {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.theme-row__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.theme-row__unknown {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--text);
+}
+
+.theme-row__meta {
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* What a theme is flagged as: a word in a bordered chip, so it never relies on its
+   colour. */
+.theme-mark {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 18px;
+  text-transform: uppercase;
+}
+
+.theme-mark--nsfw {
+  color: var(--status-dropped);
+  background: var(--status-dropped-bg);
+  border-color: var(--status-dropped-border);
+}
+
+.theme-mark--spoiler {
+  color: var(--status-onhold);
+  background: var(--status-onhold-bg);
+  border-color: var(--status-onhold-border);
+}
+
+.theme-row__play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.theme-row__play:hover {
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.theme-row__play[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.theme-row__play:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .theme-row--playing {
+    outline: 1px solid Highlight;
+  }
+
+  .theme-mark,
+  .theme-row__play {
+    border-color: CanvasText;
+    color: CanvasText;
+  }
+}

@@ -1,0 +1,271 @@
+/* What the song was. The video sits beside the rest where there is room and above it
+   where there isn't, always first, and keeps its own proportions. It and the poster are
+   drawn large: the reveal is what the round was for. */
+.theme-reveal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--game-correct) 55%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--game-correct) 6%, transparent);
+  animation: theme-reveal-in 0.22s ease-out both;
+}
+
+/* The answer revealed after a loss or a give-up. It must not read as a win, so it is
+   set apart in a neutral dashed frame with none of the green, and tagged in words. */
+.theme-reveal--answer {
+  border: 1px dashed color-mix(in srgb, var(--text) 55%, transparent);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+/* Stopped with End game on a song already got: the game has ended, which is neither a win
+   nor a loss to look at, so the frame is the app's plain one. */
+.theme-reveal--plain {
+  border: 1px solid var(--border);
+  background: transparent;
+}
+
+.theme-reveal__tag {
+  align-self: flex-start;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--text-h);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.theme-reveal__body {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+  grid-template-areas:
+    'video anime'
+    'actions anime';
+  grid-template-rows: auto 1fr;
+  column-gap: 22px;
+  row-gap: 14px;
+  align-items: start;
+}
+
+.theme-reveal__video-box,
+.theme-reveal__video-note {
+  grid-area: video;
+}
+
+.theme-reveal__video-box {
+  position: relative;
+  min-width: 0;
+}
+
+/* The shape is reserved, so nothing under the video moves when its picture arrives: Next song
+   would otherwise jump as I go to press it. A video of another shape sits inside it, unstretched. */
+.theme-reveal__video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 70svh;
+  border-radius: 12px;
+  background: #000;
+  object-fit: contain;
+}
+
+.theme-reveal__video-note {
+  margin: 0;
+  padding: 28px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* Shown over the video only when the browser wouldn't start it by itself. */
+.theme-reveal__video-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  transform: translate(-50%, -50%);
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--fam-ink);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.theme-reveal__video-play:focus-visible {
+  outline: 3px solid var(--bg);
+  outline-offset: 2px;
+}
+
+.theme-reveal__anime {
+  grid-area: anime;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.theme-reveal__poster-link {
+  flex: none;
+  display: block;
+  border-radius: 8px;
+}
+
+/* A fixed poster box: the picture is drawn whole inside it over the blurred fill. */
+.theme-reveal__poster {
+  width: min(100%, 190px);
+  aspect-ratio: 2 / 3;
+  border-radius: 10px;
+}
+
+.theme-reveal__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.theme-reveal__text p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.theme-reveal__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: normal;
+  overflow-wrap: anywhere;
+}
+
+.theme-reveal__title a {
+  color: var(--text-h);
+  text-decoration: none;
+}
+
+.theme-reveal__title a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.theme-reveal__label {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.theme-reveal__label b {
+  color: var(--text-h);
+}
+
+.theme-reveal__song {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.theme-reveal__unknown {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--text);
+}
+
+.theme-reveal__artists {
+  font-size: 15px;
+  color: var(--text);
+}
+
+.theme-reveal__actions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.theme-reveal__in-list {
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.theme-reveal__next {
+  margin-left: auto;
+}
+
+@keyframes theme-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* Narrower than two columns need: the video first, then the rest, with the picture
+   beside the words as it is on any list row. */
+@media (max-width: 820px) {
+  .theme-reveal {
+    padding: 14px;
+  }
+
+  .theme-reveal__body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'video'
+      'anime'
+      'actions';
+    grid-template-rows: auto;
+    row-gap: 14px;
+  }
+
+  .theme-reveal__video {
+    max-height: 56svh;
+  }
+
+  .theme-reveal__anime {
+    flex-direction: row;
+    gap: 14px;
+  }
+
+  .theme-reveal__poster {
+    width: 112px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-reveal {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .theme-reveal {
+    border-color: Highlight;
+    background: transparent;
+  }
+
+  .theme-reveal--answer {
+    border-color: GrayText;
+  }
+
+  .theme-reveal__tag {
+    border: 1px solid CanvasText;
+  }
+
+  .theme-reveal__video-play {
+    border: 2px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+  }
+}

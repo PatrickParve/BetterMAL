@@ -1229,6 +1229,16 @@ export function SettingsPage() {
           it names a service the app supports, not one it has called. */}
       <SettingsGroup title="Credits">
         <TmdbAttribution />
+        {/* The openings and endings, and the game built on them, come from
+            AnimeThemes (anime-themes "AnimeThemes is credited where its data
+            shows"). A plain text credit: their logo is not ours to use. */}
+        <p className="settings-box__hint settings-credit">
+          Openings and endings come from{' '}
+          <a href="https://animethemes.moe/" target="_blank" rel="noreferrer">
+            AnimeThemes
+          </a>
+          . This application is not affiliated with AnimeThemes.
+        </p>
       </SettingsGroup>
 
       {importDetailsOpen && importCard?.report && (

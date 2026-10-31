@@ -8,8 +8,8 @@ export type GameListing = {
   name: string
   text: string
   to: string
-  /** The medallion on the game's poster pair: `vs`, or `question` over blurred posters. */
-  badge: 'vs' | 'question'
+  /** The medallion on the game's poster pair: `vs`, `question` over blurred posters, or `note` over posters drawn clearly. */
+  badge: 'vs' | 'question' | 'note'
 }
 
 export const HIGHER_OR_LOWER: GameListing = {
@@ -24,4 +24,11 @@ export const GUESS_THE_ANIME: GameListing = {
   text: 'Find the hidden anime in 10 guesses. Every guess shows how close you were.',
   to: '/games/guess-the-anime',
   badge: 'question',
+}
+
+export const GUESS_THE_THEME: GameListing = {
+  name: 'Guess the Opening/Ending',
+  text: 'Name the anime from a split second of its opening or ending. Every miss gives you a longer listen.',
+  to: '/games/guess-the-theme',
+  badge: 'note',
 }

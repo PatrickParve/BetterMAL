@@ -1,0 +1,76 @@
+/* The box is the detail page's and the series page's own (.detail-box, .series-box),
+   drawn here so one section serves both and neither page's stylesheet has to be
+   loaded for it. */
+.themes-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.themes-section h2 {
+  margin: 0;
+}
+
+.themes-section p {
+  margin: 0;
+}
+
+.themes-section__quiet {
+  color: var(--text);
+}
+
+.themes-section__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* A series' groups are told apart by a rule above all but the first. */
+.themes-section__group + .themes-section__group {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.themes-section__group-title {
+  margin: 0;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.themes-section__group-title a {
+  color: var(--text-h);
+  text-decoration: none;
+}
+
+.themes-section__group-title a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.themes-section__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.themes-section__credit {
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.themes-section__credit a {
+  color: var(--text);
+}
+
+.themes-section__credit a:hover {
+  color: var(--text-h);
+}

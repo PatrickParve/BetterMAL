@@ -331,6 +331,79 @@ namespace AnimeTracker.Api.Migrations
                     b.ToTable("AnimeScoreRecords");
                 });
 
+            modelBuilder.Entity("AnimeTracker.Api.Models.AnimeTheme", b =>
+                {
+                    b.Property<int>("AnimeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ThemeId")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<string>>("Artists")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("AudioUrl")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Clean")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Episodes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Nsfw")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SongId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SongTitle")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Spoiler")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("VideoUrl")
+                        .HasColumnType("text");
+
+                    b.HasKey("AnimeId", "ThemeId");
+
+                    b.HasIndex("SongId");
+
+                    b.ToTable("AnimeThemes");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.AnimeThemesSyncState", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AnimeThemesSyncStates");
+                });
+
             modelBuilder.Entity("AnimeTracker.Api.Models.AnimeUpdate", b =>
                 {
                     b.Property<long>("Id")
@@ -482,6 +555,112 @@ namespace AnimeTracker.Api.Migrations
                     b.HasIndex("AnswerAnimeId");
 
                     b.ToTable("GuessTheAnimeRuns");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.GuessTheThemeRound", b =>
+                {
+                    b.Property<int>("RunId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<int>>("AcceptedAnimeIds")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.Property<int>("AnimeId")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<string>>("Artists")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("AudioUrl")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SongId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SongTitle")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ThemeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("VideoUrl")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("RunId", "Number");
+
+                    b.HasIndex("AnimeId");
+
+                    b.ToTable("GuessTheThemeRounds");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.GuessTheThemeRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("HideHentai")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ListScope")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.PrimitiveCollection<List<string>>("MediaTypes")
+                        .HasColumnType("text[]");
+
+                    b.Property<int>("Moves")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Phase")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.PrimitiveCollection<List<int>>("PlayedSongIds")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.Property<int>("Round")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<int>>("RoundGuesses")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.Property<int>("Step")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Themes")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("YearFrom")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("YearTo")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("GuessTheThemeRuns");
                 });
 
             modelBuilder.Entity("AnimeTracker.Api.Models.HigherOrLowerAppearance", b =>
@@ -1166,6 +1345,21 @@ namespace AnimeTracker.Api.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("AnimeTracker.Api.Models.GuessTheThemeRound", b =>
+                {
+                    b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", null)
+                        .WithMany()
+                        .HasForeignKey("AnimeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AnimeTracker.Api.Models.GuessTheThemeRun", null)
+                        .WithMany("Rounds")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AnimeTracker.Api.Models.HigherOrLowerAppearance", b =>
                 {
                     b.HasOne("AnimeTracker.Api.Models.AnimeMetadata", null)
@@ -1316,6 +1510,11 @@ namespace AnimeTracker.Api.Migrations
                     b.Navigation("RelatedAnime");
 
                     b.Navigation("UserEntry");
+                });
+
+            modelBuilder.Entity("AnimeTracker.Api.Models.GuessTheThemeRun", b =>
+                {
+                    b.Navigation("Rounds");
                 });
 
             modelBuilder.Entity("AnimeTracker.Api.Models.PendingReconciliationDiff", b =>

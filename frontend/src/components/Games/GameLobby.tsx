@@ -34,6 +34,16 @@ type GameLobbyProps<TGame> = {
   /** Starts a game, and settles whatever it wants drawn when the board opens. */
   start: (settings: GameSettings) => Promise<TGame>
   onStarted: (game: TGame, played: GameLobbySettings) => void
+  /** A setting of the game's own, drawn after Anime (Guess the Opening/Ending's Theme). */
+  extraSetting?: ReactNode
+  /** What the extra setting is set to, so the count's read changes with it. */
+  extraKey?: string
+  /** False for a game that shows no MAL score, so the note about them is left out. */
+  showScoreNote?: boolean
+  /** Set while the game's data hasn't arrived yet: the count line says this instead of "Not enough anime", and Play is unavailable. */
+  notReadyText?: string
+  /** What Play reads while a game is being started, for a start that takes a moment. */
+  startingLabel?: string
 }
 
 // The setup screen both games open on (higher-or-lower "Higher or Lower opens
@@ -53,13 +63,18 @@ export function GameLobby<TGame>({
   readPool,
   start,
   onStarted,
+  extraSetting,
+  extraKey,
+  showScoreNote = true,
+  notReadyText,
+  startingLabel,
 }: GameLobbyProps<TGame>) {
   const { hideHentai } = useContentFilter()
   const { hidden: scoresHidden } = useScoreVisibility()
   const reportFailure = useActionFailure()
   const labelId = useId()
 
-  const key = settingsKey(settings, hideHentai)
+  const key = settingsKey(settings, hideHentai) + (extraKey === undefined ? '' : `:${extraKey}`)
   const { data: pool, failed: poolFailed } = usePageData<GamePoolDto>(`${listing.to}:pool:${key}`, () =>
     readPool({ ...settings, hideHentai }),
   )
@@ -70,9 +85,10 @@ export function GameLobby<TGame>({
   // treated like a count that says there are too few, until they change.
   const [refusedKey, setRefusedKey] = useState<string | null>(null)
   const tooFew = (shownPool !== null && !shownPool.playable) || refusedKey === key
+  const notReady = notReadyText !== undefined
 
   async function play() {
-    if (starting || tooFew) return
+    if (starting || tooFew || notReady) return
     setStarting(true)
     try {
       onStarted(await start({ ...settings, hideHentai }), settings)
@@ -182,9 +198,13 @@ export function GameLobby<TGame>({
             </div>
           </div>
 
+          {extraSetting}
+
           <div className="game-lobby__start">
             <p className="game-lobby__count" aria-live="polite" aria-atomic="true">
-              {tooFew ? (
+              {notReady ? (
+                notReadyText
+              ) : tooFew ? (
                 'Not enough anime for these settings.'
               ) : shownPool !== null ? (
                 <>
@@ -192,12 +212,12 @@ export function GameLobby<TGame>({
                 </>
               ) : null}
             </p>
-            <button type="button" className="game-button" disabled={tooFew || starting} onClick={() => void play()}>
-              Play
+            <button type="button" className="game-button" disabled={tooFew || notReady || starting} onClick={() => void play()}>
+              {starting && startingLabel !== undefined ? startingLabel : 'Play'}
             </button>
           </div>
 
-          {scoresHidden && <p className="game-lobby__note">You'll see MAL scores while you play.</p>}
+          {showScoreNote && scoresHidden && <p className="game-lobby__note">You'll see MAL scores while you play.</p>}
         </div>
       </div>
     </div>

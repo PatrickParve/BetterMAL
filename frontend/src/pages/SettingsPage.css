@@ -235,6 +235,10 @@
   font-size: 13px;
 }
 
+.settings-credit a {
+  color: var(--text-h);
+}
+
 .settings-box__error {
   margin: 0;
   color: var(--danger, #d64545);

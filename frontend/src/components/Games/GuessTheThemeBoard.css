@@ -1,0 +1,262 @@
+/* The board is Guess the Anime's frame (.guess-page, .guess-bar and .guess-scroll in
+   GuessBoard.css): as tall as the window under the navbar, a bar with End game and the
+   field above, and one box that scrolls under it, with no scrollbar. What sits in that
+   box is a column here. On a phone, where a reveal is taller than what is left, it is
+   this box that scrolls, and the bar stays where it is (add-anime-themes-and-guess-the-
+   theme design.md D11). */
+.theme-stage__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  box-sizing: border-box;
+  padding: 18px 0 24px;
+}
+
+/* The big control that plays the current length, named by what it plays. */
+.theme-play {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 132px;
+  height: 132px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--fam-ink);
+  font: inherit;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition:
+    transform 0.12s ease,
+    background-color 0.15s ease;
+}
+
+.theme-play:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.theme-play:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.theme-play:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.theme-play:disabled {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.theme-play__icon {
+  display: grid;
+  place-items: center;
+  height: 40px;
+}
+
+.theme-play__length {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.theme-play--loading .theme-play__length {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.theme-play__spinner {
+  display: block;
+  width: 30px;
+  height: 30px;
+  box-sizing: border-box;
+  border: 3px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: theme-spin 0.8s linear infinite;
+}
+
+/* Playing: three bars that rise and fall, and the same bars standing still for someone
+   who has asked for no motion. */
+.theme-play__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 32px;
+}
+
+.theme-play__bars i {
+  display: block;
+  width: 6px;
+  height: 100%;
+  border-radius: 3px;
+  background: currentColor;
+  transform-origin: bottom;
+  animation: theme-bar 0.7s ease-in-out infinite alternate;
+}
+
+.theme-play__bars i:nth-child(2) {
+  animation-delay: -0.25s;
+}
+
+.theme-play__bars i:nth-child(3) {
+  animation-delay: -0.5s;
+}
+
+@keyframes theme-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes theme-bar {
+  from {
+    transform: scaleY(0.3);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* Said once a song has taken a while to arrive, under the Play control. */
+.theme-loading-note {
+  max-width: 360px;
+  margin: -6px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* The song could not be loaded: this takes the Play control's place. */
+.theme-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 0 8px;
+  text-align: center;
+}
+
+.theme-failed p {
+  margin: 0;
+  color: var(--text-h);
+  font-size: 16px;
+}
+
+.theme-skip {
+  flex: none;
+}
+
+/* The guesses of this round, newest last, in the app's row picture slots. */
+.theme-guesses {
+  width: 100%;
+  max-width: 680px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.theme-guess {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-h);
+}
+
+.theme-guess__thumb {
+  --row-picture-w: 56px;
+  --row-picture-h: 80px;
+  border-radius: 6px;
+}
+
+.theme-guess__thumb.row-picture--placeholder {
+  border: 1px solid var(--border);
+}
+
+.theme-guess__title {
+  min-width: 0;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.theme-stage__reveal {
+  width: 100%;
+}
+
+.theme-stage__empty {
+  margin: 40px 0 0;
+  color: var(--text);
+  font-size: 16px;
+  text-align: center;
+}
+
+/* A verdict that is neither a win nor a loss: the game has ended. */
+.guess-bar__verdict--plain {
+  color: var(--text-h);
+}
+
+@media (max-height: 600px) {
+  .theme-play {
+    width: 108px;
+    height: 108px;
+  }
+
+  .theme-stage__inner {
+    gap: 14px;
+    padding-top: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-play {
+    transition: none;
+  }
+
+  .theme-play:active:not(:disabled) {
+    transform: none;
+  }
+
+  .theme-play__spinner {
+    animation: none;
+  }
+
+  .theme-play__bars i {
+    animation: none;
+    transform: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .theme-play {
+    border: 2px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+    box-shadow: none;
+  }
+
+  .theme-play:disabled {
+    border-color: GrayText;
+    color: GrayText;
+  }
+
+  .theme-guess {
+    border-color: CanvasText;
+  }
+}

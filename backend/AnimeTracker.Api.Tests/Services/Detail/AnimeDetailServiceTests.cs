@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
+using AnimeTracker.Api.Services.AnimeThemes;
 using AnimeTracker.Api.Services.Detail;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Infrastructure;
@@ -14,6 +15,7 @@ using AnimeTracker.Api.Tests.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using static AnimeTracker.Api.Tests.Services.Tmdb.TmdbTestData;
+using AnimeTracker.Api.Tests.Services.AnimeThemes;
 using AnimeTracker.Api.Tests.Services.ScoreHistory;
 
 namespace AnimeTracker.Api.Tests.Services.Detail;
@@ -39,7 +41,7 @@ public class AnimeDetailServiceTests
     // see it. The ones that are pass their own, over the same db.
     private static AnimeDetailService CreateService(
         AnimeTrackerDbContext db, FakeMetadataRefreshService refreshService, ITmdbArtworkService? tmdb = null,
-        ICustomIdMappings? custom = null) =>
+        ICustomIdMappings? custom = null, IAnimeThemesReads? themes = null) =>
         new(
             new AnimeMetadataRepository(db),
             refreshService,
@@ -51,6 +53,7 @@ public class AnimeDetailServiceTests
             tmdb ?? ArtworkService(db, new FakeTmdbClient(), apiKey: "", custom: custom),
             TestIdMappings.Resolver(db, custom),
             ScoreHistoryServiceTestKit.Create(db),
+            themes ?? AnimeThemesReadsTestKit.Create(db),
             NullLogger<AnimeDetailService>.Instance);
 
     private static AnimeMetadata Anime(
@@ -579,6 +582,114 @@ public class AnimeDetailServiceTests
 
         Assert.Contains(1, refresh.Calls); // the visit fetched, and saved a second, different score
         Assert.True(dto.HasScoreHistory);
+    }
+
+    // --- anime-themes: the detail page lists the anime's openings and endings ---
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetDetailAsync_AnAnimeWithThemesListsThem_InMyListOrNot(bool inMyList)
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(Anime(1, DateTimeOffset.UtcNow));
+        if (inMyList)
+            db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = 1, Status = WatchStatus.Watching });
+        StoredThemes.MarkSynced(db);
+        db.AnimeThemes.AddRange(
+            StoredThemes.Row(1, 12, AnimeThemeKind.Ending, 1, songTitle: "The ending", artists: ["Singer"]),
+            StoredThemes.Row(1, 11, AnimeThemeKind.Opening, 1, songTitle: "The opening", episodes: "1-12"),
+            StoredThemes.Row(2, 21)); // another anime's
+        await db.SaveChangesAsync();
+
+        var dto = await CreateService(db, new FakeMetadataRefreshService(db)).GetDetailAsync(1);
+
+        Assert.True(dto.Themes.Ready);
+        Assert.Equal(["OP1", "ED1"], dto.Themes.Themes.Select(t => t.Label));
+        Assert.Equal("The opening", dto.Themes.Themes[0].SongTitle);
+        Assert.Equal("1-12", dto.Themes.Themes[0].Episodes);
+        Assert.Equal(["Singer"], dto.Themes.Themes[1].Artists);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_AnAnimeWithNoThemesHasAnEmptyList_AndTheRestOfThePageIsAsItWas()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(Anime(1, DateTimeOffset.UtcNow));
+        db.AnimeMetadata.Add(Anime(2, DateTimeOffset.UtcNow));
+        StoredThemes.MarkSynced(db);
+        db.AnimeThemes.Add(StoredThemes.Row(2, 20));
+        await db.SaveChangesAsync();
+
+        var dto = await CreateService(db, new FakeMetadataRefreshService(db)).GetDetailAsync(1);
+
+        Assert.True(dto.Themes.Ready);
+        Assert.Empty(dto.Themes.Themes);
+        Assert.Equal(1, dto.AnimeId);
+        Assert.Equal("Anime 1", dto.Title);
+        Assert.False(dto.RefreshFailed);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_BeforeTheFirstRefreshTheThemesAreNotReady()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(Anime(1, DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
+
+        var dto = await CreateService(db, new FakeMetadataRefreshService(db)).GetDetailAsync(1);
+
+        Assert.False(dto.Themes.Ready);
+        Assert.Empty(dto.Themes.Themes);
+    }
+
+    [Fact]
+    public async Task GetDetailAsync_ReadsTheThemesOnceAndFromTheStoredCatalogueOnly()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(Anime(1, DateTimeOffset.UtcNow));
+        StoredThemes.MarkSynced(db);
+        db.AnimeThemes.Add(StoredThemes.Row(1, 10));
+        await db.SaveChangesAsync();
+        var reads = new CountingThemesReads(AnimeThemesReadsTestKit.Create(db));
+
+        var dto = await CreateService(db, new FakeMetadataRefreshService(db), themes: reads).GetDetailAsync(1);
+
+        Assert.Equal([1], reads.AnimeCalls);
+        Assert.Equal(0, reads.SeriesCalls);
+        Assert.Single(dto.Themes.Themes);
+    }
+
+    // The page's read can reach the catalogue and nothing that reaches AnimeThemes: no
+    // client, no sync and no HTTP in what it is built from (spec anime-themes "Opening a page").
+    [Fact]
+    public void TheDetailServiceCannotReachAnimeThemes()
+    {
+        var parameters = typeof(AnimeDetailService).GetConstructors().Single().GetParameters().Select(p => p.ParameterType).ToList();
+
+        Assert.Contains(typeof(IAnimeThemesReads), parameters);
+        Assert.DoesNotContain(typeof(IAnimeThemesClient), parameters);
+        Assert.DoesNotContain(typeof(IAnimeThemesCatalogueSyncService), parameters);
+        Assert.DoesNotContain(typeof(HttpClient), parameters);
+        Assert.DoesNotContain(typeof(IHttpClientFactory), parameters);
+    }
+
+    private sealed class CountingThemesReads(IAnimeThemesReads inner) : IAnimeThemesReads
+    {
+        public List<int> AnimeCalls { get; } = [];
+        public int SeriesCalls { get; private set; }
+
+        public Task<AnimeThemesDto> GetForAnimeAsync(int animeId, CancellationToken ct = default)
+        {
+            AnimeCalls.Add(animeId);
+            return inner.GetForAnimeAsync(animeId, ct);
+        }
+
+        public Task<SeriesThemesDto> GetForSeriesAsync(IReadOnlyList<int> animeIds, CancellationToken ct = default)
+        {
+            SeriesCalls++;
+            return inner.GetForSeriesAsync(animeIds, ct);
+        }
     }
 
     private sealed class FakeMetadataRefreshService(

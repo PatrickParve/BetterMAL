@@ -141,6 +141,10 @@ public class CrossSiteRequestGuardTests
         "api/dashboard",
         "api/games/guess-the-anime",         // read-only: the game in progress, compared, and two posters from stored data, nothing written (GuessTheAnimeService.GetStateAsync)
         "api/games/guess-the-anime/pool",    // read-only: a count of stored anime, nothing written (GuessTheAnimeService.GetPoolAsync)
+        "api/games/guess-the-theme",         // read-only: the game in progress, with no unrevealed song, and two posters from stored data, nothing written (GuessTheThemeService.GetStateAsync)
+        "api/games/guess-the-theme/pool",    // read-only: a count of stored anime with a usable song, nothing written (GuessTheThemeService.GetPoolAsync)
+        "api/games/guess-the-theme/runs/{id:int}/clip", // read-only: relays the start of a song's audio, nothing written here, no MyAnimeList change, no list entry touched (GuessTheThemeService.GetClipSourceAsync, AnimeThemesMediaRelay)
+        "api/games/guess-the-theme/video", // read-only: relays a revealed song's video, nothing written here, no MyAnimeList change, no list entry touched (GuessTheThemeService.GetVideoSourceAsync, AnimeThemesMediaHold)
         "api/games/higher-or-lower",         // read-only: the game in progress and two posters from stored data, nothing written (HigherOrLowerService.GetStateAsync)
         "api/games/higher-or-lower/pool",    // read-only: a count of stored anime, nothing written (HigherOrLowerService.GetPoolAsync)
         "api/health",
