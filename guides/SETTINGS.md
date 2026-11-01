@@ -21,6 +21,8 @@ runs, a thin bar under the gear shows its progress.
   often.
 - Airing dates from AniList are kept current every day, and an anime on your
   list with no airing dates yet is picked up within the hour.
+- Once a week the list of openings and endings is refreshed from AnimeThemes. See
+  [ANIMETHEMES.md](ANIMETHEMES.md).
 
 The actions below are for when you don't want to wait, or when one of these has
 gone wrong.
@@ -182,5 +184,6 @@ why. Once you're connected again, the list import checks for anime to add.
 
 ## Credits
 
-TMDB's logo and the notice its terms require. It's always shown, whether or not
-you have a TMDB key.
+TMDB's logo and the notice its terms require, which is always shown whether or
+not you have a TMDB key, and a credit for AnimeThemes, where the openings and
+endings come from.

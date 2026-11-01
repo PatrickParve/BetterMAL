@@ -30,9 +30,12 @@ its own.
   franchise's average, has moved. It starts when the app does, as MyAnimeList
   keeps no history of its own.
 - **Games**: Higher or Lower, a quick game of guessing which of two anime has
-  the higher MyAnimeList score, and how many you can get in a row; and Guess the
+  the higher MyAnimeList score, and how many you can get in a row; Guess the
   Anime, where you find a hidden anime in ten guesses, each one showing how close
-  it was.
+  it was; and Guess the Opening/Ending, where you name the anime from a clip of
+  its song, starting at a tenth of a second.
+- **Openings and endings**: every anime's and series' songs, with the artist and
+  the episodes they play in, and a button to watch or listen.
 - **Pictures**: choose any MyAnimeList picture for an anime or a series, or,
   with a TMDB key, a full-size poster or backdrop.
 - **Two-way sync**: your edits reach MyAnimeList within seconds, and changes
@@ -78,6 +81,11 @@ meantime: the app opens by itself when it's ready.
 To update after pulling new changes, run the same command again.
 `docker compose down` stops the app, and your data stays in a Docker volume.
 
+## Openings and endings
+
+The songs and videos come from AnimeThemes and need no key or account. See
+[guides/ANIMETHEMES.md](guides/ANIMETHEMES.md).
+
 ## Optional: better pictures from TMDB
 
 With a free TMDB API key, the picture picker also offers TMDB's full-size
@@ -121,12 +129,13 @@ it to a network.
 - Episode air dates: the [AniList](https://anilist.co/) API.
 - The MyAnimeList-to-TMDB/IMDb id mapping:
   [Fribb/anime-lists](https://github.com/Fribb/anime-lists).
+- Openings and endings: [AnimeThemes](https://animethemes.moe/).
 - Pictures (optional): [TMDB](https://www.themoviedb.org/). This application
   uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise
   approved by TMDB.
 
 BetterMAL is an independent project, not affiliated with or endorsed by
-MyAnimeList or AniList.
+MyAnimeList, AniList or AnimeThemes.
 
 ## License
 
