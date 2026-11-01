@@ -16,11 +16,16 @@
   min-width: 0;
 }
 
-/* OP1, ED2, OP1-BD: a chip of a steady least width, so titles start in one column. */
+/* OP1, ED2, OP1-BD: a chip of a steady least width, so titles start in one column (wide enough
+   for OP62). Some labels are far longer (ED1-YorinukiGintamaSan), so the chip stops growing at
+   two fifths of the row and cuts the rest with an ellipsis; the whole label is its title. */
 .theme-row__label {
   flex: none;
   box-sizing: border-box;
-  min-width: 48px;
+  min-width: 56px;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 3px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;

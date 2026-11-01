@@ -243,7 +243,7 @@ public class GuessTheThemeService(
             run.PlayedSongIds = [.. run.PlayedSongIds, ahead.SongId];
         }
 
-        await SaveAsync(move, ct);
+        await SaveAsync(run, move, ct);
 
         media.Keep(ahead is null ? [Whole(next)] : [Whole(next), Whole(ahead)]);
 
@@ -342,7 +342,7 @@ public class GuessTheThemeService(
         if (next is null && following is null)
         {
             await RemoveRunAsync(run, ct);
-            await SaveAsync(move, ct);
+            await SaveAsync(run, move, ct);
             onDeck.Clear();
             media.Keep([]);
             return new GuessTheThemeReplaceDto(GuessTheThemeOutcome.Cleared, null);
@@ -371,7 +371,7 @@ public class GuessTheThemeService(
         run.Step = 0;
         run.RoundGuesses = [];
         run.Moves++;
-        await SaveAsync(move, ct);
+        await SaveAsync(run, move, ct);
 
         var rounds = await LoadRoundsAsync(run.Id, ct);
         media.Keep(rounds.Select(Whole));
@@ -396,7 +396,7 @@ public class GuessTheThemeService(
             {
                 var reveal = await RevealAsync(round, heardSeconds, ct);
                 await RemoveRunAsync(run, ct);
-                await SaveAsync(move, ct);
+                await SaveAsync(run, move, ct);
                 onDeck.Clear();
                 media.Keep([VideoOf(round)]);
                 return new GuessTheThemeMoveDto(GuessTheThemeOutcome.Cleared, null, reveal);
@@ -411,7 +411,7 @@ public class GuessTheThemeService(
 
         run.Phase = GuessTheThemePhase.Revealed;
         run.Moves++;
-        await SaveAsync(move, ct);
+        await SaveAsync(run, move, ct);
 
         if (drawnNow is not null)
             media.Keep([Whole(round), Whole(drawnNow)]);
@@ -433,7 +433,7 @@ public class GuessTheThemeService(
             var ahead = await db.GuessTheThemeRounds.AsNoTracking()
                 .FirstOrDefaultAsync(r => r.RunId == run.Id && r.Number == run.Round + 1, ct);
             await RemoveRunAsync(run, ct);
-            await SaveAsync(move, ct);
+            await SaveAsync(run, move, ct);
 
             // The song that was next has been read for the game that just ended, so Play again
             // can start on it at once. The next press decides whether it's heard.
@@ -455,7 +455,7 @@ public class GuessTheThemeService(
         if (animeId is { } guessed)
             run.RoundGuesses = [.. run.RoundGuesses, guessed];
         run.Moves++;
-        await SaveAsync(move, ct);
+        await SaveAsync(run, move, ct);
 
         return new GuessTheThemeMoveDto(outcome, await BuildGameAsync(run, await LoadRoundsAsync(run.Id, ct), ct), null);
     }
@@ -486,9 +486,13 @@ public class GuessTheThemeService(
     }
 
     /// <summary>Saves a move's changes. If the move count has moved since the run was read, a
-    /// double press or a tab behind the game, the concurrency token refuses the save and the
-    /// move is stale like any other.</summary>
-    private async Task SaveAsync(int move, CancellationToken ct)
+    /// double press or a tab behind the game, the move is stale like any other. The concurrency
+    /// token usually says so (<see cref="DbUpdateConcurrencyException"/>), but two presses of the
+    /// same move that each add the next song insert the same round, and on a real database the
+    /// second insert meets the round's key before the token is ever checked. That is the same race
+    /// and the same answer, so a failed save is looked into: when the run has moved on from this
+    /// move, or is gone, it was a lost race; any other failure is still a failure.</summary>
+    private async Task SaveAsync(GuessTheThemeRun run, int move, CancellationToken ct)
     {
         try
         {
@@ -497,6 +501,14 @@ public class GuessTheThemeService(
         catch (DbUpdateConcurrencyException)
         {
             throw new GuessTheThemeStaleMoveException(move);
+        }
+        catch (DbUpdateException)
+        {
+            var stillOnThisMove = await db.GuessTheThemeRuns.AsNoTracking()
+                .AnyAsync(r => r.Id == run.Id && r.Moves == move, ct);
+            if (!stillOnThisMove)
+                throw new GuessTheThemeStaleMoveException(move);
+            throw;
         }
     }
 

@@ -4,6 +4,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.AnimeThemes;
 using AnimeTracker.Api.Services.Games;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using static AnimeTracker.Api.Tests.Services.Games.GuessTheThemeServiceTests;
 using static AnimeTracker.Api.Tests.Services.Games.GuessTheThemeTestKit;
 using static AnimeTracker.Api.Tests.Services.Games.HigherOrLowerTestKit;
@@ -410,6 +411,62 @@ public class GuessTheThemeServiceMovesTests
         using var check = CreateDb(name);
         var kept = await StoredRunAsync(check);
         Assert.Equal((1, 1), (kept.Step, kept.Moves));
+    }
+
+    /// <summary>Fails the next save with a plain <see cref="DbUpdateException"/> that is not a
+    /// concurrency conflict, the way Postgres answers an insert whose key the other press just
+    /// took (found on a real Npgsql database on 11/1: InMemory raises a concurrency conflict
+    /// instead). Runs <paramref name="beforeFailing"/> first, which is the other press landing.</summary>
+    private sealed class KeyClash(Action? beforeFailing) : SaveChangesInterceptor
+    {
+        private bool _done;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (_done)
+                return ValueTask.FromResult(result);
+            _done = true;
+            beforeFailing?.Invoke();
+            throw new DbUpdateException("duplicate key value violates unique constraint \"PK_GuessTheThemeRounds\"");
+        }
+    }
+
+    private static AnimeTrackerDbContext CreateDbWith(string name, SaveChangesInterceptor interceptor) =>
+        new(new DbContextOptionsBuilder<AnimeTrackerDbContext>().UseInMemoryDatabase(name).AddInterceptors(interceptor).Options);
+
+    [Fact]
+    public async Task TwoNextPressesThatInsertTheSameRoundLeaveTheSlowerOneStaleNotFailed()
+    {
+        // Two presses of Next song at the same move each add the next round. On Postgres the second
+        // insert meets the round's key before the move token is checked, which was a 500.
+        const string name = "next-key-clash";
+        using var seed = CreateDb(name);
+        var run = await TwoSongGameAsync(seed, phase: GuessTheThemePhase.Revealed);
+        using var slower = CreateDbWith(name, new KeyClash(() =>
+        {
+            using var faster = CreateDb(name);
+            var stored = faster.GuessTheThemeRuns.Single();
+            stored.Round = 2;
+            stored.Moves = 1;
+            faster.SaveChanges();
+        }));
+
+        await Assert.ThrowsAsync<GuessTheThemeStaleMoveException>(() => Make(slower).NextAsync(run.Id, 0));
+
+        using var check = CreateDb(name);
+        Assert.Equal((2, 1), ((await StoredRunAsync(check)).Round, (await StoredRunAsync(check)).Moves));
+    }
+
+    [Fact]
+    public async Task AFailedSaveThatIsNotALostRaceIsStillAFailure()
+    {
+        const string name = "next-real-failure";
+        using var seed = CreateDb(name);
+        var run = await TwoSongGameAsync(seed, phase: GuessTheThemePhase.Revealed);
+        using var tab = CreateDbWith(name, new KeyClash(null));
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => Make(tab).NextAsync(run.Id, 0));
     }
 
     [Fact]

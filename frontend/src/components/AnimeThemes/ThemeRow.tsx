@@ -26,7 +26,7 @@ export function ThemeRow({ theme, playing, hideNsfw, onToggle }: ThemeRowProps) 
   return (
     <li className={'theme-row' + (playing ? ' theme-row--playing' : '')}>
       <div className="theme-row__line">
-        <span className="theme-row__label">{theme.label}</span>
+        <span className="theme-row__label" title={theme.label}>{theme.label}</span>
         <div className="theme-row__text">
           <p className="theme-row__title">
             {theme.songTitle ? theme.songTitle : <span className="theme-row__unknown">Song title not known</span>}
