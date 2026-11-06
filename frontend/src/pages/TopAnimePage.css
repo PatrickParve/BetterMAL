@@ -102,7 +102,7 @@
 }
 
 .top-anime-row:hover,
-.top-anime-row:focus-within {
+.top-anime-row:has(:focus-visible:not(select)) {
   background: var(--accent-bg);
   border-color: var(--accent-border);
 }
@@ -275,7 +275,7 @@
 }
 
 .top-anime-showcase__item:hover,
-.top-anime-showcase__item:focus-within {
+.top-anime-showcase__item:has(:focus-visible:not(select)) {
   background: var(--accent-bg);
   border-color: var(--accent-border);
   box-shadow: var(--shadow);
@@ -302,7 +302,7 @@
   box-shadow: 0 0 0 1px var(--medal-border), var(--shadow);
 }
 .top-anime-showcase__item--rank-1:hover,
-.top-anime-showcase__item--rank-1:focus-within {
+.top-anime-showcase__item--rank-1:has(:focus-visible:not(select)) {
   background: var(--accent-bg);
   border-color: var(--accent-border);
   box-shadow: 0 0 0 1px var(--medal-border), var(--shadow);
@@ -573,7 +573,7 @@
 }
 
 .top-anime-card:hover,
-.top-anime-card:focus-within {
+.top-anime-card:has(:focus-visible:not(select)) {
   border-color: var(--accent-border);
   background: var(--accent-bg);
   box-shadow: var(--shadow);

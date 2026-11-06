@@ -11,6 +11,7 @@ import { AnimeRankProvider } from './context/AnimeRankContext.tsx'
 import { ContentFilterProvider } from './context/ContentFilterContext.tsx'
 import { PageStateProvider } from './state/PageStateContext.tsx'
 import { useScrollRestoration } from './hooks/useScrollRestoration.ts'
+import { useCardPressFocus } from './hooks/useCardPressFocus.ts'
 import { HomePage } from './pages/HomePage.tsx'
 import { SeasonPage } from './pages/SeasonPage.tsx'
 import { YearPage } from './pages/YearPage.tsx'
@@ -38,6 +39,7 @@ import { GuessTheThemePage } from './pages/GuessTheThemePage.tsx'
 // (navbar-settings-status-indicator design.md D7) — App.tsx's connect gate
 // above this component has no navbar to read it.
 export function AppShell() {
+  useCardPressFocus()
   return (
     <ScoreVisibilityProvider>
       <ContentFilterProvider>

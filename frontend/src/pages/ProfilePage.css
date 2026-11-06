@@ -230,7 +230,7 @@
 }
 
 .profile-list-row:hover,
-.profile-list-row:focus-within {
+.profile-list-row:has(:focus-visible:not(select)) {
   background: var(--fam-bg);
   border-color: var(--fam-border);
 }

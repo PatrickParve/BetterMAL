@@ -73,7 +73,7 @@
 }
 
 .unresolved-episodes__row:hover,
-.unresolved-episodes__row:focus-within {
+.unresolved-episodes__row:has(:focus-visible:not(select)) {
   background: var(--accent-bg);
   border-color: var(--accent-border);
 }

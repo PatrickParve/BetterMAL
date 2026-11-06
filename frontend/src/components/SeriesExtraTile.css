@@ -8,7 +8,7 @@
 }
 
 .series-extra-tile:hover,
-.series-extra-tile:focus-within {
+.series-extra-tile:has(:focus-visible:not(select)) {
   border-top-color: var(--accent-border);
   border-right-color: var(--accent-border);
   border-bottom-color: var(--accent-border);

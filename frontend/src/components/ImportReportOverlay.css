@@ -134,7 +134,7 @@
 }
 
 .import-report-overlay__row:hover,
-.import-report-overlay__row:focus-within {
+.import-report-overlay__row:has(:focus-visible:not(select)) {
   background: var(--accent-bg);
 }
 

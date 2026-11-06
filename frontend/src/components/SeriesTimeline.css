@@ -124,7 +124,7 @@
 }
 
 .series-timeline__card:hover,
-.series-timeline__card:focus-within {
+.series-timeline__card:has(:focus-visible:not(select)) {
   border-color: var(--accent-border);
 }
 

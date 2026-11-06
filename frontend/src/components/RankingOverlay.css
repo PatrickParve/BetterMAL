@@ -42,7 +42,7 @@
 }
 
 .ranking-overlay__link:hover,
-.ranking-overlay__link:focus-within {
+.ranking-overlay__link:focus-visible {
   background: var(--fam-bg);
   border-color: var(--fam-border);
   box-shadow: var(--shadow);

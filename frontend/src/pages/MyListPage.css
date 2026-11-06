@@ -241,7 +241,7 @@
 /* Only the top/right/bottom border colours change on hover — border-left-color
    stays owned by the status modifier below so the status stripe survives. */
 .my-list-row:hover,
-.my-list-row:focus-within {
+.my-list-row:has(:focus-visible:not(select)) {
   background: var(--accent-bg);
   border-top-color: var(--accent-border);
   border-right-color: var(--accent-border);

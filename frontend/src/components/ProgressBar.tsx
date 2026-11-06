@@ -116,6 +116,15 @@ export function ProgressBar({ watched, total, aired, onIncrement, onSetWatched, 
     closeEditing(true)
   }
 
+  // Chrome, Edge and Firefox focus a button when it is pressed; Safari does
+  // not. Opening the field on that focus opened it before the press ended, so
+  // a drag that began on the count, or a press that slid off it, left the
+  // field open and its card lit. Only keyboard focus opens it here; a click
+  // still opens it through the button's onClick.
+  function handleCountFocus(event: React.FocusEvent<HTMLButtonElement>) {
+    if (event.currentTarget.matches(':focus-visible')) startEditing()
+  }
+
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     event.stopPropagation()
     if (event.key === 'Enter') {
@@ -164,7 +173,7 @@ export function ProgressBar({ watched, total, aired, onIncrement, onSetWatched, 
                 event.stopPropagation()
                 startEditing()
               }}
-              onFocus={startEditing}
+              onFocus={handleCountFocus}
               aria-label="Edit episodes watched"
             >
               {watched}

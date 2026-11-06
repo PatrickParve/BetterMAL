@@ -150,7 +150,7 @@
 }
 
 .edit-history__row:hover,
-.edit-history__row:focus-within {
+.edit-history__row:has(:focus-visible:not(select)) {
   background: var(--accent-bg);
   border-color: var(--accent-border);
 }

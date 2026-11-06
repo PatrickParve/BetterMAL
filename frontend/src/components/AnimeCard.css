@@ -24,8 +24,19 @@
   transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
+/* Lit while hovered, or while keyboard focus is inside the card. It is
+   :focus-visible rather than :focus-within because Chrome, Edge and Firefox
+   leave focus on a link or button that was pressed and Safari does not, so
+   :focus-within kept a pressed card lit (after a drag, or a press released
+   elsewhere) until I clicked somewhere else on the page. :focus-visible is
+   keyboard focus, or a text field being typed in, such as the episode count's
+   open field. A dropdown is left out, since browsers treat one opened with the
+   mouse as keyboard-focused. Every other card and row does the same (a row
+   that is itself a link uses plain :focus-visible), and
+   hooks/useCardPressFocus.ts lists them (design D1-D3 of
+   fix-sticky-card-highlight). */
 .anime-card:hover::before,
-.anime-card:focus-within::before {
+.anime-card:has(:focus-visible:not(select))::before {
   background: var(--accent-bg);
   border-color: var(--accent-border);
   box-shadow: var(--shadow);

@@ -399,7 +399,7 @@ a.recap-page__stat--link:focus-visible {
 }
 
 .recap-hot-take:hover,
-.recap-hot-take:focus-within {
+.recap-hot-take:has(:focus-visible:not(select)) {
   background: var(--fam-bg);
   border-color: var(--fam-border);
   box-shadow: var(--shadow);
@@ -746,7 +746,7 @@ a.recap-page__stat--link:focus-visible {
 }
 
 .recap-podium__card:hover,
-.recap-podium__card:focus-within {
+.recap-podium__card:has(:focus-visible:not(select)) {
   transform: translateY(-4px) scale(1.015);
   /* A 0-offset blur+spread glows evenly on every side rather than casting
      mostly downward the way a drop-shadow-style offset would. */
@@ -816,7 +816,7 @@ a.recap-page__stat--link:focus-visible {
   }
 
   .recap-podium__card:hover,
-  .recap-podium__card:focus-within {
+  .recap-podium__card:has(:focus-visible:not(select)) {
     transform: none;
   }
 
@@ -856,7 +856,7 @@ a.recap-page__stat--link:focus-visible {
 }
 
 .recap-top-ten-row:hover,
-.recap-top-ten-row:focus-within {
+.recap-top-ten-row:has(:focus-visible:not(select)) {
   background: var(--accent-bg);
   border-color: var(--accent-border);
   box-shadow: var(--shadow);

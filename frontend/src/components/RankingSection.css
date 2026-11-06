@@ -46,7 +46,7 @@
 }
 
 .recap-ranking-row__link:hover,
-.recap-ranking-row__link:focus-within {
+.recap-ranking-row__link:focus-visible {
   background: var(--fam-bg);
   border-color: var(--fam-border);
   box-shadow: var(--shadow);
