@@ -13,6 +13,9 @@ namespace AnimeTracker.Api.Services.AnimeThemes;
 /// <item><description>A row with no song, no video or no audio is still held: the page lists it, only the
 /// game needs all three.</description></item>
 /// <item><description>Whether the app has stored the anime makes no difference.</description></item>
+/// <item><description>Every row carries the name of the AnimeThemes anime it was made from, under each of that
+/// anime's MAL ids, so a MAL id that two anime name holds a row per anime, each with its own anime's name.
+/// A blank name is held as none.</description></item>
 /// </list></summary>
 public static class AnimeThemesCatalogueReader
 {
@@ -49,6 +52,7 @@ public static class AnimeThemesCatalogueReader
                         Label = theme.Slug,
                         SongId = theme.Song?.Id,
                         SongTitle = NullIfBlank(theme.Song?.Title),
+                        AnimeName = NullIfBlank(anime.Name),
                         Artists = ArtistsOf(theme.Song),
                         Episodes = chosen.Episodes,
                         Nsfw = chosen.Nsfw,

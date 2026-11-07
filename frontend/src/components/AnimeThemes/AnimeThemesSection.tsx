@@ -1,7 +1,10 @@
-import { useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { AnimeThemeDto } from '../../api/types.ts'
 import { useContentFilter } from '../../context/ContentFilterContext.tsx'
+import { SCROLL_KEYS, type OpenAt } from '../../hooks/useOpenAtSong.ts'
+import { scrollWindowTo } from '../../state/navbarReveal.ts'
 import { ThemeRow } from './ThemeRow.tsx'
+import { themeKey } from './themeFlags.ts'
 import { useThemesView } from './useThemesView.ts'
 import './AnimeThemesSection.css'
 
@@ -26,9 +29,67 @@ type AnimeThemesSectionProps = {
    * song search. `anime` is one open list.
    */
   subject: 'anime' | 'series'
+  /**
+   * The song this visit opened the page at, which the section brings into view and starts
+   * (anime-themes "The anime page can open at one song"). Only the anime page passes it,
+   * and only for a visit that picked a song in the search page's OP/ED dropdown.
+   */
+  openAt?: OpenAt | null
 }
 
-const themeKey = (animeId: number, themeId: number) => `${animeId}:${themeId}`
+// How far below the top of the window the row of a song opened at lands. The navbar is
+// hidden by then, so the row can sit near the edge; its player is beneath it.
+const OPEN_AT_TOP_GAP_PX = 16
+
+// How long after the move the page goes on following the row while its player takes its size.
+const OPEN_AT_FOLLOW_MS = 3000
+
+// Brings `row` to OPEN_AT_TOP_GAP_PX below the top of the window, and keeps it there while the
+// page takes its final height. A video is 150px tall until its metadata has loaded and 360px
+// after, so the page is taller a moment after the move was aimed than when it was, and a row
+// near the end of the page was clamped to the shorter page: the move stopped short, with the
+// lower part of its player and its controls below the window (11/7, real pages, Chrome). So
+// whenever the page has grown enough to let the move go further, it goes further, aimed from
+// the row's place now. It stops for good at the first wheel, touch, press or page-moving key
+// (that is me taking over, as in useOpenAtSong) and after OPEN_AT_FOLLOW_MS. Returns what
+// stops it.
+function bringRowIntoView(row: HTMLElement): () => void {
+  const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const target = () => Math.max(0, row.getBoundingClientRect().top + window.scrollY - OPEN_AT_TOP_GAP_PX)
+  // Where the window can go right now: the target, or the end of the page if that is nearer.
+  const reachable = (top: number) => Math.min(top, document.documentElement.scrollHeight - window.innerHeight)
+
+  let top = target()
+  let aimedAt = reachable(top)
+  scrollWindowTo(top, { navbar: 'hide', smooth })
+
+  const observer = new ResizeObserver(() => {
+    top = target()
+    const next = reachable(top)
+    if (next - aimedAt < 1) return
+    aimedAt = next
+    scrollWindowTo(top, { navbar: 'hide', smooth })
+  })
+  observer.observe(document.documentElement)
+
+  function onKeyDown(event: KeyboardEvent) {
+    if (SCROLL_KEYS.has(event.key)) stop()
+  }
+  const timer = window.setTimeout(() => stop(), OPEN_AT_FOLLOW_MS)
+  function stop() {
+    observer.disconnect()
+    window.clearTimeout(timer)
+    window.removeEventListener('wheel', stop)
+    window.removeEventListener('touchstart', stop)
+    window.removeEventListener('pointerdown', stop)
+    window.removeEventListener('keydown', onKeyDown)
+  }
+  window.addEventListener('wheel', stop, { passive: true })
+  window.addEventListener('touchstart', stop, { passive: true })
+  window.addEventListener('pointerdown', stop)
+  window.addEventListener('keydown', onKeyDown)
+  return stop
+}
 
 // The magnifier of My List's find field, copied so that component stays untouched.
 function SearchGlyph() {
@@ -56,10 +117,18 @@ function SearchGlyph() {
 // (useThemesView): every group starts closed and opens from its heading, an
 // expand/collapse-all control sits at the top right, and a search field keeps the songs
 // that match.
-export function AnimeThemesSection({ groups, ready, subject }: AnimeThemesSectionProps) {
+export function AnimeThemesSection({ groups, ready, subject, openAt }: AnimeThemesSectionProps) {
   const { hideHentai } = useContentFilter()
   const [playing, setPlaying] = useState<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+  const sectionRef = useRef<HTMLElement>(null)
+  // The visit whose song has been dealt with, so a visit opens at its song once however
+  // often this renders, and a song the visit never found isn't looked for again.
+  const openedKeyRef = useRef<string | null>(null)
+  // The theme whose row is to be brought into view once its player is on the page.
+  const [scrollToTheme, setScrollToTheme] = useState<number | null>(null)
+  // Ends the page following the opened row (bringRowIntoView), for a new visit or on leaving.
+  const stopFollowingRef = useRef<(() => void) | null>(null)
 
   const grouped = subject === 'series'
   const listed = groups.filter((group) => group.themes.length > 0)
@@ -75,10 +144,47 @@ export function AnimeThemesSection({ groups, ready, subject }: AnimeThemesSectio
     setPlaying(null)
   }
 
+  // Opens at one song (anime-themes "The anime page can open at one song"): once, on the
+  // render that first shows the rows, it starts the song as if its play control had been
+  // pressed, so the row shows as the one playing and the player mounts with `autoPlay`,
+  // and then asks for the row to be brought into view. The page's usual rules apply: the
+  // video with sound, or for a held song the audio with its note. A song the page doesn't
+  // list (the catalogue changed since the search) does nothing, and the page stays at the
+  // top. If the browser won't start sound by itself the player is still open under the
+  // row with its controls showing, and one press starts it. From then on it is just the
+  // playing row, until another plays or I leave.
+  useEffect(() => {
+    if (!openAt || openedKeyRef.current === openAt.key) return
+    openedKeyRef.current = openAt.key
+    const group = groups.find((entry) => entry.themes.some((theme) => theme.id === openAt.themeId))
+    if (!group) return
+    setPlaying(themeKey(group.animeId, openAt.themeId))
+    setScrollToTheme(openAt.themeId)
+  }, [openAt, groups])
+
+  // The scroll waits for the commit that mounts the player: the row alone is near the end
+  // of the page, and the player is what makes the page tall enough to bring the row to the
+  // top (a target past the end is clamped, which is as far as the page goes). It goes
+  // through scrollWindowTo with the navbar hidden, as SeriesPage's pins do, so it is never
+  // read as my scrolling and the sticky navbar doesn't cover the row. A smooth scroll
+  // only when I haven't asked my system for reduced motion. The player's video is still
+  // taking its size, so the move goes on following the row for a moment (bringRowIntoView).
+  useLayoutEffect(() => {
+    if (scrollToTheme === null) return
+    const row = sectionRef.current?.querySelector<HTMLElement>(`[data-theme-id="${scrollToTheme}"]`)
+    if (row) {
+      stopFollowingRef.current?.()
+      stopFollowingRef.current = bringRowIntoView(row)
+    }
+    setScrollToTheme(null)
+  }, [scrollToTheme])
+
+  useEffect(() => () => stopFollowingRef.current?.(), [])
+
   const heading = <h2>Openings and endings</h2>
 
   return (
-    <section className="themes-section">
+    <section className="themes-section" ref={sectionRef}>
       {hasControls ? (
         <div className="themes-section__header">
           {heading}
@@ -164,6 +270,7 @@ export function AnimeThemesSection({ groups, ready, subject }: AnimeThemesSectio
                         theme={theme}
                         playing={playing === key}
                         hideNsfw={hideHentai}
+                        data-theme-id={theme.id}
                         onToggle={() => setPlaying((current) => (current === key ? null : key))}
                       />
                     )

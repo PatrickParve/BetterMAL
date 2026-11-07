@@ -4,25 +4,72 @@
   gap: 20px;
 }
 
+/* The header's three parts, in the order they read: the title, the page's own search bar
+   (SearchPageBar) and the count, Type filter and sort. The bar is always centred on the page,
+   whichever mode it is in and whatever the title and the filters hold (the user, 11/7: "make it
+   so it is always centered"). It was first centred in the room between the other two, which
+   moved it 147px sideways whenever the Type filter and the sort became just a count; a grid
+   whose two side columns are the same width keeps it where it is. How the parts sit depends
+   on the room:
+   - 1240px and up: one line, the title at the left, the bar in the middle, the filters at the
+     right (each side column is wide enough for the filters, which are 343px);
+   - 960 to 1239px: the title and the bar on one line, the bar still in the middle, and the
+     filters on a line of their own beneath, at the right;
+   - below 960px: one beneath another, the bar centred on its own line.
+   Every step keeps the order they read in, so the tab order is the visual order. */
 .search-page__header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  justify-content: space-between;
+  gap: 12px 16px;
 }
 
+/* A long query, even one with no spaces, wraps in its column instead of pushing the bar. */
 .search-page__header h1 {
+  min-width: 0;
   margin: 0;
   font-size: 24px;
   font-weight: 600;
   letter-spacing: normal;
+  overflow-wrap: anywhere;
 }
 
+/* 420px at most (the component), in the middle of its cell. */
+.search-page__header .search-page-bar {
+  justify-self: center;
+}
+
+/* At the right of its cell. When it has something to show it is as tall as a control in every
+   mode (the Type filter and the sort in Anime mode, the count alone in OP/ED), so a header that
+   gives it a line of its own is the same height in both and the page doesn't jump when I
+   switch. With nothing to show it takes no height. */
 .search-page__controls {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  justify-self: end;
   gap: 12px;
+}
+
+.search-page__controls:not(:empty) {
+  min-height: var(--control-h);
+}
+
+@media (min-width: 960px) {
+  .search-page__header {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 420px) minmax(0, 1fr);
+  }
+
+  .search-page__controls {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1240px) {
+  .search-page__controls {
+    grid-column: auto;
+  }
 }
 
 .search-page__count {

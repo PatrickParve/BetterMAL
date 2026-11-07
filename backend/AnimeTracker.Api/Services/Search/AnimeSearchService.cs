@@ -42,7 +42,7 @@ public class AnimeSearchService(
     public async Task<List<AnimeSearchResultDto>> SearchAsync(
         string query, int limit, bool includeLive, bool includeSeries = true, CancellationToken ct = default)
     {
-        var (term, exact) = ParseQuery(query);
+        var (term, exact) = SearchQuery.Parse(query);
         // A term that normalizes to nothing (e.g. "!!!") must match nothing,
         // not every title (design.md D2) — checked before any index load or
         // MAL call. Subsumes the old zero-length check since an empty term
@@ -142,7 +142,7 @@ public class AnimeSearchService(
 
     public async Task<SearchPageDto> SearchPageAsync(string query, string sortKey, int offset, int limit, CancellationToken ct = default)
     {
-        var (term, exact) = ParseQuery(query);
+        var (term, exact) = SearchQuery.Parse(query);
         // See the matching guard in SearchAsync (design.md D2): a
         // punctuation-only term normalizes to nothing and must match
         // nothing.
@@ -160,12 +160,17 @@ public class AnimeSearchService(
         }
         else
         {
+            // Read once for the whole page: the in-memory by-id view of the
+            // anime the app has saved, which already holds the picture the app
+            // displays for each (improve-search-page design.md D1).
+            var saved = await searchIndex.GetByIdAsync(ct);
+
             var candidates = edges
                 .Select((edge, index) => new SearchPageCandidate(
                     edge.Node.Id,
                     edge.Node.Title,
                     NullIfWhitespace(edge.Node.AlternativeTitles?.En),
-                    edge.Node.MainPicture?.Medium ?? edge.Node.MainPicture?.Large,
+                    DisplayedPicture(saved, edge.Node.Id, edge.Node.MainPicture),
                     edge.Node.NumEpisodes is null or 0 ? null : edge.Node.NumEpisodes,
                     edge.Node.MediaType,
                     edge.Node.Mean,
@@ -272,18 +277,6 @@ public class AnimeSearchService(
             .ToList();
     }
 
-    /// <summary>Trims the query and strips a surrounding pair of double quotes
-    /// (length &gt;= 2, first and last char both `"`) to signal an exact-title
-    /// match instead of a substring match. Shared by both search entry points.</summary>
-    private static (string Term, bool Exact) ParseQuery(string query)
-    {
-        var trimmed = query.Trim();
-        if (trimmed.Length >= 2 && trimmed[0] == '"' && trimmed[^1] == '"')
-            return (trimmed[1..^1], true);
-
-        return (trimmed, false);
-    }
-
     /// <summary>Live MAL search. Degrades to an empty list with <c>Failed</c>
     /// true on failure, distinct from MAL legitimately answering with no
     /// matches (design.md D7) — the type-ahead (<see cref="SearchAsync"/>)
@@ -344,6 +337,23 @@ public class AnimeSearchService(
     }
 
     private static string? NullIfWhitespace(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    /// <summary>The picture a results-page card shows (improve-search-page design.md
+    /// D1, spec <c>navigation-and-search</c> "Full search results page"). An anime
+    /// the app has saved shows the picture the app displays for it everywhere else:
+    /// the one I chose, else the MAL one it stored — never the one the live search
+    /// answered with, which would hide a chosen picture. An anime it hasn't saved
+    /// shows MAL's <c>large</c> picture, falling back to <c>medium</c> only when MAL
+    /// gives no large one: the same order every path that stores a picture uses.
+    /// A saved anime with no stored picture at all keeps MAL's, rather than a
+    /// blank where the live search had one, as the dropdown's
+    /// <see cref="MergeById"/> does for the same case. Only the picture is taken from
+    /// storage: the title, score, episode count and order stay MAL's.</summary>
+    private static string? DisplayedPicture(
+        IReadOnlyDictionary<int, AnimeTitleProjection> saved, int animeId, MalMainPicture? livePicture) =>
+        (saved.TryGetValue(animeId, out var stored) ? stored.PictureUrl : null)
+        ?? livePicture?.Large
+        ?? livePicture?.Medium;
 
     /// <summary>Fire-and-forget: schedules a background series build for the
     /// query's top-ranked anime match when it isn't already part of a stored

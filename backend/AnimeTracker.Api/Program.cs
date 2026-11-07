@@ -224,6 +224,12 @@ builder.Services.AddScoped<IAnimeThemesCatalogueSyncService, AnimeThemesCatalogu
 builder.Services.AddHostedService<AnimeThemesCatalogueBackgroundService>();
 builder.Services.AddScoped<IAnimeThemesReads, AnimeThemesReads>();
 
+// The search page's OP/ED mode (spec `theme-search`): the catalogue held in memory, which the weekly
+// refresh invalidates after its save, and the read-only service over it. It reads stored data only and
+// is given no client, so nothing here can call AnimeThemes or MyAnimeList.
+builder.Services.AddSingleton<IThemeSearchIndex, ThemeSearchIndex>();
+builder.Services.AddScoped<IThemeSearchService, ThemeSearchService>();
+
 // --- Airing schedule ---
 builder.Services.AddScoped<IAiringScheduleService, AiringScheduleService>();
 

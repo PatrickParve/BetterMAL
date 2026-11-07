@@ -76,7 +76,12 @@ public sealed class SeriesSearchIndex
         var (title, englishTitle, pictureUrl) = SeriesIdentity.Resolve(
             root.SelectedTitle, root.SelectedPictureUrl, root.Title, root.EnglishTitle, root.MalPictureUrl);
 
-        return new SeriesSearchResultDto(seriesId, title, englishTitle, pictureUrl, members.Count);
+        // The main line's MAL average, by the same helper the series page and
+        // the series browser use, so the three figures can't drift apart
+        // (improve-search-page design.md D2). Extras are left out, as there.
+        var malScore = SeriesAverages.Mal(members.Where(m => m.IsMainLine).Select(m => m.MalScore)).Value;
+
+        return new SeriesSearchResultDto(seriesId, title, englishTitle, pictureUrl, members.Count, malScore);
     }
 
     // A chosen title is added to the match set alongside every member's own

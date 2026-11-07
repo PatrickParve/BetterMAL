@@ -378,6 +378,10 @@ export type SeriesSearchResultDto = {
   englishTitle: string | null
   pictureUrl: string | null
   entryCount: number
+  // The mean of MAL's scores over the series' main-line entries that have one -
+  // the figure the series page and the series browser show as the main series'
+  // MAL average (improve-search-page design.md D2). null when none has a score.
+  malScore: number | null
 }
 
 export type SearchPageDto = {
@@ -1038,6 +1042,27 @@ export type SeriesThemeGroupDto = {
 export type SeriesThemesDto = {
   ready: boolean
   groups: SeriesThemeGroupDto[]
+}
+
+// One song in the search page's OP/ED mode (improve-search-page, theme-search):
+// mirrors the backend's ThemeSearchResultDto. The anime is named as the rest of
+// the app names it where the app has saved it (its title, English title and the
+// picture it displays, a chosen one included); where it hasn't, `title` is
+// AnimeThemes' name for it and there is no English title or picture. `theme` is
+// exactly what the anime and series pages show for the same row.
+export type ThemeSearchResultDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  theme: AnimeThemeDto
+}
+
+// `ready` is whether a catalogue refresh has ever finished: it tells "the songs
+// aren't here yet" from "nothing matches", which are both an empty list.
+export type ThemeSearchResponseDto = {
+  ready: boolean
+  results: ThemeSearchResultDto[]
 }
 
 export type SeriesDto = {

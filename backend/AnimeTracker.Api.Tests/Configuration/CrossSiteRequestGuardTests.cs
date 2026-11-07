@@ -170,6 +170,7 @@ public class CrossSiteRequestGuardTests
         "api/setup/status",                  // read-only: counts and the coordinator's in-memory state, no outside call (SetupStatusService)
         "api/sync/held",                  // writes: clears held changes MAL already agrees with (HeldChangeService.GetHeldAsync, design D8a)
         "api/sync/reconcile/pending",
+        "api/themes/search",                 // read-only: songs from the stored catalogue, no outside call, no background work, nothing written (ThemeSearchService)
         "api/top-anime",                      // cache-only read; the refresh that used to run inline is now the separate POST api/top-anime/refresh
         "api/transfer/export",
         "api/transfer/import/status",

@@ -1,12 +1,17 @@
 import { useCallback, useRef, useState, type SyntheticEvent } from 'react'
 import type { AnimeThemeDto } from '../../api/types.ts'
-import { heldNote, heldReasons, videoRule } from './themeFlags.ts'
+import { heldNote, heldReasons, startsOnVideo, videoRule, type ThemeStart } from './themeFlags.ts'
 import './ThemePlayer.css'
 
 type ThemePlayerProps = {
   theme: AnimeThemeDto
   /** The app-wide Hide NSFW setting: with it on, an NSFW theme's video is held back, as a spoiler's is. */
   hideNsfw: boolean
+  /**
+   * Which kind of file it begins with. The video, as every player always has, unless the
+   * caller asks for the audio: the search page's OP/ED results do (startsOnVideo).
+   */
+  startWith?: ThemeStart
 }
 
 // The player under a row (anime-themes "Playing a theme"): the video with its
@@ -20,12 +25,15 @@ type ThemePlayerProps = {
 // player serves every page, so the rule is the same on all of them.
 // A file that won't play is a quiet note in place of the player and nothing else
 // on the page notices; the switch stays, so the other kind can be tried.
-export function ThemePlayer({ theme, hideNsfw }: ThemePlayerProps) {
+// It begins on the video, or on the audio when the caller asks (`startWith`, the search
+// results): a song with no audio then begins on its video all the same, unless that is
+// held, and the switch carries on from the same point in the song either way.
+export function ThemePlayer({ theme, hideNsfw, startWith = 'video' }: ThemePlayerProps) {
   const held = videoRule(theme, hideNsfw) === 'held'
   const canVideo = theme.videoUrl !== null
   const hasAudio = theme.audioUrl !== null
 
-  const [videoOn, setVideoOn] = useState(!held && theme.videoUrl !== null)
+  const [videoOn, setVideoOn] = useState(() => startsOnVideo(theme, held, startWith))
   const [failed, setFailed] = useState(false)
   const mediaRef = useRef<HTMLMediaElement | null>(null)
   const setMedia = useCallback((element: HTMLMediaElement | null) => {

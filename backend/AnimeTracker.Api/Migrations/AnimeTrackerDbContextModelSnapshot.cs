@@ -339,6 +339,9 @@ namespace AnimeTracker.Api.Migrations
                     b.Property<int>("ThemeId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("AnimeName")
+                        .HasColumnType("text");
+
                     b.PrimitiveCollection<List<string>>("Artists")
                         .IsRequired()
                         .HasColumnType("text[]");
@@ -392,6 +395,9 @@ namespace AnimeTracker.Api.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CatalogueFormat")
+                        .HasColumnType("integer");
 
                     b.Property<DateTimeOffset?>("LastAttemptAt")
                         .HasColumnType("timestamp with time zone");

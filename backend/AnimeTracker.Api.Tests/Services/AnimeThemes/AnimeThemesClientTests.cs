@@ -70,6 +70,56 @@ public class AnimeThemesClientTests
     }
 
     [Fact]
+    public async Task TheRecordingPredatesTheNameSoNoAnimeInItHasOne()
+    {
+        // Recorded before `title { romaji }` joined the query (see AnimeThemesFixture): an answer
+        // that sends no title parses, with no name, rather than failing the page.
+        var page = await AnimeThemesFixture.ParsedPageAsync();
+
+        Assert.NotEmpty(page.Anime);
+        Assert.All(page.Anime, anime => Assert.Null(anime.Name));
+    }
+
+    [Fact]
+    public async Task AnAnimesNameIsItsRomajiTitle()
+    {
+        var (client, handler) = Create();
+        handler.Enqueue(() => FakeAnimeThemesHandler.Json("""
+            {"data":{"animePagination":{"paginatorInfo":{"hasMorePages":false},"data":[
+              {"id":1,"title":{"romaji":"Cowboy Bebop"},"resources":{"nodes":[{"externalId":1}]},"animethemes":[]},
+              {"id":2,"title":{"romaji":"Kimi no Na wa."},"resources":{"nodes":[]},"animethemes":[]}
+            ]}}}
+            """));
+
+        var page = await client.GetPageAsync(1);
+
+        Assert.Equal(["Cowboy Bebop", "Kimi no Na wa."], page.Anime.Select(a => a.Name));
+        Assert.Equal([1], page.Anime[0].MalIds); // reading the name leaves the rest as it was
+    }
+
+    [Theory]
+    [InlineData("""{"id":1,"animethemes":[]}""", null)]                                 // no title at all
+    [InlineData("""{"id":1,"title":null,"animethemes":[]}""", null)]                    // a null title
+    [InlineData("""{"id":1,"title":{},"animethemes":[]}""", null)]                      // a title with no romaji
+    [InlineData("""{"id":1,"title":{"romaji":null},"animethemes":[]}""", null)]         // a null romaji
+    [InlineData("""{"id":1,"title":{"romaji":""},"animethemes":[]}""", "")]             // blank: passed on as sent
+    [InlineData("""{"id":1,"title":{"romaji":"   "},"animethemes":[]}""", "   ")]       // the reader makes it null
+    [InlineData("""{"id":1,"title":{"romaji":"Real","english":"Other","native":"X"},"animethemes":[]}""", "Real")]
+    public async Task AnAnimeWithNoUsableNameStillParses_AndDoesNotFailThePage(string anime, string? expectedName)
+    {
+        var (client, handler) = Create();
+        handler.Enqueue(() => FakeAnimeThemesHandler.Json(
+            """{"data":{"animePagination":{"paginatorInfo":{"hasMorePages":false},"data":[""" + anime
+            + """,{"id":2,"title":{"romaji":"Next"},"animethemes":[]}]}}}"""));
+
+        var page = await client.GetPageAsync(1);
+
+        Assert.Equal(2, page.Anime.Count); // the other anime on the page is read too
+        Assert.Equal(expectedName, page.Anime[0].Name);
+        Assert.Equal("Next", page.Anime[1].Name);
+    }
+
+    [Fact]
     public async Task OnlyDistinctMalIdsAreKept_AndAMissingOneIsDropped()
     {
         var (client, handler) = Create();
@@ -138,11 +188,25 @@ public class AnimeThemesClientTests
     }
 
     [Fact]
+    public void TheQueryAsksForTheAnimesRomajiTitle_AndNoFieldNamedNameOfItsOwn()
+    {
+        // `Anime` has no `name` in AnimeThemes' GraphQL schema, only `title { romaji }`
+        // (improve-search-page task 2.1): asking for `name` there fails every page. The
+        // other `name` in the query is the artist's, a different level.
+        var query = Regex.Replace(AnimeThemesClient.Query, @"\s+", " ");
+
+        Assert.Contains("data { id title { romaji } resources(site: MAL)", query);
+        Assert.DoesNotContain("data { id name", query);
+        Assert.Equal(2, Regex.Matches(query, @"\bromaji\b").Count); // the anime's, and the song's
+    }
+
+    [Fact]
     public void TheQueryAsksForNoOtherField()
     {
         // The fields the catalogue stores (design D1) and the structure that
-        // reaches them: no synopsis, picture, studio, year or title but the
-        // song's. The arguments and the variable are not fields.
+        // reaches them: no synopsis, picture, studio or year, and no title but
+        // the anime's own romaji one and the song's. The arguments and the
+        // variable are not fields.
         string[] allowed =
         [
             "animePagination", "paginatorInfo", "hasMorePages", "data", "id", "resources", "nodes", "externalId",

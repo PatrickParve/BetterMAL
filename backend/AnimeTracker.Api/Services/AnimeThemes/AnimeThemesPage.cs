@@ -11,8 +11,13 @@ namespace AnimeTracker.Api.Services.AnimeThemes;
 public record AnimeThemesPage(bool HasMorePages, IReadOnlyList<AnimeThemesAnime> Anime);
 
 /// <summary>One AnimeThemes anime. It names no MyAnimeList id, one, or several:
-/// an entry that spans more than one MAL entry carries each of them.</summary>
-public record AnimeThemesAnime(int Id, IReadOnlyList<int> MalIds, IReadOnlyList<AnimeThemesTheme> Themes);
+/// an entry that spans more than one MAL entry carries each of them. <c>Name</c> is
+/// its romaji title, which AnimeThemes calls `title { romaji }` (the schema has no
+/// `name` on an anime): kept so a song of an anime the app hasn't stored can still
+/// be called something (improve-search-page design.md D8). Null when the answer
+/// carried none; a blank one arrives as it was sent, and the reader makes it
+/// null.</summary>
+public record AnimeThemesAnime(int Id, string? Name, IReadOnlyList<int> MalIds, IReadOnlyList<AnimeThemesTheme> Themes);
 
 /// <summary>An opening, ending or insert song of an anime. <c>Type</c> is
 /// AnimeThemes' own `OP`, `ED` or `IN`; <c>Sequence</c> is null where they give

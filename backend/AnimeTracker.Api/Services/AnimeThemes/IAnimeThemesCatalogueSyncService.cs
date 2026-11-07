@@ -16,7 +16,9 @@ public enum AnimeThemesCatalogueSyncOutcome
 public interface IAnimeThemesCatalogueSyncService
 {
     /// <summary>Refreshes the catalogue when it is due: never refreshed, or last
-    /// refreshed more than 7 days ago, and not within 6 hours of a failed attempt.
+    /// refreshed more than 7 days ago, or stored before the app began keeping
+    /// something it now keeps (an older <see cref="Models.AnimeThemesSyncState.CatalogueFormat"/>),
+    /// and in each case not within 6 hours of a failed attempt.
     /// Never throws except on cancellation. Any failure is logged, recorded as a
     /// failed attempt and returned as <see cref="AnimeThemesCatalogueSyncOutcome.Failed"/>,
     /// so nothing that calls it can be stopped by it (design.md D3).</summary>

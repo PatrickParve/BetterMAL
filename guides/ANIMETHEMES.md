@@ -7,6 +7,18 @@ Games page, where you hear a short clip and name the anime.
 
 There is nothing to set up. It works without a key or an account.
 
+## Searching
+
+On the search page, switch the bar from **Anime** to **OP/ED** to search every song
+at once. Type a song title, an artist or an anime, and the first five matches drop
+down; pick one to open that anime's page with the song already playing. Press Enter
+for the full list, up to 200 songs, each with its anime's picture and name. They play
+right there, starting with the sound, with a button to switch to the video.
+
+Songs of anime the app hasn't saved yet are found too, under the name AnimeThemes
+gives the anime and with no picture. Open the anime once and its usual title and
+picture show from then on.
+
 ## Where it comes from
 
 The songs, artists and videos come from [AnimeThemes](https://animethemes.moe/),

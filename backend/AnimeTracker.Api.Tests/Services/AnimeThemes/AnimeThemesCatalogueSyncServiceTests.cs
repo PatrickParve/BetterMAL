@@ -1,6 +1,8 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.AnimeThemes;
+using AnimeTracker.Api.Services.Search;
+using AnimeTracker.Api.Tests.Services.Search;
 using AnimeTracker.Api.Tests.Services.IdMapping;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -24,9 +26,10 @@ public class AnimeThemesCatalogueSyncServiceTests
     }
 
     // One opening and one ending per anime, every id derived from the anime's own,
-    // so a test can change one by naming it.
+    // so a test can change one by naming it. The anime is named "Show <id>" too; a test
+    // that wants another name, or none, says `Show(1) with { Name = null }`.
     private static AnimeThemesAnime Show(int id, string songTitle = "Song") =>
-        Parsed.Anime(id, [id + 1000],
+        Parsed.Named(id, $"Show {id}", [id + 1000],
             Parsed.Theme(id * 10, "OP", "OP1", 1, Parsed.Song(id * 100, songTitle, Parsed.Credit("Artist"))),
             Parsed.Theme(id * 10 + 1, "ED", "ED1", 1, Parsed.Song(id * 100 + 1, songTitle, Parsed.Credit("Artist"))));
 
@@ -46,11 +49,14 @@ public class AnimeThemesCatalogueSyncServiceTests
         IAnimeThemesClient client,
         List<string>? timeline = null,
         CancellationToken ct = default,
-        ILogger<AnimeThemesCatalogueSyncService>? logger = null)
+        ILogger<AnimeThemesCatalogueSyncService>? logger = null,
+        IThemeSearchIndex? themeIndex = null)
     {
         // A new context per call, as each hourly tick gets a scope of its own.
         using var db = new AnimeTrackerDbContext(options);
-        var sync = new TestSync(db, client, timeline ?? [], logger ?? NullLogger<AnimeThemesCatalogueSyncService>.Instance);
+        var sync = new TestSync(
+            db, client, themeIndex ?? new FakeThemeSearchIndex(), timeline ?? [],
+            logger ?? NullLogger<AnimeThemesCatalogueSyncService>.Instance);
         var outcome = await sync.SyncIfDueAsync(ct);
         return new Result(outcome, sync.Delays);
     }
@@ -83,7 +89,7 @@ public class AnimeThemesCatalogueSyncServiceTests
         using var db = new AnimeTrackerDbContext(options);
         var rows = await db.AnimeThemes.AsNoTracking().ToListAsync();
         return string.Join("|", rows.OrderBy(r => r.AnimeId).ThenBy(r => r.ThemeId).Select(r =>
-            $"{r.AnimeId}/{r.ThemeId}:{r.Kind}:{r.Sequence}:{r.Label}:{r.SongId}:{r.SongTitle}:{string.Join(",", r.Artists)}:{r.Episodes}:{r.Nsfw}:{r.Spoiler}:{r.Clean}:{r.VideoUrl}:{r.AudioUrl}"));
+            $"{r.AnimeId}/{r.ThemeId}:{r.Kind}:{r.Sequence}:{r.Label}:{r.SongId}:{r.SongTitle}:{r.AnimeName}:{string.Join(",", r.Artists)}:{r.Episodes}:{r.Nsfw}:{r.Spoiler}:{r.Clean}:{r.VideoUrl}:{r.AudioUrl}"));
     }
 
     private static async Task<int> CountRowsAsync(DbContextOptions<AnimeTrackerDbContext> options)
@@ -98,6 +104,26 @@ public class AnimeThemesCatalogueSyncServiceTests
         var first = await SyncAsync(options, Paged(Enumerable.Range(1, animeCount).Select(id => Show(id)), 100));
         Assert.Equal(AnimeThemesCatalogueSyncOutcome.Synced, first.Outcome);
         await AgeAsync(options, TimeSpan.FromDays(8));
+    }
+
+    private static async Task SetFormatAsync(DbContextOptions<AnimeTrackerDbContext> options, int format)
+    {
+        using var db = new AnimeTrackerDbContext(options);
+        var state = await db.AnimeThemesSyncStates.SingleAsync();
+        state.CatalogueFormat = format;
+        await db.SaveChangesAsync();
+    }
+
+    // The catalogue as the version before names left it: no anime name on any row, format 0, and
+    // refreshed this long ago (so well inside its week).
+    private static async Task SeedPreviousVersionAsync(
+        DbContextOptions<AnimeTrackerDbContext> options, int animeCount, TimeSpan refreshedAgo)
+    {
+        var first = await SyncAsync(
+            options, Paged(Enumerable.Range(1, animeCount).Select(id => Show(id) with { Name = null }), 100));
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Synced, first.Outcome);
+        await SetFormatAsync(options, 0);
+        await AgeAsync(options, refreshedAgo);
     }
 
     private static void AssertJustNow(DateTimeOffset? stamp) =>
@@ -466,6 +492,354 @@ public class AnimeThemesCatalogueSyncServiceTests
         Assert.Equal(2, await db.AnimeThemes.CountAsync());
     }
 
+    // --- The anime's name (improve-search-page design.md D8, task 2.4) ---
+
+    [Fact]
+    public async Task ARenamedAnimeIsWrittenOnEachOfItsRowsAndNothingElseIs()
+    {
+        var recorder = new SaveRecorder();
+        var options = CreateOptions(recorder);
+        await SeedAsync(options, 3);
+        recorder.Reset();
+
+        // AnimeThemes has renamed anime 2; 1 and 3 are as they were.
+        var result = await SyncAsync(options, Serving(Paged([Show(1), Show(2) with { Name = "Show Two Remastered" }, Show(3)], 100)));
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Synced, result.Outcome);
+        Assert.Equal(2, recorder.Saved.Count(s => s is ("AnimeTheme", EntityState.Modified))); // anime 2's OP and ED
+        Assert.DoesNotContain(recorder.Saved, s => s is ("AnimeTheme", EntityState.Added) or ("AnimeTheme", EntityState.Deleted));
+
+        using var db = new AnimeTrackerDbContext(options);
+        var rows = await db.AnimeThemes.AsNoTracking().ToListAsync();
+        Assert.All(rows.Where(r => r.AnimeId == 1002), r => Assert.Equal("Show Two Remastered", r.AnimeName));
+        Assert.All(rows.Where(r => r.AnimeId == 1001), r => Assert.Equal("Show 1", r.AnimeName));
+        Assert.All(rows.Where(r => r.AnimeId == 1003), r => Assert.Equal("Show 3", r.AnimeName));
+    }
+
+    [Fact]
+    public async Task AnUnchangedNamedCatalogueStillWritesNoRow()
+    {
+        var recorder = new SaveRecorder();
+        var options = CreateOptions(recorder);
+        await SeedAsync(options, 4);
+        recorder.Reset();
+
+        var result = await SyncAsync(options, Serving(Paged(Enumerable.Range(1, 4).Select(id => Show(id)), 100)));
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Synced, result.Outcome);
+        Assert.Equal([("AnimeThemesSyncState", EntityState.Modified)], recorder.Saved);
+        using var db = new AnimeTrackerDbContext(options);
+        Assert.All(await db.AnimeThemes.AsNoTracking().ToListAsync(), r => Assert.StartsWith("Show ", r.AnimeName));
+    }
+
+    [Fact]
+    public async Task ANameAnimeThemesDropsIsClearedOnItsRows()
+    {
+        var options = CreateOptions();
+        await SeedAsync(options, 2);
+
+        await SyncAsync(options, Paged([Show(1) with { Name = null }, Show(2)], 100));
+
+        using var db = new AnimeTrackerDbContext(options);
+        var rows = await db.AnimeThemes.AsNoTracking().ToListAsync();
+        Assert.All(rows.Where(r => r.AnimeId == 1001), r => Assert.Null(r.AnimeName));
+        Assert.All(rows.Where(r => r.AnimeId == 1002), r => Assert.Equal("Show 2", r.AnimeName));
+    }
+
+    [Fact]
+    public async Task TheRefreshAfterTheUpgradeNamesEveryRowOnceAndAddsOrRemovesNone()
+    {
+        var recorder = new SaveRecorder();
+        var options = CreateOptions(recorder);
+        await SeedPreviousVersionAsync(options, 4, refreshedAgo: TimeSpan.FromDays(2));
+        recorder.Reset();
+
+        var result = await SyncAsync(options, Serving(Paged(Enumerable.Range(1, 4).Select(id => Show(id)), 100)));
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Synced, result.Outcome);
+        Assert.Equal(8, recorder.Saved.Count(s => s is ("AnimeTheme", EntityState.Modified)));
+        Assert.Equal(1, recorder.SaveCount); // the names and the stamp go in the one save
+        using var db = new AnimeTrackerDbContext(options);
+        var rows = await db.AnimeThemes.AsNoTracking().ToListAsync();
+        Assert.Equal(8, rows.Count);
+        Assert.All(rows, r => Assert.Equal($"Show {r.AnimeId - 1000}", r.AnimeName));
+    }
+
+    // --- The catalogue format (improve-search-page design.md D9, task 2.5) ---
+
+    [Fact]
+    public void ThisVersionsCatalogueFormatIsOne_TheFormatThatKeepsTheAnimesName()
+    {
+        // Bump it, in the same change, when the app begins to keep one more thing from AnimeThemes.
+        Assert.Equal(1, AnimeThemesCatalogueSyncService.CurrentCatalogueFormat);
+    }
+
+    [Fact]
+    public async Task ARefreshStampsTheCurrentFormat()
+    {
+        var options = CreateOptions();
+
+        await SyncAsync(options, Paged([Show(1)], 100));
+
+        Assert.Equal(AnimeThemesCatalogueSyncService.CurrentCatalogueFormat, (await ReadStateAsync(options)).CatalogueFormat);
+    }
+
+    [Fact]
+    public async Task ACatalogueStoredWithoutNamesIsDueTwoDaysAfterItsRefresh()
+    {
+        var options = CreateOptions();
+        await SeedPreviousVersionAsync(options, 3, refreshedAgo: TimeSpan.FromDays(2));
+        var client = Serving(Paged(Enumerable.Range(1, 3).Select(id => Show(id)), 100));
+
+        var result = await SyncAsync(options, client);
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Synced, result.Outcome);
+        Assert.Equal([1], client.Requested);
+    }
+
+    [Fact]
+    public async Task ACatalogueOfTheCurrentFormatIsNotDueTwoDaysAfterItsRefresh()
+    {
+        var options = CreateOptions();
+        await SyncAsync(options, Paged([Show(1)], 100));
+        await AgeAsync(options, TimeSpan.FromDays(2));
+        var client = Serving(Paged([Show(1)], 100));
+
+        var result = await SyncAsync(options, client);
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.NotDue, result.Outcome);
+        Assert.Empty(client.Requested);
+    }
+
+    [Fact]
+    public async Task AStaleFormatWithAnAttemptThatFailedTwoHoursAgoBacksOff_AndSixHoursLaterItTriesOnce()
+    {
+        var options = CreateOptions();
+        await SeedPreviousVersionAsync(options, 3, refreshedAgo: TimeSpan.FromDays(2));
+        await SetStampsAsync(options, lastSyncedAgo: TimeSpan.FromDays(2), lastAttemptAgo: TimeSpan.FromHours(2));
+        var backedOff = Serving(Paged([Show(1)], 100));
+
+        var early = await SyncAsync(options, backedOff);
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.NotDue, early.Outcome);
+        Assert.Empty(backedOff.Requested);
+
+        await SetStampsAsync(options, lastSyncedAgo: TimeSpan.FromDays(2), lastAttemptAgo: TimeSpan.FromHours(6) + TimeSpan.FromMinutes(1));
+        var retry = Serving(Paged(Enumerable.Range(1, 3).Select(id => Show(id)), 100));
+        var late = await SyncAsync(options, retry);
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Synced, late.Outcome);
+        Assert.Equal([1], retry.Requested);
+    }
+
+    [Fact]
+    public async Task AfterTheCatchUpRefreshTheNextDayIsNotDue_AndTheWeeklyClockRunsFromIt()
+    {
+        var options = CreateOptions();
+        await SeedPreviousVersionAsync(options, 3, refreshedAgo: TimeSpan.FromDays(2));
+        var catchUp = await SyncAsync(options, Paged(Enumerable.Range(1, 3).Select(id => Show(id)), 100));
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Synced, catchUp.Outcome);
+        var state = await ReadStateAsync(options);
+        Assert.Equal(AnimeThemesCatalogueSyncService.CurrentCatalogueFormat, state.CatalogueFormat);
+        AssertJustNow(state.LastSyncedAt);
+
+        await AgeAsync(options, TimeSpan.FromDays(1));
+        var nextDay = Serving(Paged([Show(1)], 100));
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.NotDue, (await SyncAsync(options, nextDay)).Outcome);
+        Assert.Empty(nextDay.Requested);
+
+        // Seven days after the refresh that added the names it is due again, not before.
+        await AgeAsync(options, TimeSpan.FromDays(6));
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.NotDue, (await SyncAsync(options, Serving(Paged([Show(1)], 100)))).Outcome);
+        await AgeAsync(options, TimeSpan.FromDays(8));
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Synced, (await SyncAsync(options, Serving(Paged(Enumerable.Range(1, 3).Select(id => Show(id)), 100)))).Outcome);
+    }
+
+    [Fact]
+    public async Task AFailedCatchUpRefreshBacksOffSixHoursAndKeepsTheOldFormat()
+    {
+        var options = CreateOptions();
+        await SeedPreviousVersionAsync(options, 3, refreshedAgo: TimeSpan.FromDays(2));
+        var before = await DescribeAsync(options);
+        var beforeState = await ReadStateAsync(options);
+
+        var failed = await SyncAsync(options, new FakeClient([]) { Serve = (_, _) => throw new AnimeThemesException("down") });
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Failed, failed.Outcome);
+        Assert.Equal(before, await DescribeAsync(options));
+        var state = await ReadStateAsync(options);
+        Assert.Equal(0, state.CatalogueFormat);
+        Assert.Equal(beforeState.LastSyncedAt, state.LastSyncedAt);
+        AssertJustNow(state.LastAttemptAt);
+
+        // The next tick, straight away, does not try again.
+        var again = Serving(Paged([Show(1)], 100));
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.NotDue, (await SyncAsync(options, again)).Outcome);
+        Assert.Empty(again.Requested);
+    }
+
+    [Fact]
+    public async Task AnAbandonedCatchUpRefreshKeepsFormatZeroAndTheStoredRows()
+    {
+        var options = CreateOptions();
+        await SeedPreviousVersionAsync(options, 20, refreshedAgo: TimeSpan.FromDays(2));
+        var before = await DescribeAsync(options);
+        var beforeState = await ReadStateAsync(options);
+
+        // Under half the stored anime: the sanity guard abandons it, names or not.
+        var result = await SyncAsync(options, Paged(Enumerable.Range(1, 9).Select(id => Show(id)), 100));
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Failed, result.Outcome);
+        Assert.Equal(before, await DescribeAsync(options));
+        var state = await ReadStateAsync(options);
+        Assert.Equal(0, state.CatalogueFormat);
+        Assert.Equal(beforeState.LastSyncedAt, state.LastSyncedAt);
+        AssertJustNow(state.LastAttemptAt);
+    }
+
+    [Fact]
+    public async Task TheStoredCatalogueStaysReadyWhileACatchUpRefreshRuns()
+    {
+        var options = CreateOptions();
+        await SeedPreviousVersionAsync(options, 3, refreshedAgo: TimeSpan.FromDays(2));
+        bool? readyWhileReading = null;
+        var client = new FakeClient([])
+        {
+            Serve = (_, _) =>
+            {
+                using var db = new AnimeTrackerDbContext(options);
+                readyWhileReading = AnimeThemesReads.IsCatalogueReadyAsync(db).GetAwaiter().GetResult();
+                return new AnimeThemesPage(false, [Show(1), Show(2), Show(3)]);
+            },
+        };
+
+        var result = await SyncAsync(options, client);
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Synced, result.Outcome);
+        Assert.True(readyWhileReading); // the pages keep listing the stored openings and endings
+    }
+
+    // --- The search page's in-memory index (improve-search-page design.md D6, task 3.4) ---
+
+    [Fact]
+    public async Task ASuccessfulRefreshInvalidatesTheSearchIndexOnceAndOnlyAfterItsSaveHasCommitted()
+    {
+        var recorder = new SaveRecorder();
+        var options = CreateOptions(recorder);
+        var index = new FakeThemeSearchIndex();
+        int? rowsCommittedWhenInvalidated = null;
+        int? savesWhenInvalidated = null;
+        index.OnInvalidate = () =>
+        {
+            using var db = new AnimeTrackerDbContext(options);
+            rowsCommittedWhenInvalidated = db.AnimeThemes.Count();
+            savesWhenInvalidated = recorder.SaveCount;
+        };
+
+        var result = await SyncAsync(options, Serving(Paged([Show(1), Show(2)], 100)), themeIndex: index);
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Synced, result.Outcome);
+        Assert.Equal(1, index.InvalidateCallCount);
+        Assert.Equal(4, rowsCommittedWhenInvalidated);          // the new catalogue had been written
+        Assert.Equal(recorder.SaveCount, savesWhenInvalidated); // and no save came after it
+    }
+
+    [Fact]
+    public async Task ARefreshThatFoundNothingNewStillInvalidatesOnce()
+    {
+        // Cheap (one rebuild a week) and always right, so the refresh does not try to tell.
+        var options = CreateOptions();
+        await SeedAsync(options, 3);
+        var index = new FakeThemeSearchIndex();
+
+        var result = await SyncAsync(options, Serving(Paged(Enumerable.Range(1, 3).Select(id => Show(id)), 100)), themeIndex: index);
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Synced, result.Outcome);
+        Assert.Equal(1, index.InvalidateCallCount);
+    }
+
+    [Fact]
+    public async Task AFailedRefreshDoesNotInvalidateTheSearchIndex()
+    {
+        var options = CreateOptions();
+        await SeedAsync(options, 3);
+        var index = new FakeThemeSearchIndex();
+
+        var result = await SyncAsync(
+            options, new FakeClient([]) { Serve = (_, _) => throw new AnimeThemesException("down") }, themeIndex: index);
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Failed, result.Outcome);
+        Assert.Equal(0, index.InvalidateCallCount);
+    }
+
+    [Fact]
+    public async Task AFailedSaveDoesNotInvalidateTheSearchIndex()
+    {
+        var recorder = new SaveRecorder();
+        var options = CreateOptions(recorder);
+        await SeedAsync(options, 4);
+        recorder.FailNextThemeSave = true;
+        var index = new FakeThemeSearchIndex();
+
+        var result = await SyncAsync(options, Serving(Paged([Show(1, "Changed"), Show(2), Show(3), Show(4)], 100)), themeIndex: index);
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Failed, result.Outcome);
+        Assert.Equal(0, index.InvalidateCallCount); // nothing new had been committed to search
+    }
+
+    [Fact]
+    public async Task AnAbandonedRefreshDoesNotInvalidateTheSearchIndex()
+    {
+        var options = CreateOptions();
+        await SeedAsync(options, 20);
+        var index = new FakeThemeSearchIndex();
+
+        // Under half the stored anime: the sanity guard abandons it, and the stored rows stay as they were.
+        var result = await SyncAsync(options, Serving(Paged(Enumerable.Range(1, 9).Select(id => Show(id)), 100)), themeIndex: index);
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.Failed, result.Outcome);
+        Assert.Equal(0, index.InvalidateCallCount);
+    }
+
+    [Fact]
+    public async Task ARefreshThatIsNotDueDoesNotInvalidateTheSearchIndex()
+    {
+        var options = CreateOptions();
+        await SyncAsync(options, Paged([Show(1)], 100));
+        await AgeAsync(options, TimeSpan.FromDays(3));
+        var index = new FakeThemeSearchIndex();
+
+        var result = await SyncAsync(options, Serving(Paged([Show(1)], 100)), themeIndex: index);
+
+        Assert.Equal(AnimeThemesCatalogueSyncOutcome.NotDue, result.Outcome);
+        Assert.Equal(0, index.InvalidateCallCount);
+    }
+
+    [Fact]
+    public async Task ACancelledRefreshDoesNotInvalidateTheSearchIndex()
+    {
+        var options = CreateOptions();
+        using var cts = new CancellationTokenSource();
+        var index = new FakeThemeSearchIndex();
+        var client = new FakeClient([])
+        {
+            Serve = (page, ct) =>
+            {
+                if (page == 2)
+                {
+                    cts.Cancel();
+                    ct.ThrowIfCancellationRequested();
+                }
+
+                return new AnimeThemesPage(true, [Show(page)]);
+            },
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => SyncAsync(options, client, ct: cts.Token, themeIndex: index));
+
+        Assert.Equal(0, index.InvalidateCallCount);
+    }
+
     // --- Pace ---
 
     [Fact]
@@ -594,8 +968,9 @@ public class AnimeThemesCatalogueSyncServiceTests
 
     // Records every wait instead of sitting through it, and where it fell among the requests.
     private sealed class TestSync(
-        AnimeTrackerDbContext db, IAnimeThemesClient client, List<string> timeline, ILogger<AnimeThemesCatalogueSyncService> logger)
-        : AnimeThemesCatalogueSyncService(db, client, logger)
+        AnimeTrackerDbContext db, IAnimeThemesClient client, IThemeSearchIndex themeIndex, List<string> timeline,
+        ILogger<AnimeThemesCatalogueSyncService> logger)
+        : AnimeThemesCatalogueSyncService(db, client, themeIndex, logger)
     {
         public List<TimeSpan> Delays { get; } = [];
 

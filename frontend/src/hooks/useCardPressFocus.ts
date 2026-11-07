@@ -26,6 +26,10 @@ const HIGHLIGHTED_SURFACES = [
   '.edit-history__row',
   '.unresolved-episodes__row',
   '.import-report-overlay__row',
+  // The search page's OP/ED results (improve-search-page): a song row greys under the pointer.
+  // Scoped to the results so the themes boxes of the anime and series pages, which have no
+  // hover of their own, are not listed.
+  '.theme-results .theme-row',
 ].join(', ')
 
 // Gives back the focus a mouse press put on a link or button inside a card or
@@ -48,17 +52,25 @@ const HIGHLIGHTED_SURFACES = [
 // Only links and buttons: a dropdown needs focus while its list is open, and
 // a text field needs it to be typed in. A card or row missing from the list
 // above keeps the CSS fix and loses only this guard.
+//
+// The pressed control is found when the mouse goes down, not when the timer runs. A
+// press can be released at once (a touch tap's synthesized mouse events, a scripted
+// click), so the click may already have re-rendered what is inside the control by then:
+// a song row's play control swaps its play icon for a stop icon, and the node under the
+// pointer is no longer in the document to ask. The control itself stays, and is what has
+// the focus.
 export function useCardPressFocus(): void {
   useEffect(() => {
     function handleMouseDown(event: MouseEvent) {
       const target = event.target
-      if (!(target instanceof Node)) return
+      if (!(target instanceof Element)) return
+      const pressed = target.closest('a[href], button')
+      if (pressed === null) return
       setTimeout(() => {
         const focused = document.activeElement
         if (
           focused instanceof HTMLElement &&
-          focused.matches('a[href], button') &&
-          focused.contains(target) &&
+          focused === pressed &&
           focused.closest(HIGHLIGHTED_SURFACES) !== null &&
           !focused.matches(':focus-visible')
         ) {

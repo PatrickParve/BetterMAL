@@ -68,6 +68,74 @@
   color: var(--text);
 }
 
+/* A song named by its anime (the search page's OP/ED results, improve-search-page
+   design.md D11): the anime's picture leads the line, and its title is the last line of
+   the text; both are plain links to the anime's page. The picture is the box RowPicture
+   draws, a placeholder of the same size where the app has none, so labels and titles line
+   up whether or not a row has one. It is drawn large, about as tall as the three lines of
+   text beside it, so the row is led by the picture rather than the thumbnail it was. */
+.theme-row__picture {
+  --row-picture-w: 64px;
+  --row-picture-h: 92px;
+  border-radius: 4px;
+}
+
+.theme-row__picture--placeholder {
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+}
+
+/* The link around the picture takes the picture's own box and nothing more. It is the
+   only thing that tells the pointer the picture is clickable, so it dims a little under
+   it. (The text link beside it has the hover colour.) */
+.theme-row__picture-link {
+  flex: none;
+  display: block;
+  border-radius: 4px;
+}
+
+.theme-row__picture-link:hover .theme-row__picture {
+  opacity: 0.85;
+}
+
+/* A narrow window gives the text back some of the width the picture takes: still larger
+   than the thumbnail it replaces, but not so wide that a row's text is left a sliver. A
+   landscape picture (a TMDB backdrop) is as wide as 16:9 of its height, 121px at this
+   height, which would leave the text 50px; it is held to the 78px the old thumbnail's
+   height allowed, and RowPicture's `contain` then shows it whole inside that. */
+@media (max-width: 480px) {
+  .theme-row__picture {
+    --row-picture-w: 48px;
+    --row-picture-h: 68px;
+  }
+
+  .theme-row__picture .row-picture--wide {
+    max-width: 78px;
+  }
+}
+
+.theme-row__anime {
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.theme-row__anime a {
+  color: var(--text-h);
+  text-decoration: none;
+}
+
+/* The colour is the hover feedback; the title is never underlined. */
+.theme-row__anime a:hover {
+  color: var(--accent);
+}
+
+.theme-row__anime a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 /* What a theme is flagged as: a word in a bordered chip, so it never relies on its
    colour. */
 .theme-mark {

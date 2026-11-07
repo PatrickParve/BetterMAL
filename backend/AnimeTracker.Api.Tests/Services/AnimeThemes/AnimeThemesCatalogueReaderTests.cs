@@ -228,6 +228,75 @@ public class AnimeThemesCatalogueReaderTests
         Assert.Equal([10, 11], rows.Where(r => r.AnimeId == 101).Select(r => r.ThemeId));
     }
 
+    // --- The anime's name (improve-search-page design.md D8, task 2.3) ---
+
+    [Fact]
+    public void AnAnimeWithTwoMalIdsCarriesItsNameOnBothRows()
+    {
+        var rows = AnimeThemesCatalogueReader.Read([Parsed.Page(
+            Parsed.Named(1, "Cowboy Bebop", [100, 101], Parsed.Theme(10), Parsed.Theme(11, type: "ED", slug: "ED1")))]);
+
+        Assert.Equal(4, rows.Count);
+        Assert.All(rows, r => Assert.Equal("Cowboy Bebop", r.AnimeName));
+        // Each id holds both themes (the rows come theme by theme, so the ids interleave).
+        Assert.Equal([10, 11], rows.Where(r => r.AnimeId == 100).Select(r => r.ThemeId));
+        Assert.Equal([10, 11], rows.Where(r => r.AnimeId == 101).Select(r => r.ThemeId));
+    }
+
+    [Fact]
+    public void OneMalIdOnTwoAnimeGivesEachRowTheNameOfTheAnimeItCameFrom()
+    {
+        var rows = AnimeThemesCatalogueReader.Read([Parsed.Page(
+            Parsed.Named(1, "Fate/Zero", [100], Parsed.Theme(10, slug: "OP1")),
+            Parsed.Named(2, "Fate/Zero 2nd Season", [100], Parsed.Theme(20, slug: "OP1"), Parsed.Theme(21, type: "ED", slug: "ED1")))]);
+
+        Assert.All(rows, r => Assert.Equal(100, r.AnimeId));
+        Assert.Equal("Fate/Zero", Assert.Single(rows, r => r.ThemeId == 10).AnimeName);
+        Assert.Equal("Fate/Zero 2nd Season", Assert.Single(rows, r => r.ThemeId == 20).AnimeName);
+        Assert.Equal("Fate/Zero 2nd Season", Assert.Single(rows, r => r.ThemeId == 21).AnimeName);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("\t\n")]
+    public void ABlankOrMissingNameIsHeldAsNone(string? name)
+    {
+        var rows = AnimeThemesCatalogueReader.Read([Parsed.Page(Parsed.Named(1, name, [100], Parsed.Theme(10)))]);
+
+        Assert.Null(Assert.Single(rows).AnimeName);
+    }
+
+    [Fact]
+    public void ANameIsHeldWithoutItsSurroundingSpace()
+    {
+        var rows = AnimeThemesCatalogueReader.Read([Parsed.Page(Parsed.Named(1, "  Cowboy Bebop \n", [100], Parsed.Theme(10)))]);
+
+        Assert.Equal("Cowboy Bebop", Assert.Single(rows).AnimeName);
+    }
+
+    [Fact]
+    public void ANameOnlyNamesItsOwnAnimesRows()
+    {
+        var rows = AnimeThemesCatalogueReader.Read([Parsed.Page(
+            Parsed.Named(1, "First", [100], Parsed.Theme(10)),
+            Parsed.Named(2, null, [200], Parsed.Theme(20)),
+            Parsed.Named(3, "Third", [300], Parsed.Theme(30)))]);
+
+        Assert.Equal(["First", null, "Third"], rows.Select(r => r.AnimeName));
+    }
+
+    [Fact]
+    public async Task TheRecordingPredatesNamesSoItsRowsHoldNone()
+    {
+        // See AnimeThemesFixture: recorded before `title { romaji }` was asked for.
+        var rows = await ReadRecordingAsync();
+
+        Assert.NotEmpty(rows);
+        Assert.All(rows, r => Assert.Null(r.AnimeName));
+    }
+
     [Fact]
     public void TwoAnimeOnOneMalIdAreMerged()
     {

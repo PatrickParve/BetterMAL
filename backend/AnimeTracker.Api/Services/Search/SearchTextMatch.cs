@@ -40,6 +40,20 @@ internal static class SearchTextMatch
     public static bool StartsWithNormalized(string? value, string term) =>
         value is not null && Normalize(value).StartsWith(Normalize(term), StringComparison.Ordinal);
 
+    // The same three comparisons for text that has already been through Normalize on both sides.
+    // The openings-and-endings search holds every catalogue row's texts normalized once, so a
+    // keystroke compares 14.6k rows without normalizing any of them again (improve-search-page
+    // design.md D7). They compare exactly what they are given: normalizing is the caller's job,
+    // and given normalized input they agree with the three above for every value and term.
+    public static bool EqualsPrenormalized(string? normalizedValue, string normalizedTerm) =>
+        normalizedValue is not null && string.Equals(normalizedValue, normalizedTerm, StringComparison.Ordinal);
+
+    public static bool StartsWithPrenormalized(string? normalizedValue, string normalizedTerm) =>
+        normalizedValue is not null && normalizedValue.StartsWith(normalizedTerm, StringComparison.Ordinal);
+
+    public static bool ContainsPrenormalized(string? normalizedValue, string normalizedTerm) =>
+        normalizedValue is not null && normalizedValue.Contains(normalizedTerm, StringComparison.Ordinal);
+
     /// <summary>Word-anchored contains: true when every word of
     /// <paramref name="term"/> lines up, in order, with a run of whole words
     /// inside <paramref name="value"/>. Unlike <see cref="ContainsNormalized"/>,

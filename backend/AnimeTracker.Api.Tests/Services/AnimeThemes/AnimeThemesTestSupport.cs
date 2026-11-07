@@ -13,7 +13,10 @@ namespace AnimeTracker.Api.Tests.Services.AnimeThemes;
 
 /// <summary>The recorded answer. <c>Fixtures/anime-pagination.json</c> is a trimmed copy of
 /// a real <c>animePagination</c> answer from graphql.animethemes.moe, recorded on
-/// 2026-10-31 with <see cref="AnimeThemesClient.Query"/>: page 1 of the whole list
+/// 2026-10-31 with <see cref="AnimeThemesClient.Query"/> as it was then, before the anime's
+/// <c>title { romaji }</c> was added to it, so no anime in it carries a name. It has not been
+/// recorded again: it stands for an answer that sends none, and the tests that need a name
+/// build the body by hand (improve-search-page task 2.2). Page 1 of the whole list
 /// (anime 2, 5, 6, 18, 20, 22, 25, 33 and 69) and the one anime with insert songs
 /// (4514), left as AnimeThemes sent them. Between them they hold a clean and a credited
 /// video, versions, a spoiler, NSFW entries, an insert song, no artist, no episodes, a
@@ -125,7 +128,11 @@ internal static class Parsed
         new(id, type, sequence, slug, song, versions ?? [Version(1)]);
 
     public static AnimeThemesAnime Anime(int id, int[] malIds, params AnimeThemesTheme[] themes) =>
-        new(id, malIds, themes);
+        new(id, null, malIds, themes);
+
+    /// <summary>An anime that AnimeThemes names (its romaji title).</summary>
+    public static AnimeThemesAnime Named(int id, string? name, int[] malIds, params AnimeThemesTheme[] themes) =>
+        new(id, name, malIds, themes);
 
     public static AnimeThemesPage Page(params AnimeThemesAnime[] anime) => new(false, anime);
 }
@@ -154,7 +161,8 @@ internal static class StoredThemes
         string? episodes = null,
         bool nsfw = false,
         bool spoiler = false,
-        bool clean = false) =>
+        bool clean = false,
+        string? animeName = null) =>
         new()
         {
             AnimeId = animeId,
@@ -164,6 +172,7 @@ internal static class StoredThemes
             Label = label ?? $"{(kind == AnimeThemeKind.Opening ? "OP" : "ED")}{sequence}",
             SongId = themeId * 10,
             SongTitle = songTitle,
+            AnimeName = animeName,
             Artists = [.. artists ?? []],
             Episodes = episodes,
             Nsfw = nsfw,

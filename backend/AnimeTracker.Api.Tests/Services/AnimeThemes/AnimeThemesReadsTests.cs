@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.AnimeThemes;
+using AnimeTracker.Api.Tests.Services.Search;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -131,7 +132,7 @@ public class AnimeThemesReadsTests
         handler.Enqueue(() => FakeAnimeThemesHandler.Json(AnimeThemesFixture.PageJson().Replace("\"hasMorePages\":true", "\"hasMorePages\":false")));
         using (var syncDb = new AnimeTrackerDbContext(options))
         {
-            var sync = new AnimeThemesCatalogueSyncService(syncDb, new InstantClient(handler), NullLogger<AnimeThemesCatalogueSyncService>.Instance);
+            var sync = new AnimeThemesCatalogueSyncService(syncDb, new InstantClient(handler), new FakeThemeSearchIndex(), NullLogger<AnimeThemesCatalogueSyncService>.Instance);
             Assert.Equal(AnimeThemesCatalogueSyncOutcome.Synced, await sync.SyncIfDueAsync());
         }
 

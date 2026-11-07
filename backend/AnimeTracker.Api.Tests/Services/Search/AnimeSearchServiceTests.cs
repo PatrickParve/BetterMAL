@@ -681,6 +681,216 @@ public class AnimeSearchServiceTests
         Assert.Equal(2, malClient.CallCount);
     }
 
+    // --- The results page's pictures (improve-search-page design.md D1, task 1.2) ---
+
+    private static MalAnimeListEdge MalEdgeWithPicture(int id, string title, int index, string? medium, string? large) =>
+        new()
+        {
+            Node = new MalAnimeNode
+            {
+                Id = id, Title = title, Popularity = 100 + index,
+                MainPicture = new MalMainPicture { Medium = medium, Large = large },
+            },
+        };
+
+    [Fact]
+    public async Task SearchPageAsync_AnUnsavedAnimeShowsMalsLargePicture()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+        var service = CreateService(db, malResults: [MalEdgeWithPicture(1, "Naruto", 0, medium: "m.jpg", large: "l.jpg")]);
+
+        var page = await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+
+        Assert.Equal("l.jpg", Assert.Single(page.Items).PictureUrl);
+    }
+
+    [Theory]
+    [InlineData(null, "m.jpg", "m.jpg")] // no large one: the medium one
+    [InlineData("l.jpg", null, "l.jpg")]
+    [InlineData(null, null, null)]       // a picture object holding neither
+    public async Task SearchPageAsync_AMissingLargePictureFallsBackToMedium(string? large, string? medium, string? expected)
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+        var service = CreateService(db, malResults: [MalEdgeWithPicture(1, "Naruto", 0, medium, large)]);
+
+        var page = await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+
+        Assert.Equal(expected, Assert.Single(page.Items).PictureUrl);
+    }
+
+    [Fact]
+    public async Task SearchPageAsync_AnAnimeMalSentNoPictureObjectForHasNoPicture()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+        var service = CreateService(db, malResults: [MalEdge(1, "Naruto", 0)]);
+
+        var page = await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+
+        Assert.Null(Assert.Single(page.Items).PictureUrl);
+    }
+
+    [Fact]
+    public async Task SearchPageAsync_ASavedAnimeShowsItsStoredPictureNotTheLiveOne()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+        var service = CreateService(
+            db,
+            localIndex: [new AnimeTitleProjection(1, "Naruto", null, "stored.jpg", 5)],
+            malResults: [MalEdgeWithPicture(1, "Naruto", 0, medium: "m.jpg", large: "l.jpg")]);
+
+        var page = await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+
+        Assert.Equal("stored.jpg", Assert.Single(page.Items).PictureUrl);
+    }
+
+    [Fact]
+    public async Task SearchPageAsync_ASavedAnimeShowsThePictureIChose()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Naruto", MalPictureUrl = "mal.jpg", SelectedPictureUrl = "chosen.jpg" };
+        anime.ResolvePictureUrl();
+        db.AnimeMetadata.Add(anime);
+        await db.SaveChangesAsync();
+
+        // The real index over the same data, so "the picture the app displays" is what the
+        // app's own projection reads, not a value written straight into a fake.
+        var service = CreateService(
+            db,
+            searchIndex: new AnimeSearchIndexCache(new FakeScopeFactory(db)),
+            malResults: [MalEdgeWithPicture(1, "Naruto", 0, medium: "m.jpg", large: "l.jpg")]);
+
+        var page = await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+
+        Assert.Equal("chosen.jpg", Assert.Single(page.Items).PictureUrl);
+    }
+
+    [Fact]
+    public async Task SearchPageAsync_ASavedAnimeWithNoChosenPictureShowsTheOneItStored()
+    {
+        using var db = CreateDb();
+        var anime = new AnimeMetadata { Id = 1, Title = "Naruto", MalPictureUrl = "mal.jpg" };
+        anime.ResolvePictureUrl();
+        db.AnimeMetadata.Add(anime);
+        await db.SaveChangesAsync();
+
+        var service = CreateService(
+            db,
+            searchIndex: new AnimeSearchIndexCache(new FakeScopeFactory(db)),
+            malResults: [MalEdgeWithPicture(1, "Naruto", 0, medium: "m.jpg", large: "l.jpg")]);
+
+        var page = await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+
+        Assert.Equal("mal.jpg", Assert.Single(page.Items).PictureUrl);
+    }
+
+    [Fact]
+    public async Task SearchPageAsync_ASavedAnimeWithNoStoredPictureKeepsMalsLargeOne()
+    {
+        // Saved with no picture at all (MAL had none when it was stored): the live search's
+        // large one is better than a blank, as the dropdown's merge already treats it.
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+        var service = CreateService(
+            db,
+            localIndex: [new AnimeTitleProjection(1, "Naruto", null, null, 5)],
+            malResults: [MalEdgeWithPicture(1, "Naruto", 0, medium: "m.jpg", large: "l.jpg")]);
+
+        var page = await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+
+        Assert.Equal("l.jpg", Assert.Single(page.Items).PictureUrl);
+    }
+
+    [Theory]
+    [InlineData("relevance", new[] { 10, 20, 30 })]
+    [InlineData("popularity", new[] { 30, 20, 10 })]
+    public async Task SearchPageAsync_OnlyThePictureIsTakenFromStorage(string sortKey, int[] expectedOrder)
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+
+        // MAL's answer, in MAL's order. Anime 20 is also saved, and its stored copy disagrees
+        // about everything: title, English title, popularity and picture.
+        var malResults = new List<MalAnimeListEdge>
+        {
+            new()
+            {
+                Node = new MalAnimeNode
+                {
+                    Id = 10, Title = "Live Ten", AlternativeTitles = new MalAlternativeTitles { En = "Live Ten EN" },
+                    MainPicture = new MalMainPicture { Large = "l10.jpg" },
+                    Mean = 8.1, NumEpisodes = 24, MediaType = "tv", Popularity = 300,
+                },
+            },
+            new()
+            {
+                Node = new MalAnimeNode
+                {
+                    Id = 20, Title = "Live Twenty", AlternativeTitles = new MalAlternativeTitles { En = "Live Twenty EN" },
+                    MainPicture = new MalMainPicture { Large = "l20.jpg" },
+                    Mean = 7.7, NumEpisodes = 12, MediaType = "ova", Popularity = 200,
+                },
+            },
+            new()
+            {
+                Node = new MalAnimeNode
+                {
+                    Id = 30, Title = "Live Thirty", MainPicture = new MalMainPicture { Large = "l30.jpg" },
+                    Mean = 6.5, NumEpisodes = 0, MediaType = "movie", Popularity = 100,
+                },
+            },
+        };
+        var service = CreateService(
+            db,
+            localIndex: [new AnimeTitleProjection(20, "Stored Twenty", "Stored Twenty EN", "stored20.jpg", 1)],
+            malResults: malResults);
+
+        var page = await service.SearchPageAsync("live", sortKey, offset: 0, limit: 50);
+
+        Assert.Equal(expectedOrder, page.Items.Select(i => i.AnimeId));
+        var twenty = page.Items.Single(i => i.AnimeId == 20);
+        Assert.Equal("stored20.jpg", twenty.PictureUrl);
+        Assert.Equal("Live Twenty", twenty.Title);
+        Assert.Equal("Live Twenty EN", twenty.EnglishTitle);
+        Assert.Equal(7.7, twenty.MalScore);
+        Assert.Equal(12, twenty.TotalEpisodes);
+        Assert.Equal("ova", twenty.MediaType);
+        Assert.Equal(200, twenty.PopularityRank);
+        Assert.Equal("l10.jpg", page.Items.Single(i => i.AnimeId == 10).PictureUrl);
+        Assert.Equal("l30.jpg", page.Items.Single(i => i.AnimeId == 30).PictureUrl);
+        Assert.Null(page.Items.Single(i => i.AnimeId == 30).TotalEpisodes);
+    }
+
+    [Fact]
+    public async Task SearchPageAsync_TheLocalFallbackStillShowsStoredPictures()
+    {
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+        var fallback = new List<AnimeSearchFallbackProjection> { new(1, "Naruto", null, "stored.jpg", 1, "tv", 220, 8.0) };
+        var service = CreateService(db, fallbackIndex: fallback, malFails: true);
+
+        var page = await service.SearchPageAsync("naruto", "relevance", offset: 0, limit: 50);
+
+        Assert.True(page.MalSearchFailed);
+        Assert.Equal("stored.jpg", Assert.Single(page.Items).PictureUrl);
+    }
+
+    [Fact]
+    public async Task SearchAsync_TheDropdownStillTakesTheSmallPicture()
+    {
+        // Its thumbnails are 28px wide, so the medium picture is enough there (proposal).
+        using var db = CreateDb();
+        await db.SaveChangesAsync();
+        var service = CreateService(db, malResults: [MalEdgeWithPicture(1, "Naruto", 0, medium: "m.jpg", large: "l.jpg")]);
+
+        var results = await service.SearchAsync("naruto", limit: 5, includeLive: true);
+
+        Assert.Equal("m.jpg", Assert.Single(results).PictureUrl);
+    }
+
     // --- Normalized matching (design.md D1-D3, tasks.md 1.7) ---
 
     [Fact]

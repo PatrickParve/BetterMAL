@@ -39,6 +39,16 @@ public class AnimeTheme
 
     public string? SongTitle { get; set; }
 
+    /// <summary>AnimeThemes' name for the anime this row came from, which is its
+    /// romaji title. It exists to call a song of an anime the app hasn't stored
+    /// something in the openings-and-endings search; wherever the app has stored the
+    /// anime, its own titles are used instead (improve-search-page design.md D8). Held
+    /// on every row rather than once per MAL id, so that "the name of the anime this
+    /// row came from" stays exact when one AnimeThemes anime names two MAL ids or one
+    /// MAL id is named by two anime. Null when AnimeThemes sent none, or a blank one,
+    /// and for a row stored before names were kept, until the next refresh.</summary>
+    public string? AnimeName { get; set; }
+
     /// <summary>Empty for about 30% of songs. Each name is the artist's alias
     /// where one is set, as it's credited on this song, else their name.</summary>
     public List<string> Artists { get; set; } = [];

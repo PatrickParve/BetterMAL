@@ -30,6 +30,7 @@ public class SeriesSearchLookup(AnimeTrackerDbContext db)
                     member.Anime.MalPictureUrl,
                     member.IsMainLine,
                     member.Anime.PopularityRank,
+                    member.Anime.MalScore,
                     series.SelectedTitle,
                     series.SelectedPictureUrl))
             .ToListAsync(ct);
@@ -46,8 +47,10 @@ public class SeriesSearchLookup(AnimeTrackerDbContext db)
 /// series), fed to SeriesIdentity.Resolve for display alongside the root's
 /// MalPictureUrl — its default, deliberately not its own (resolved)
 /// displayed picture, so a root anime's own pin never doubles as the
-/// series' default (design.md D7).</summary>
+/// series' default (design.md D7). MalScore is the member's own MAL score,
+/// which SeriesSearchIndex averages over the main line for the series card
+/// (improve-search-page design.md D2).</summary>
 internal sealed record SeriesMemberProjection(
     int SeriesId, int AnimeId, string Title, string? EnglishTitle, string? MalPictureUrl,
-    bool IsMainLine, int? PopularityRank,
+    bool IsMainLine, int? PopularityRank, double? MalScore,
     string? SelectedTitle, string? SelectedPictureUrl);

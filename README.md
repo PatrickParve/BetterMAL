@@ -35,7 +35,8 @@ its own.
   it was; and Guess the Opening/Ending, where you name the anime from a clip of
   its song, starting at a tenth of a second.
 - **Openings and endings**: every anime's and series' songs, with the artist and
-  the episodes they play in, and a button to watch or listen.
+  the episodes they play in, and a button to watch or listen. The search page's
+  **OP/ED** switch finds a song by its title, its artist or its anime.
 - **Pictures**: choose any MyAnimeList picture for an anime or a series, or,
   with a TMDB key, a full-size poster or backdrop.
 - **Two-way sync**: your edits reach MyAnimeList within seconds, and changes

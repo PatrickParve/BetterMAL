@@ -40,6 +40,7 @@ import { useActionFailure } from "../context/ActionFailureContext.tsx";
 import { useScoreVisibility } from "../context/ScoreVisibilityContext.tsx";
 import { useDisplayPicture } from "../hooks/useDisplayPicture.ts";
 import { useLandscapePicture } from "../hooks/useLandscapePicture.ts";
+import { useOpenAtSong } from "../hooks/useOpenAtSong.ts";
 import { usePageData } from "../hooks/usePageData.ts";
 import { usePickerOpenGroups } from "../hooks/usePickerOpenGroups.ts";
 import { useScoreReveal } from "../hooks/useScoreReveal.ts";
@@ -234,6 +235,12 @@ export function AnimeDetailPage() {
     setData: setDetail,
     reload,
   } = usePageData<AnimeDetailDto>(`anime:${animeId}`, () => getAnimeDetail(animeId));
+  // The song this visit was opened at, when I picked one in the search page's OP/ED
+  // dropdown; null for every other way in (anime-themes "The anime page can open at one
+  // song"). It is read here, from the moment the visit begins, because the themes section
+  // only mounts once the read above has finished and by then it is too late to know
+  // whether I scrolled in the meantime.
+  const openAt = useOpenAtSong();
   const [refreshing, setRefreshing] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [incrementPending, setIncrementPending] = useState(false);
@@ -955,6 +962,7 @@ export function AnimeDetailPage() {
             subject="anime"
             ready={detail.themes.ready}
             groups={[{ animeId: detail.animeId, title: null, themes: detail.themes.themes }]}
+            openAt={openAt}
           />
         </div>
       </div>

@@ -1,0 +1,113 @@
+/* The switch and the field on one line, the field taking the room that is left. The bar
+   is compact, 420px at most: about 125px of switch and a field of about 287px. The page
+   (SearchPage.css) centres it in its header, between the title and the filters; at 360px it
+   has the whole content width, 310px, and the field about 177px. */
+.search-page-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+}
+
+/* The page's field is the navbar's (SearchBar.css) with its own sizes: no 360px cap, the
+   room the switch leaves, and the height of the page's other header controls (the Type
+   filter, the sort select) instead of the navbar's. The doubled class beats the base
+   rule whichever stylesheet loads first. The input drops its vertical padding because the
+   field is only 34px tall: a line of text plus 16px of padding would be clipped. A long
+   placeholder or value ends in an ellipsis rather than being cut mid-letter. The text is
+   15px, next to the switch's and the filters' 14px, where the navbar's field takes the
+   page's 16 to 18px: in a 34px field that size looks oversized beside them, and it is what
+   lets the whole OP/ED placeholder ("Search songs, artists or anime…", about 213px) fit
+   the compact field on a desktop window. */
+.search-bar.search-bar--page {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  max-width: none;
+  height: var(--control-h);
+  box-sizing: border-box;
+}
+
+.search-bar--page .search-bar__input {
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 15px;
+  text-overflow: ellipsis;
+}
+
+/* The field alone is too narrow for a dropdown row to say anything before its ellipsis
+   (about 267px in the compact bar, 177px on a phone). The dropdown hangs from the whole
+   bar instead, so it is as wide as the switch and the field together. Making the field
+   static hands the dropdown's anchor to the bar, with no change to the field's own look. */
+.search-page-bar {
+  position: relative;
+}
+
+.search-bar.search-bar--page {
+  position: static;
+}
+
+/* Two buttons joined into one control, the look of My List's Grouping switch
+   (.my-list-controls__segmented): a shared border with a rule between them, the chosen
+   one filled with the accent tint. Hover tints the one that isn't chosen neutrally, so a
+   hovered option never looks chosen, and the focus ring is drawn inside the control,
+   which clips anything outside its rounded corners. */
+.search-mode-switch {
+  flex: none;
+  display: flex;
+  height: var(--control-h);
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.search-mode-switch:hover {
+  border-color: var(--accent-border);
+}
+
+.search-mode-switch__option {
+  font: inherit;
+  font-size: 14px;
+  padding: 0 10px;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.search-mode-switch__option:first-child {
+  border-left: none;
+}
+
+.search-mode-switch__option[aria-checked='false']:hover {
+  background: var(--code-bg);
+  color: var(--text-h);
+}
+
+.search-mode-switch__option[aria-checked='true'] {
+  background: var(--accent-bg);
+  color: var(--text-h);
+}
+
+.search-mode-switch__option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Colours that say which one is chosen survive forced colours (which drop fills): the
+   chosen option takes the selection colours. */
+@media (forced-colors: active) {
+  .search-mode-switch,
+  .search-mode-switch__option {
+    border-color: CanvasText;
+  }
+
+  .search-mode-switch__option[aria-checked='true'] {
+    background: Highlight;
+    color: HighlightText;
+  }
+}

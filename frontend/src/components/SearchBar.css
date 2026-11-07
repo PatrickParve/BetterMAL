@@ -153,3 +153,30 @@
 .search-bar__result .series-badge {
   line-height: 16px;
 }
+
+/* The search page's OP/ED rows (SearchPageBar): the song's title on the first line, and
+   beneath it one line of label, anime and artists. 22px + the 2px gap + 18px is 42px,
+   inside the row's 44px content budget, so these rows stand exactly as tall as the anime
+   and series rows and the dropdown never changes height as I type or switch mode. Cut
+   short with an ellipsis, never wrapped. */
+.search-bar__result-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--text);
+}
+
+.search-bar__unknown {
+  font-style: italic;
+  color: var(--text);
+}
+
+/* The empty picture box of a song whose anime the app has not saved: the same size as a
+   picture, with a border so it reads as a box rather than a gap. */
+.search-bar__thumb--placeholder {
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+}

@@ -43,29 +43,59 @@ export function AnimeCard({ animeId, title, englishTitle, pictureUrl, to, childr
   )
 }
 
+// The MAL score at the end of a browse card's meta line: two decimals, in the MAL
+// score colour. While scores are globally hidden it is omitted entirely — no value,
+// no placeholder, no reveal control — rather than using ScoreValue, whose hidden
+// branch always renders a reveal button
+// (score-visibility spec's browse-card exception; "always show completed/dropped
+// scores" is deliberately not consulted here, since these cards carry no watch
+// status). It exists once so every browse card hides its score by the same rule:
+// the anime cards' score below and the search page's series cards, whose figure is
+// the series' main-line MAL average.
+//
+// With no score the slot is empty on the season and year pages (season-browser "An
+// anime with no MAL score shows nothing in that slot"), and a dash on the search page,
+// which asks for it with `showMissing` (navigation-and-search "Full search results page").
+// The dash is the app's own mark for a value with none (ScoreValue's `—`), drawn in the
+// neutral text colour rather than the MAL blue, and named "No score" for a screen reader.
+// It shows only while scores are shown: hidden, a card carries nothing in the score's
+// place, whether or not the anime has one, so hiding scores leaves no furniture behind.
+export function BrowseCardScore({ malScore, showMissing = false }: { malScore: number | null; showMissing?: boolean }) {
+  const { hidden } = useScoreVisibility()
+  if (hidden) return null
+  if (malScore == null) {
+    if (!showMissing) return null
+    return (
+      <span className="anime-card__meta-score anime-card__meta-score--none" title="No MAL score">
+        <span aria-hidden="true">—</span>
+        <span className="visually-hidden">No score</span>
+      </span>
+    )
+  }
+  return <span className="anime-card__meta-score score--mal">{malScore.toFixed(2)}</span>
+}
+
 // The `{TYPE} · {N} ep` meta line shown on browse cards (season, search) below
-// the title, with the anime's MAL score trailing at the line's end. While
-// scores are globally hidden the score is omitted entirely — no value, no
-// placeholder, no reveal control — rather than using ScoreValue, whose
-// hidden branch always renders a reveal button (score-visibility spec's
-// browse-card exception; "always show completed/dropped scores" is
-// deliberately not consulted here, since these cards carry no watch status).
+// the title, with the anime's MAL score trailing at the line's end. `showMissingScore`
+// puts a dash there for an anime with no score (the search page); without it the slot
+// stays empty, as it does on the season and year pages.
 export function AnimeCardMeta({
   mediaType,
   totalEpisodes,
   malScore,
+  showMissingScore = false,
 }: {
   mediaType: string | null
   totalEpisodes: number | null
   malScore: number | null
+  showMissingScore?: boolean
 }) {
-  const { hidden } = useScoreVisibility()
   return (
     <span className="anime-card__meta">
       <span>
         {mediaTypeLabel(mediaType)} · {totalEpisodes ?? '?'} ep
       </span>
-      {!hidden && malScore != null && <span className="anime-card__meta-score score--mal">{malScore.toFixed(2)}</span>}
+      <BrowseCardScore malScore={malScore} showMissing={showMissingScore} />
     </span>
   )
 }

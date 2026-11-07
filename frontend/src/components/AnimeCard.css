@@ -127,3 +127,18 @@
 .anime-card__meta-score {
   font-weight: 500;
 }
+
+/* The dash that stands where an anime with no score would show one (the search page's
+   cards): the quiet text colour, since no score means no MAL blue, and the normal weight
+   of the line it ends. */
+.anime-card__meta-score--none {
+  font-weight: 400;
+  color: var(--text);
+}
+
+/* A series card puts its badge in this line, with the series' MAL average at the
+   end (the search page). The badge carries a fade of its own, so inside the line's
+   it would fade twice and read paler than it does today; this keeps it at its own. */
+.anime-card__meta > .series-badge {
+  opacity: 1;
+}

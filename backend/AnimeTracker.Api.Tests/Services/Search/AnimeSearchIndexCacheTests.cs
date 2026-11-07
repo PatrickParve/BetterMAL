@@ -150,6 +150,216 @@ public class AnimeSearchIndexCacheTests
         Assert.Equal(2, repository.CallCount); // the in-flight rebuild's query, plus this one — never a third
     }
 
+    // --- The by-id view (improve-search-page design.md D1, task 1.1) ---
+
+    [Fact]
+    public async Task GetByIdAsync_HoldsTheSameRowsAsGetAsync()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata
+        {
+            Id = 1, Title = "Attack on Titan", EnglishTitle = "Attack on Titan",
+            PictureUrl = "https://mal/1.jpg", PopularityRank = 1,
+        });
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 2, Title = "No Nullable Fields At All" });
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 30, Title = "Thirty" });
+        await db.SaveChangesAsync();
+
+        var cache = new AnimeSearchIndexCache(new FakeScopeFactory(new CountingAnimeMetadataRepository(db)));
+
+        var rows = await cache.GetAsync();
+        var byId = await cache.GetByIdAsync();
+
+        Assert.Equal(3, byId.Count);
+        Assert.Equal(rows.Count, byId.Count);
+        // The very same instances, not copies that merely compare equal: one entry carries both.
+        Assert.All(rows, row => Assert.Same(row, byId[row.Id]));
+        Assert.Equal("https://mal/1.jpg", byId[1].PictureUrl);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_IsBuiltOncePerGenerationNotOncePerCall()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1" });
+        await db.SaveChangesAsync();
+
+        var cache = new AnimeSearchIndexCache(new FakeScopeFactory(new CountingAnimeMetadataRepository(db)));
+
+        var first = await cache.GetByIdAsync();
+        var second = await cache.GetByIdAsync();
+        Assert.Same(first, second); // the cached view, not a dictionary rebuilt from the list on every search
+
+        cache.Invalidate();
+        var third = await cache.GetByIdAsync();
+        Assert.NotSame(first, third); // a new generation brings a new view
+    }
+
+    [Fact]
+    public async Task TheCachedViewIsWhatTheInterfaceHandsOut()
+    {
+        // The search services reach the index through IAnimeSearchIndex, where GetByIdAsync has a default
+        // implementation for fakes. The cache's own method has to be the one that answers there, or every
+        // results-page search would rebuild the dictionary from the list instead of reading the cached one.
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1" });
+        await db.SaveChangesAsync();
+        IAnimeSearchIndex index = new AnimeSearchIndexCache(new FakeScopeFactory(new CountingAnimeMetadataRepository(db)));
+
+        var first = await index.GetByIdAsync();
+        var second = await index.GetByIdAsync();
+
+        Assert.Same(first, second);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_AnIdTheAppHasNotSavedIsNotInIt()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1" });
+        await db.SaveChangesAsync();
+
+        var cache = new AnimeSearchIndexCache(new FakeScopeFactory(new CountingAnimeMetadataRepository(db)));
+
+        var byId = await cache.GetByIdAsync();
+
+        Assert.True(byId.ContainsKey(1));
+        Assert.False(byId.ContainsKey(2));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TheRowsAndTheByIdViewShareOneQueryWhicheverIsReadFirst(bool rowsFirst)
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1" });
+        await db.SaveChangesAsync();
+
+        var repository = new CountingAnimeMetadataRepository(db);
+        var cache = new AnimeSearchIndexCache(new FakeScopeFactory(repository));
+
+        if (rowsFirst)
+        {
+            await cache.GetAsync();
+            await cache.GetByIdAsync();
+        }
+        else
+        {
+            await cache.GetByIdAsync();
+            await cache.GetAsync();
+        }
+
+        Assert.Equal(1, repository.CallCount);
+    }
+
+    [Fact]
+    public async Task Invalidate_MakesTheListAndTheByIdViewRebuildTogether()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1" });
+        await db.SaveChangesAsync();
+
+        var repository = new CountingAnimeMetadataRepository(db);
+        var cache = new AnimeSearchIndexCache(new FakeScopeFactory(repository));
+
+        Assert.Single(await cache.GetAsync());
+        Assert.Single(await cache.GetByIdAsync());
+
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 2, Title = "Anime 2" });
+        await db.SaveChangesAsync();
+        cache.Invalidate();
+
+        // The by-id read goes first, so it is the one that triggers the rebuild: the
+        // list read after it must be the same new generation, not a stale one.
+        var byId = await cache.GetByIdAsync();
+        var rows = await cache.GetAsync();
+
+        Assert.Equal(2, byId.Count);
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, row => Assert.Same(row, byId[row.Id]));
+        Assert.Equal(2, repository.CallCount); // the first build, and one rebuild — not one per view
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ConcurrentColdReadsOfBothViewsIssueOneQuery()
+    {
+        using var db = CreateDb();
+        for (var id = 1; id <= 3; id++)
+            db.AnimeMetadata.Add(new AnimeMetadata { Id = id, Title = $"Anime {id}" });
+        await db.SaveChangesAsync();
+
+        var repository = new CountingAnimeMetadataRepository(db) { Gate = new TaskCompletionSource() };
+        var cache = new AnimeSearchIndexCache(new FakeScopeFactory(repository));
+
+        var rows = new List<Task<List<AnimeTitleProjection>>>();
+        var byIds = new List<Task<IReadOnlyDictionary<int, AnimeTitleProjection>>>();
+        for (var i = 0; i < 4; i++)
+        {
+            rows.Add(cache.GetAsync());
+            byIds.Add(cache.GetByIdAsync());
+        }
+
+        repository.Gate.SetResult();
+        await Task.WhenAll(rows);
+        await Task.WhenAll(byIds);
+
+        Assert.Equal(1, repository.CallCount);
+        Assert.All(rows, task => Assert.Equal(3, task.Result.Count));
+        Assert.All(byIds, task => Assert.Equal(3, task.Result.Count));
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_AWriteThatInvalidatesMidRebuildIsPickedUpByTheNextReadNotTheStaleOne()
+    {
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1" });
+        await db.SaveChangesAsync();
+
+        var repository = new CountingAnimeMetadataRepository(db) { Gate = new TaskCompletionSource() };
+        var cache = new AnimeSearchIndexCache(new FakeScopeFactory(repository));
+
+        var inFlight = cache.GetByIdAsync(); // blocked mid-rebuild on the gate, having captured generation 0
+
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 2, Title = "Anime 2" });
+        await db.SaveChangesAsync();
+        cache.Invalidate(); // bumps to generation 1 while the rebuild above is still in flight
+
+        repository.Gate.SetResult();
+        await inFlight; // stale-but-published, tagged generation 0 — not asserted on
+
+        repository.Gate = null;
+        var next = await cache.GetByIdAsync();
+
+        Assert.Equal(2, next.Count);
+        Assert.Equal(2, repository.CallCount);
+    }
+
+    [Fact]
+    public async Task TheDefaultViewOverAnImplementationThatOnlySuppliesRowsHoldsItsRows()
+    {
+        var fake = new FakeAnimeSearchIndex([new(1, "A", null, null, 1), new(2, "B", "B English", "b.jpg", null)]);
+        IAnimeSearchIndex index = fake;
+
+        var byId = await index.GetByIdAsync();
+
+        Assert.Equal([1, 2], byId.Keys.Order());
+        Assert.Equal("B English", byId[2].EnglishTitle);
+        Assert.Equal("b.jpg", byId[2].PictureUrl);
+
+        // Built from GetAsync on every call, so a fake whose rows change is followed.
+        fake.Rows = [new(3, "C", null, null, null)];
+        Assert.Equal([3], (await index.GetByIdAsync()).Keys);
+    }
+
+    [Fact]
+    public void IndexById_GivenTheSameIdTwiceKeepsTheLaterRowInsteadOfThrowing()
+    {
+        var byId = IAnimeSearchIndex.IndexById([new(7, "First", null, null, null), new(7, "Second", null, null, null)]);
+
+        Assert.Equal("Second", Assert.Single(byId).Value.Title);
+    }
+
     // Delegates to the real repository over the given context so "same rows"
     // holds by construction, while counting calls and optionally blocking on
     // a gate mid-query to simulate a rebuild in flight.

@@ -48,6 +48,7 @@ import type {
   SeriesLookupResult,
   SeriesTmdbPicturesDto,
   SetupStatusDto,
+  ThemeSearchResponseDto,
   TimeSpentSeriesSectionDto,
   TopAnimeItemDto,
   TopAnimeMediaType,
@@ -247,6 +248,16 @@ export function getSearchPage(
     limit: String(params.limit),
   })
   return fetchJson<SearchPageDto>(`/api/anime/search/page?${search.toString()}`)
+}
+
+// The search page's OP/ED mode (improve-search-page, theme-search): songs of the
+// stored catalogue matching a song title, an artist or an anime title, best first.
+// The type-ahead asks for 5 and the results list for 200 (the server clamps to
+// 1-200). It reads only what the app has stored, so it never reaches AnimeThemes or
+// MyAnimeList. The signal lets the type-ahead drop a request the next keystroke, or a
+// dismissal, supersedes.
+export function searchThemes(query: string, limit: number, signal?: AbortSignal): Promise<ThemeSearchResponseDto> {
+  return fetchJson<ThemeSearchResponseDto>(`/api/themes/search?q=${encodeURIComponent(query)}&limit=${limit}`, { signal })
 }
 
 export function updateEntry(animeId: number, request: UserAnimeEntryEditRequest): Promise<UserAnimeEntryDto> {

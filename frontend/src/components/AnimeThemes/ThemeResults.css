@@ -1,0 +1,99 @@
+/* The box is the series page's openings-and-endings box, drawn here so the search page
+   needs nothing from the themes section's stylesheet: the same border and radius, around
+   rows that bring their own padding (ThemeRow.css). min-width: 0 lets the list shrink
+   with a 360px window rather than push the page sideways, and each row's text wraps
+   inside it. */
+.theme-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.theme-results__sentinel {
+  height: 1px;
+}
+
+/* The row under the pointer is greyed a little, and edged, so it stands out from the rows
+   around it (the user, 11/7). It is a change in surface and border, not colour alone, as
+   every card and row's hover is (navigation-and-search "Hover highlight on anime cards and
+   rows"); the edge is an inset shadow so nothing shifts. The tint is neutral rather than
+   the accent on purpose: the accent fill is what marks the row that is playing, and a
+   hovered row must never look like a playing one (MyListControls' segmented switch makes
+   the same choice for the same reason). A row is lit only while the pointer is over it or
+   keyboard focus is inside it (:focus-visible, so a focus a mouse press left on a button
+   lights nothing), which is how every card and row behaves ("A press never leaves a card
+   or row highlighted"), and useCardPressFocus lists the row for the part of that a
+   stylesheet can't do. The playing row keeps its fill and gets an accent edge. */
+.theme-results .theme-row {
+  transition: background-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.theme-results .theme-row:hover,
+.theme-results .theme-row:has(:focus-visible) {
+  background: var(--code-bg);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+/* The label chip is --code-bg itself; on the greyed row it lifts to the page colour, so it
+   still reads as a chip. */
+.theme-results .theme-row:hover .theme-row__label,
+.theme-results .theme-row:has(:focus-visible) .theme-row__label {
+  background: var(--bg);
+}
+
+.theme-results .theme-row--playing:hover,
+.theme-results .theme-row--playing:has(:focus-visible) {
+  background: var(--accent-bg);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}
+
+.theme-results .theme-row--playing:hover .theme-row__label,
+.theme-results .theme-row--playing:has(:focus-visible) .theme-row__label {
+  background: var(--code-bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-results .theme-row {
+    transition: none;
+  }
+}
+
+/* Forced colours drop fills and shadows, so the hovered row gets an outline (the playing
+   row already has one, in ThemeRow.css). */
+@media (forced-colors: active) {
+  .theme-results .theme-row:hover:not(.theme-row--playing),
+  .theme-results .theme-row:has(:focus-visible):not(.theme-row--playing) {
+    outline: 1px solid CanvasText;
+  }
+}
+
+/* A phone gives each row picture, label, text and play control in about 300px, so the
+   room around them is trimmed and the label chip, which may stretch to two fifths of a
+   row for a long slug (ED1-YorinukiGintamaSan), is held to under a quarter: the song's
+   text keeps a column to read in, and the whole slug stays in the chip's title. A usual
+   label (OP1, ED2) is its 56px least width and doesn't reach this. Scoped to these
+   results; the series page's rows keep their own spacing. */
+@media (max-width: 480px) {
+  .theme-results {
+    padding: 4px;
+  }
+
+  .theme-results .theme-row {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .theme-results .theme-row__line {
+    gap: 8px;
+  }
+
+  .theme-results .theme-row__label {
+    max-width: 24%;
+  }
+}

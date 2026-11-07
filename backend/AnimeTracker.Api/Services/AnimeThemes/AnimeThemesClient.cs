@@ -35,13 +35,17 @@ public class AnimeThemesClient(HttpClient http, ILogger<AnimeThemesClient> logge
     /// <summary>The query asks for the fields the catalogue stores (design.md D1)
     /// and nothing else: no synopsis, picture, studio or year. The MAL ids come
     /// from `resources(site: MAL)`, a song's artists in AnimeThemes' order of
-    /// relevance, and `first` is the most a page may hold.</summary>
+    /// relevance, and `first` is the most a page may hold. The anime's own name is
+    /// its romaji title, `title { romaji }`: GraphQL's `Anime` has no `name` field,
+    /// and asking for one fails every page (improve-search-page design.md D8, checked
+    /// against the schema in the server's `graphql/Models/Wiki/anime.graphql`).</summary>
     public const string Query = """
         query ($page: Int!) {
           animePagination(first: 100, page: $page, sort: [ID]) {
             paginatorInfo { hasMorePages }
             data {
               id
+              title { romaji }
               resources(site: MAL) { nodes { externalId } }
               animethemes {
                 id
@@ -163,6 +167,7 @@ public class AnimeThemesClient(HttpClient http, ILogger<AnimeThemesClient> logge
     private static AnimeThemesAnime ToAnime(AnimeDto anime) =>
         new(
             anime.Id ?? throw MissingId("an anime"),
+            anime.Title?.Romaji,
             (anime.Resources?.Nodes ?? [])
                 .Select(r => r?.ExternalId)
                 .OfType<int>()
@@ -234,8 +239,14 @@ public class AnimeThemesClient(HttpClient http, ILogger<AnimeThemesClient> logge
     private sealed class AnimeDto
     {
         public int? Id { get; set; }
+        public AnimeTitleDto? Title { get; set; }
         public NodesDto<ResourceDto>? Resources { get; set; }
         public List<ThemeDto>? AnimeThemes { get; set; }
+    }
+
+    private sealed class AnimeTitleDto
+    {
+        public string? Romaji { get; set; }
     }
 
     private sealed class ResourceDto

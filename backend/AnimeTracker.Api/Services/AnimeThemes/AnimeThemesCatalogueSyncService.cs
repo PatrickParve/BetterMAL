@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Search;
 using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Services.AnimeThemes;
@@ -18,9 +19,16 @@ namespace AnimeTracker.Api.Services.AnimeThemes;
 public class AnimeThemesCatalogueSyncService(
     AnimeTrackerDbContext db,
     IAnimeThemesClient client,
+    IThemeSearchIndex themeSearchIndex,
     ILogger<AnimeThemesCatalogueSyncService> logger) : IAnimeThemesCatalogueSyncService
 {
     private static readonly TimeSpan SyncInterval = TimeSpan.FromDays(7);
+
+    /// <summary>What a catalogue made by this version holds. Bump it in the version that
+    /// begins to keep one more thing from AnimeThemes: a catalogue stored with an older
+    /// number is refreshed at the first chance, rather than left without the new value
+    /// for up to a week (improve-search-page design.md D9). 1: the anime's name.</summary>
+    public const int CurrentCatalogueFormat = 1;
 
     // Without this, a persistent change on AnimeThemes' side would start another
     // seven-minute read on every hourly tick.
@@ -71,7 +79,14 @@ public class AnimeThemesCatalogueSyncService(
 
             state.LastSyncedAt = now;
             state.LastAttemptAt = now;
+            state.CatalogueFormat = CurrentCatalogueFormat;
             await db.SaveChangesAsync(ct);
+
+            // Only now, with the new catalogue committed: until this save lands, the rows the
+            // search page holds in memory are the catalogue as it is. Never before the save, and
+            // never on the failed or abandoned paths, which leave the stored catalogue as it was
+            // (improve-search-page design.md D6).
+            themeSearchIndex.Invalidate();
 
             logger.LogInformation(
                 "AnimeThemes catalogue synced: {Rows} openings and endings of {Anime} anime ({Added} added, {Updated} changed, {Removed} removed).",
@@ -109,11 +124,16 @@ public class AnimeThemesCatalogueSyncService(
 
     private static bool IsDue(AnimeThemesSyncState state, DateTimeOffset now)
     {
-        if (state.LastSyncedAt is { } syncedAt && now - syncedAt <= SyncInterval)
+        // The week only counts for a catalogue made the way this version makes
+        // them. One stored without something the app now keeps is due at once, but
+        // not LastSyncedAt's problem: that stays as it was until a refresh succeeds,
+        // so the pages keep listing the stored catalogue while it runs (design.md D9).
+        if (state.CatalogueFormat == CurrentCatalogueFormat
+            && state.LastSyncedAt is { } syncedAt && now - syncedAt <= SyncInterval)
             return false;
 
         // A failed attempt is one made after the last success, or, before any
-        // success, any attempt at all.
+        // success, any attempt at all. It backs off a catch-up refresh as well.
         if (state.LastAttemptAt is { } attemptedAt
             && (state.LastSyncedAt is not { } lastSyncedAt || attemptedAt > lastSyncedAt)
             && now - attemptedAt < RetryBackoff)
@@ -203,6 +223,12 @@ public class AnimeThemesCatalogueSyncService(
         if (row.SongTitle != incoming.SongTitle)
         {
             row.SongTitle = incoming.SongTitle;
+            changed = true;
+        }
+
+        if (row.AnimeName != incoming.AnimeName)
+        {
+            row.AnimeName = incoming.AnimeName;
             changed = true;
         }
 

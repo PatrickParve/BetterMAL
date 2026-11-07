@@ -53,7 +53,10 @@ public class AnimeThemesReads(AnimeTrackerDbContext db) : IAnimeThemesReads
             .ThenBy(t => t.Label, StringComparer.Ordinal)
             .ThenBy(t => t.ThemeId);
 
-    private static AnimeThemeDto ToDto(AnimeTheme theme) =>
+    /// <summary>One stored row as a page shows it. Internal so the OP/ED search can send
+    /// exactly the theme the anime and series pages send for the same row, not a second copy of
+    /// the mapping (improve-search-page task 3.5).</summary>
+    internal static AnimeThemeDto ToDto(AnimeTheme theme) =>
         new(
             theme.ThemeId,
             theme.Kind,

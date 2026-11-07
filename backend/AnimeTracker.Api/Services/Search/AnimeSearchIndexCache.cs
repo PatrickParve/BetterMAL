@@ -13,15 +13,27 @@ public class AnimeSearchIndexCache(IServiceScopeFactory scopeFactory) : IAnimeSe
     // wait so a caller queued behind an in-flight rebuild reuses its result.
     private readonly SemaphoreSlim _rebuildLock = new(1, 1);
 
-    // Rows and the generation they were built at are published together as
-    // a single reference so a reader can never pair one rebuild's rows with
-    // another's generation tag (design.md D5).
-    private sealed record Entry(List<AnimeTitleProjection> Rows, long Generation);
+    // Rows, their by-id view and the generation they were built at are
+    // published together as a single reference, so a reader can never pair
+    // one rebuild's rows with another's generation tag (design.md D5), nor
+    // the list with a by-id view of a different generation
+    // (improve-search-page design.md D1).
+    private sealed record Entry(
+        List<AnimeTitleProjection> Rows, Dictionary<int, AnimeTitleProjection> ById, long Generation);
 
     private Entry? _entry;
     private long _generation;
 
-    public async Task<List<AnimeTitleProjection>> GetAsync(CancellationToken ct = default)
+    public async Task<List<AnimeTitleProjection>> GetAsync(CancellationToken ct = default) =>
+        (await GetEntryAsync(ct)).Rows;
+
+    /// <summary>The same rows, keyed by id. Declared here, not left to the
+    /// interface's default, so it is the cached view of the same generation as
+    /// <see cref="GetAsync"/> and not a dictionary built again on every call.</summary>
+    public async Task<IReadOnlyDictionary<int, AnimeTitleProjection>> GetByIdAsync(CancellationToken ct = default) =>
+        (await GetEntryAsync(ct)).ById;
+
+    private async Task<Entry> GetEntryAsync(CancellationToken ct)
     {
         if (TryReadFresh() is { } cached)
             return cached;
@@ -42,8 +54,9 @@ public class AnimeSearchIndexCache(IServiceScopeFactory scopeFactory) : IAnimeSe
             var repository = scope.ServiceProvider.GetRequiredService<IAnimeMetadataRepository>();
             var rows = await repository.GetSearchIndexAsync(ct);
 
-            Publish(rows, generation);
-            return rows;
+            var entry = new Entry(rows, IAnimeSearchIndex.IndexById(rows), generation);
+            Volatile.Write(ref _entry, entry);
+            return entry;
         }
         finally
         {
@@ -56,14 +69,11 @@ public class AnimeSearchIndexCache(IServiceScopeFactory scopeFactory) : IAnimeSe
     /// this freely.</summary>
     public void Invalidate() => Interlocked.Increment(ref _generation);
 
-    private List<AnimeTitleProjection>? TryReadFresh()
+    private Entry? TryReadFresh()
     {
         var entry = Volatile.Read(ref _entry);
         return entry is not null && entry.Generation == Volatile.Read(ref _generation)
-            ? entry.Rows
+            ? entry
             : null;
     }
-
-    private void Publish(List<AnimeTitleProjection> rows, long generation) =>
-        Volatile.Write(ref _entry, new Entry(rows, generation));
 }

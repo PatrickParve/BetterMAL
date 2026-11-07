@@ -14,8 +14,8 @@ public class SeriesSearchLookupTests
     private static SeriesMemberProjection Member(
         int seriesId, int animeId, string title,
         string? englishTitle = null, string? malPictureUrl = null, bool isMainLine = true, int? popularityRank = null,
-        string? selectedTitle = null, string? selectedPictureUrl = null) =>
-        new(seriesId, animeId, title, englishTitle, malPictureUrl, isMainLine, popularityRank, selectedTitle, selectedPictureUrl);
+        string? selectedTitle = null, string? selectedPictureUrl = null, double? malScore = null) =>
+        new(seriesId, animeId, title, englishTitle, malPictureUrl, isMainLine, popularityRank, malScore, selectedTitle, selectedPictureUrl);
 
     [Fact]
     public void MatchesOnNonRootMembersTitle()
@@ -243,5 +243,97 @@ public class SeriesSearchLookupTests
         var results = index.Match("academia", exact: false);
 
         Assert.Single(results);
+    }
+
+    // --- The main-line MAL average (improve-search-page design.md D2, task 1.3) ---
+
+    [Fact]
+    public void TheAverageCoversTheMainLineMembersThatHaveAScore()
+    {
+        var index = new SeriesSearchIndex(
+        [
+            Member(100, 100, "Attack on Titan", malScore: 8.0),
+            Member(100, 101, "Attack on Titan Season 2", malScore: 9.0),
+            // Main line but unscored: not a zero, simply left out of the mean.
+            Member(100, 102, "Attack on Titan Season 3", malScore: null),
+        ]);
+
+        var series = Assert.Single(index.Match("attack on titan", exact: false));
+
+        Assert.Equal(8.5, series.MalScore);
+    }
+
+    [Fact]
+    public void ExtrasAreExcludedEvenWhenTheyScoreHigher()
+    {
+        var index = new SeriesSearchIndex(
+        [
+            Member(100, 100, "Attack on Titan", malScore: 7.0),
+            Member(100, 101, "Attack on Titan: No Regrets", isMainLine: false, malScore: 9.5),
+            Member(100, 102, "Attack on Titan: Lost Girls", isMainLine: false, malScore: 9.9),
+        ]);
+
+        var series = Assert.Single(index.Match("attack on titan", exact: false));
+
+        Assert.Equal(7.0, series.MalScore);
+    }
+
+    [Fact]
+    public void NoMainLineScoreGivesNullEvenWhenAnExtraHasOne()
+    {
+        var index = new SeriesSearchIndex(
+        [
+            Member(100, 100, "Attack on Titan", malScore: null),
+            Member(100, 101, "Attack on Titan: No Regrets", isMainLine: false, malScore: 8.0),
+        ]);
+
+        var series = Assert.Single(index.Match("attack on titan", exact: false));
+
+        Assert.Null(series.MalScore);
+    }
+
+    [Fact]
+    public void TheAverageIsTheSameWhicheverMemberMatchedTheQuery()
+    {
+        var index = new SeriesSearchIndex(
+        [
+            Member(100, 100, "Attack on Titan", malScore: 8.0),
+            Member(100, 101, "Attack on Titan Season 2", malScore: 9.0),
+            Member(100, 102, "Lost Girls", isMainLine: false, malScore: 5.0),
+        ]);
+
+        // Only the extra's title matches, yet the figure is still the main line's mean.
+        var series = Assert.Single(index.Match("lost girls", exact: false));
+
+        Assert.Equal(8.5, series.MalScore);
+    }
+
+    [Fact]
+    public void EachSeriesGetsItsOwnAverage()
+    {
+        var index = new SeriesSearchIndex(
+        [
+            Member(100, 100, "Gundam Alpha", malScore: 8.0),
+            Member(200, 200, "Gundam Beta", malScore: 6.0),
+            Member(200, 201, "Gundam Beta Two", malScore: 7.0),
+        ]);
+
+        var results = index.Match("gundam", exact: false).ToDictionary(s => s.SeriesId, s => s.MalScore);
+
+        Assert.Equal(8.0, results[100]);
+        Assert.Equal(6.5, results[200]);
+    }
+
+    [Fact]
+    public void TheDropdownsSeriesRowCarriesNoScore()
+    {
+        // The dropdown's rows show no scores, so the average isn't part of their shape.
+        var index = new SeriesSearchIndex([Member(100, 100, "Attack on Titan", malScore: 8.0)]);
+
+        var row = AnimeSearchResultDto.ForSeries(Assert.Single(index.Match("attack", exact: false)));
+
+        Assert.Equal("series", row.Kind);
+        Assert.Equal(100, row.Id);
+        Assert.Equal(1, row.EntryCount);
     }
 }
