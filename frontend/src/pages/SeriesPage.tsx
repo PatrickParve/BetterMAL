@@ -1549,8 +1549,12 @@ export function SeriesPage() {
 
       {/* The last box. The groups are the main line's picked route, so switching the
           picker changes them with no request, and a theme playing in a group the
-          switch removes stops. The themes arrived with this page's read, from the
-          stored catalogue, however many entries the series has (anime-themes). */}
+          switch removes stops. Each group opens and closes from its heading, which is
+          no longer a link to the anime (the Main series cards above are). The box owns
+          its search and expand/collapse-all, and keeps the open groups and the search
+          in this page's restorable state (useThemesView). The themes arrived with this
+          page's read, from the stored catalogue, however many entries the series has
+          (anime-themes). */}
       <AnimeThemesSection subject="series" ready={series.themes.ready} groups={themeGroups} />
     </div>
   )

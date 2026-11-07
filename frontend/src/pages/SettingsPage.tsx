@@ -1230,8 +1230,9 @@ export function SettingsPage() {
       <SettingsGroup title="Credits">
         <TmdbAttribution />
         {/* The openings and endings, and the game built on them, come from
-            AnimeThemes (anime-themes "AnimeThemes is credited where its data
-            shows"). A plain text credit: their logo is not ours to use. */}
+            AnimeThemes (anime-themes "AnimeThemes is credited in Settings"). A
+            plain text credit: their logo is not ours to use. This is the only
+            credit; a themes section and the game's reveal carry none. */}
         <p className="settings-box__hint settings-credit">
           Openings and endings come from{' '}
           <a href="https://animethemes.moe/" target="_blank" rel="noreferrer">

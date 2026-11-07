@@ -19,7 +19,7 @@ songs aren't here yet.
 
 Some themes are marked as NSFW or as containing spoilers. They stay in the list
 with a mark. A spoiler's video waits until you ask for it, and with **Hide NSFW**
-on, an NSFW theme plays as sound only. The game never plays a spoiler, and with
+on, so does an NSFW theme's. The game never plays a spoiler, and with
 **Hide NSFW** on it never plays an NSFW theme either.
 
 ## Guess the Opening/Ending
@@ -40,5 +40,5 @@ your own computer is. **If you run a fork commercially, or host it for other
 people, get AnimeThemes' approval first.** Their terms and contact are on their
 site.
 
-The app says where the songs come from on the page that shows them and under
-**Credits** in Settings. It isn't affiliated with AnimeThemes.
+The app credits AnimeThemes under **Credits** in Settings. It isn't affiliated
+with AnimeThemes.

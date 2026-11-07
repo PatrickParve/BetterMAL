@@ -1,18 +1,38 @@
 import type { AnimeThemeDto } from '../../api/types.ts'
 
 // How much of a theme's video a page may show (anime-themes "Flagged themes stay
-// listed and hold their video back", design.md D6):
-//   free   - the video plays as usual
-//   held   - the audio plays first, and the video only when I ask for it
-//   locked - the audio alone, with no way to the video (NSFW while Hide NSFW is on)
-// A theme flagged both follows whichever shows less: with Hide NSFW off that is
-// the spoiler's rule, and with it on the NSFW one.
-export type VideoRule = 'free' | 'held' | 'locked'
+// listed and hold their video back"):
+//   free - the video plays as usual
+//   held - the audio plays first, with a note saying why, and the video only when I
+//          ask for it
+// A video is held while its theme is a spoiler, and while it is NSFW and Hide NSFW is
+// on; a theme flagged both stays held while either reason applies. There is no third
+// rule that shuts the video away: a held video is always one press from playing.
+export type VideoRule = 'free' | 'held'
+
+// Why a theme's video is held, in the order a note gives them.
+export type HeldReason = 'nsfw' | 'spoiler'
+
+export function heldReasons(theme: Pick<AnimeThemeDto, 'nsfw' | 'spoiler'>, hideNsfw: boolean): HeldReason[] {
+  const reasons: HeldReason[] = []
+  if (theme.nsfw && hideNsfw) reasons.push('nsfw')
+  if (theme.spoiler) reasons.push('spoiler')
+  return reasons
+}
 
 export function videoRule(theme: Pick<AnimeThemeDto, 'nsfw' | 'spoiler'>, hideNsfw: boolean): VideoRule {
-  if (theme.nsfw && hideNsfw) return 'locked'
-  if (theme.spoiler) return 'held'
-  return 'free'
+  return heldReasons(theme, hideNsfw).length > 0 ? 'held' : 'free'
+}
+
+// The note under a held theme's audio: every reason that applies, and null when the
+// video isn't held.
+export function heldNote(reasons: readonly HeldReason[]): string | null {
+  const nsfw = reasons.includes('nsfw')
+  const spoiler = reasons.includes('spoiler')
+  if (nsfw && spoiler) return 'Its video is marked NSFW and may spoil the show.'
+  if (nsfw) return 'Its video is marked NSFW.'
+  if (spoiler) return 'Its video may spoil the show.'
+  return null
 }
 
 // A theme can be played when it has a file of either kind to play.

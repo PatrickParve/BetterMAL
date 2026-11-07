@@ -23,6 +23,121 @@
   color: var(--text);
 }
 
+/* The series page's heading row: the title, and the expand/collapse-all control at the
+   top right. The control keeps its place and the title wraps instead (min-width: 0), so a
+   narrow window never pushes the control off the box. */
+.themes-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.themes-section__header h2 {
+  min-width: 0;
+}
+
+/* The look of the More section's Expand all button, .series-page__toggle-all in
+   SeriesPage.css. Copied rather than shared because this stylesheet must not depend on
+   the page's (see the note at the top). The cursor comes from index.css's rule for
+   buttons. */
+.themes-section__toggle-all {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  flex: 0 0 auto;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.themes-section__toggle-all:hover:not(:disabled) {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+}
+
+/* A search nothing matches leaves no group to open or close. */
+.themes-section__toggle-all:disabled {
+  opacity: 0.5;
+}
+
+/* The look of My List's "Find in list" field, .my-list-controls__find in
+   MyListControls.css, copied for the same reason: a magnifier, a borderless input inside
+   a bordered box, and an x that clears. It is the box's full width on a phone and stops
+   at 22rem. */
+.themes-section__search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 22rem;
+  height: var(--control-h);
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* The input is borderless, so the hover goes on this wrapper, the bordered box. */
+.themes-section__search:hover {
+  border-color: var(--accent-border);
+  color: var(--text-h);
+}
+
+/* A search in force narrows the list, so the field takes the tint every narrowing
+   filter has (.my-list-controls--active). */
+.themes-section__search--active {
+  background: var(--accent-bg-solid);
+  border-color: var(--accent-border);
+  color: var(--text-h);
+}
+
+/* Hovering the tinted field thickens its outline instead, as a 1px inset ring that adds
+   no layout; focus draws the same ring, since the input's own outline is off. */
+.themes-section__search--active:hover,
+.themes-section__search:focus-within {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.themes-section__search svg {
+  flex: 0 0 auto;
+  opacity: 0.6;
+}
+
+.themes-section__search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 14px;
+  border: none;
+  background: transparent;
+  color: inherit;
+}
+
+.themes-section__search-input:focus {
+  outline: none;
+}
+
+/* Sits within the field's own bounds, so its appearance doesn't resize the field. */
+.themes-section__search-clear {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--text);
+}
+
+.themes-section__search-clear:hover {
+  color: var(--text-h);
+}
+
 .themes-section__group {
   display: flex;
   flex-direction: column;
@@ -43,14 +158,51 @@
   overflow-wrap: anywhere;
 }
 
-.themes-section__group-title a {
-  color: var(--text-h);
-  text-decoration: none;
+/* The heading is a button that opens and closes its group: a caret, the anime's title
+   and the count of its songs. It keeps the title's old look (16px, bold, --text-h) from
+   the <h3> through font: inherit. On hover the title and the caret turn --accent with no
+   underline, since it is not a link. A long title wraps, and the caret stays beside its
+   first line (align-items: baseline). */
+.themes-section__group-toggle {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
 }
 
-.themes-section__group-title a:hover {
+.themes-section__group-caret {
+  flex: none;
+  width: 1em;
+  font-size: 10px;
+  text-align: center;
+  color: var(--text);
+}
+
+.themes-section__group-label {
+  min-width: 0;
+  color: var(--text-h);
+}
+
+/* The count is quieter than the title: normal weight, the muted colour, and it does not
+   take the title's hover colour. */
+.themes-section__group-count {
+  font-weight: 400;
+  color: var(--text);
+}
+
+.themes-section__group-toggle:hover .themes-section__group-label,
+.themes-section__group-toggle:hover .themes-section__group-caret {
   color: var(--accent);
-  text-decoration: underline;
+}
+
+.themes-section__group-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .themes-section__list {
@@ -62,15 +214,20 @@
   list-style: none;
 }
 
-.themes-section__credit {
-  margin-top: 4px;
-  font-size: 13px;
-}
+/* The new controls take the borders and colours the row's play control uses
+   (ThemeRow.css), so they stay visible under forced colours. The tint and the inset
+   rings are shadows and fills, which forced colours drop, so focus gets an outline. The
+   disabled button is left to the browser's own greyed-out colours. */
+@media (forced-colors: active) {
+  .themes-section__toggle-all:not(:disabled),
+  .themes-section__search,
+  .themes-section__group-toggle {
+    border-color: CanvasText;
+    color: CanvasText;
+  }
 
-.themes-section__credit a {
-  color: var(--text);
-}
-
-.themes-section__credit a:hover {
-  color: var(--text-h);
+  .themes-section__search:focus-within {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+  }
 }
