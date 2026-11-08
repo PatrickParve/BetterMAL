@@ -44,6 +44,8 @@ public class UserAnimeEntryRepository(AnimeTrackerDbContext db) : IUserAnimeEntr
                     AiredFrom = e.Anime.AiredFrom,
                     AverageEpisodeDurationSeconds = e.Anime.AverageEpisodeDurationSeconds,
                     Genres = e.Anime.Genres,
+                    Studios = e.Anime.Studios,
+                    Source = e.Anime.Source,
                 },
             })
             .ToListAsync(ct);

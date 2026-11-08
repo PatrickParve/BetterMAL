@@ -25,7 +25,7 @@
 }
 
 .recap-scope-chip__link:hover {
-  text-decoration: underline;
+  color: var(--text-h);
 }
 
 .recap-scope-chip__dismiss {

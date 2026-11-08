@@ -157,7 +157,6 @@
 
 .theme-reveal__title a:hover {
   color: var(--accent);
-  text-decoration: underline;
 }
 
 .theme-reveal__label {

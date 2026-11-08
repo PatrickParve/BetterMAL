@@ -176,6 +176,15 @@
   color: var(--text-h);
 }
 
+/* The label's text on its own, so a name longer than its board column ends in an
+   ellipsis instead of running into the next column. In the list layout the panel
+   is as wide as its longest label and this never clips. */
+.filter-multi-select__option-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* An option that cannot be ticked right now (a dead end on the genre board).
    Dimmed like the app's other disabled controls, not hidden: it keeps its
    place and stays readable, so the board never reflows under the pointer. The

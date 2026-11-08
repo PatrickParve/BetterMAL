@@ -4,6 +4,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing.AniList;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Studios;
 using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,6 +21,7 @@ public class EpisodeScheduleRefreshService(
     IEpisodeAiringRepository episodeAiringRepository,
     IAniListClient aniList,
     AniListRelationStore relationStore,
+    StudioLinkStore studioLinkStore,
     IBroadcastLocalTimeConverter localTimeConverter,
     IAnimeUpdateRecorder updateRecorder,
     ILogger<EpisodeScheduleRefreshService> logger) : IEpisodeScheduleRefreshService
@@ -31,10 +33,12 @@ public class EpisodeScheduleRefreshService(
 
     /// <summary>What AniList reported about one anime, before it is saved.
     /// <paramref name="Relations"/> is non-null exactly when a lookup was made for
-    /// it (a lookup carries relations; a read by stored id doesn't).</summary>
+    /// it (a lookup carries relations; a read by stored id doesn't).
+    /// <paramref name="Studios"/> is non-null exactly when that lookup asked for
+    /// studios (studio-links design.md D7).</summary>
     private sealed record AniListFacts(
         int? AniListId, string? Status, DateTimeOffset? NextAiringAtUtc, int? Episodes,
-        IReadOnlyList<AniListRelationEdge>? Relations);
+        IReadOnlyList<AniListRelationEdge>? Relations, IReadOnlyList<AniListStudio>? Studios = null);
 
     private enum LookupPlan { Lookup, UseStoredId, SkipKnownAbsent }
 
@@ -132,10 +136,14 @@ public class EpisodeScheduleRefreshService(
         {
             ct.ThrowIfCancellationRequested();
 
+            // Asks for studios only when an anime in this request credits one the app
+            // holds no AniList id for yet; no request is added either way.
+            var withStudios = await WantsStudiosAsync(chunk, ct);
+
             IReadOnlyDictionary<int, AniListMediaLookup> found;
             try
             {
-                found = await aniList.LookupBatchByMalIdsAsync(chunk, ct);
+                found = await aniList.LookupBatchByMalIdsAsync(chunk, withStudios, ct);
             }
             // Filtered on the token, not the exception type: an HttpClient
             // timeout is a TaskCanceledException with ct still live, and fails the
@@ -152,7 +160,7 @@ public class EpisodeScheduleRefreshService(
             {
                 if (found.TryGetValue(id, out var lookup))
                 {
-                    facts[id] = FactsFrom(lookup);
+                    facts[id] = FactsFrom(lookup, withStudios);
                     resolved.Add(id);
                     continue;
                 }
@@ -381,7 +389,8 @@ public class EpisodeScheduleRefreshService(
         AniListFacts facts;
         if (plan == LookupPlan.Lookup)
         {
-            var lookup = await aniList.LookupByMalIdAsync(animeId, ct);
+            var withStudios = await WantsStudiosAsync([animeId], ct);
+            var lookup = await aniList.LookupByMalIdAsync(animeId, withStudios, ct);
             if (lookup is null)
             {
                 await RecordUnknownAsync(animeId, ct);
@@ -389,7 +398,7 @@ public class EpisodeScheduleRefreshService(
                 return 0;
             }
 
-            facts = FactsFrom(lookup);
+            facts = FactsFrom(lookup, withStudios);
         }
         else
         {
@@ -412,8 +421,53 @@ public class EpisodeScheduleRefreshService(
         return schedule.Episodes.Count;
     }
 
-    private static AniListFacts FactsFrom(AniListMediaLookup lookup) =>
-        new(lookup.AniListId, lookup.Status, lookup.NextAiringEpisodeAtUtc, lookup.Episodes, lookup.Relations);
+    private static AniListFacts FactsFrom(AniListMediaLookup lookup, bool askedForStudios) =>
+        new(lookup.AniListId, lookup.Status, lookup.NextAiringEpisodeAtUtc, lookup.Episodes, lookup.Relations,
+            askedForStudios ? lookup.Studios : null);
+
+    /// <summary>Whether the lookup of these anime should also ask AniList for their
+    /// studios: only when one of the anime credits a studio the app holds no AniList id
+    /// for, because a stored id is never fetched again (studio-links "Nothing stored is
+    /// fetched again"). A failure to check is read as "no": learning studios must never
+    /// get in the way of the lookup itself.</summary>
+    private async Task<bool> WantsStudiosAsync(IReadOnlyCollection<int> animeIds, CancellationToken ct)
+    {
+        try
+        {
+            var studioLists = await db.AnimeMetadata.AsNoTracking()
+                .Where(a => animeIds.Contains(a.Id) && a.Studios != null)
+                .Select(a => a.Studios)
+                .ToListAsync(ct);
+
+            var names = studioLists.SelectMany(list => list!).ToList();
+            return await studioLinkStore.AnyWithoutIdAsync(names, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Could not tell whether the studios of {Count} anime are known; the lookup will not ask for them.", animeIds.Count);
+            return false;
+        }
+    }
+
+    /// <summary>Hands an anime's MyAnimeList studio names and the AniList studios its
+    /// lookup returned to the store, which records the matches and nothing else: a name
+    /// AniList's record of this anime does not list stays as it was. Runs after the
+    /// anime's own save has committed and can fail without failing it: what the lookup
+    /// stored is complete either way.</summary>
+    private async Task LearnStudiosAsync(AnimeMetadata anime, IReadOnlyList<AniListStudio> aniListStudios, CancellationToken ct)
+    {
+        if (anime.Studios is not { Count: > 0 } malNames)
+            return;
+
+        try
+        {
+            await studioLinkStore.LearnAsync(malNames, aniListStudios, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Could not store the AniList studios learned for anime {AnimeId} ({Title}).", anime.Id, anime.Title);
+        }
+    }
 
     /// <summary>Records that AniList has no entry for an anime, with the time of the
     /// look: the airing-fetched mark that keeps automatic passes from asking again
@@ -493,6 +547,11 @@ public class EpisodeScheduleRefreshService(
 
         await UpsertSyncAsync(sync, animeId, facts.AniListId, now, facts.NextAiringAtUtc, hasCompleteData, nextRecheckAtUtc, relationsFetchedAt, ct);
         await transaction.CommitAsync(ct);
+
+        // Only a lookup that asked for studios has any to learn from, and it is learned
+        // once the anime is safely saved.
+        if (facts.Studios is not null)
+            await LearnStudiosAsync(anime, facts.Studios, ct);
     }
 
     /// <summary>Diffs <paramref name="before"/> (the anime's stored rows just

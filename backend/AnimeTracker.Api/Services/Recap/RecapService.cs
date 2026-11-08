@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Taste;
 
 namespace AnimeTracker.Api.Services.Recap;
 
@@ -55,10 +56,37 @@ public class RecapService(
         var (seasonRanking, yearRanking, seasonTimeRanking, yearTimeRanking) =
             BuildRankings(included, period, effectiveFilter, wholeList, rankingSnapshot);
 
+        var highlights = BuildHighlights(included, wholeList, rankingSnapshot, logRows);
+
         return new RecapDto(
             period.Mode, period.StartYear, period.EndYear, period.Season, effectiveFilter,
             watchedCount, airedCount, stats, items, seasonRanking, yearRanking,
-            seasonTimeRanking, yearTimeRanking);
+            seasonTimeRanking, yearTimeRanking, highlights);
+    }
+
+    // taste-stats / list-recaps "Recap highlights row": every figure is over `included`,
+    // the recap's own counted set — the stat block's, so the top 10's media-type
+    // narrowing, which only the client applies, never changes them — ranked on the
+    // whole list's mean score and the whole-list ranking snapshot, like the rankings
+    // above. The biggest day reads the period's log rows already loaded, so it makes
+    // no query of its own. Genres go out in most-watched order and studios in
+    // highest-rated order, whole: the client reads the first of each for its card and
+    // the lot for the lists those cards open.
+    private RecapHighlightsDto BuildHighlights(
+        List<UserAnimeEntry> included, List<UserAnimeEntry> wholeList, AnimeRankingSnapshot rankingSnapshot,
+        List<ActivityLog> logRows)
+    {
+        var wholeListMean = RecapRankingBuilder.ScoredMean(wholeList);
+
+        var genres = TasteStatsBuilder.Genres(included, wholeListMean, rankingSnapshot);
+        var studios = TasteStatsBuilder.Studios(included, wholeListMean, rankingSnapshot)
+            .Where(s => s.ScoreRank is not null)
+            .OrderBy(s => s.ScoreRank)
+            .ToList();
+        var hiddenGem = TasteStatsBuilder.HiddenGems(included, rankingSnapshot, limit: 1).FirstOrDefault();
+        var biggestDay = TasteStatsBuilder.BiggestDay(logRows, included, localTimeConverter, rankingSnapshot);
+
+        return new RecapHighlightsDto(genres, studios, hiddenGem, biggestDay);
     }
 
     // design.md decision "Bayesian ranking of seasons and years" + tasks.md

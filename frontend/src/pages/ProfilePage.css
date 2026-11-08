@@ -46,6 +46,28 @@
   grid-column: 1 / -1;
 }
 
+/* Top genres beside Top studios (profile-stats "Top genres and Top studios"):
+   the genres first, stacking below the breakpoint with the genres on top, and a
+   section left on its own takes the whole row. */
+.profile-page__taste-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.profile-page__taste-row > :only-child {
+  grid-column: 1 / -1;
+}
+
+/* The Demographic, Source and Era boxes share one row, as many columns as there
+   are boxes (--splits, set by the page), and stack in that order below the
+   breakpoint. */
+.profile-page__splits-row {
+  display: grid;
+  grid-template-columns: repeat(var(--splits, 3), minmax(0, 1fr));
+  gap: 20px;
+}
+
 /* Favourite seasons / Favourite years (profile-stats "Favourite seasons and
    years"): same two-column pattern as the divergence row and the recap
    page's own ranking-pair grid, under its own class name (design.md decision
@@ -60,6 +82,8 @@
 @media (max-width: 1024px) {
   .profile-page__top-row,
   .profile-page__divergence-row,
+  .profile-page__taste-row,
+  .profile-page__splits-row,
   .profile-page__favourites-row {
     grid-template-columns: 1fr;
   }
@@ -90,7 +114,7 @@
 }
 
 .profile-page__unresolved-button:hover {
-  text-decoration: underline;
+  color: var(--text-h);
 }
 
 .profile-box {
@@ -359,6 +383,13 @@
    --text-h exactly as they do today. */
 .profile-media-tabs__tab--active.family--mal,
 .profile-media-tabs__tab--active.family--mine {
+  color: var(--fam-from);
+}
+
+/* The same for the tabs that sit inside a family's own section (Top genres, Top
+   studios): the selected one carries the section's family as the favourites
+   rankings' All button does, the label following it. */
+.profile-media-tabs--family .profile-media-tabs__tab--active {
   color: var(--fam-from);
 }
 

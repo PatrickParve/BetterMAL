@@ -1,7 +1,13 @@
+import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { Modal } from './Modal.tsx'
 import { RowPicture } from './RowPicture.tsx'
 import './RankingOverlay.css'
+
+// The section colour families a ranking can be drawn in (section-colour-language):
+// the year and season rankings, and the genre and studio lists of
+// add-genre-and-studio-stats.
+export type RankingFamily = 'year' | 'season' | 'genre' | 'studio'
 
 export type RankingOverlayRow = {
   key: string
@@ -15,7 +21,7 @@ type RankingOverlayProps = {
   title: string
   rows: RankingOverlayRow[]
   onClose: () => void
-  family?: 'year' | 'season'
+  family?: RankingFamily
 }
 
 // The recap page's rankings show five at a time; this overlay lists every
@@ -36,7 +42,10 @@ export function RankingOverlay({ title, rows, onClose, family }: RankingOverlayP
           {title}
         </h2>
 
-        <ol className="ranking-overlay__list scroll-hidden">
+        <ol
+          className="ranking-overlay__list scroll-hidden"
+          style={{ '--rank-digits': String(rows.length).length } as CSSProperties}
+        >
           {rows.map((row, index) => (
             <li key={row.key} className="ranking-overlay__row">
               <Link to={row.to} className="ranking-overlay__link" onClick={onClose}>

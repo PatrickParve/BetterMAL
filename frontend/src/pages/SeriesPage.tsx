@@ -38,6 +38,7 @@ import { SeriesExtraTile } from '../components/SeriesExtraTile.tsx'
 import { SeriesStatusPill } from '../components/SeriesStatusPill.tsx'
 import { SeriesTimeline } from '../components/SeriesTimeline.tsx'
 import { SeriesTitlePickerOverlay } from '../components/SeriesTitlePickerOverlay.tsx'
+import { StudioLinks } from '../components/StudioLink.tsx'
 import { useActionFailure } from '../context/ActionFailureContext.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useScoreVisibility } from '../context/ScoreVisibilityContext.tsx'
@@ -1419,7 +1420,9 @@ export function SeriesPage() {
           {stats.studios.length > 0 && (
             <div>
               <dt>Studios</dt>
-              <dd>{stats.studios.join(', ')}</dd>
+              <dd>
+                <StudioLinks names={stats.studios} />
+              </dd>
             </div>
           )}
           {stats.genres.length > 0 && (

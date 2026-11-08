@@ -145,7 +145,7 @@
 }
 
 .import-report-overlay__link:hover {
-  text-decoration: underline;
+  color: var(--accent);
 }
 
 .import-report-overlay__name {

@@ -68,7 +68,7 @@ public class AniListClientTests
                 Pacer, Health, NullLogger<AniListClient>.Instance);
         }
 
-        public Task<AniListMediaLookup?> LookupAsync(CancellationToken ct = default) => Client.LookupByMalIdAsync(1, ct);
+        public Task<AniListMediaLookup?> LookupAsync(CancellationToken ct = default) => Client.LookupByMalIdAsync(1, ct: ct);
 
         public string ResetHeaderIn(TimeSpan span) => (Now + span).ToUnixTimeSeconds().ToString();
     }

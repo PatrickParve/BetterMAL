@@ -291,11 +291,12 @@ public class ListViewReadParityTests
         {
             Id = ReopenCandidateAnimeId, Title = "Reopen Candidate", MediaType = "tv",
             AiringStatus = "currently_airing", TotalEpisodes = 24, AiredFrom = today.AddYears(-1),
-            // Genres, here and on the hand-ordered anime below, are what the My
-            // List parity fact compares row by row (its DTO carries them): in
+            // Genres and studios, here and on the hand-ordered anime below, are what
+            // the My List parity fact compares row by row (its DTO carries them): in
             // MyAnimeList's order, which is not alphabetical, and on more than
             // one row, so a projection that dropped or reordered them fails it.
             Genres = ["Fantasy", "Action"],
+            Studios = ["Wit Studio", "Aniplex"],
         };
         // R5: completes on this read (Watching, finished airing, at its total).
         var completeCandidate = new AnimeMetadata
@@ -311,6 +312,7 @@ public class ListViewReadParityTests
             TotalEpisodes = 24, AverageEpisodeDurationSeconds = 1400, MalScore = 8.5,
             AiredFrom = today.AddYears(-9).AddMonths(3),
             Genres = ["Sports", "Drama", "Seinen"],
+            Studios = ["Madhouse"],
         };
         // RankBand.ShortForm.
         var musicShortForm = new AnimeMetadata
@@ -348,6 +350,9 @@ public class ListViewReadParityTests
         {
             Id = 9, Title = "Currently Airing Known Total", MediaType = "tv", AiringStatus = "currently_airing",
             TotalEpisodes = 24, AiredFrom = currentSeasonStart,
+            // Genres, studios and a source on the anime a current-season recap includes, so the recap's
+            // taste highlights have something for the lean and the full read to disagree about.
+            Genres = ["Action", "Shounen"], Studios = ["Studio One"], Source = "manga",
         };
         // A rewatched entry.
         var rewatched = new AnimeMetadata
@@ -361,6 +366,7 @@ public class ListViewReadParityTests
         {
             Id = 11, Title = "Current Season Finished", MediaType = "tv", AiringStatus = "finished_airing",
             TotalEpisodes = 1, AverageEpisodeDurationSeconds = 1400, MalScore = 5.5, AiredFrom = currentSeasonStart,
+            Genres = ["Action", "Comedy", "Shounen"], Studios = ["Studio One", "Studio Two"], Source = "manga",
         };
         // Filler scored entries, purely to clear ScoreDivergence.MinimumRatedPairs
         // and to spread AiredFrom across several distinct years.

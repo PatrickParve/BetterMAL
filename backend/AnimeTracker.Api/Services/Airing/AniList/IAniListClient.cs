@@ -16,15 +16,31 @@ public record AniListRelationEdge(string RelationType, int? RelatedMalId);
 /// lookup does) plus its relation edges.</summary>
 public record AniListRelationsLookup(int AniListId, IReadOnlyList<AniListRelationEdge> Relations);
 
-/// <summary>Result of resolving a MAL id to AniList's own Media id, done once
+/// <summary>One studio as AniList lists it for a media: AniList's own id for it
+/// and its name there. The id is what a studio link needs (studio-links).</summary>
+public record AniListStudio(int Id, string Name);
+
+/// <summary>Result of resolving a MAL id to AniList's Media id, done once
 /// per anime and then cached (see <see cref="Models.AnimeAiringSync"/>).
 /// Relations ride along on the same request — free, since the media is
 /// already being looked up. <paramref name="Episodes"/> is AniList's own
 /// reported total episode count, normalised from 0 to null; it feeds
 /// <c>AnimeMetadata.AniListTotalEpisodes</c> as a fallback when MyAnimeList
-/// publishes none.</summary>
+/// publishes none. <paramref name="Studios"/> is the media's studios, and is
+/// empty unless the lookup asked for them (<c>withStudios</c>) — a lookup
+/// asks only when one of the anime it covers has a studio with no stored AniList
+/// id (studio-links design.md D7).</summary>
 public record AniListMediaLookup(
-    int AniListId, string? Status, DateTimeOffset? NextAiringEpisodeAtUtc, IReadOnlyList<AniListRelationEdge> Relations, int? Episodes);
+    int AniListId, string? Status, DateTimeOffset? NextAiringEpisodeAtUtc, IReadOnlyList<AniListRelationEdge> Relations, int? Episodes,
+    IReadOnlyList<AniListStudio> Studios)
+{
+    /// <summary>A lookup that did not ask for studios.</summary>
+    public AniListMediaLookup(
+        int aniListId, string? status, DateTimeOffset? nextAiringEpisodeAtUtc, IReadOnlyList<AniListRelationEdge> relations, int? episodes)
+        : this(aniListId, status, nextAiringEpisodeAtUtc, relations, episodes, [])
+    {
+    }
+}
 
 /// <summary>One media's current state as a read by AniList id reports it: what a
 /// lookup reports, without the relations (a media read is for anime whose AniList
@@ -57,8 +73,9 @@ public interface IAniListClient
     /// <summary>Resolves a MAL id to AniList's Media id (plus its current
     /// status and next-airing instant), or null when AniList has no entry
     /// linked to that MAL id. Call once per anime; the caller persists the
-    /// result so later refreshes skip this lookup.</summary>
-    Task<AniListMediaLookup?> LookupByMalIdAsync(int malId, CancellationToken ct = default);
+    /// result so later refreshes skip this lookup. <paramref name="withStudios"/>
+    /// also asks for the media's studios, in the same request.</summary>
+    Task<AniListMediaLookup?> LookupByMalIdAsync(int malId, bool withStudios = false, CancellationToken ct = default);
 
     /// <summary>The complete airing schedule for a known AniList id, paged
     /// from the beginning until AniList reports no further pages — so a
@@ -93,8 +110,17 @@ public interface IAniListClient
     /// result is keyed by MAL id, and a MAL id AniList has no media for is simply
     /// absent: the batch's reading of the single lookup's "not found". Where
     /// AniList holds two media for one MAL id, the one with the lowest AniList id
-    /// is taken and a warning is logged.</summary>
+    /// is taken and a warning is logged. <paramref name="withStudios"/> also asks for
+    /// each media's studios, in the same request.</summary>
     Task<IReadOnlyDictionary<int, AniListMediaLookup>> LookupBatchByMalIdsAsync(
+        IReadOnlyList<int> malIds, bool withStudios = false, CancellationToken ct = default);
+
+    /// <summary>Reads the studios of up to 25 media by MAL id in one request, nothing
+    /// else. For a studio link followed before the app has matched the studio
+    /// (studio-links design.md D7). The result is keyed by MAL id; a MAL id AniList
+    /// has no media for is absent. Where AniList holds two media for one MAL id,
+    /// their studios are taken together.</summary>
+    Task<IReadOnlyDictionary<int, IReadOnlyList<AniListStudio>>> GetStudiosByMalIdsAsync(
         IReadOnlyList<int> malIds, CancellationToken ct = default);
 
     /// <summary>Reads up to 50 media by AniList id in one request, without

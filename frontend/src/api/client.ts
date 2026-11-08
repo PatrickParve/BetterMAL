@@ -48,6 +48,7 @@ import type {
   SeriesLookupResult,
   SeriesTmdbPicturesDto,
   SetupStatusDto,
+  TasteSectionDto,
   ThemeSearchResponseDto,
   TimeSpentSeriesSectionDto,
   TopAnimeItemDto,
@@ -405,6 +406,14 @@ export function getRewatchedSeriesSection(): Promise<RewatchedSeriesSectionDto> 
 // Top series read already does.
 export function getTimeSpentSeriesSection(): Promise<TimeSpentSeriesSectionDto> {
   return fetchJson<TimeSpentSeriesSectionDto>('/api/profile/time-spent-series')
+}
+
+// Everything the profile's genre and studio sections draw (Hidden gems, Top
+// genres, Top studios, Favourite combos, Demographic, Source and Era), computed
+// server-side from stored data alone. Its own read so the profile's first paint
+// does not wait on it (add-genre-and-studio-stats design.md D9).
+export function getTasteSection(): Promise<TasteSectionDto> {
+  return fetchJson<TasteSectionDto>('/api/profile/taste')
 }
 
 // The ranking editor's score selector plus one tier (design.md D7).

@@ -148,6 +148,24 @@
   --family-hot-bg: rgba(185, 28, 28, 0.12);
   --family-hot-border: rgba(185, 28, 28, 0.45);
 
+  /* Genre and studio (add-genre-and-studio-stats, design.md D12). Genre is a
+     green running to a yellow-green; it clears 4.5:1 under the white band ink at
+     both ends (5.48 / 4.99) and as text on the page. Studio is a magenta-leaning
+     pink running to a deeper one (6.40 / 9.05 under white). It sits at hue 327
+     rather than a plain pink's 330-335, which is measurably clear of the other
+     colours it shares a page with: CIEDE2000 23.9 from the 9 tier's red, 24.1
+     from the mine purple and 25.5 from the hot-take red (the first draft,
+     #be185d, was 19.9 / 27.9 / 18.6). Genre green is 28 from the tier-blue and
+     18 from the Watching status green. */
+  --family-genre-from: #047857;
+  --family-genre-to: #4d7c0f;
+  --family-genre-bg: rgba(4, 120, 87, 0.12);
+  --family-genre-border: rgba(4, 120, 87, 0.45);
+  --family-studio-from: #b3196e;
+  --family-studio-to: #8a1458;
+  --family-studio-bg: rgba(179, 25, 110, 0.12);
+  --family-studio-border: rgba(179, 25, 110, 0.45);
+
   /* --fam-* accent defaults (section-colour-language capability, design.md
      decision 2 of banded-section-titles-and-settings-restyle): declared once
      here rather than on any consuming element. A default declared on the row
@@ -279,6 +297,20 @@
     --family-hot-bg: rgba(248, 113, 113, 0.16);
     --family-hot-border: rgba(248, 113, 113, 0.5);
 
+    /* The dark studio pink is the one that needed moving: the plain pink-400
+       (#f472b6) is only 13.0 CIEDE2000 from the 9 tier's rose (#fb7185), where the
+       existing hot-take / red-tier pair is 5.8. This one is 18.2 from the rose and
+       19.0 from the mine purple, and still clears 4.5:1 under the dark band ink
+       (5.42 / 10.68) and as text on the page (4.87). */
+    --family-genre-from: #34d399;
+    --family-genre-to: #a3e635;
+    --family-genre-bg: rgba(52, 211, 153, 0.16);
+    --family-genre-border: rgba(52, 211, 153, 0.5);
+    --family-studio-from: #e444ac;
+    --family-studio-to: #f4a6d6;
+    --family-studio-bg: rgba(228, 68, 172, 0.16);
+    --family-studio-border: rgba(228, 68, 172, 0.5);
+
     --fam-ink: #09090b;
   }
 
@@ -362,6 +394,25 @@ html:has(.navbar :focus) {
 
 body {
   margin: 0;
+}
+
+/* Links are never underlined (link-presentation capability, design.md D15), at
+   rest, on hover, on focus or once visited, and they show hover by a change of
+   colour. These three rules carry no specificity at all (:where), so every
+   component rule that styles a link still wins and an unclassed anchor, which the
+   browser would draw in its own blue with an underline, is drawn in the accent
+   instead. Focus rings are untouched: a ring is not an underline. */
+:where(a) {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+:where(a:hover) {
+  color: var(--text-h);
+}
+
+:where(a:visited) {
+  color: var(--accent);
 }
 
 h1,
@@ -490,6 +541,20 @@ code {
   --fam-to: var(--family-hot-to);
   --fam-bg: var(--family-hot-bg);
   --fam-border: var(--family-hot-border);
+}
+
+.family--genre {
+  --fam-from: var(--family-genre-from);
+  --fam-to: var(--family-genre-to);
+  --fam-bg: var(--family-genre-bg);
+  --fam-border: var(--family-genre-border);
+}
+
+.family--studio {
+  --fam-from: var(--family-studio-from);
+  --fam-to: var(--family-studio-to);
+  --fam-bg: var(--family-studio-bg);
+  --fam-border: var(--family-studio-border);
 }
 
 .family--mal {

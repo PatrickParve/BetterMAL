@@ -1044,6 +1044,19 @@ namespace AnimeTracker.Api.Migrations
                     b.ToTable("SetupStates");
                 });
 
+            modelBuilder.Entity("AnimeTracker.Api.Models.StudioLink", b =>
+                {
+                    b.Property<string>("Name")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("AniListStudioId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Name");
+
+                    b.ToTable("StudioLinks");
+                });
+
             modelBuilder.Entity("AnimeTracker.Api.Models.TmdbMovieImage", b =>
                 {
                     b.Property<int>("MovieId")

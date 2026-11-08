@@ -47,6 +47,7 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<TmdbSeasonImage> TmdbSeasonImages => Set<TmdbSeasonImage>();
     public DbSet<TmdbMovieImageSet> TmdbMovieImageSets => Set<TmdbMovieImageSet>();
     public DbSet<TmdbMovieImage> TmdbMovieImages => Set<TmdbMovieImage>();
+    public DbSet<StudioLink> StudioLinks => Set<StudioLink>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -435,6 +436,15 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
         {
             entity.HasKey(e => new { e.MovieId, e.FilePath });
             entity.Property(e => e.Kind).HasConversion<string>();
+        });
+
+        // One row per studio name MyAnimeList credits that AniList has been asked
+        // about (see the entity's comment). The name is the key, as MyAnimeList
+        // spells it, and compared exactly; no foreign key, since a studio outlives
+        // any one anime.
+        modelBuilder.Entity<StudioLink>(entity =>
+        {
+            entity.HasKey(e => e.Name);
         });
     }
 }

@@ -10,10 +10,11 @@ public interface IUserAnimeEntryRepository
     Task<List<UserAnimeEntry>> GetAllAsync(CancellationToken ct = default);
 
     /// <summary>The same entries as <see cref="GetAllAsync"/>, every entry column
-    /// filled, but <c>Anime</c> carries only the 12 fields the list and aggregate
+    /// filled, but <c>Anime</c> carries only the 14 fields the list and aggregate
     /// pages read (My List, Home, Profile, Recap): Id, Title, EnglishTitle,
     /// PictureUrl, MediaType, TotalEpisodes, AiringStatus, MalScore,
-    /// PopularityRank, AiredFrom, AverageEpisodeDurationSeconds, Genres. Every other
+    /// PopularityRank, AiredFrom, AverageEpisodeDurationSeconds, Genres, Studios,
+    /// Source (the last two are the taste stats'). Every other
     /// AnimeMetadata property is left at its default. Never attach these objects
     /// to a DbContext. ListViewReadParityTests fails if one of those pages starts
     /// reading a column this leaves out. Extend the projection and that test's

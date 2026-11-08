@@ -1,3 +1,5 @@
+using AnimeTracker.Api.Services.Taste;
+
 namespace AnimeTracker.Api.Services.Profile;
 
 public interface IProfileService
@@ -45,4 +47,12 @@ public interface IProfileService
     /// not schedule background series builds itself, for the same reason as
     /// <see cref="GetRewatchedSeriesSectionAsync"/> (design.md D6).</summary>
     Task<TimeSpentSeriesSectionDto> GetTimeSpentSeriesSectionAsync(CancellationToken ct = default);
+
+    /// <summary>Everything the profile's genre and studio sections draw (taste-stats
+    /// design.md D1/D9): Hidden gems, Top genres and Top studios in both orders,
+    /// Favourite combos, and the demographic, source and era splits. Counted over every
+    /// entry except Plan to watch, built from stored data alone, so it asks nothing
+    /// of MyAnimeList or AniList. A separate read, so the profile's first paint does
+    /// not wait on it.</summary>
+    Task<TasteSectionDto> GetTasteSectionAsync(CancellationToken ct = default);
 }

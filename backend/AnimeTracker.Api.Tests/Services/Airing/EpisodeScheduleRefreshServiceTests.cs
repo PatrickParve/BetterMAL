@@ -5,6 +5,7 @@ using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Airing.AniList;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Studios;
 using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -36,6 +37,7 @@ public class EpisodeScheduleRefreshServiceTests
             episodeAiringRepository,
             aniList,
             new AniListRelationStore(db),
+            new StudioLinkStore(db),
             LocalTime,
             new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))),
             NullLogger<EpisodeScheduleRefreshService>.Instance);
@@ -342,7 +344,7 @@ public class EpisodeScheduleRefreshServiceTests
         public Dictionary<int, Exception> ThrowForAniListId { get; } = new();
         public Dictionary<int, Exception> ThrowForMalId { get; } = new();
 
-        public Task<AniListMediaLookup?> LookupByMalIdAsync(int malId, CancellationToken ct = default) =>
+        public Task<AniListMediaLookup?> LookupByMalIdAsync(int malId, bool withStudios = false, CancellationToken ct = default) =>
             ThrowForMalId.TryGetValue(malId, out var ex) ? throw ex
             : Lookup is not null ? Task.FromResult<AniListMediaLookup?>(Lookup) : throw new NotImplementedException();
 
@@ -352,9 +354,12 @@ public class EpisodeScheduleRefreshServiceTests
         public Task<IReadOnlyDictionary<int, AniListRelationsLookup>> GetRelationsBatchAsync(IReadOnlyList<int> malIds, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
+        public Task<IReadOnlyDictionary<int, IReadOnlyList<AniListStudio>>> GetStudiosByMalIdsAsync(IReadOnlyList<int> malIds, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+
         // These tests are about the single-anime path; the batched one is in
         // EpisodeScheduleRefreshBatchTests, over a scripted client.
-        public Task<IReadOnlyDictionary<int, AniListMediaLookup>> LookupBatchByMalIdsAsync(IReadOnlyList<int> malIds, CancellationToken ct = default) =>
+        public Task<IReadOnlyDictionary<int, AniListMediaLookup>> LookupBatchByMalIdsAsync(IReadOnlyList<int> malIds, bool withStudios = false, CancellationToken ct = default) =>
             throw new NotImplementedException();
 
         public Task<IReadOnlyDictionary<int, AniListMediaState>> GetMediaBatchAsync(IReadOnlyList<int> aniListIds, CancellationToken ct = default) =>

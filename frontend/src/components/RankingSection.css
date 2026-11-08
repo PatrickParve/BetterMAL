@@ -203,5 +203,5 @@
 }
 
 .recap-page__see-all-ranks:hover {
-  text-decoration: underline;
+  color: var(--text-h);
 }

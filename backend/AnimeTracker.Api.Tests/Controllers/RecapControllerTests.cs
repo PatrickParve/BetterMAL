@@ -16,7 +16,8 @@ public class RecapControllerTests
         new(period.Mode, period.StartYear, period.EndYear, period.Season, filter,
             WatchedCount: 0, AiredCount: 0,
             Stats: new RecapStatsDto(null, 0, 0, 0, 0, 0, 0, 0, []),
-            Items: [], SeasonRanking: [], YearRanking: [], SeasonTimeRanking: [], YearTimeRanking: []);
+            Items: [], SeasonRanking: [], YearRanking: [], SeasonTimeRanking: [], YearTimeRanking: [],
+            Highlights: new RecapHighlightsDto([], [], null, null));
 
     [Fact]
     public async Task Get_UnknownModeIsRejectedWithoutReachingTheService()

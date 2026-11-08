@@ -99,4 +99,16 @@ public class ProfileController(IProfileService profileService) : ControllerBase
         var section = await profileService.GetTimeSpentSeriesSectionAsync(ct);
         return Ok(section);
     }
+
+    /// <summary>The profile's genre and studio sections: Hidden gems, Top genres and
+    /// Top studios, Favourite combos, and the demographic, source and era splits, counted
+    /// over every entry but Plan to watch (taste-stats design.md D9). Deliberately not
+    /// embedded in <see cref="Get"/>, like <see cref="GetTopSeries"/>: it is its own read,
+    /// so the profile's first paint does not wait on it. Computed from stored data alone.</summary>
+    [HttpGet("api/profile/taste")]
+    public async Task<IActionResult> GetTaste(CancellationToken ct)
+    {
+        var section = await profileService.GetTasteSectionAsync(ct);
+        return Ok(section);
+    }
 }

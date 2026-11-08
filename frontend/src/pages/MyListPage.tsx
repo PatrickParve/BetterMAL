@@ -5,7 +5,7 @@ import { RECAP_SEASONS, type IncrementTarget, type MyListItemDto, type RecapDto,
 import type { FilterMultiSelectOption } from '../components/FilterMultiSelect.tsx'
 import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
 import { LoadingNotice } from '../components/LoadingNotice.tsx'
-import { MyListControls, type ScoreFilter } from '../components/MyListControls.tsx'
+import { MyListControls } from '../components/MyListControls.tsx'
 import { MyListRow } from '../components/MyListRow.tsx'
 import { RecapPickerOverlay } from '../components/RecapPickerOverlay.tsx'
 import { RecapScopeChip } from '../components/RecapScopeChip.tsx'
@@ -23,12 +23,13 @@ import {
   MEDIA_TYPE_ORDER,
   mediaTypeLabel,
   pickDisplayTitle,
+  scoreChoiceLabel,
   seasonLabel,
   STATUS_CLASS,
   STATUS_LABELS,
 } from '../utils/anime.ts'
 import type { AiringStatus, SortDirection, SortKey } from '../utils/anime.ts'
-import { buildGenreOptions, passesGenres } from '../utils/genreFilter.ts'
+import { buildBoardOptions, passesTicked } from '../utils/boardFilter.ts'
 import './MyListPage.css'
 
 // Multi-select (polish-rewatch-more-and-filters design.md D6): any
@@ -57,21 +58,28 @@ const STATUS_TABS: { value: WatchStatus; label: string }[] = [
   { value: 'Dropped', label: 'Dropped' },
 ]
 
+// Every status but Plan to watch, in the tabs' own order: the anime I have
+// watched, which is what the profile's genre and combination counts are over
+// (add-genre-and-studio-stats design.md D14, library-views "My list status
+// filter tabs"). Dropped and On hold are in it because they count there too.
+const WATCHED_STATUSES: WatchStatus[] = STATUS_TABS.map((tab) => tab.value).filter((status) => status !== 'PlanToWatch')
+
 // The recap handoff's `focus` token (design.md decision 1/3), translated
 // into this page's own control values — a *seed* for useRestorableState's
 // `initial`, read once per fresh visit rather than an arrival effect (design.md
 // decision 2). An unknown or absent token maps to "no narrowing": every
 // control stays at its ordinary default. `status` is a one-element array (or
 // `[]`) — every deep link still lands on exactly the single status it names
-// today (polish-rewatch-more-and-filters design.md D6, tasks.md 5.2).
+// today (polish-rewatch-more-and-filters design.md D6, tasks.md 5.2). The one
+// exception is `watched`, which names every status except Plan to watch.
 type FocusSeed = {
   status: StatusFilter
   typeFilters: string[]
-  scoreFilter: ScoreFilter
+  scoreFilters: string[]
 }
 
 function parseFocus(token: string | null): FocusSeed {
-  const none: FocusSeed = { status: [], typeFilters: [], scoreFilter: 'any' }
+  const none: FocusSeed = { status: [], typeFilters: [], scoreFilters: [] }
   switch (token) {
     case 'completed':
       return { ...none, status: ['Completed'] }
@@ -79,6 +87,8 @@ function parseFocus(token: string | null): FocusSeed {
       return { ...none, status: ['Dropped'] }
     case 'watching':
       return { ...none, status: ['Watching'] }
+    case 'watched':
+      return { ...none, status: [...WATCHED_STATUSES] }
     case 'movies':
       // The stat this mirrors ("Movies watched") counts a movie regardless
       // of status, which the removed Started filter used to narrow to. The
@@ -87,7 +97,7 @@ function parseFocus(token: string | null): FocusSeed {
       return { ...none, typeFilters: ['movie'] }
     default: {
       const scoreMatch = token?.match(/^score-([1-9]|10)$/)
-      return scoreMatch ? { ...none, scoreFilter: scoreMatch[1] as ScoreFilter } : none
+      return scoreMatch ? { ...none, scoreFilters: [scoreMatch[1]] } : none
     }
   }
 }
@@ -132,11 +142,11 @@ function statusFiltersLabel(statusFilters: StatusFilter): string {
   return statusFilters.length === 0 ? 'All' : statusFilters.map((status) => STATUS_LABELS[status]).join(', ')
 }
 
-// The four filter predicates (the genre one lives in utils/genreFilter.ts),
-// factored out so the option pass below (which tests each candidate against
-// the *other* three) and the match pass apply exactly the same rule rather
-// than two copies of it (design D8, tasks.md 3.1). Nothing ticked is no
-// restriction.
+// The filter predicates (the genre and studio ones are utils/boardFilter.ts's
+// passesTicked), factored out so the option pass below (which tests each
+// candidate against the *other* four) and the match pass apply exactly the same
+// rule rather than two copies of it (design D8, tasks.md 3.1). Nothing ticked is
+// no restriction.
 function passesType(item: MyListItemDto, typeFilters: string[]): boolean {
   return typeFilters.length === 0 || typeFilters.includes(item.mediaType ?? 'unknown')
 }
@@ -145,11 +155,17 @@ function passesAiring(item: MyListItemDto, airingFilters: string[]): boolean {
   return airingFilters.length === 0 || airingFilters.includes(item.airingStatus ?? 'unknown')
 }
 
-function passesScore(item: MyListItemDto, scoreFilter: ScoreFilter): boolean {
-  if (scoreFilter === 'any') return true
-  if (scoreFilter === 'rated') return item.entry.myScore != null
-  if (scoreFilter === 'unrated') return item.entry.myScore == null
-  return item.entry.myScore === Number(scoreFilter)
+// An entry has one score, so with several choices ticked it passes when it
+// matches ANY of them: Rated (it has a score), Unrated (it has none), or a
+// number (exactly that score).
+function passesScore(item: MyListItemDto, ticked: readonly string[]): boolean {
+  if (ticked.length === 0) return true
+  const score = item.entry.myScore
+  return ticked.some((choice) => {
+    if (choice === 'rated') return score != null
+    if (choice === 'unrated') return score == null
+    return score === Number(choice)
+  })
 }
 
 // Builds a Type/Airing option list from the values a base actually holds,
@@ -234,8 +250,25 @@ export function MyListPage() {
   // session. A new key makes that unreachable.
   const [typeFilters, setTypeFilters] = useRestorableState<string[]>('typeFilters', focusSeed.typeFilters)
   const [airingFilters, setAiringFilters] = useRestorableState<string[]>('airingFilters', [])
-  const [genreFilters, setGenreFilters] = useRestorableState<string[]>('genreFilters', [])
-  const [scoreFilter, setScoreFilter] = useRestorableState<ScoreFilter>('scoreFilter', focusSeed.scoreFilter)
+  // A link can name genres (a repeatable `genre` parameter: the profile's Top
+  // genres and Favourite combos, the recap's genre list). They seed a fresh
+  // visit like `focus` does and are never re-read, so a back-navigation restores
+  // the ticks as they were left (library-views "My list genre filter").
+  const [genreFilters, setGenreFilters] = useRestorableState<string[]>(
+    'genreFilters',
+    Array.from(new Set(searchParams.getAll('genre'))),
+  )
+  // Studios arrive the same way genres do: a repeatable `studio` parameter (the
+  // profile's Top studios, the recap's studio list) seeds a fresh visit and is
+  // never re-read, so a back-navigation restores the ticks as they were left.
+  const [studioFilters, setStudioFilters] = useRestorableState<string[]>(
+    'studioFilters',
+    Array.from(new Set(searchParams.getAll('studio'))),
+  )
+  // Renamed from `scoreFilter` (one value) when the score filter became a
+  // multi-select, for the reason `statusFilter` became `statusFilters`: a
+  // snapshot holding the old string must never be read as an array.
+  const [scoreFilters, setScoreFilters] = useRestorableState<string[]>('scoreFilters', focusSeed.scoreFilters)
   const [sort, setSort] = useRestorableState<SortKey>('sort', 'alphabetical')
   const [sortDirection, setSortDirection] = useRestorableState<SortDirection>('sortDirection', 'natural')
   const [sortThen, setSortThen] = useRestorableState<SortKey | null>('sortThen', null)
@@ -264,7 +297,8 @@ export function MyListPage() {
     typeFilters,
     airingFilters,
     genreFilters,
-    scoreFilter,
+    studioFilters,
+    scoreFilters,
     sort,
     sortDirection,
     sortThen,
@@ -384,6 +418,8 @@ export function MyListPage() {
         'recapFilter',
         'recapType',
         'focus',
+        'genre',
+        'studio',
       ]) {
         params.delete(key)
       }
@@ -545,14 +581,15 @@ export function MyListPage() {
   // One pass over `candidates` produces the four option lists and the
   // matched set together (design D8): each entry is tested once against each
   // predicate, and it counts toward a control's options exactly when it
-  // passes the *other* three — never its own, so a filter never narrows its
-  // own options (design D1) — and toward `matched` when it passes all four.
-  // The genre filter is one of the other controls to the other three (design
-  // D4 of add-genre-filter-and-polish-lists). Its own board is counted over
-  // what the others leave, its ticks excluded, so ticking a genre never
-  // changes which genres the board holds; `matchedGenres`, from the entries
-  // still shown, only decides which of them are greyed out.
-  const { matched, typeOptions, airingOptions, genreOptions, scoreOptions, scoreDisabledLabel } = useMemo(() => {
+  // passes the *other* four — never its own, so a filter never narrows its
+  // own options (design D1) — and toward `matched` when it passes all five.
+  // The genre and studio filters are two of the other controls to the rest
+  // (design D4 of add-genre-filter-and-polish-lists). Each board is counted over
+  // what the others leave, its own ticks excluded, so ticking a genre or a
+  // studio never changes which ones the board holds; `matchedGenres` and
+  // `matchedStudios`, from the entries still shown, only decide which of them
+  // are greyed out.
+  const { matched, typeOptions, airingOptions, genreOptions, studioOptions, scoreOptions } = useMemo(() => {
     const presentTypes = new Set<string>()
     let hasUnknownType = false
     const presentAiring = new Set<string>()
@@ -563,36 +600,45 @@ export function MyListPage() {
     let genreBaseTotal = 0
     const genreCounts = new Map<string, number>()
     const matchedGenres = new Set<string>()
+    let studioBaseTotal = 0
+    const studioCounts = new Map<string, number>()
+    const matchedStudios = new Set<string>()
     const matched: MyListItemDto[] = []
 
     for (const item of candidates) {
       const t = passesType(item, typeFilters)
       const a = passesAiring(item, airingFilters)
-      const g = passesGenres(item, genreFilters)
-      const s = passesScore(item, scoreFilter)
+      const g = passesTicked(item.genres, genreFilters)
+      const st = passesTicked(item.studios, studioFilters)
+      const s = passesScore(item, scoreFilters)
 
-      if (a && g && s) {
+      if (a && g && st && s) {
         if (item.mediaType) presentTypes.add(item.mediaType)
         else hasUnknownType = true
       }
-      if (t && g && s) {
+      if (t && g && st && s) {
         if (item.airingStatus) presentAiring.add(item.airingStatus)
         else hasUnknownAiring = true
       }
-      if (t && a && g) {
+      if (t && a && g && st) {
         scoreBaseTotal++
         if (item.entry.myScore != null) {
           scoreBaseRated++
           scoreCounts.set(item.entry.myScore, (scoreCounts.get(item.entry.myScore) ?? 0) + 1)
         }
       }
-      if (t && a && s) {
+      if (t && a && st && s) {
         genreBaseTotal++
         for (const genre of item.genres) genreCounts.set(genre, (genreCounts.get(genre) ?? 0) + 1)
       }
       if (t && a && g && s) {
+        studioBaseTotal++
+        for (const studio of item.studios) studioCounts.set(studio, (studioCounts.get(studio) ?? 0) + 1)
+      }
+      if (t && a && g && st && s) {
         matched.push(item)
         for (const genre of item.genres) matchedGenres.add(genre)
+        for (const studio of item.studios) matchedStudios.add(studio)
       }
     }
 
@@ -604,46 +650,53 @@ export function MyListPage() {
       airingFilters,
       (value) => (value === 'unknown' ? 'Unknown' : AIRING_STATUS_LABELS[value as AiringStatus]),
     )
-    const genreOptions = buildGenreOptions({
+    const genreOptions = buildBoardOptions({
       counts: genreCounts,
       baseTotal: genreBaseTotal,
-      matchedGenres,
+      matched: matchedGenres,
       ticked: genreFilters,
+    })
+    const studioOptions = buildBoardOptions({
+      counts: studioCounts,
+      baseTotal: studioBaseTotal,
+      matched: matchedStudios,
+      ticked: studioFilters,
     })
 
     // A score value is offered iff present and not universal over the base;
     // Rated/Unrated are offered iff the base is mixed (design D2). The base
-    // excludes the score filter's own restriction, same as the controls
-    // above (design D1).
+    // excludes the score filter's own ticks, same as the controls above
+    // (design D1), and every tick is offered whatever the rule says (design
+    // D4), so any of them can be unticked. Several can be ticked together and an
+    // entry passes on any of them, so a tick never makes another choice a dead
+    // end: nothing here is greyed out.
     const scoreBaseUnrated = scoreBaseTotal - scoreBaseRated
     const ratedUnratedOffered = scoreBaseRated > 0 && scoreBaseUnrated > 0
-    const offeredValues = Array.from({ length: 10 }, (_, i) => 10 - i).filter((value) => {
-      const count = scoreCounts.get(value) ?? 0
-      return count > 0 && count < scoreBaseTotal
-    })
-
-    // Presentation order: Any, Rated, 10..1, Unrated. `scoreFilter`'s own
-    // current value is forced in regardless of the rule above (design D4).
-    const scoreOptions: ScoreFilter[] = ['any']
-    if (ratedUnratedOffered || scoreFilter === 'rated') scoreOptions.push('rated')
+    const tickedScores = new Set(scoreFilters)
+    const scoreOptions: FilterMultiSelectOption[] = []
+    function offerScore(choice: string, offered: boolean) {
+      if (offered || tickedScores.has(choice)) scoreOptions.push({ value: choice, label: scoreChoiceLabel(choice) })
+    }
+    // Presentation order: Rated, 10..1, Unrated.
+    offerScore('rated', ratedUnratedOffered)
     for (let value = 10; value >= 1; value--) {
-      if (offeredValues.includes(value) || scoreFilter === String(value)) scoreOptions.push(String(value) as ScoreFilter)
+      const count = scoreCounts.get(value) ?? 0
+      offerScore(String(value), count > 0 && count < scoreBaseTotal)
     }
-    if (ratedUnratedOffered || scoreFilter === 'unrated') scoreOptions.push('unrated')
+    offerScore('unrated', ratedUnratedOffered)
 
-    // Disabled exactly when nothing besides Any would ever be offered and the
-    // score filter isn't itself narrowing the list (design D5). By D2's own
-    // proof there are exactly three ways to reach this — a mixed base or two
-    // distinct scores always leave something else offerable (tasks.md 3.6).
-    let scoreDisabledLabel: string | null = null
-    if (scoreFilter === 'any' && !ratedUnratedOffered && offeredValues.length === 0) {
-      if (scoreBaseTotal === 0) scoreDisabledLabel = 'Any'
-      else if (scoreBaseRated === 0) scoreDisabledLabel = 'Unrated'
-      else scoreDisabledLabel = String([...scoreCounts.keys()][0])
+    // Nothing to choose between: every listed entry carries the same score, or none
+    // carries one. The control is unavailable then (one option or none, nothing
+    // ticked), and states the one thing true of the list — "Score: 8", or
+    // "Score: Unrated" — which it can only do with that choice as its one option.
+    // An empty list leaves it with none, reading "Score: All".
+    if (scoreOptions.length === 0 && scoreBaseTotal > 0) {
+      const only = scoreBaseRated === 0 ? 'unrated' : String([...scoreCounts.keys()][0])
+      scoreOptions.push({ value: only, label: scoreChoiceLabel(only) })
     }
 
-    return { matched, typeOptions, airingOptions, genreOptions, scoreOptions, scoreDisabledLabel }
-  }, [candidates, typeFilters, airingFilters, genreFilters, scoreFilter])
+    return { matched, typeOptions, airingOptions, genreOptions, studioOptions, scoreOptions }
+  }, [candidates, typeFilters, airingFilters, genreFilters, studioFilters, scoreFilters])
 
   // Sorts and groups `matched` (design D8) — what matches, and the `shown`/
   // `total` counts, are unchanged from before this change; only where the
@@ -693,7 +746,8 @@ export function MyListPage() {
     typeFilters.length > 0 ||
     airingFilters.length > 0 ||
     genreFilters.length > 0 ||
-    scoreFilter !== 'any' ||
+    studioFilters.length > 0 ||
+    scoreFilters.length > 0 ||
     sort !== 'alphabetical' ||
     sortDirection !== 'natural' ||
     sortThen !== null ||
@@ -712,7 +766,8 @@ export function MyListPage() {
     setTypeFilters([])
     setAiringFilters([])
     setGenreFilters([])
-    setScoreFilter('any')
+    setStudioFilters([])
+    setScoreFilters([])
     setSort('alphabetical')
     setSortDirection('natural')
     setSortThen(null)
@@ -903,8 +958,10 @@ export function MyListPage() {
           onAiringFiltersChange: setAiringFilters,
           genreFilters,
           onGenreFiltersChange: setGenreFilters,
-          scoreFilter,
-          onScoreFilterChange: setScoreFilter,
+          studioFilters,
+          onStudioFiltersChange: setStudioFilters,
+          scoreFilters,
+          onScoreFiltersChange: setScoreFilters,
         }}
         sort={{
           sort,
@@ -919,8 +976,8 @@ export function MyListPage() {
         typeOptions={typeOptions}
         airingOptions={airingOptions}
         genreOptions={genreOptions}
+        studioOptions={studioOptions}
         scoreOptions={scoreOptions}
-        scoreDisabledLabel={scoreDisabledLabel}
       />
 
       {hasResultsLine && (

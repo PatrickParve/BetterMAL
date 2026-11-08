@@ -415,6 +415,10 @@ export type MyListItemDto = {
   // whose details were never fetched in full — so the genre filter needs no
   // null guard.
   genres: string[]
+  // The studios MyAnimeList credits the anime with, in its order, under the same
+  // rule (never null, empty when none are stored), so the studio filter runs over
+  // the loaded list.
+  studios: string[]
 }
 
 export type TopAnimeItemDto = {
@@ -1409,6 +1413,86 @@ export type RecapTimeRankingDto = {
   topPosters: RecapRankingPosterDto[]
 }
 
+// One genre or studio of a counted set (taste-stats, add-genre-and-studio-stats
+// design.md D9). countRank is its 1-based place in the most-watched order, which
+// holds every one; scoreRank its place in the highest-rated order, which holds
+// only those with a scored anime, so it is null for the rest. Both lists are
+// shipped once with both ranks, and a tab orders them by sorting on the rank
+// alone: the client never re-derives a tie-break. weightedScore is the server's
+// Bayesian score rounded for display, null when nothing in it is scored. Posters
+// are up to three of its anime in my ranking's order.
+export type TasteGenreDto = {
+  name: string
+  animeCount: number
+  scoredCount: number
+  weightedScore: number | null
+  countRank: number
+  scoreRank: number | null
+  posters: RecapRankingPosterDto[]
+}
+
+export type TasteStudioDto = TasteGenreDto
+
+// A hidden gem: an anime I scored 8 or higher outside MyAnimeList's 1,000 most
+// popular. popularityRank is MyAnimeList's own rank for it, shown in full.
+export type TasteGemDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  myScore: number
+  popularityRank: number
+}
+
+// A pair or trio of genres carried together, named alphabetically.
+export type TasteComboDto = {
+  genres: string[]
+  animeCount: number
+}
+
+// One category of a split: a demographic's name, a source key as MyAnimeList
+// stores it, a decade like "2010s", or "other" for the categories merged after
+// the fourth.
+export type TasteSplitDto = {
+  label: string
+  count: number
+}
+
+// GET /api/profile/taste (add-genre-and-studio-stats design.md D9): everything
+// the profile's Hidden gems, Top genres, Top studios, Favourite combos and the
+// three split boxes draw. A separate read, like Top series, so the profile's
+// first paint does not wait on it.
+export type TasteSectionDto = {
+  genres: TasteGenreDto[]
+  studios: TasteStudioDto[]
+  pairs: TasteComboDto[]
+  trios: TasteComboDto[]
+  demographics: TasteSplitDto[]
+  sources: TasteSplitDto[]
+  eras: TasteSplitDto[]
+  hiddenGems: TasteGemDto[]
+}
+
+// The recap's biggest day: the local calendar day with the most episodes watched
+// across the period's anime. date is an ISO day ("2026-09-15").
+export type RecapBiggestDayDto = {
+  date: string
+  episodes: number
+  posters: RecapRankingPosterDto[]
+}
+
+// The recap's highlights row (list-recaps "Recap highlights row"). genres is
+// every genre of the period in most-watched order and studios every studio with
+// a scored anime in highest-rated order: the cards read the first of each, and
+// the lists they open read the lot. hiddenGem and biggestDay are null when the
+// period has none.
+export type RecapHighlightsDto = {
+  genres: TasteGenreDto[]
+  studios: TasteStudioDto[]
+  hiddenGem: TasteGemDto | null
+  biggestDay: RecapBiggestDayDto | null
+}
+
 // filter echoes what the server actually used — always 'aired' for a season
 // recap. watchedCount/airedCount are this period's counts under *both*
 // filters, letting the recap page render/disable the toggle without a
@@ -1427,6 +1511,7 @@ export type RecapDto = {
   yearRanking: RecapYearRankingDto[]
   seasonTimeRanking: RecapTimeRankingDto[]
   yearTimeRanking: RecapTimeRankingDto[]
+  highlights: RecapHighlightsDto
 }
 
 export type RecapYearAvailabilityDto = {

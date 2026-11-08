@@ -156,6 +156,7 @@ public class CrossSiteRequestGuardTests
         "api/profile/activity",
         "api/profile/rewatched",
         "api/profile/rewatched-series",
+        "api/profile/taste",                 // read-only: genre and studio figures from stored data, no outside call, nothing written (ProfileService.GetTasteSectionAsync)
         "api/profile/time-spent-series",
         "api/profile/top-anime",
         "api/profile/top-series",            // writes: enqueues a background series build (ProfileService/GetTopSeriesSectionAsync)
@@ -168,6 +169,7 @@ public class CrossSiteRequestGuardTests
         "api/series/list",
         "api/series/{seriesId:int}/score-history", // read-only: stored records, no outside call, nothing written (ScoreHistoryService)
         "api/setup/status",                  // read-only: counts and the coordinator's in-memory state, no outside call (SetupStatusService)
+        "api/studios/open",                  // writes: a studio nothing has taught the app yet costs one AniList read and a derived StudioLinks row; no MyAnimeList change, no list entry touched, no unsent edit lost (StudioLinkResolver)
         "api/sync/held",                  // writes: clears held changes MAL already agrees with (HeldChangeService.GetHeldAsync, design D8a)
         "api/sync/reconcile/pending",
         "api/themes/search",                 // read-only: songs from the stored catalogue, no outside call, no background work, nothing written (ThemeSearchService)

@@ -233,6 +233,29 @@
   gap: 20px;
 }
 
+/* The highlights row (list-recaps "Recap highlights row"): four cards across
+   the page's full width, two to a row from the lead's own breakpoint down, one at
+   phone width. The grid always has four tracks above the first breakpoint, so a
+   lone card keeps its quarter of the row rather than stretching across it; cards
+   in one row stretch to one height. */
+.recap-highlights {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1024px) {
+  .recap-highlights {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .recap-highlights {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Sized for the lead grid's narrow column rather than the page's full
    width — a 1-2 column stack instead of the old 6-tile horizontal strip. */
 .recap-page__stats {
@@ -931,7 +954,7 @@ a.recap-page__stat--link:focus-visible {
 }
 
 .recap-page__see-all:hover {
-  text-decoration: underline;
+  color: var(--text-h);
 }
 
 /* Season/year rankings (the row list, poster, and "See all" styles live in

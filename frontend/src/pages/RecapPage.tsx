@@ -13,8 +13,9 @@ import {
   type RecapTimeRankingDto,
   type ScoreDistributionBucketDto,
 } from '../api/types.ts'
+import { HighlightCard } from '../components/HighlightCard.tsx'
 import { PosterPicture } from '../components/PosterPicture.tsx'
-import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
+import { RankingOverlay, type RankingFamily, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
 import { RowPicture } from '../components/RowPicture.tsx'
 import {
   describeSeasonRanking,
@@ -33,6 +34,7 @@ import { LoadFailedNotice } from '../components/LoadFailedNotice.tsx'
 import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import {
+  formatIsoDay,
   formatRuntime,
   MEDIA_TYPE_ORDER,
   mediaTypeLabel,
@@ -45,6 +47,7 @@ import {
 // range helpers — MyAnimeList's first season archive year through the
 // current season — instead of keeping its own (design D2 of
 // bound-recap-and-airing-range).
+import { describeGenreRanking, describeStudioRanking } from '../utils/tasteRankings.ts'
 import {
   currentSeasonTarget,
   EARLIEST_YEAR,
@@ -245,7 +248,12 @@ function resolveRecapUrl(searchParams: URLSearchParams, current: SeasonTarget): 
 // distribution row describes, on top of the plain scope: `completed`,
 // `dropped`, `watching`, `movies`, or `score-1`…`score-10`. Omitted, the
 // scope alone is the unfocused "in this period" set — the existing "See all
-// N in my list" link never passes one, so it stays byte-identical.
+// N in my list" link never passes one, so it stays byte-identical. `genre` and
+// `studio` (add-genre-and-studio-stats design.md D14) tick one genre or one studio
+// in my list's own Genre or Studio filter on top of the scope, where it can be
+// changed or cleared: the recap's genre and studio lists link through them.
+type MyListNarrowing = { focus?: string; genre?: string; studio?: string }
+
 function myListScopeSearch(
   mode: RecapMode,
   startYear: number,
@@ -253,7 +261,7 @@ function myListScopeSearch(
   season: RecapSeasonName,
   filter: RecapTimeFilter,
   typeFilter: string,
-  focus?: string,
+  { focus, genre, studio }: MyListNarrowing = {},
 ): string {
   const params = new URLSearchParams()
   params.set('recapMode', mode)
@@ -267,6 +275,8 @@ function myListScopeSearch(
   else params.set('recapFilter', filter)
   if (typeFilter !== 'all') params.set('recapType', typeFilter)
   if (focus) params.set('focus', focus)
+  if (genre) params.set('genre', genre)
+  if (studio) params.set('studio', studio)
   return params.toString()
 }
 
@@ -329,7 +339,7 @@ function RecapPageView({
   const [overlay, setOverlay] = useState<{
     title: string
     rows: RankingOverlayRow[]
-    family?: 'year' | 'season'
+    family?: RankingFamily
   } | null>(null)
   // The score board (design.md decision 6/D7): opened from the
   // distribution's section header, matching `overlay` above — still no URL
@@ -729,7 +739,7 @@ function RecapPageView({
   // somewhere".
   function renderStats(stats: RecapStatsDto) {
     const scopeLink = (focus?: string, filterOverride?: RecapTimeFilter) =>
-      `/my-list?${myListScopeSearch(mode, startYear, endYear, season, filterOverride ?? filter, typeFilter, focus)}`
+      `/my-list?${myListScopeSearch(mode, startYear, endYear, season, filterOverride ?? filter, typeFilter, { focus })}`
 
     const tiles: { label: string; value: string; to?: string; count?: number }[] = [
       { label: 'In this period', value: String(stats.animeCounted), to: scopeLink(), count: stats.animeCounted },
@@ -792,7 +802,7 @@ function RecapPageView({
           compact
           tiered
           hrefForScore={(score) =>
-            `/my-list?${myListScopeSearch(mode, startYear, endYear, season, filter, typeFilter, `score-${score}`)}`
+            `/my-list?${myListScopeSearch(mode, startYear, endYear, season, filter, typeFilter, { focus: `score-${score}` })}`
           }
         />
       </section>
@@ -846,6 +856,93 @@ function RecapPageView({
           <ul className="recap-hot-take-list">{shown.map(renderHotTake)}</ul>
         )}
       </section>
+    )
+  }
+
+  // The highlights row (list-recaps "Recap highlights row", add-genre-and-studio-
+  // stats design.md D11): four cards under the lead, in a fixed order, each drawn
+  // only when it has something to show, and the row only when any card does. No
+  // heading and no explanatory text: a card's label names it. The two cards that
+  // open a list set the single overlay slot the rankings' "See all" controls use,
+  // so the lists follow its sizing and dismissal rules and add nothing to history.
+  function renderHighlights(recap: RecapDto) {
+    const { genres, studios, hiddenGem, biggestDay } = recap.highlights
+    const favouriteGenre = genres[0]
+    const favouriteStudio = studios[0]
+    if (!favouriteGenre && !favouriteStudio && !hiddenGem && !biggestDay) return null
+
+    return (
+      <div className="recap-highlights">
+        {favouriteGenre && (
+          <HighlightCard
+            label="Favourite genre"
+            value={favouriteGenre.name}
+            line={`${favouriteGenre.animeCount} anime`}
+            posters={favouriteGenre.posters}
+            rail="genre"
+            onOpen={() =>
+              setOverlay({
+                title: `Genres — ${periodLabel}`,
+                family: 'genre',
+                rows: genres.map((genre) =>
+                  describeGenreRanking(
+                    genre,
+                    'count',
+                    `/my-list?${myListScopeSearch(mode, startYear, endYear, season, filter, typeFilter, { genre: genre.name })}`,
+                  ),
+                ),
+              })
+            }
+          />
+        )}
+        {favouriteStudio && (
+          <HighlightCard
+            label="Favourite studio"
+            value={favouriteStudio.name}
+            line={`${favouriteStudio.scoredCount} scored · ${favouriteStudio.weightedScore?.toFixed(2) ?? '—'}`}
+            posters={favouriteStudio.posters}
+            rail="studio"
+            onOpen={() =>
+              setOverlay({
+                title: `Studios — ${periodLabel}`,
+                family: 'studio',
+                rows: studios.map((studio) =>
+                  describeStudioRanking(
+                    studio,
+                    'score',
+                    `/my-list?${myListScopeSearch(mode, startYear, endYear, season, filter, typeFilter, { studio: studio.name })}`,
+                  ),
+                ),
+              })
+            }
+          />
+        )}
+        {hiddenGem && (
+          <HighlightCard
+            label="Hidden gem"
+            value={pickDisplayTitle(hiddenGem.title, hiddenGem.englishTitle)}
+            line={`Popularity #${hiddenGem.popularityRank.toLocaleString('en-US')}`}
+            posters={[
+              {
+                animeId: hiddenGem.animeId,
+                title: pickDisplayTitle(hiddenGem.title, hiddenGem.englishTitle),
+                pictureUrl: hiddenGem.pictureUrl,
+              },
+            ]}
+            rail="accent"
+            to={`/anime/${hiddenGem.animeId}`}
+          />
+        )}
+        {biggestDay && (
+          <HighlightCard
+            label="Biggest day"
+            value={`${biggestDay.episodes} ${biggestDay.episodes === 1 ? 'episode' : 'episodes'}`}
+            line={formatIsoDay(biggestDay.date)}
+            posters={biggestDay.posters}
+            rail="neutral"
+          />
+        )}
+      </div>
     )
   }
 
@@ -1178,6 +1275,8 @@ function RecapPageView({
               {renderDistribution(scoreBuckets, scoreGroups)}
             </div>
           </div>
+
+          {renderHighlights(displayedRecap)}
 
           {renderRankings(displayedRecap)}
 

@@ -4,6 +4,7 @@ using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Recap;
 using AnimeTracker.Api.Services.Series;
+using AnimeTracker.Api.Services.Taste;
 using AnimeTracker.Api.Services.Watching;
 
 namespace AnimeTracker.Api.Services.Profile;
@@ -44,6 +45,11 @@ public class ProfileService(
     private const int RecentActivityFetchWindow = 400;
 
     private const int TopAnimeMinimumSize = 10;
+
+    // How many favourite combinations of each size, and how many hidden gems, the taste
+    // read carries (taste-stats design.md D9). Genres, studios and the splits go out whole.
+    private const int TasteCombinationLimit = 5;
+    private const int TasteHiddenGemLimit = 10;
 
     // The app-wide fallback runtime for an anime with no cached average
     // episode duration (design.md decision 2) — not the sole basis for
@@ -201,6 +207,31 @@ public class ProfileService(
 
     private static TimeSpentSeriesItemDto ToTimeSpentSeriesItem(SeriesWatchTimeResult s) =>
         new(s.SeriesId, s.Title, s.EnglishTitle, s.PictureUrl, s.WatchedSeconds);
+
+    // The counted set is every entry but Plan to watch, whatever its other status
+    // (taste-stats "Taste figures count a defined set of entries"). Weighted scores use
+    // the whole list's mean, not the counted set's, like the favourite seasons and years.
+    // Built from the lean list read alone and my stored ranking, so nothing here can
+    // reach MyAnimeList or AniList.
+    public async Task<TasteSectionDto> GetTasteSectionAsync(CancellationToken ct = default)
+    {
+        var entries = await entryRepository.GetAllForListViewAsync(ct);
+        var orderedAnimeIds = await topAnimeSelectionRepository.GetOrderedAnimeIdsAsync(ct);
+        var rankingSnapshot = AnimeRankingSnapshot.Build(entries, orderedAnimeIds);
+
+        var counted = entries.Where(e => e.Status != WatchStatus.PlanToWatch).ToList();
+        var wholeListMean = RecapRankingBuilder.ScoredMean(entries);
+
+        return new TasteSectionDto(
+            TasteStatsBuilder.Genres(counted, wholeListMean, rankingSnapshot),
+            TasteStatsBuilder.Studios(counted, wholeListMean, rankingSnapshot),
+            TasteStatsBuilder.Pairs(counted, wholeListMean, TasteCombinationLimit),
+            TasteStatsBuilder.Trios(counted, wholeListMean, TasteCombinationLimit),
+            TasteStatsBuilder.Demographics(counted),
+            TasteStatsBuilder.Sources(counted),
+            TasteStatsBuilder.Eras(counted),
+            TasteStatsBuilder.HiddenGems(counted, rankingSnapshot, TasteHiddenGemLimit));
+    }
 
     // Fire-and-forget: enqueues a bounded batch of my-list anime with no
     // stored series onto the existing background build queue, reusing the

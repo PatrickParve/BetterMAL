@@ -36,6 +36,22 @@ type FilterMultiSelectProps = {
   // in columns inside a panel as wide as the viewport allows, scrolling
   // inside itself when it is too tall (design D3).
   layout?: 'list' | 'board'
+  // For a filter over names with no closed set (my list's studios): the longest
+  // label the trigger draws in full. A longer one is cut with an ellipsis there,
+  // and the whole name is the trigger's tooltip, so the trigger holds one width
+  // however long a name is on offer. Unset, every label is drawn whole.
+  maxLabelChars?: number
+}
+
+// The most characters a board's columns are sized for. A longer label is cut
+// with an ellipsis inside its column, and shows whole as its tooltip, so one
+// very long name cannot widen every column.
+const BOARD_MAX_CHARS = 28
+
+// A label cut to `max` characters, ending in an ellipsis; whole when it fits or
+// when no cap is set.
+function clipLabel(text: string, max: number | undefined): string {
+  return max !== undefined && text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
 }
 
 // Where the open panel sits. All of it is measured from the page after the
@@ -91,6 +107,7 @@ export function FilterMultiSelect({
   onChange,
   singleOptionIsChoice = false,
   layout = 'list',
+  maxLabelChars,
 }: FilterMultiSelectProps) {
   const [open, setOpen] = useState(false)
   const [placement, setPlacement] = useState(DEFAULT_PLACEMENT)
@@ -182,7 +199,7 @@ export function FilterMultiSelect({
     if (value.length === 0) return 'All'
     if (value.length === 1) {
       const match = options.find((option) => option.value === value[0])
-      return match ? match.label : value[0]
+      return clipLabel(match ? match.label : value[0], maxLabelChars)
     }
     return `${value.length} selected`
   }
@@ -193,7 +210,7 @@ export function FilterMultiSelect({
   // falls through to bareSummary([]), which reads All since `unavailable`
   // only holds with nothing ticked (D5).
   function summary(): string {
-    if (unavailable && options.length === 1) return `${label}: ${options[0].label}`
+    if (unavailable && options.length === 1) return `${label}: ${clipLabel(options[0].label, maxLabelChars)}`
     return `${label}: ${bareSummary(selected)}`
   }
 
@@ -212,7 +229,13 @@ export function FilterMultiSelect({
     const n = Math.max(widthOptions.length, options.length)
     const counts: string[] = []
     for (let i = 2; i <= n; i++) counts.push(`${i} selected`)
-    const candidates = ['All', ...widthOptions.map((option) => option.label), ...options.map((option) => option.label), ...counts, bareSummary(selected)]
+    const candidates = [
+      'All',
+      ...widthOptions.map((option) => clipLabel(option.label, maxLabelChars)),
+      ...options.map((option) => clipLabel(option.label, maxLabelChars)),
+      ...counts,
+      bareSummary(selected),
+    ]
     return [...new Set(candidates)]
   }
 
@@ -242,12 +265,22 @@ export function FilterMultiSelect({
     // focus, so the keyboard passes it by as well.
     const disabled = option.disabled === true && !checked
     return (
-      <label key={option.value} className={`filter-multi-select__option${disabled ? ' filter-multi-select__option--disabled' : ''}`}>
+      <label
+        key={option.value}
+        className={`filter-multi-select__option${disabled ? ' filter-multi-select__option--disabled' : ''}`}
+        title={layout === 'board' && option.label.length > BOARD_MAX_CHARS ? option.label : undefined}
+      >
         <input type="checkbox" checked={checked} disabled={disabled} onChange={() => toggle(option.value)} />
-        {option.label}
+        <span className="filter-multi-select__option-text">{option.label}</span>
       </label>
     )
   }
+
+  // The whole name behind a trigger that had to cut it short.
+  const singleLabel =
+    selected.length === 1 ? (options.find((option) => option.value === selected[0])?.label ?? selected[0]) : null
+  const fullSingleLabel =
+    singleLabel !== null && clipLabel(singleLabel, maxLabelChars) !== singleLabel ? `${label}: ${singleLabel}` : undefined
 
   const panelClass = [
     'filter-multi-select__panel',
@@ -267,8 +300,8 @@ export function FilterMultiSelect({
   // columns are the same width whichever genres are on the board right now.
   let longestLabel = 0
   if (layout === 'board') {
-    for (const option of widthOptions) longestLabel = Math.max(longestLabel, option.label.length)
-    for (const option of options) longestLabel = Math.max(longestLabel, option.label.length)
+    for (const option of widthOptions) longestLabel = Math.max(longestLabel, Math.min(option.label.length, BOARD_MAX_CHARS))
+    for (const option of options) longestLabel = Math.max(longestLabel, Math.min(option.label.length, BOARD_MAX_CHARS))
   }
 
   return (
@@ -280,6 +313,7 @@ export function FilterMultiSelect({
         // holds with nothing ticked, which is already the branch that leaves
         // the accent off.
         className={`filter-multi-select__button${selected.length > 0 ? ' filter-multi-select--active' : ''}`}
+        title={fullSingleLabel}
         aria-haspopup="true"
         aria-expanded={open}
         disabled={unavailable}

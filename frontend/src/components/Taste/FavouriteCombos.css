@@ -1,0 +1,87 @@
+/* Two lists side by side, the pairs left and the trios right; a list left on its
+   own takes the whole box, and below the breakpoint the trios follow the pairs. */
+.favourite-combos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.favourite-combos > :only-child {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 800px) {
+  .favourite-combos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.favourite-combos__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* A row has the ranking rows' look: a bordered box that tints in the section's
+   family on hover and on keyboard focus, with no change of size or position. */
+.favourite-combos__link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-h);
+  text-decoration: none;
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.favourite-combos__link:hover,
+.favourite-combos__link:focus-visible {
+  background: var(--fam-bg);
+  border-color: var(--fam-border);
+  box-shadow: var(--shadow);
+}
+
+.favourite-combos__link:focus-visible {
+  outline: 2px solid var(--fam-from);
+  outline-offset: 2px;
+}
+
+.favourite-combos__chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  min-width: 0;
+}
+
+.favourite-combos__chip {
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--fam-border);
+  background: var(--fam-bg);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+
+.favourite-combos__plus {
+  color: var(--text);
+  opacity: 0.7;
+}
+
+.favourite-combos__count {
+  flex: 0 0 auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}

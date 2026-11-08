@@ -1,9 +1,10 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import {
   getProfile,
   getRewatchedSection,
   getRewatchedSeriesSection,
+  getTasteSection,
   getTimeSpentSeriesSection,
   getTopAnimeSection,
   getTopSeriesSection,
@@ -13,6 +14,8 @@ import type {
   ProfileDto,
   RewatchedSectionDto,
   RewatchedSeriesSectionDto,
+  TasteGenreDto,
+  TasteSectionDto,
   TimeSpentSeriesSectionDto,
   TopAnimeMediaType,
   TopAnimeSectionDto,
@@ -24,7 +27,7 @@ import { ScoreValue } from '../components/ScoreValue.tsx'
 import { AnimeRankOverlay } from '../components/AnimeRankOverlay.tsx'
 import { EditHistoryOverlay } from '../components/EditHistoryOverlay.tsx'
 import { ProgressBar } from '../components/ProgressBar.tsx'
-import { RankingOverlay, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
+import { RankingOverlay, type RankingFamily, type RankingOverlayRow } from '../components/RankingOverlay.tsx'
 import { PosterPicture } from '../components/PosterPicture.tsx'
 import { RowPicture } from '../components/RowPicture.tsx'
 import {
@@ -35,6 +38,8 @@ import {
   RankingSection,
 } from '../components/RankingSection.tsx'
 import { ScoreDistribution } from '../components/ScoreDistribution.tsx'
+import { FavouriteCombos } from '../components/Taste/FavouriteCombos.tsx'
+import { TasteSplit } from '../components/Taste/TasteSplit.tsx'
 import { TruncatedTitle } from '../components/TruncatedTitle.tsx'
 import { UnresolvedEpisodesOverlay } from '../components/UnresolvedEpisodesOverlay.tsx'
 import { useAnimeRank } from '../context/AnimeRankContext.tsx'
@@ -45,7 +50,8 @@ import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { useDragScroll } from '../hooks/useDragScroll.ts'
 import { useRestorableScroll } from '../hooks/useRestorableScroll.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
-import { formatRewatchTime, formatTimestamp, pickDisplayTitle } from '../utils/anime.ts'
+import { formatRewatchTime, formatTimestamp, pickDisplayTitle, sourceLabel } from '../utils/anime.ts'
+import { describeGenreRanking, describeStudioRanking, type TasteBasis } from '../utils/tasteRankings.ts'
 import './ProfilePage.css'
 
 type TopSeriesBasis = 'mine' | 'mal'
@@ -194,6 +200,58 @@ function isScopeOffered(scope: RewatchedScope, offered: TopAnimeMediaType[] | un
   if (scope === 'all' || scope === 'series') return true
   if (!offered) return true
   return offered.includes(scope)
+}
+
+// Top genres' and Top studios' two orders (profile-stats "Top genres and Top
+// studios"): the same two tabs on both, Most watched first. `Highest rated` is
+// offered only while some row has a scored anime.
+const TASTE_BASIS_TABS: { value: TasteBasis; label: string }[] = [
+  { value: 'count', label: 'Most watched' },
+  { value: 'score', label: 'Highest rated' },
+]
+
+// A tab orders the shipped rows by the server's rank for it and nothing else, so
+// the client never re-implements a tie-break (design.md D9). Highest rated holds
+// only the rows with a scored anime, which are the ones that have a score rank.
+function orderedByTasteBasis<T extends TasteGenreDto>(rows: T[], basis: TasteBasis): T[] {
+  if (basis === 'count') return [...rows].sort((a, b) => a.countRank - b.countRank)
+  return rows.filter((row) => row.scoreRank !== null).sort((a, b) => a.scoreRank! - b.scoreRank!)
+}
+
+// A genre's or a studio's link into my list: that one ticked in its filter and
+// every status but Plan to watch selected, so my list holds exactly the anime its
+// count covers.
+function watchedLink(filter: 'genre' | 'studio', name: string): string {
+  return `/my-list?${new URLSearchParams({ focus: 'watched', [filter]: name }).toString()}`
+}
+
+function TasteBasisTabs({
+  label,
+  selected,
+  onSelect,
+}: {
+  label: string
+  selected: TasteBasis
+  onSelect: (basis: TasteBasis) => void
+}) {
+  return (
+    <div className="profile-media-tabs profile-media-tabs--family" role="tablist" aria-label={label}>
+      {TASTE_BASIS_TABS.map((tab) => (
+        <button
+          key={tab.value}
+          type="button"
+          role="tab"
+          aria-selected={selected === tab.value}
+          className={
+            selected === tab.value ? 'profile-media-tabs__tab profile-media-tabs__tab--active' : 'profile-media-tabs__tab'
+          }
+          onClick={() => onSelect(tab.value)}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 const STAT_LABELS: { key: keyof ProfileDto['stats']; label: string }[] = [
@@ -497,6 +555,18 @@ export function ProfilePage() {
       ? favouriteSeasonsScoreRaw
       : null
 
+  // The genre and studio sections' read (add-genre-and-studio-stats design.md D9):
+  // its own resource, so the page's first paint does not wait on it, and each
+  // section is drawn only once it has arrived. The two tabs are restorable, so a
+  // round trip through a row leaves each section on the order it was left on.
+  const {
+    data: taste,
+    failed: tasteFailed,
+    retry: retryTaste,
+  } = usePageData<TasteSectionDto>('taste', getTasteSection)
+  const [storedGenresBasis, setGenresBasis] = useRestorableState<TasteBasis>('topGenresBasis', 'count')
+  const [storedStudiosBasis, setStudiosBasis] = useRestorableState<TasteBasis>('topStudiosBasis', 'count')
+
   const [showHistory, setShowHistory] = useState(false)
   const [showTopAnimeSelect, setShowTopAnimeSelect] = useState(false)
   const [showUnresolvedEpisodes, setShowUnresolvedEpisodes] = useState(false)
@@ -506,7 +576,7 @@ export function ProfilePage() {
   const [rankingOverlay, setRankingOverlay] = useState<{
     title: string
     rows: RankingOverlayRow[]
-    family?: 'year' | 'season'
+    family?: RankingFamily
   } | null>(null)
   const topAnimeStripScroll = useStripScroll(`top-anime:${mediaType}`)
   // Keyed on rewatchedScope, not rewatchedMediaType, so Series keeps its own
@@ -515,6 +585,9 @@ export function ProfilePage() {
   const rewatchedStripScroll = useStripScroll(`rewatched:${rewatchedScope}`)
   const topSeriesStripScroll = useStripScroll('top-series')
   const timeSpentStripScroll = useStripScroll('time-spent-series')
+  // Hidden gems reuses the time-spent strip's markup and rules; its own key keeps
+  // its scroll offset apart from that strip's.
+  const hiddenGemsStripScroll = useStripScroll('hidden-gems')
 
   // The whole page waits on the profile read. Nothing is drawn for the
   // loading-indicator delay, and a failed read says so with Try again rather
@@ -533,6 +606,18 @@ export function ProfilePage() {
   )
   const theyLikedRows = divergenceRows(profile.theyLikedItIDidnt, scoresHidden)
   const iLikedRows = divergenceRows(profile.iLikedItTheyDidnt, scoresHidden)
+
+  // Highest rated is offered only while some genre or studio has a scored anime,
+  // and a restored selection of it that is no longer offered reads as Most
+  // watched without the stored value being rewritten (profile-stats "Top genres
+  // and Top studios").
+  const genresRated = taste?.genres.some((genre) => genre.scoreRank !== null) ?? false
+  const studiosRated = taste?.studios.some((studio) => studio.scoreRank !== null) ?? false
+  const genresBasis: TasteBasis = genresRated ? storedGenresBasis : 'count'
+  const studiosBasis: TasteBasis = studiosRated ? storedStudiosBasis : 'count'
+  const splitCount = taste
+    ? [taste.demographics, taste.sources, taste.eras].filter((categories) => categories.length > 0).length
+    : 0
 
   return (
     <div className="profile-page">
@@ -931,6 +1016,100 @@ export function ProfilePage() {
           </div>
         )}
       </section>
+
+      {/* The genre and studio sections (add-genre-and-studio-stats), from a read of
+          their own: nothing is drawn until it arrives, and each part only when it
+          has something to show. A failed read says so, with Try again, in place
+          of them. */}
+      {tasteFailed && !taste && (
+        <section className="profile-box">
+          <LoadFailedNotice compact what="your genre and studio stats" onRetry={retryTaste} />
+        </section>
+      )}
+
+      {taste && taste.hiddenGems.length > 0 && (
+        <section className="profile-box">
+          <h2>Hidden gems</h2>
+          {/* The time-spent strip's own markup and rules (tile size, the room a
+              hovered tile needs, drag-scroll, no scrollbar); the badge reads the
+              anime's MyAnimeList popularity rank. */}
+          <div
+            className={hiddenGemsStripScroll.fits ? 'time-spent-strip time-spent-strip--fits' : 'time-spent-strip'}
+            ref={hiddenGemsStripScroll.ref}
+            {...hiddenGemsStripScroll.handlers}
+          >
+            {taste.hiddenGems.map((gem) => (
+              <Link
+                key={gem.animeId}
+                to={`/anime/${gem.animeId}`}
+                className="time-spent-strip__item"
+                draggable={false}
+                title={pickDisplayTitle(gem.title, gem.englishTitle)}
+              >
+                <PosterPicture
+                  src={gem.pictureUrl}
+                  alt={pickDisplayTitle(gem.title, gem.englishTitle)}
+                  className="time-spent-strip__picture"
+                  tier="tile"
+                  draggable={false}
+                />
+                <span className="time-spent-strip__count">#{gem.popularityRank.toLocaleString('en-US')}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {taste && (taste.genres.length > 0 || taste.studios.length > 0) && (
+        <div className="profile-page__taste-row">
+          {taste.genres.length > 0 && (
+            <section className="profile-box family--genre">
+              <RankingSection
+                title="Top genres"
+                noun="genres"
+                rows={orderedByTasteBasis(taste.genres, genresBasis).map((genre) =>
+                  describeGenreRanking(genre, genresBasis, watchedLink('genre', genre.name)),
+                )}
+                onSeeAll={setRankingOverlay}
+                family="genre"
+                controls={
+                  genresRated ? (
+                    <TasteBasisTabs label="Order genres by" selected={genresBasis} onSelect={setGenresBasis} />
+                  ) : undefined
+                }
+              />
+            </section>
+          )}
+          {taste.studios.length > 0 && (
+            <section className="profile-box family--studio">
+              <RankingSection
+                title="Top studios"
+                noun="studios"
+                rows={orderedByTasteBasis(taste.studios, studiosBasis).map((studio) =>
+                  describeStudioRanking(studio, studiosBasis, watchedLink('studio', studio.name)),
+                )}
+                onSeeAll={setRankingOverlay}
+                family="studio"
+                controls={
+                  studiosRated ? (
+                    <TasteBasisTabs label="Order studios by" selected={studiosBasis} onSelect={setStudiosBasis} />
+                  ) : undefined
+                }
+              />
+            </section>
+          )}
+        </div>
+      )}
+
+      {taste && <FavouriteCombos pairs={taste.pairs} trios={taste.trios} />}
+
+      {taste && splitCount > 0 && (
+        <div className="profile-page__splits-row" style={{ '--splits': splitCount } as CSSProperties}>
+          <TasteSplit title="Demographic" categories={taste.demographics} />
+          <TasteSplit title="Source" categories={taste.sources} labelOf={sourceLabel} />
+          <TasteSplit title="Era" categories={taste.eras} />
+        </div>
+      )}
 
       {profile.favouriteSeasons.length === 0 && profile.favouriteYears.length === 0 ? (
         <section className="profile-box">

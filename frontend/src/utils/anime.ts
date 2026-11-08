@@ -362,6 +362,36 @@ const MAL_GENRE_NAMES = [
 
 export const GENRE_FILTER_OPTIONS: FilterMultiSelectOption[] = MAL_GENRE_NAMES.map((name) => ({ value: name, label: name }))
 
+// The my-list Studio filter's width reservation, the same role as the genre list
+// above (add-genre-and-studio-stats). MyAnimeList has no closed set of studio
+// names to reserve for, so the trigger is sized for a name at its clipping limit
+// instead: one real studio name longer than STUDIO_FILTER_MAX_CHARS, which the
+// trigger draws cut short with an ellipsis (the whole name is its tooltip and is
+// shown in full on the board). This never says which studios exist; that comes
+// from the entries.
+export const STUDIO_FILTER_MAX_CHARS = 20
+export const STUDIO_FILTER_OPTIONS: FilterMultiSelectOption[] = [
+  { value: 'Bandai Namco Filmworks', label: 'Bandai Namco Filmworks' },
+]
+
+// The choices the my-list Score filter holds: 'rated', 'unrated' or a score as
+// its plain number string. Several can be ticked at once: an entry has one score,
+// so an entry passes when it matches ANY ticked choice (Rated: it has a score;
+// Unrated: it has none; a number: exactly that score).
+export function scoreChoiceLabel(choice: string): string {
+  if (choice === 'rated') return 'Rated'
+  if (choice === 'unrated') return 'Unrated'
+  return choice
+}
+
+// Every choice the Score filter could ever offer, in presentation order — width
+// reservation only, the same role as the lists above.
+export const SCORE_FILTER_OPTIONS: FilterMultiSelectOption[] = [
+  { value: 'rated', label: 'Rated' },
+  ...Array.from({ length: 10 }, (_, i) => String(10 - i)).map((value) => ({ value, label: value })),
+  { value: 'unrated', label: 'Unrated' },
+]
+
 // My list's two-level sort (D5): a primary key with an optional tiebreaker,
 // each direction-aware and built so a missing value never leads the list.
 export type SortKey =
@@ -774,4 +804,32 @@ export const TMDB_LANGUAGE_LABELS: Record<TmdbLanguage, string> = {
   none: 'No language',
   ja: 'Japanese',
   en: 'English',
+}
+
+// Every studio name in the app is a link to this one address, whether or not the
+// studio's AniList page is known yet (studio-links "A studio link opens the
+// studio's AniList page"): the backend answers with a redirect to the page, or to
+// AniList's search when it cannot say which studio it is. The address is the same
+// for a known and an unknown studio, so a page is drawn the same way either way
+// and never waits on AniList.
+export function studioLinkHref(name: string): string {
+  return `/api/studios/open?name=${encodeURIComponent(name)}`
+}
+
+// MAL sends raw source values like "light_novel" — prettify to "Light novel".
+// Shared by the detail page's Source field and the profile's Source split.
+export function sourceLabel(source: string): string {
+  const spaced = source.replace(/_/g, ' ')
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+}
+
+// An ISO day ("2026-09-15") as "15 Sep 2026". Written out rather than left to
+// toLocaleDateString, whose short September is "Sep" in one locale and "Sept" in
+// another, so the recap's Biggest day reads the same on every machine.
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+export function formatIsoDay(isoDay: string): string {
+  const [year, month, day] = isoDay.split('-').map(Number)
+  if (!year || !month || !day || month < 1 || month > 12) return isoDay
+  return `${day} ${SHORT_MONTHS[month - 1]} ${year}`
 }

@@ -31,6 +31,7 @@ import { RevealControl } from "../components/RevealControl.tsx";
 import { ScoreHistoryOverlay } from "../components/ScoreHistoryOverlay.tsx";
 import { ScoreValue } from "../components/ScoreValue.tsx";
 import { SpaceWrappedTitle } from "../components/SpaceWrappedTitle.tsx";
+import { StudioLinks } from "../components/StudioLink.tsx";
 import { useEntryEditor } from "../context/EntryEditorContext.tsx";
 import {
   useEpisodeIncrement,
@@ -55,6 +56,7 @@ import {
   mediaTypeLabel,
   pickDisplayTitle,
   SERIES_TRAVERSAL_RELATIONS,
+  sourceLabel,
   STATUS_LABELS,
 } from "../utils/anime.ts";
 import "./AnimeDetailPage.css";
@@ -149,9 +151,7 @@ function formatAiringStatus(
 
 // MAL sends raw source values like "light_novel" — prettify to "Light novel".
 function formatSource(source: string | null): string {
-  if (!source) return NO_INFO;
-  const spaced = source.replace(/_/g, " ");
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  return source ? sourceLabel(source) : NO_INFO;
 }
 
 // AverageEpisodeDurationSeconds is always a per-episode figure; label it as
@@ -849,9 +849,11 @@ export function AnimeDetailPage() {
               <div>
                 <dt>{detail.studios.length > 1 ? "Studios" : "Studio"}</dt>
                 <dd>
-                  {detail.studios.length > 0
-                    ? detail.studios.join(", ")
-                    : NO_INFO}
+                  {detail.studios.length > 0 ? (
+                    <StudioLinks names={detail.studios} />
+                  ) : (
+                    NO_INFO
+                  )}
                 </dd>
               </div>
               <div>

@@ -18,10 +18,10 @@ its own.
 - **Series**: each franchise in watch order on a timeline, with how far behind
   you are and your scores next to MyAnimeList's.
 - **My list**: grouped by status, with sorting and filters by score, type,
-  genre and more.
+  genre, studio and more.
 - **Recap and Profile**: recap any season, year or run of years; see your
-  stats, favourite seasons, where your scores differ most from MyAnimeList's,
-  and rank your favourites.
+  stats, favourite genres and studios, favourite seasons, where your scores
+  differ most from MyAnimeList's, and rank your favourites.
 - **Updates**: news about the shows on your list, such as a sequel announced, a
   start date or episode count released, or a broadcast moving.
 - **Hide scores**: hide MyAnimeList's scores everywhere, so they don't sway
@@ -127,7 +127,7 @@ it to a network.
 
 - Anime data and your list: the
   [MyAnimeList API](https://myanimelist.net/apiconfig/references/api/v2).
-- Episode air dates: the [AniList](https://anilist.co/) API.
+- Episode air dates and studio pages: the [AniList](https://anilist.co/) API.
 - The MyAnimeList-to-TMDB/IMDb id mapping:
   [Fribb/anime-lists](https://github.com/Fribb/anime-lists).
 - Openings and endings: [AnimeThemes](https://animethemes.moe/).

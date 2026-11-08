@@ -48,10 +48,17 @@
   box-shadow: var(--shadow);
 }
 
+/* The rank column is as wide as the longest rank in the list needs. --rank-digits
+   is set on the list from the row count: "#" plus that many digits at this
+   weight's own digit width (ch), but never narrower than the 28px the rankings
+   have always had. A fixed 28px held "#99" and let "#100" run into the name. The
+   figures are tabular so a column of ranks lines up, and every row of one list
+   takes the same width, so the names start in the same place down it. */
 .ranking-overlay__rank {
   flex: 0 0 auto;
-  width: 28px;
+  width: max(28px, calc((var(--rank-digits, 2) + 1) * 1ch));
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--text);
   opacity: 0.7;
 }

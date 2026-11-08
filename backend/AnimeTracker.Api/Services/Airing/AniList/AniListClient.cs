@@ -29,6 +29,17 @@ public class AniListClient(
         "id status episodes nextAiringEpisode { episode airingAt } " +
         "relations { edges { relationType node { idMal } } } } }";
 
+    // The same lookup, also asking for the media's studios (studio-links design.md D7).
+    // Each lookup exists twice, as two plain strings, because whether AniList honours
+    // GraphQL's @include(if:) here isn't verified and two strings can't surprise us. The
+    // caller sends this one only when an anime it covers has a studio with no stored id.
+    private const string StudiosSelection = "studios { edges { node { id name } } }";
+
+    private const string LookupQueryWithStudios =
+        "query ($idMal: Int) { Media(idMal: $idMal, type: ANIME) { " +
+        "id status episodes nextAiringEpisode { episode airingAt } " +
+        "relations { edges { relationType node { idMal } } } " + StudiosSelection + " } }";
+
     // idMal_in restricts Media to exactly the requested batch, so one page
     // always holds every result — no hasNextPage loop needed here, unlike
     // ScheduleQuery. perPage matches the caller's batch size.
@@ -56,6 +67,18 @@ public class AniListClient(
         "media(idMal_in: $idMalIn, type: ANIME) { id idMal status episodes nextAiringEpisode { episode airingAt } " +
         "relations { edges { relationType node { idMal } } } } } }";
 
+    private const string LookupBatchQueryWithStudios =
+        "query ($idMalIn: [Int], $perPage: Int) { Page(page: 1, perPage: $perPage) { " +
+        "media(idMal_in: $idMalIn, type: ANIME) { id idMal status episodes nextAiringEpisode { episode airingAt } " +
+        "relations { edges { relationType node { idMal } } } " + StudiosSelection + " } } }";
+
+    // Just the studios of up to 25 media, for a studio link followed before the studio
+    // is known. Sent at perPage 50 like the lookups, so two media sharing one idMal
+    // can't push a result off the page.
+    private const string StudiosBatchQuery =
+        "query ($idMalIn: [Int], $perPage: Int) { Page(page: 1, perPage: $perPage) { " +
+        "media(idMal_in: $idMalIn, type: ANIME) { idMal " + StudiosSelection + " } } }";
+
     private const string MediaBatchQuery =
         "query ($idIn: [Int], $perPage: Int) { Page(page: 1, perPage: $perPage) { " +
         "media(id_in: $idIn) { id status episodes nextAiringEpisode { episode airingAt } } } }";
@@ -74,13 +97,15 @@ public class AniListClient(
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    public async Task<AniListMediaLookup?> LookupByMalIdAsync(int malId, CancellationToken ct = default)
+    public async Task<AniListMediaLookup?> LookupByMalIdAsync(int malId, bool withStudios = false, CancellationToken ct = default)
     {
-        var response = await PostAsync<LookupResponse>(new { query = LookupQuery, variables = new { idMal = malId } }, ct);
+        var response = await PostAsync<LookupResponse>(
+            new { query = withStudios ? LookupQueryWithStudios : LookupQuery, variables = new { idMal = malId } }, ct);
         return response?.Data?.Media is not { } media
             ? null
             : new AniListMediaLookup(
-                media.Id, media.Status, ToInstant(media.NextAiringEpisode), ToRelationEdges(media.Relations), NormalizeEpisodes(media.Episodes));
+                media.Id, media.Status, ToInstant(media.NextAiringEpisode), ToRelationEdges(media.Relations), NormalizeEpisodes(media.Episodes),
+                ToStudios(media.Studios));
     }
 
     public async Task<IReadOnlyDictionary<int, AniListRelationsLookup>> GetRelationsBatchAsync(
@@ -104,7 +129,7 @@ public class AniListClient(
     }
 
     public async Task<IReadOnlyDictionary<int, AniListMediaLookup>> LookupBatchByMalIdsAsync(
-        IReadOnlyList<int> malIds, CancellationToken ct = default)
+        IReadOnlyList<int> malIds, bool withStudios = false, CancellationToken ct = default)
     {
         if (malIds.Count > IAniListClient.MaxLookupBatch)
             throw new ArgumentException($"A lookup batch holds at most {IAniListClient.MaxLookupBatch} ids, got {malIds.Count}.", nameof(malIds));
@@ -114,7 +139,7 @@ public class AniListClient(
             return result;
 
         var response = await PostAsync<BatchMediaResponse>(
-            new { query = LookupBatchQuery, variables = new { idMalIn = malIds, perPage = BatchPerPage } }, ct);
+            new { query = withStudios ? LookupBatchQueryWithStudios : LookupBatchQuery, variables = new { idMalIn = malIds, perPage = BatchPerPage } }, ct);
 
         // Ascending by AniList id, so that where AniList holds two media for one
         // MAL id the lowest id is the one kept, whatever order it answered in.
@@ -132,7 +157,37 @@ public class AniListClient(
             }
 
             result[idMal] = new AniListMediaLookup(
-                media.Id, media.Status, ToInstant(media.NextAiringEpisode), ToRelationEdges(media.Relations), NormalizeEpisodes(media.Episodes));
+                media.Id, media.Status, ToInstant(media.NextAiringEpisode), ToRelationEdges(media.Relations), NormalizeEpisodes(media.Episodes),
+                ToStudios(media.Studios));
+        }
+
+        return result;
+    }
+
+    public async Task<IReadOnlyDictionary<int, IReadOnlyList<AniListStudio>>> GetStudiosByMalIdsAsync(
+        IReadOnlyList<int> malIds, CancellationToken ct = default)
+    {
+        if (malIds.Count > IAniListClient.MaxLookupBatch)
+            throw new ArgumentException($"A studios batch holds at most {IAniListClient.MaxLookupBatch} ids, got {malIds.Count}.", nameof(malIds));
+
+        var result = new Dictionary<int, IReadOnlyList<AniListStudio>>();
+        if (malIds.Count == 0)
+            return result;
+
+        var response = await PostAsync<StudiosBatchResponse>(
+            new { query = StudiosBatchQuery, variables = new { idMalIn = malIds, perPage = BatchPerPage } }, ct);
+
+        foreach (var media in response?.Data?.Page?.Media ?? [])
+        {
+            if (media.IdMal is not { } idMal)
+                continue;
+
+            // Two media for one MAL id: their studios are taken together, since a name
+            // matched against either is a studio of that anime.
+            var studios = ToStudios(media.Studios);
+            result[idMal] = result.TryGetValue(idMal, out var already)
+                ? already.Concat(studios).DistinctBy(s => s.Id).ToList()
+                : studios;
         }
 
         return result;
@@ -233,6 +288,15 @@ public class AniListClient(
         // and everything after it was never reached.
         return requested.Where(id => !completed.Contains(id)).ToList();
     }
+
+    // A studio edge with no node, or a node with no name, tells us nothing to match.
+    private static List<AniListStudio> ToStudios(StudiosWrapper? studios) =>
+        studios?.Edges?
+            .Select(e => e.Node)
+            .Where(n => n is { Name: not null } && !string.IsNullOrWhiteSpace(n.Name))
+            .Select(n => new AniListStudio(n!.Id, n.Name!))
+            .DistinctBy(s => s.Id)
+            .ToList() ?? [];
 
     private static List<AniListRelationEdge> ToRelationEdges(RelationsWrapper? relations) =>
         relations?.Edges?
@@ -415,12 +479,22 @@ public class AniListClient(
 
     private sealed record LookupResponse(LookupData? Data);
     private sealed record LookupData(LookupMedia? Media);
-    private sealed record LookupMedia(int Id, string? Status, int? Episodes, NextAiringEpisodeNode? NextAiringEpisode, RelationsWrapper? Relations);
+    private sealed record LookupMedia(
+        int Id, string? Status, int? Episodes, NextAiringEpisodeNode? NextAiringEpisode, RelationsWrapper? Relations, StudiosWrapper? Studios);
 
     private sealed record BatchMediaResponse(BatchMediaData? Data);
     private sealed record BatchMediaData(BatchMediaPage? Page);
     private sealed record BatchMediaPage(List<BatchMedia>? Media);
-    private sealed record BatchMedia(int Id, int? IdMal, string? Status, int? Episodes, NextAiringEpisodeNode? NextAiringEpisode, RelationsWrapper? Relations);
+    private sealed record BatchMedia(
+        int Id, int? IdMal, string? Status, int? Episodes, NextAiringEpisodeNode? NextAiringEpisode, RelationsWrapper? Relations, StudiosWrapper? Studios);
+
+    private sealed record StudiosBatchResponse(StudiosBatchData? Data);
+    private sealed record StudiosBatchData(StudiosBatchPage? Page);
+    private sealed record StudiosBatchPage(List<StudiosBatchMedia>? Media);
+    private sealed record StudiosBatchMedia(int? IdMal, StudiosWrapper? Studios);
+    private sealed record StudiosWrapper(List<StudiosEdge>? Edges);
+    private sealed record StudiosEdge(StudiosNode? Node);
+    private sealed record StudiosNode(int Id, string? Name);
 
     private sealed record SchedulesBatchResponse(SchedulesBatchData? Data);
     private sealed record SchedulesBatchData(SchedulesBatchPage? Page);

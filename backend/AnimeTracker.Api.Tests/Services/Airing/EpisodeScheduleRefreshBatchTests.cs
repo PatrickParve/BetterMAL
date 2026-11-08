@@ -4,6 +4,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Airing.AniList;
 using AnimeTracker.Api.Services.Relations;
+using AnimeTracker.Api.Services.Studios;
 using AnimeTracker.Api.Services.Updates;
 using AnimeTracker.Api.Tests.Services.IdMapping;
 using Microsoft.EntityFrameworkCore;
@@ -326,7 +327,7 @@ public class EpisodeScheduleRefreshBatchTests
         // Anime 1's rows can't be written; anime 2's can.
         var service = new EpisodeScheduleRefreshService(
             db, new UserAnimeEntryRepository(db), new FailingRepositoryFor(db, failingAnimeId: 1),
-            aniList, new AniListRelationStore(db), Kit.LocalTime,
+            aniList, new AniListRelationStore(db), new StudioLinkStore(db), Kit.LocalTime,
             new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))),
             NullLogger<EpisodeScheduleRefreshService>.Instance);
 

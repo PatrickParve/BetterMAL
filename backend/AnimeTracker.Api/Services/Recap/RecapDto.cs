@@ -1,3 +1,5 @@
+using AnimeTracker.Api.Services.Taste;
+
 namespace AnimeTracker.Api.Services.Recap;
 
 /// <summary>One "hot take": an included, both-scored anime ranked by how far
@@ -124,6 +126,24 @@ public record RecapRowDto(
     bool MalRevealed,
     int? MyRank);
 
+/// <summary>The local day of a period on which the activity log records the
+/// most episodes watched (taste-stats "The biggest day of a period"). The
+/// posters are up to three of that day's anime, most episodes that day first,
+/// then in my ranking's order.</summary>
+public record RecapBiggestDayDto(DateOnly Date, int Episodes, List<RecapRankingPosterDto> Posters);
+
+/// <summary>The recap's highlights row (taste-stats design.md D9), computed over the
+/// recap's included set. <c>Genres</c> holds every genre of it in most-watched
+/// order and <c>Studios</c> every studio with a scored anime in highest-rated
+/// order; the client reads the first of each for the two cards and the whole list
+/// for the overlays they open. <c>HiddenGem</c> and <c>BiggestDay</c> are null
+/// when the period has none.</summary>
+public record RecapHighlightsDto(
+    List<TasteGenreDto> Genres,
+    List<TasteStudioDto> Studios,
+    TasteGemDto? HiddenGem,
+    RecapBiggestDayDto? BiggestDay);
+
 /// <summary>Full recap payload for one period + time filter (design.md
 /// decision 1). <c>Filter</c> echoes what was actually used — always
 /// <c>RecapTimeFilter.Aired</c> for a season recap, regardless of what (if
@@ -137,7 +157,9 @@ public record RecapRowDto(
 /// decision "Bayesian ranking of seasons and years"'s gate excludes them for
 /// this mode/filter combination — the time rankings share that same gate
 /// (design.md decision 8) even though they don't share the score rankings'
-/// scored-anime requirement.</summary>
+/// scored-anime requirement. <c>Highlights</c> is the highlights row's data
+/// (taste-stats design.md D9), always present and empty where the recap has
+/// nothing to highlight.</summary>
 public record RecapDto(
     string Mode,
     int StartYear,
@@ -151,7 +173,8 @@ public record RecapDto(
     List<RecapSeasonRankingDto> SeasonRanking,
     List<RecapYearRankingDto> YearRanking,
     List<RecapTimeRankingDto> SeasonTimeRanking,
-    List<RecapTimeRankingDto> YearTimeRanking);
+    List<RecapTimeRankingDto> YearTimeRanking,
+    RecapHighlightsDto Highlights);
 
 /// <summary>One calendar year's entry counts under both time filters, for
 /// the whole list — not scoped to any particular recap period. The recap

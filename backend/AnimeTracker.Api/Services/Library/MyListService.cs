@@ -46,7 +46,8 @@ public class MyListService(
                 UserAnimeEntryDto.FromEntity(e),
                 snapshot.RankOf(e.AnimeId),
                 e.Anime.PopularityRank,
-                e.Anime.Genres ?? []));
+                e.Anime.Genres ?? [],
+                e.Anime.Studios ?? []));
         }
         return items;
     }

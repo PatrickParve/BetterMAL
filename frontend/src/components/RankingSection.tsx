@@ -1,8 +1,13 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import type { RecapRankingPosterDto, RecapRankingScorePostersDto, RecapSeasonRankingDto, RecapYearRankingDto } from '../api/types.ts'
+import type {
+  RecapRankingPosterDto,
+  RecapRankingScorePostersDto,
+  RecapSeasonRankingDto,
+  RecapYearRankingDto,
+} from '../api/types.ts'
 import { scoreTier, seasonLabel } from '../utils/anime.ts'
-import type { RankingOverlayRow } from './RankingOverlay.tsx'
+import type { RankingFamily, RankingOverlayRow } from './RankingOverlay.tsx'
 import { RowPicture } from './RowPicture.tsx'
 import './RankingSection.css'
 
@@ -185,10 +190,14 @@ type RankingSectionProps = {
   title: string
   noun: string
   rows: RankingOverlayRow[]
-  onSeeAll: (overlay: { title: string; rows: RankingOverlayRow[]; family?: 'year' | 'season' }) => void
+  onSeeAll: (overlay: { title: string; rows: RankingOverlayRow[]; family?: RankingFamily }) => void
   style?: CSSProperties
-  family?: 'year' | 'season'
+  family?: RankingFamily
   scoreFilter?: ScoreFilter
+  // A control of the caller's own, drawn where the score filter is (between the
+  // title and the rows): the profile's Most watched / Highest rated tabs
+  // (add-genre-and-studio-stats). Nothing is drawn when it is absent.
+  controls?: ReactNode
 }
 
 // One rendering for every ranking a page shows — capped at
@@ -209,7 +218,7 @@ type RankingSectionProps = {
 // (design.md D4) — composed here, since this is the one place that already
 // holds both `title` and `scoreFilter.selected`, so both callers' `onSeeAll`
 // reduce to their plain overlay setter.
-export function RankingSection({ title, noun, rows, onSeeAll, style, family, scoreFilter }: RankingSectionProps) {
+export function RankingSection({ title, noun, rows, onSeeAll, style, family, scoreFilter, controls }: RankingSectionProps) {
   const visible = rows.slice(0, VISIBLE_RANK_COUNT)
   const overlayTitle =
     scoreFilter && scoreFilter.selected !== null ? `${title} — with most ${scoreFilter.selected}s` : title
@@ -217,6 +226,7 @@ export function RankingSection({ title, noun, rows, onSeeAll, style, family, sco
     <section className={family ? `recap-page__section family--${family}` : 'recap-page__section'} style={style}>
       <h2 className={family ? 'section-band' : undefined}>{title}</h2>
       {scoreFilter && renderScoreFilter(noun, scoreFilter)}
+      {controls}
       {renderRankingRows(visible)}
       {rows.length > VISIBLE_RANK_COUNT && (
         <button

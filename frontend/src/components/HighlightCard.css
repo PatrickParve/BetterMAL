@@ -1,0 +1,133 @@
+/* A card of the recap's highlights row (list-recaps "Recap highlights row"). The
+   box is the stat tiles' own (RecapPage.css, .recap-page__stat): the same padding,
+   border, corner and background, so a card sits in the page as one of its tiles
+   does. --fam-from/-bg/-border come from the card's family class, or from the
+   accent defaults in index.css when it has none (the Hidden gem card). */
+.highlight-card {
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--code-bg);
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  font: inherit;
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+/* The rail: a leading marker inside the padding box, so it never changes the
+   card's own box. Coloured when the card leads somewhere, neutral when not. */
+.highlight-card::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--fam-from);
+}
+
+.highlight-card--neutral::before {
+  background: var(--border);
+}
+
+/* A card that leads somewhere takes the app's standard hover treatment in its
+   rail's colour, on the pointer and on the keyboard alike. It does not lift or
+   resize: a card never moves when it is hovered. */
+a.highlight-card:hover,
+a.highlight-card:focus-visible,
+button.highlight-card:hover,
+button.highlight-card:focus-visible {
+  background: var(--fam-bg);
+  border-color: var(--fam-border);
+  box-shadow: var(--shadow);
+}
+
+a.highlight-card:focus-visible,
+button.highlight-card:focus-visible {
+  outline: 2px solid var(--fam-from);
+  outline-offset: 2px;
+}
+
+a.highlight-card,
+button.highlight-card {
+  cursor: pointer;
+}
+
+/* Biggest day leads nowhere, so it gets the quieter feedback a stat tile that
+   leads nowhere gets: a background change, no pointer, no focus stop. */
+div.highlight-card:hover {
+  background: var(--border);
+}
+
+/* Subordinate to the name or figure under it: small, capitalised, quiet. */
+.highlight-card__label {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.75;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.highlight-card__body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.highlight-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* At most two lines, then an ellipsis. overflow-wrap: anywhere lets one very
+   long word wrap instead of widening the card. */
+.highlight-card__value {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.highlight-card__line {
+  font-size: 14px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* At the card's trailing edge, at the size the ranking rows' posters use
+   (RankingSection.css: 30px by 44px). */
+.highlight-card__posters {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.highlight-card__poster {
+  --row-picture-w: 30px;
+  --row-picture-h: 44px;
+  border-radius: 4px;
+}
+
+.highlight-card__poster-placeholder {
+  border: 1px solid var(--border);
+}

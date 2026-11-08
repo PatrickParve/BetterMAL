@@ -18,6 +18,19 @@ public static class RecapWatchLog
     {
         var map = new Dictionary<int, int>();
 
+        foreach (var (row, increase) in PositiveIncreases(rows))
+            map[row.AnimeId] = map.GetValueOrDefault(row.AnimeId) + increase;
+
+        return map;
+    }
+
+    /// <summary>The rows that count, each with its positive episode increase: the
+    /// one place that decides which logged rows are genuine progress. The per-anime
+    /// map above and the taste stats' biggest day both read it, so the two can
+    /// never disagree about how many episodes a period holds (taste-stats design.md
+    /// D6).</summary>
+    public static IEnumerable<(ActivityLog Row, int Increase)> PositiveIncreases(IEnumerable<ActivityLog> rows)
+    {
         foreach (var row in rows)
         {
             if (ProfileService.ParseNewEpisodesWatched(row) is not { } newEpisodesWatched
@@ -28,9 +41,7 @@ public static class RecapWatchLog
             if (increase <= 0)
                 continue;
 
-            map[row.AnimeId] = map.GetValueOrDefault(row.AnimeId) + increase;
+            yield return (row, increase);
         }
-
-        return map;
     }
 }

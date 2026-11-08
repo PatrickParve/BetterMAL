@@ -27,6 +27,7 @@ using AnimeTracker.Api.Services.Search;
 using AnimeTracker.Api.Services.Season;
 using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Services.Setup;
+using AnimeTracker.Api.Services.Studios;
 using AnimeTracker.Api.Services.Sync;
 using AnimeTracker.Api.Services.Tmdb;
 using AnimeTracker.Api.Services.Transfer;
@@ -244,6 +245,12 @@ builder.Services.AddHttpClient<IAniListClient, AniListClient>(client =>
 });
 builder.Services.AddScoped<IEpisodeScheduleService, EpisodeScheduleService>();
 builder.Services.AddScoped<AniListRelationStore>();
+
+// Studio links (spec `studio-links`): the studios' AniList ids, learned in the AniList
+// lookups above that already run and, for a studio nothing has taught the app yet, when
+// its link is first followed. No timer and no background pass.
+builder.Services.AddScoped<StudioLinkStore>();
+builder.Services.AddScoped<StudioLinkResolver>();
 builder.Services.AddScoped<IEpisodeScheduleRefreshService, EpisodeScheduleRefreshService>();
 builder.Services.AddHostedService<EpisodeScheduleRefreshBackgroundService>();
 builder.Services.AddSingleton<INewEntryRefreshTrigger, NewEntryRefreshTrigger>();

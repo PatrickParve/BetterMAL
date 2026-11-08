@@ -5,6 +5,7 @@ using AnimeTracker.Api.Services.Airing;
 using AnimeTracker.Api.Services.Airing.AniList;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Scheduling;
+using AnimeTracker.Api.Services.Studios;
 using AnimeTracker.Api.Services.Updates;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -37,6 +38,7 @@ internal static class AiringRefreshTestKit
             new InMemoryEpisodeAiringRepository(db),
             aniList,
             new AniListRelationStore(db),
+            new StudioLinkStore(db),
             LocalTime,
             new AnimeUpdateRecorder(db, new AnimeUpdateRelevance(db, new RelationResolver(db))),
             logger ?? NullLogger<EpisodeScheduleRefreshService>.Instance);
@@ -117,6 +119,10 @@ internal sealed class ScriptedAniListClient : IAniListClient
         public DateTimeOffset? NextAiringAt { get; set; }
         public List<AniListRelationEdge> Relations { get; set; } = [];
         public List<AniListEpisode> Rows { get; set; } = [];
+
+        /// <summary>The studios AniList lists for it: returned by a lookup only when the
+        /// lookup asked for studios, and by a studios read.</summary>
+        public List<AniListStudio> Studios { get; set; } = [];
     }
 
     private readonly Dictionary<int, ScriptedMedia> _byMalId = [];
@@ -133,8 +139,21 @@ internal sealed class ScriptedAniListClient : IAniListClient
     public List<int[]> MediaBatches { get; } = [];
     public List<int[]> ScheduleReads { get; } = [];
 
+    /// <summary>Whether each single lookup asked for studios, in the order they were made.</summary>
+    public List<bool> SingleLookupStudioFlags { get; } = [];
+
+    /// <summary>Whether each lookup batch asked for studios, in the order they were made.</summary>
+    public List<bool> LookupBatchStudioFlags { get; } = [];
+
+    /// <summary>The MAL ids each studios read asked about, in the order they were made.</summary>
+    public List<int[]> StudioReads { get; } = [];
+
+    /// <summary>Awaited inside a studios read, with the read's token: a test makes the
+    /// answer slow, or never come, here.</summary>
+    public Func<CancellationToken, Task>? BeforeStudiosAnswer { get; set; }
+
     // Failure injection. A request throws when this returns an exception for it
-    // ("lookup", "media" or "schedule", and the ids it asks for).
+    // ("lookup", "media", "schedule" or "studios", and the ids it asks for).
     public Func<string, IReadOnlyList<int>, Exception?>? Fail { get; set; }
 
     /// <summary>A schedule read throws after this many anime have been called back.</summary>
@@ -160,16 +179,17 @@ internal sealed class ScriptedAniListClient : IAniListClient
             throw failure;
     }
 
-    private static AniListMediaLookup LookupOf(ScriptedMedia m) =>
-        new(m.AniListId, m.Status, m.NextAiringAt, m.Relations, m.Episodes);
+    private static AniListMediaLookup LookupOf(ScriptedMedia m, bool withStudios) =>
+        new(m.AniListId, m.Status, m.NextAiringAt, m.Relations, m.Episodes, withStudios ? m.Studios.ToList() : []);
 
     // --- The single-anime methods ---
 
-    public Task<AniListMediaLookup?> LookupByMalIdAsync(int malId, CancellationToken ct = default)
+    public Task<AniListMediaLookup?> LookupByMalIdAsync(int malId, bool withStudios = false, CancellationToken ct = default)
     {
         SingleLookups.Add(malId);
+        SingleLookupStudioFlags.Add(withStudios);
         MaybeFail("lookup", [malId]);
-        return Task.FromResult(_byMalId.TryGetValue(malId, out var media) ? LookupOf(media) : null);
+        return Task.FromResult(_byMalId.TryGetValue(malId, out var media) ? LookupOf(media, withStudios) : null);
     }
 
     public Task<AniListScheduleResult> GetAiringScheduleAsync(int aniListId, CancellationToken ct = default)
@@ -185,18 +205,35 @@ internal sealed class ScriptedAniListClient : IAniListClient
     public Task<IReadOnlyDictionary<int, AniListRelationsLookup>> GetRelationsBatchAsync(IReadOnlyList<int> malIds, CancellationToken ct = default) =>
         throw new NotImplementedException();
 
+    public async Task<IReadOnlyDictionary<int, IReadOnlyList<AniListStudio>>> GetStudiosByMalIdsAsync(IReadOnlyList<int> malIds, CancellationToken ct = default)
+    {
+        if (malIds.Count > IAniListClient.MaxLookupBatch)
+            throw new ArgumentException($"A studios read holds at most {IAniListClient.MaxLookupBatch} ids.");
+
+        StudioReads.Add(malIds.ToArray());
+        MaybeFail("studios", malIds);
+        if (BeforeStudiosAnswer is not null)
+            await BeforeStudiosAnswer(ct);
+
+        // A MAL id AniList holds no media for is absent, as the real client reports it.
+        return malIds
+            .Where(_byMalId.ContainsKey)
+            .ToDictionary(id => id, id => (IReadOnlyList<AniListStudio>)_byMalId[id].Studios.ToList());
+    }
+
     // --- The batched methods ---
 
-    public Task<IReadOnlyDictionary<int, AniListMediaLookup>> LookupBatchByMalIdsAsync(IReadOnlyList<int> malIds, CancellationToken ct = default)
+    public Task<IReadOnlyDictionary<int, AniListMediaLookup>> LookupBatchByMalIdsAsync(IReadOnlyList<int> malIds, bool withStudios = false, CancellationToken ct = default)
     {
         if (malIds.Count > IAniListClient.MaxLookupBatch)
             throw new ArgumentException($"A lookup batch holds at most {IAniListClient.MaxLookupBatch} ids.");
 
         LookupBatches.Add(malIds.ToArray());
+        LookupBatchStudioFlags.Add(withStudios);
         MaybeFail("lookup", malIds);
         IReadOnlyDictionary<int, AniListMediaLookup> found = malIds
             .Where(_byMalId.ContainsKey)
-            .ToDictionary(id => id, id => LookupOf(_byMalId[id]));
+            .ToDictionary(id => id, id => LookupOf(_byMalId[id], withStudios));
         return Task.FromResult(found);
     }
 

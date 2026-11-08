@@ -552,8 +552,6 @@
   border: none;
   padding: 2px 0;
   cursor: pointer;
-  text-decoration: underline;
-  text-decoration-color: var(--border);
 }
 
 .series-page__extras-group-hint:hover {
