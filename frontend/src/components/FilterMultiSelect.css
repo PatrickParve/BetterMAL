@@ -57,8 +57,8 @@
   transform: translateY(-65%) rotate(45deg);
 }
 
-/* Colours only (design D9/D10) — selection or None both count as
-   "narrowing", so both get the accent; the trigger's size is untouched. */
+/* Colours only (design D9/D10) — a ticked option counts as "narrowing", so
+   it gets the accent; the trigger's size is untouched. */
 .filter-multi-select__button.filter-multi-select--active {
   background: var(--accent-bg);
   border-color: var(--accent-border);
@@ -87,34 +87,51 @@
   padding: 8px;
   border-radius: 6px;
   border: 1px solid var(--border);
-  border-top-color: var(--accent-border);
   background: var(--bg);
   box-shadow: var(--shadow);
 }
 
 /* Set by FilterMultiSelect's useLayoutEffect when the left-aligned default
-   would run the panel off the viewport's trailing edge. */
+   would run the panel off the viewport's trailing edge and the trailing
+   edge fits. When neither does, the effect sets an inline `left` instead. */
 .filter-multi-select__panel--end {
   left: auto;
   right: 0;
 }
 
-/* Two equal-width columns so the pair reads as a segmented pair rather than
-   two links of different lengths (design D4). */
+/* The board (design D3): a panel for many options, as wide as the viewport
+   allows up to 60rem. An explicit width, because a shrink-to-fit absolute box
+   would collapse a multi-column block to one column. The effect adds an
+   inline max-width (the viewport less its margins, scrollbar excluded) that
+   this `min()` can't see. border-box so the padding and border come out of
+   the width rather than adding to it. */
+.filter-multi-select__panel--board {
+  box-sizing: border-box;
+  width: min(100vw - 16px, 60rem);
+}
+
+/* Set when the board doesn't fit whole beneath the trigger and there is more
+   room above it. */
+.filter-multi-select__panel--above {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+/* One full-width button on its own row, above the options and outside the
+   board's scroll area, with the divider under it. */
 .filter-multi-select__shortcuts {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: 1fr;
   padding-bottom: 6px;
   margin-bottom: 4px;
   border-bottom: 1px solid var(--border);
 }
 
-/* Bordered buttons in the app's small-control family (closest existing
-   example: .recap-page__board-button) rather than bare text. Neither
-   shortcut carries a persistent "selected" look — the trigger's own label
-   is where the current state is read, and a second indicator of the same
-   fact here is what made the count-vs-All mismatch confusing before. */
+/* A bordered button in the app's small-control family (closest existing
+   example: .recap-page__board-button) rather than bare text. It carries no
+   persistent "selected" look — the trigger's own label is where the current
+   state is read, and a second indicator of the same fact here is what made
+   the count-vs-All mismatch confusing before. */
 .filter-multi-select__shortcut {
   font: inherit;
   font-size: 12px;
@@ -127,7 +144,7 @@
   cursor: pointer;
 }
 
-.filter-multi-select__shortcut:hover {
+.filter-multi-select__shortcut:hover:not(:disabled) {
   color: var(--text-h);
   background: var(--accent-bg);
   border-color: var(--accent-border);
@@ -136,6 +153,13 @@
 .filter-multi-select__shortcut:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Nothing is ticked, so there is nothing to clear. Same disabled idiom as the
+   trigger above. */
+.filter-multi-select__shortcut:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .filter-multi-select__option {
@@ -148,6 +172,43 @@
   white-space: nowrap;
 }
 
-.filter-multi-select__option:hover {
+.filter-multi-select__option:hover:not(.filter-multi-select__option--disabled) {
   color: var(--text-h);
+}
+
+/* An option that cannot be ticked right now (a dead end on the genre board).
+   Dimmed like the app's other disabled controls, not hidden: it keeps its
+   place and stays readable, so the board never reflows under the pointer. The
+   disabled input beside it takes no click and no focus. */
+.filter-multi-select__option--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* The board's option area. It scrolls here rather than on the panel so the
+   Clear row stays in view; the effect sets its max-height inline, from the
+   room the viewport leaves. overscroll-behavior keeps a scroll that reaches
+   its end from carrying on into the page behind it. */
+.filter-multi-select__scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Alphabetical down each column, then across: a multi-column block rather than
+   a grid, so the columns balance by themselves. font-size is set here as well
+   as on the options because the column width below is in em of it. The width
+   is the longest label's character count (set inline from the data, 17 being
+   MAL's longest name today) at about half an em a character, plus the
+   checkbox and its gap. Half an em is generous for the system fonts the app
+   uses, so a label doesn't run into its neighbour column. */
+.filter-multi-select__columns {
+  font-size: 14px;
+  column-width: calc(var(--filter-board-chars, 17) * 0.52em + 2rem);
+  column-gap: 12px;
+}
+
+.filter-multi-select__columns > .filter-multi-select__option {
+  padding: 3px 0;
+  break-inside: avoid;
 }

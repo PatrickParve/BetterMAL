@@ -1,5 +1,11 @@
 import { useRef } from 'react'
-import { AIRING_FILTER_OPTIONS, MEDIA_TYPE_FILTER_OPTIONS, type SortDirection, type SortKey } from '../utils/anime.ts'
+import {
+  AIRING_FILTER_OPTIONS,
+  GENRE_FILTER_OPTIONS,
+  MEDIA_TYPE_FILTER_OPTIONS,
+  type SortDirection,
+  type SortKey,
+} from '../utils/anime.ts'
 import { FilterMultiSelect, type FilterMultiSelectOption } from './FilterMultiSelect.tsx'
 import { StableLabel } from './StableLabel.tsx'
 import './MyListControls.css'
@@ -80,10 +86,15 @@ const SCORE_FILTER_WIDTH_VALUES: ScoreFilter[] = [
 export type MyListFiltersProps = {
   query: string
   onQueryChange: (value: string) => void
-  typeFilter: string[] | null
-  onTypeFilterChange: (value: string[] | null) => void
-  airingFilter: string[] | null
-  onAiringFilterChange: (value: string[] | null) => void
+  // The three multi-selects' ticked values. `[]` is nothing ticked, which is
+  // no restriction (page-header-design: the shared multi-select applies no
+  // restriction until an option is ticked).
+  typeFilters: string[]
+  onTypeFiltersChange: (value: string[]) => void
+  airingFilters: string[]
+  onAiringFiltersChange: (value: string[]) => void
+  genreFilters: string[]
+  onGenreFiltersChange: (value: string[]) => void
   scoreFilter: ScoreFilter
   onScoreFilterChange: (value: ScoreFilter) => void
 }
@@ -104,6 +115,9 @@ type MyListControlsProps = {
   sort: MyListSortProps
   typeOptions: FilterMultiSelectOption[]
   airingOptions: FilterMultiSelectOption[]
+  // The genre board's genres, alphabetical, with the dead ends marked
+  // `disabled` (utils/genreFilter.ts).
+  genreOptions: FilterMultiSelectOption[]
   // The choices that would change the list (MyListPage's one-pass option
   // memo), in presentation order — not "the score values at least one entry
   // has", since Rated/Unrated and a value are each dropped when choosing
@@ -127,7 +141,15 @@ function FindGlyph() {
 // label + wrapping controls row (design D2). Purely presentational: every
 // value and every setter/handler comes from MyListPage, which keeps the
 // restorable state and the sort-choice decoding (design D11).
-export function MyListControls({ filters, sort, typeOptions, airingOptions, scoreOptions, scoreDisabledLabel }: MyListControlsProps) {
+export function MyListControls({
+  filters,
+  sort,
+  typeOptions,
+  airingOptions,
+  genreOptions,
+  scoreOptions,
+  scoreDisabledLabel,
+}: MyListControlsProps) {
   const findInputRef = useRef<HTMLInputElement>(null)
 
   return (
@@ -169,15 +191,27 @@ export function MyListControls({ filters, sort, typeOptions, airingOptions, scor
           label="Type"
           options={typeOptions}
           widthOptions={MEDIA_TYPE_FILTER_OPTIONS}
-          selected={filters.typeFilter}
-          onChange={filters.onTypeFilterChange}
+          selected={filters.typeFilters}
+          onChange={filters.onTypeFiltersChange}
         />
         <FilterMultiSelect
           label="Airing"
           options={airingOptions}
           widthOptions={AIRING_FILTER_OPTIONS}
-          selected={filters.airingFilter}
-          onChange={filters.onAiringFilterChange}
+          selected={filters.airingFilters}
+          onChange={filters.onAiringFiltersChange}
+        />
+        {/* A board of about seventy genres in columns, not a list. One genre
+            on it is still a choice (every genre on it narrows the list when
+            ticked on its own), so the control is unavailable only with none. */}
+        <FilterMultiSelect
+          label="Genre"
+          options={genreOptions}
+          widthOptions={GENRE_FILTER_OPTIONS}
+          selected={filters.genreFilters}
+          onChange={filters.onGenreFiltersChange}
+          layout="board"
+          singleOptionIsChoice
         />
         {/* The single-area grid mirrors StableLabel's cell technique (see
             StableLabel.css) — a native select can't use StableLabel itself

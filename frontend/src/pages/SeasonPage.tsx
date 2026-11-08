@@ -180,10 +180,11 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
 
   const sort = isSortKey(sortParam) ? sortParam : 'popularity'
   const inMyList = inMyListParam !== '0'
-  // URLSearchParams.get already distinguishes absent (null) from
-  // present-and-empty (''), which is what makes a third state — None — free:
-  // no parameter is All, `?type=` is None, `?type=tv,movie` is a selection.
-  const typeFilter = typeParam === null ? null : typeParam.split(',').filter(Boolean)
+  // The ticked types. Absent (null), empty ('') and a list of nothing all read
+  // as none ticked, which is no restriction: `?type=tv,movie` is the only
+  // shape that narrows. A link made while an empty `type` still meant None
+  // therefore shows everything.
+  const typeFilter = (typeParam ?? '').split(',').filter(Boolean)
   const { hideHentai } = useContentFilter()
 
   // Keyed on season/year/hideHentai: those are the only things a read
@@ -247,7 +248,7 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
   const displayed = useMemo(() => {
     const filtered = items.filter((item) => {
       if (!inMyList && item.inMyList) return false
-      if (typeFilter !== null && !typeFilter.includes(item.mediaType ?? 'unknown')) return false
+      if (typeFilter.length > 0 && !typeFilter.includes(item.mediaType ?? 'unknown')) return false
       return true
     })
     return [...filtered].sort((a, b) => (a.sortOrder?.[sort] ?? 0) - (b.sortOrder?.[sort] ?? 0))
@@ -351,10 +352,10 @@ function SeasonPageView({ year, season }: { year: number; season: RecapSeasonNam
     })
   }
 
-  function setTypeFilter(next: string[] | null) {
+  function setTypeFilter(next: string[]) {
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev)
-      if (next === null) params.delete('type')
+      if (next.length === 0) params.delete('type')
       else params.set('type', next.join(','))
       return params
     })

@@ -231,7 +231,10 @@
      leads the row (rank or poster) — only top/bottom stay at 0 so the
      poster still fills the row's full height. */
   padding: 0 8px 0 10px;
-  min-height: 72px;
+  /* The height of the poster box below (design D2 of
+     add-genre-filter-and-polish-lists). Content-box like the 72px before it,
+     so the poster still fills the row between the borders. */
+  min-height: 120px;
   overflow: hidden;
   border: 1px solid var(--border);
   border-left: 4px solid var(--border);
@@ -280,7 +283,10 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1 1 260px;
+  /* Content-sized basis (it was 260px): the link is the one cell that gives
+     way to the progress cell below, and a title too long for the room is cut
+     here, in .my-list-row__title (design D6). */
+  flex: 1 1 auto;
   min-width: 0;
   color: inherit;
   text-decoration: none;
@@ -295,12 +301,16 @@
   /* Geometry (width/height/object-fit/background/flex) lives in the shared
      .row-picture rule (RowPicture.css, artwork-presentation) — this just
      sets the box that rule reads. */
-  --row-picture-w: 52px;
-  --row-picture-h: 72px;
+  --row-picture-w: 87px;
+  --row-picture-h: 120px;
 }
 
 .my-list-row__picture--placeholder {
   border: 1px solid var(--border);
+  /* The border is drawn inside the 87x120 box rather than added to it, so a
+     row with no picture stands as tall as one with a poster (library-views,
+     "List-row posters fill the row"). */
+  box-sizing: border-box;
 }
 
 .my-list-row__info {
@@ -329,9 +339,54 @@
   font-weight: 500;
 }
 
+/* The progress cell's width is shared out against the title (design D6 of
+   add-genre-filter-and-polish-lists). Its basis is 250px less how far the
+   window is below full size (--full-size-shortfall, useFullSizeShortfall.ts),
+   never below 0, and it can't shrink: at full size every bar is 250px and a
+   title too long for what's left is cut; narrower by S, a row whose title is
+   cut keeps its title where it was cut and gives the bar all of S, while a row
+   whose title fits grows the cell back toward 250px (the 1000 grow factor) at
+   the title's expense only once the title would no longer fit. The automatic
+   minimum width is the bar's floor plus its count and + button, so no row
+   shortens a bar below 30% of its full length (the track rule below). With no
+   shortfall known the property falls back to 250px, a basis of 0: each row
+   then trades for itself and nothing overflows. */
 .my-list-row__progress {
-  width: 250px;
-  flex: 0 0 auto;
+  flex: 1000 0 max(0px, calc(250px - var(--full-size-shortfall, 250px)));
+  max-width: 250px;
+}
+
+/* A row with nothing aired renders no bar (MyListRow): its title gets the
+   bar's room at every width. The score columns stay aligned regardless,
+   because the link fills up to them. */
+.my-list-row__progress:empty {
+  flex: 0 0 0;
+}
+
+/* Every row's count takes the room the longest count in the list needs
+   (--progress-count-ch, set on the page element), so every bar has the same
+   full length: 250px less the two 6px gaps, the 20px + button and that room.
+   The size and tabular figures are the ones the label already has, stated on
+   the bar so `1ch` means the same in the label and the track, which has no
+   text of its own. Scoped to my-list rows: the other pages' bars keep their
+   own sizing. */
+.my-list-row .progress-bar {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  --progress-slot: calc(var(--progress-count-ch, 0) * 1ch);
+}
+
+.my-list-row .progress-bar__label {
+  min-width: var(--progress-slot);
+  text-align: left;
+}
+
+/* The bar stops shortening at 30% of its full length: 250px less the two
+   6px gaps and the 20px + button (32px) and less the count's room. The count
+   and the + button don't shrink, so the cell's own minimum width is this plus
+   them (design D6). */
+.my-list-row .progress-bar__track {
+  min-width: calc(0.3 * (250px - 32px - var(--progress-slot)));
 }
 
 .my-list-row__my-score {

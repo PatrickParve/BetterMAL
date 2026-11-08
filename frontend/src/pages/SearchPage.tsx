@@ -90,10 +90,12 @@ export function SearchPage() {
   const sortParam = searchParams.get('sort')
   const sort = isSortKey(sortParam) ? sortParam : 'relevance'
   const typeParam = searchParams.get('type')
-  // URLSearchParams.get already distinguishes absent (null) from
-  // present-and-empty (''), which is what makes a third state — None — free:
-  // no parameter is All, `?type=` is None, `?type=tv,movie` is a selection.
-  const typeFilter = typeParam === null ? null : typeParam.split(',').filter(Boolean)
+  // The ticked types. Absent (null), empty ('') and a list of nothing all read
+  // as none ticked, which is no restriction: `?type=tv,movie` is the only
+  // shape that narrows. A link made while an empty `type` still meant None
+  // therefore shows everything. Memoised on the parameter so an unchanged
+  // address hands the filter below the same array.
+  const typeFilter = useMemo(() => (typeParam ?? '').split(',').filter(Boolean), [typeParam])
 
   // Keyed on the mode and the query: a different query is a different history
   // snapshot, so restoring one restores its results regardless of which sort
@@ -145,10 +147,10 @@ export function SearchPage() {
     })
   }
 
-  function setTypeFilter(next: string[] | null) {
+  function setTypeFilter(next: string[]) {
     setSearchParams((prev) => {
       const params = new URLSearchParams(prev)
-      if (next === null) params.delete('type')
+      if (next.length === 0) params.delete('type')
       else params.set('type', next.join(','))
       return params
     })
@@ -173,7 +175,7 @@ export function SearchPage() {
   const typeOptions = useMemo(() => mediaTypeFilterOptions(items.map((item) => item.mediaType)), [items])
 
   const filteredItems = useMemo(
-    () => (typeFilter === null ? items : items.filter((item) => typeFilter.includes(item.mediaType ?? 'unknown'))),
+    () => (typeFilter.length === 0 ? items : items.filter((item) => typeFilter.includes(item.mediaType ?? 'unknown'))),
     [items, typeFilter],
   )
 

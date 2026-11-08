@@ -291,6 +291,11 @@ public class ListViewReadParityTests
         {
             Id = ReopenCandidateAnimeId, Title = "Reopen Candidate", MediaType = "tv",
             AiringStatus = "currently_airing", TotalEpisodes = 24, AiredFrom = today.AddYears(-1),
+            // Genres, here and on the hand-ordered anime below, are what the My
+            // List parity fact compares row by row (its DTO carries them): in
+            // MyAnimeList's order, which is not alphabetical, and on more than
+            // one row, so a projection that dropped or reordered them fails it.
+            Genres = ["Fantasy", "Action"],
         };
         // R5: completes on this read (Watching, finished airing, at its total).
         var completeCandidate = new AnimeMetadata
@@ -305,6 +310,7 @@ public class ListViewReadParityTests
             Id = HandOrderedAnimeId, Title = "Hand Ordered", MediaType = "tv", AiringStatus = "finished_airing",
             TotalEpisodes = 24, AverageEpisodeDurationSeconds = 1400, MalScore = 8.5,
             AiredFrom = today.AddYears(-9).AddMonths(3),
+            Genres = ["Sports", "Drama", "Seinen"],
         };
         // RankBand.ShortForm.
         var musicShortForm = new AnimeMetadata

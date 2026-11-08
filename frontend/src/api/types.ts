@@ -410,6 +410,11 @@ export type MyListItemDto = {
   // rank tiebreak (utils/anime.ts composeComparator).
   myRank: number | null
   popularityRank: number | null
+  // The anime's stored MyAnimeList genres, themes and demographics under
+  // MyAnimeList's own names, in its order. Never null — empty for an anime
+  // whose details were never fetched in full — so the genre filter needs no
+  // null guard.
+  genres: string[]
 }
 
 export type TopAnimeItemDto = {

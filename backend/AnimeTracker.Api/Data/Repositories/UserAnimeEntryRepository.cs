@@ -43,6 +43,7 @@ public class UserAnimeEntryRepository(AnimeTrackerDbContext db) : IUserAnimeEntr
                     PopularityRank = e.Anime.PopularityRank,
                     AiredFrom = e.Anime.AiredFrom,
                     AverageEpisodeDurationSeconds = e.Anime.AverageEpisodeDurationSeconds,
+                    Genres = e.Anime.Genres,
                 },
             })
             .ToListAsync(ct);

@@ -171,13 +171,14 @@ const REWATCHED_SCOPE_TABS: { value: RewatchedScope; label: string }[] = [
   ...MEDIA_TYPE_TABS.slice(1),
 ]
 
-// Only "all" and "series" remain reachable: a media type is never offered
-// unless it holds an entry the section would list (design.md D2), so a
-// media-type scope can no longer render empty (tasks 7.8/7.9). Narrowed from
-// Record<RewatchedScope, string> so a future re-add of a per-type message has
-// to widen this type deliberately rather than slot back in unnoticed.
-const REWATCHED_EMPTY_MESSAGES: Record<'all' | 'series', string> = {
-  all: 'No shows have been rewatched',
+// Only "series" can render empty: a media type is never offered unless it
+// holds an entry the section would list (design.md D2), and the section as a
+// whole is not drawn while nothing is rewatched, so All always holds a tile
+// whenever it can be seen (add-genre-filter-and-polish-lists, design D1).
+// Narrowed from Record<RewatchedScope, string> so a future re-add of another
+// message has to widen this type deliberately rather than slot back in
+// unnoticed.
+const REWATCHED_EMPTY_MESSAGES: Record<'series', string> = {
   series: 'No series have been rewatched',
 }
 
@@ -311,22 +312,22 @@ function useStripScroll(restoreKey: string) {
   }
 }
 
-function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
-  const { hidden } = useScoreVisibility()
-  // Membership of a divergence list is itself a bound on the MAL score (≥
-  // 7.5 in one list, ≤ 7.5 in the other), so while hiding is on an unsettled
-  // entry's row is dropped outright rather than shown with a reveal control
-  // — a placeholder row would leak the same thing. `isCompleted` is the
-  // server's `Status.IsScoreRevealable()`, i.e. Completed/Dropped/Rewatching,
-  // despite the name.
-  const shown = hidden ? items.filter((item) => item.isCompleted) : items
+// The rows a divergence list draws. Membership of a divergence list is itself
+// a bound on the MAL score (≥ 7.5 in one list, ≤ 7.5 in the other), so while
+// hiding is on an unsettled entry's row is dropped outright rather than shown
+// with a reveal control — a placeholder row would leak the same thing.
+// `isCompleted` is the server's `Status.IsScoreRevealable()`, i.e.
+// Completed/Dropped/Rewatching, despite the name. The page counts these rows
+// before drawing anything (add-genre-filter-and-polish-lists, design D1): a
+// list left with none is not drawn at all.
+function divergenceRows(items: OpinionDivergenceItemDto[], hidden: boolean): OpinionDivergenceItemDto[] {
+  return hidden ? items.filter((item) => item.isCompleted) : items
+}
 
-  if (shown.length === 0) {
-    return <p className="profile-page__section-empty">Nothing here yet.</p>
-  }
+function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
   return (
     <ul className="divergence-list scroll-hidden">
-      {shown.map((item) => (
+      {items.map((item) => (
         <li key={item.animeId} className="profile-list-row">
           <Link to={`/anime/${item.animeId}`} className="profile-list-row__link">
             <RowPicture src={item.pictureUrl} className="profile-list-row__picture" />
@@ -354,6 +355,9 @@ function DivergenceList({ items }: { items: OpinionDivergenceItemDto[] }) {
 export function ProfilePage() {
   const { data: profile, failed, retry } = usePageData<ProfileDto>('profile', getProfile)
   const { openRanking } = useAnimeRank()
+  // Read here, above the early returns, because the divergence boxes below are
+  // drawn only when they have a row to show once hiding has taken its share.
+  const { hidden: scoresHidden } = useScoreVisibility()
 
   // Each media-type tab is its own resource key, not just a view control on
   // top of one shared fetch — so restoring a page left on "TV" shows TV data
@@ -386,7 +390,6 @@ export function ProfilePage() {
     : 'all'
   const {
     data: rewatched,
-    loading: rewatchedLoading,
     failed: rewatchedFailed,
     retry: retryRewatched,
   } = usePageData<RewatchedSectionDto>(`rewatched:${rewatchedMediaType}`, () => getRewatchedSection(rewatchedMediaType))
@@ -528,6 +531,8 @@ export function ProfilePage() {
   const offeredRewatchedTabs = REWATCHED_SCOPE_TABS.filter(
     (tab) => tab.value === 'all' || tab.value === 'series' || profile.scopeOptions.rewatched.includes(tab.value),
   )
+  const theyLikedRows = divergenceRows(profile.theyLikedItIDidnt, scoresHidden)
+  const iLikedRows = divergenceRows(profile.iLikedItTheyDidnt, scoresHidden)
 
   return (
     <div className="profile-page">
@@ -778,37 +783,78 @@ export function ProfilePage() {
         )}
       </section>
 
-      <section className="profile-box">
-        <h2>Most rewatched</h2>
+      {/* Drawn only while some entry has a rewatch count above zero, decided
+          from the profile's own All-scope section so it never appears and
+          then goes (add-genre-filter-and-polish-lists, design D1). The per-
+          scope reads above still run on a visit that ends up without it.
+          Under a media-type scope the strip therefore always has a tile to
+          show once its read arrives, and until then, or on a read that
+          comes back empty, it draws nothing rather than a message. */}
+      {profile.rewatched.items.length > 0 && (
+        <section className="profile-box">
+          <h2>Most rewatched</h2>
 
-        {/* All and Series are never trimmed (design.md D3), so this row
-            always holds at least two options and is always drawn. */}
-        <div className="profile-media-tabs" role="tablist" aria-label="Filter by media type">
-          {offeredRewatchedTabs.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              role="tab"
-              aria-selected={rewatchedScope === tab.value}
-              className={
-                rewatchedScope === tab.value
-                  ? 'profile-media-tabs__tab profile-media-tabs__tab--active'
-                  : 'profile-media-tabs__tab'
-              }
-              onClick={() => selectRewatchedScope(tab.value)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+          {/* All and Series are never trimmed (design.md D3), so this row
+              always holds at least two options and is always drawn. */}
+          <div className="profile-media-tabs" role="tablist" aria-label="Filter by media type">
+            {offeredRewatchedTabs.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={rewatchedScope === tab.value}
+                className={
+                  rewatchedScope === tab.value
+                    ? 'profile-media-tabs__tab profile-media-tabs__tab--active'
+                    : 'profile-media-tabs__tab'
+                }
+                onClick={() => selectRewatchedScope(tab.value)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-        {rewatchedScope === 'series' ? (
-          rewatchedSeriesFailed ? (
-            <LoadFailedNotice compact what="most rewatched series" onRetry={retryRewatchedSeries} />
-          ) : !displayedRewatchedSeries && rewatchedSeriesLoading ? null : !displayedRewatchedSeries ||
-            displayedRewatchedSeries.items.length === 0 ? (
-            <p className="profile-page__section-empty">{REWATCHED_EMPTY_MESSAGES.series}</p>
-          ) : (
+          {rewatchedScope === 'series' ? (
+            rewatchedSeriesFailed ? (
+              <LoadFailedNotice compact what="most rewatched series" onRetry={retryRewatchedSeries} />
+            ) : !displayedRewatchedSeries && rewatchedSeriesLoading ? null : !displayedRewatchedSeries ||
+              displayedRewatchedSeries.items.length === 0 ? (
+              <p className="profile-page__section-empty">{REWATCHED_EMPTY_MESSAGES.series}</p>
+            ) : (
+              <div
+                className={
+                  rewatchedStripScroll.fits
+                    ? 'rewatched-strip rewatched-strip--fits'
+                    : 'rewatched-strip'
+                }
+                ref={rewatchedStripScroll.ref}
+                {...rewatchedStripScroll.handlers}
+              >
+                {displayedRewatchedSeries.items.map((item) => (
+                  <Link
+                    key={item.seriesId}
+                    to={`/series/${item.seriesId}`}
+                    className="rewatched-strip__item"
+                    draggable={false}
+                  >
+                    <PosterPicture
+                      src={item.pictureUrl}
+                      alt={pickDisplayTitle(item.title, item.englishTitle)}
+                      className="rewatched-strip__picture"
+                      tier="tile"
+                      draggable={false}
+                    />
+                    <span className="rewatched-strip__count rewatched-strip__count--time">
+                      {formatRewatchTime(item.rewatchSeconds)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )
+          ) : rewatchedFailed ? (
+            <LoadFailedNotice compact what="most rewatched anime" onRetry={retryRewatched} />
+          ) : !displayedRewatched || displayedRewatched.items.length === 0 ? null : (
             <div
               className={
                 rewatchedStripScroll.fits
@@ -818,10 +864,10 @@ export function ProfilePage() {
               ref={rewatchedStripScroll.ref}
               {...rewatchedStripScroll.handlers}
             >
-              {displayedRewatchedSeries.items.map((item) => (
+              {displayedRewatched.items.map((item) => (
                 <Link
-                  key={item.seriesId}
-                  to={`/series/${item.seriesId}`}
+                  key={item.animeId}
+                  to={`/anime/${item.animeId}`}
                   className="rewatched-strip__item"
                   draggable={false}
                 >
@@ -832,50 +878,13 @@ export function ProfilePage() {
                     tier="tile"
                     draggable={false}
                   />
-                  <span className="rewatched-strip__count rewatched-strip__count--time">
-                    {formatRewatchTime(item.rewatchSeconds)}
-                  </span>
+                  <span className="rewatched-strip__count">{item.rewatchCount}</span>
                 </Link>
               ))}
             </div>
-          )
-        ) : rewatchedFailed ? (
-          <LoadFailedNotice compact what="most rewatched anime" onRetry={retryRewatched} />
-        ) : !displayedRewatched && rewatchedLoading ? null : !displayedRewatched || displayedRewatched.items.length === 0 ? (
-          // The only reachable case is rewatchedMediaType === 'all': any
-          // other offered media type holds a rewatch by construction
-          // (design.md D2), so it can never land here empty.
-          <p className="profile-page__section-empty">{REWATCHED_EMPTY_MESSAGES.all}</p>
-        ) : (
-          <div
-            className={
-              rewatchedStripScroll.fits
-                ? 'rewatched-strip rewatched-strip--fits'
-                : 'rewatched-strip'
-            }
-            ref={rewatchedStripScroll.ref}
-            {...rewatchedStripScroll.handlers}
-          >
-            {displayedRewatched.items.map((item) => (
-              <Link
-                key={item.animeId}
-                to={`/anime/${item.animeId}`}
-                className="rewatched-strip__item"
-                draggable={false}
-              >
-                <PosterPicture
-                  src={item.pictureUrl}
-                  alt={pickDisplayTitle(item.title, item.englishTitle)}
-                  className="rewatched-strip__picture"
-                  tier="tile"
-                  draggable={false}
-                />
-                <span className="rewatched-strip__count">{item.rewatchCount}</span>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      )}
 
       <section className="profile-box">
         <h2>Most time spent</h2>
@@ -975,16 +984,26 @@ export function ProfilePage() {
         </div>
       )}
 
-      <div className="profile-page__divergence-row">
-        <section className="profile-box family--mal">
-          <h2 className="section-band">They liked it, I didn't</h2>
-          <DivergenceList items={profile.theyLikedItIDidnt} />
-        </section>
-        <section className="profile-box family--mine">
-          <h2 className="section-band">I liked it, they didn't</h2>
-          <DivergenceList items={profile.iLikedItTheyDidnt} />
-        </section>
-      </div>
+      {/* A box is drawn only while it has a row to show once hiding has taken
+          its share, and the row only while either box does; a box left alone
+          spans it (ProfilePage.css). The two cases, nothing qualified and
+          everything hidden, look the same on purpose. */}
+      {(theyLikedRows.length > 0 || iLikedRows.length > 0) && (
+        <div className="profile-page__divergence-row">
+          {theyLikedRows.length > 0 && (
+            <section className="profile-box family--mal">
+              <h2 className="section-band">They liked it, I didn't</h2>
+              <DivergenceList items={theyLikedRows} />
+            </section>
+          )}
+          {iLikedRows.length > 0 && (
+            <section className="profile-box family--mine">
+              <h2 className="section-band">I liked it, they didn't</h2>
+              <DivergenceList items={iLikedRows} />
+            </section>
+          )}
+        </div>
+      )}
 
       {rankingOverlay && (
         <RankingOverlay

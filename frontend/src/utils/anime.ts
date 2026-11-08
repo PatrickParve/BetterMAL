@@ -333,6 +333,35 @@ export const AIRING_FILTER_OPTIONS: FilterMultiSelectOption[] = [
   { value: 'unknown', label: 'Unknown' },
 ]
 
+// Every name MyAnimeList uses for an anime's genres, explicit genres, themes
+// and demographics, which its API returns as one flat list and the app stores
+// as such. Width reservation only — the same role as the two lists above, for
+// the my-list Genre filter (add-genre-filter-and-polish-lists design D4): the
+// filter's trigger and its board's columns are sized from the longest of
+// these, so they are at their final size before any entry has loaded. It
+// never says which genres are on the board; that comes from the entries. A
+// name MyAnimeList adds later needs no entry here: the filter unions in the
+// labels it is currently offering.
+const MAL_GENRE_NAMES = [
+  // Genres
+  'Action', 'Adventure', 'Avant Garde', 'Award Winning', 'Boys Love', 'Comedy', 'Drama', 'Fantasy', 'Girls Love',
+  'Gourmet', 'Horror', 'Mystery', 'Romance', 'Sci-Fi', 'Slice of Life', 'Sports', 'Supernatural', 'Suspense',
+  // Explicit genres
+  'Ecchi', 'Erotica', 'Hentai',
+  // Themes
+  'Adult Cast', 'Anthropomorphic', 'CGDCT', 'Childcare', 'Combat Sports', 'Crossdressing', 'Delinquents', 'Detective',
+  'Educational', 'Gag Humor', 'Gore', 'Harem', 'High Stakes Game', 'Historical', 'Idols (Female)', 'Idols (Male)',
+  'Isekai', 'Iyashikei', 'Love Polygon', 'Love Status Quo', 'Magical Sex Shift', 'Mahou Shoujo', 'Martial Arts',
+  'Mecha', 'Medical', 'Memoir', 'Military', 'Music', 'Mythology', 'Organized Crime', 'Otaku Culture', 'Parody',
+  'Performing Arts', 'Pets', 'Psychological', 'Racing', 'Reincarnation', 'Reverse Harem', 'Romantic Subtext',
+  'Samurai', 'School', 'Showbiz', 'Space', 'Strategy Game', 'Super Power', 'Survival', 'Team Sports', 'Time Travel',
+  'Vampire', 'Video Game', 'Villainess', 'Visual Arts', 'Workplace',
+  // Demographics
+  'Josei', 'Kids', 'Seinen', 'Shoujo', 'Shounen',
+]
+
+export const GENRE_FILTER_OPTIONS: FilterMultiSelectOption[] = MAL_GENRE_NAMES.map((name) => ({ value: name, label: name }))
+
 // My list's two-level sort (D5): a primary key with an optional tiebreaker,
 // each direction-aware and built so a missing value never leads the list.
 export type SortKey =

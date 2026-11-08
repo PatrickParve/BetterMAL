@@ -39,6 +39,13 @@
   gap: 20px;
 }
 
+/* A box left on its own (the other has no row to show) takes the whole row
+   rather than half of it beside an empty space. Harmless in the one-column
+   layout below. */
+.profile-page__divergence-row > :only-child {
+  grid-column: 1 / -1;
+}
+
 /* Favourite seasons / Favourite years (profile-stats "Favourite seasons and
    years"): same two-column pattern as the divergence row and the recap
    page's own ranking-pair grid, under its own class name (design.md decision

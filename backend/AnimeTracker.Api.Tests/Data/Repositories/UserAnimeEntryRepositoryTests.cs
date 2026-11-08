@@ -87,6 +87,7 @@ public class UserAnimeEntryRepositoryTests
         nameof(AnimeMetadata.PictureUrl), nameof(AnimeMetadata.MediaType), nameof(AnimeMetadata.TotalEpisodes),
         nameof(AnimeMetadata.AiringStatus), nameof(AnimeMetadata.MalScore), nameof(AnimeMetadata.PopularityRank),
         nameof(AnimeMetadata.AiredFrom), nameof(AnimeMetadata.AverageEpisodeDurationSeconds),
+        nameof(AnimeMetadata.Genres),
     ];
 
     private static AnimeTrackerDbContext CreateDb() =>
@@ -174,6 +175,7 @@ public class UserAnimeEntryRepositoryTests
             Assert.Equal(fullEntry.Anime.PopularityRank, leanEntry.Anime.PopularityRank);
             Assert.Equal(fullEntry.Anime.AiredFrom, leanEntry.Anime.AiredFrom);
             Assert.Equal(fullEntry.Anime.AverageEpisodeDurationSeconds, leanEntry.Anime.AverageEpisodeDurationSeconds);
+            Assert.Equal(fullEntry.Anime.Genres, leanEntry.Anime.Genres);
 
             Assert.Empty(leanEntry.Anime.RelatedAnime);
             Assert.Null(leanEntry.Anime.UserEntry);

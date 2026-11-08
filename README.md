@@ -17,8 +17,8 @@ its own.
   MyAnimeList's rankings, and add anime to your list from there.
 - **Series**: each franchise in watch order on a timeline, with how far behind
   you are and your scores next to MyAnimeList's.
-- **My list**: grouped by status, with sorting and filters by score, type and
-  more.
+- **My list**: grouped by status, with sorting and filters by score, type,
+  genre and more.
 - **Recap and Profile**: recap any season, year or run of years; see your
   stats, favourite seasons, where your scores differ most from MyAnimeList's,
   and rank your favourites.

@@ -95,7 +95,9 @@
   align-items: center;
   gap: 12px;
   padding: 0 8px 0 0;
-  min-height: 72px;
+  /* The height of the poster box below (design D2 of
+     add-genre-filter-and-polish-lists). */
+  min-height: 120px;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -138,12 +140,16 @@
 .top-anime-row__picture {
   /* Geometry lives in the shared .row-picture rule (RowPicture.css,
      artwork-presentation) — this just sets the box that rule reads. */
-  --row-picture-w: 52px;
-  --row-picture-h: 72px;
+  --row-picture-w: 87px;
+  --row-picture-h: 120px;
 }
 
 .top-anime-row__picture--placeholder {
   border: 1px solid var(--border);
+  /* The border is drawn inside the 87x120 box rather than added to it, so a
+     row with no picture stands as tall as one with a poster (library-views,
+     "List-row posters fill the row"). */
+  box-sizing: border-box;
 }
 
 .top-anime-row__title {

@@ -513,7 +513,7 @@ export function TopAnimePage() {
                 <li key={item.animeId} className="top-anime-row">
                   <span className="top-anime-row__rank">#{item.rank}</span>
                   <Link to={`/anime/${item.animeId}`} className="top-anime-row__link">
-                    <RowPicture src={item.pictureUrl} className="top-anime-row__picture" />
+                    <RowPicture src={item.pictureUrl} className="top-anime-row__picture" tier="tile" />
                     <span className="top-anime-row__title" title={pickDisplayTitle(item.title, item.englishTitle)}>
                       {pickDisplayTitle(item.title, item.englishTitle)}
                     </span>

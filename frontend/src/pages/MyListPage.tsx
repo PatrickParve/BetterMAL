@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ApiError, getMyList, getRecap, updateEntry } from '../api/client.ts'
 import { RECAP_SEASONS, type IncrementTarget, type MyListItemDto, type RecapDto, type RecapMode, type RecapSeasonName, type RecapTimeFilter, type UserAnimeEntryDto, type WatchStatus } from '../api/types.ts'
@@ -12,12 +12,14 @@ import { RecapScopeChip } from '../components/RecapScopeChip.tsx'
 import { useActionFailure } from '../context/ActionFailureContext.tsx'
 import { useEntryEditor } from '../context/EntryEditorContext.tsx'
 import { useEpisodeIncrement, useSetEpisodesWatched } from '../context/CompletionPromptContext.tsx'
+import { useFullSizeShortfall } from '../hooks/useFullSizeShortfall.ts'
 import { usePageData } from '../hooks/usePageData.ts'
 import { useRestorableState } from '../hooks/useRestorableState.ts'
 import { useScrollReveal } from '../hooks/useScrollReveal.ts'
 import {
   AIRING_STATUS_LABELS,
   composeComparator,
+  hasAiredEpisodes,
   MEDIA_TYPE_ORDER,
   mediaTypeLabel,
   pickDisplayTitle,
@@ -26,6 +28,7 @@ import {
   STATUS_LABELS,
 } from '../utils/anime.ts'
 import type { AiringStatus, SortDirection, SortKey } from '../utils/anime.ts'
+import { buildGenreOptions, passesGenres } from '../utils/genreFilter.ts'
 import './MyListPage.css'
 
 // Multi-select (polish-rewatch-more-and-filters design.md D6): any
@@ -63,12 +66,12 @@ const STATUS_TABS: { value: WatchStatus; label: string }[] = [
 // today (polish-rewatch-more-and-filters design.md D6, tasks.md 5.2).
 type FocusSeed = {
   status: StatusFilter
-  typeFilter: string[] | null
+  typeFilters: string[]
   scoreFilter: ScoreFilter
 }
 
 function parseFocus(token: string | null): FocusSeed {
-  const none: FocusSeed = { status: [], typeFilter: null, scoreFilter: 'any' }
+  const none: FocusSeed = { status: [], typeFilters: [], scoreFilter: 'any' }
   switch (token) {
     case 'completed':
       return { ...none, status: ['Completed'] }
@@ -81,7 +84,7 @@ function parseFocus(token: string | null): FocusSeed {
       // of status, which the removed Started filter used to narrow to. The
       // status tabs don't have an equivalent (Dropped can still have zero
       // episodes watched), so this deep link is now type-only.
-      return { ...none, typeFilter: ['movie'] }
+      return { ...none, typeFilters: ['movie'] }
     default: {
       const scoreMatch = token?.match(/^score-([1-9]|10)$/)
       return scoreMatch ? { ...none, scoreFilter: scoreMatch[1] as ScoreFilter } : none
@@ -129,16 +132,17 @@ function statusFiltersLabel(statusFilters: StatusFilter): string {
   return statusFilters.length === 0 ? 'All' : statusFilters.map((status) => STATUS_LABELS[status]).join(', ')
 }
 
-// The three filter predicates, factored out so the option pass below (which
-// tests each candidate against the *other* two) and the match pass apply
-// exactly the same rule rather than two copies of it (design D8, tasks.md
-// 3.1).
-function passesType(item: MyListItemDto, typeFilter: string[] | null): boolean {
-  return typeFilter === null || typeFilter.includes(item.mediaType ?? 'unknown')
+// The four filter predicates (the genre one lives in utils/genreFilter.ts),
+// factored out so the option pass below (which tests each candidate against
+// the *other* three) and the match pass apply exactly the same rule rather
+// than two copies of it (design D8, tasks.md 3.1). Nothing ticked is no
+// restriction.
+function passesType(item: MyListItemDto, typeFilters: string[]): boolean {
+  return typeFilters.length === 0 || typeFilters.includes(item.mediaType ?? 'unknown')
 }
 
-function passesAiring(item: MyListItemDto, airingFilter: string[] | null): boolean {
-  return airingFilter === null || airingFilter.includes(item.airingStatus ?? 'unknown')
+function passesAiring(item: MyListItemDto, airingFilters: string[]): boolean {
+  return airingFilters.length === 0 || airingFilters.includes(item.airingStatus ?? 'unknown')
 }
 
 function passesScore(item: MyListItemDto, scoreFilter: ScoreFilter): boolean {
@@ -158,10 +162,10 @@ function narrowedFilterOptions(
   order: readonly string[],
   present: Set<string>,
   hasUnknown: boolean,
-  selection: string[] | null,
+  selection: string[],
   labelFor: (value: string) => string,
 ): FilterMultiSelectOption[] {
-  const forced = new Set(selection ?? [])
+  const forced = new Set(selection)
   const values = order.filter((value) => present.has(value) || forced.has(value))
   if (hasUnknown || forced.has('unknown')) values.push('unknown')
   return values.map((value) => ({ value, label: labelFor(value) }))
@@ -185,6 +189,26 @@ export function MyListPage() {
   const { data, loading, failed, retry, setData: setItems } = usePageData<MyListItemDto[]>('my-list', getMyList)
   const items = data ?? []
 
+  // Two custom properties on the page element drive the rows' progress cells
+  // (add-genre-filter-and-polish-lists, design D6). `--full-size-shortfall` is
+  // how much narrower the window is than full size; the hook writes it straight
+  // to the element's style, so a resize never re-renders the page or its rows.
+  // `--progress-count-ch` is the width, in characters, of the longest
+  // "watched/total" among every entry with an aired episode ("?" for an unknown
+  // total). It spans the whole list, not the filtered rows, so filtering never
+  // changes a bar's length, and every row gives its count that same room, so
+  // every bar has the same full length whatever its count reads.
+  const pageRef = useRef<HTMLDivElement>(null)
+  useFullSizeShortfall(pageRef)
+  const progressCountChars = useMemo(() => {
+    let longest = 0
+    for (const item of data ?? []) {
+      if (!hasAiredEpisodes(item.airingStatus, item.episodesAired)) continue
+      longest = Math.max(longest, `${item.entry.episodesWatched}/${item.totalEpisodes ?? '?'}`.length)
+    }
+    return longest
+  }, [data])
+
   // Recap scope and focus (design.md decision 1/2/9/10, tasks.md 5.1-5.2,
   // 7.3-7.5): the only use of useSearchParams on this page. A scope and an
   // optional focus token both arrive entirely from the URL (a recap's "see
@@ -201,8 +225,16 @@ export function MyListPage() {
   // back-navigation within a live session. A new key makes that unreachable.
   const [statusFilters, setStatusFilters] = useRestorableState<StatusFilter>('statusFilters', focusSeed.status)
   const [query, setQuery] = useRestorableState('query', '')
-  const [typeFilter, setTypeFilter] = useRestorableState<string[] | null>('typeFilter', focusSeed.typeFilter)
-  const [airingFilter, setAiringFilter] = useRestorableState<string[] | null>('airingFilter', null)
+  // The three multi-selects hold their ticked values, `[]` for nothing ticked,
+  // which is no restriction. Renamed from `typeFilter` and `airingFilter`
+  // (design D3 of add-genre-filter-and-polish-lists), the same way
+  // `statusFilter` became `statusFilters` above: those stored `string[] | null`
+  // (null All, [] None), and a snapshot written before this change would feed
+  // a `null` into code that reads `.length` on a back-navigation within a live
+  // session. A new key makes that unreachable.
+  const [typeFilters, setTypeFilters] = useRestorableState<string[]>('typeFilters', focusSeed.typeFilters)
+  const [airingFilters, setAiringFilters] = useRestorableState<string[]>('airingFilters', [])
+  const [genreFilters, setGenreFilters] = useRestorableState<string[]>('genreFilters', [])
   const [scoreFilter, setScoreFilter] = useRestorableState<ScoreFilter>('scoreFilter', focusSeed.scoreFilter)
   const [sort, setSort] = useRestorableState<SortKey>('sort', 'alphabetical')
   const [sortDirection, setSortDirection] = useRestorableState<SortDirection>('sortDirection', 'natural')
@@ -219,7 +251,7 @@ export function MyListPage() {
   // entries are shown or *what order* they're in starts the reveal over, while
   // the list's contents changing under an unchanged view (an edit, a settle)
   // must not — that would yank a scrolled-down user back to the top. A string
-  // rather than a reference comparison because three of the ten are arrays
+  // rather than a reference comparison because four of them are arrays
   // whose identity changes on every set even when the contents match.
   //
   // Adjusted during render, not in a useEffect — the idiom usePageData.ts and
@@ -229,8 +261,9 @@ export function MyListPage() {
   const viewIdentity = JSON.stringify([
     query,
     statusFilters,
-    typeFilter,
-    airingFilter,
+    typeFilters,
+    airingFilters,
+    genreFilters,
     scoreFilter,
     sort,
     sortDirection,
@@ -509,12 +542,17 @@ export function MyListPage() {
     })
   }, [statusScoped, query])
 
-  // One pass over `candidates` produces the three option lists and the
+  // One pass over `candidates` produces the four option lists and the
   // matched set together (design D8): each entry is tested once against each
   // predicate, and it counts toward a control's options exactly when it
-  // passes the *other* two — never its own, so a filter never narrows its
-  // own options (design D1) — and toward `matched` when it passes all three.
-  const { matched, typeOptions, airingOptions, scoreOptions, scoreDisabledLabel } = useMemo(() => {
+  // passes the *other* three — never its own, so a filter never narrows its
+  // own options (design D1) — and toward `matched` when it passes all four.
+  // The genre filter is one of the other controls to the other three (design
+  // D4 of add-genre-filter-and-polish-lists). Its own board is counted over
+  // what the others leave, its ticks excluded, so ticking a genre never
+  // changes which genres the board holds; `matchedGenres`, from the entries
+  // still shown, only decides which of them are greyed out.
+  const { matched, typeOptions, airingOptions, genreOptions, scoreOptions, scoreDisabledLabel } = useMemo(() => {
     const presentTypes = new Set<string>()
     let hasUnknownType = false
     const presentAiring = new Set<string>()
@@ -522,43 +560,60 @@ export function MyListPage() {
     let scoreBaseTotal = 0
     let scoreBaseRated = 0
     const scoreCounts = new Map<number, number>()
+    let genreBaseTotal = 0
+    const genreCounts = new Map<string, number>()
+    const matchedGenres = new Set<string>()
     const matched: MyListItemDto[] = []
 
     for (const item of candidates) {
-      const t = passesType(item, typeFilter)
-      const a = passesAiring(item, airingFilter)
+      const t = passesType(item, typeFilters)
+      const a = passesAiring(item, airingFilters)
+      const g = passesGenres(item, genreFilters)
       const s = passesScore(item, scoreFilter)
 
-      if (a && s) {
+      if (a && g && s) {
         if (item.mediaType) presentTypes.add(item.mediaType)
         else hasUnknownType = true
       }
-      if (t && s) {
+      if (t && g && s) {
         if (item.airingStatus) presentAiring.add(item.airingStatus)
         else hasUnknownAiring = true
       }
-      if (t && a) {
+      if (t && a && g) {
         scoreBaseTotal++
         if (item.entry.myScore != null) {
           scoreBaseRated++
           scoreCounts.set(item.entry.myScore, (scoreCounts.get(item.entry.myScore) ?? 0) + 1)
         }
       }
-      if (t && a && s) matched.push(item)
+      if (t && a && s) {
+        genreBaseTotal++
+        for (const genre of item.genres) genreCounts.set(genre, (genreCounts.get(genre) ?? 0) + 1)
+      }
+      if (t && a && g && s) {
+        matched.push(item)
+        for (const genre of item.genres) matchedGenres.add(genre)
+      }
     }
 
-    const typeOptions = narrowedFilterOptions(MEDIA_TYPE_ORDER, presentTypes, hasUnknownType, typeFilter, mediaTypeLabel)
+    const typeOptions = narrowedFilterOptions(MEDIA_TYPE_ORDER, presentTypes, hasUnknownType, typeFilters, mediaTypeLabel)
     const airingOptions = narrowedFilterOptions(
       Object.keys(AIRING_STATUS_LABELS),
       presentAiring,
       hasUnknownAiring,
-      airingFilter,
+      airingFilters,
       (value) => (value === 'unknown' ? 'Unknown' : AIRING_STATUS_LABELS[value as AiringStatus]),
     )
+    const genreOptions = buildGenreOptions({
+      counts: genreCounts,
+      baseTotal: genreBaseTotal,
+      matchedGenres,
+      ticked: genreFilters,
+    })
 
     // A score value is offered iff present and not universal over the base;
     // Rated/Unrated are offered iff the base is mixed (design D2). The base
-    // excludes the score filter's own restriction, same as the two controls
+    // excludes the score filter's own restriction, same as the controls
     // above (design D1).
     const scoreBaseUnrated = scoreBaseTotal - scoreBaseRated
     const ratedUnratedOffered = scoreBaseRated > 0 && scoreBaseUnrated > 0
@@ -587,8 +642,8 @@ export function MyListPage() {
       else scoreDisabledLabel = String([...scoreCounts.keys()][0])
     }
 
-    return { matched, typeOptions, airingOptions, scoreOptions, scoreDisabledLabel }
-  }, [candidates, typeFilter, airingFilter, scoreFilter])
+    return { matched, typeOptions, airingOptions, genreOptions, scoreOptions, scoreDisabledLabel }
+  }, [candidates, typeFilters, airingFilters, genreFilters, scoreFilter])
 
   // Sorts and groups `matched` (design D8) — what matches, and the `shown`/
   // `total` counts, are unchanged from before this change; only where the
@@ -635,8 +690,9 @@ export function MyListPage() {
 
   const isOffDefault =
     query !== '' ||
-    typeFilter !== null ||
-    airingFilter !== null ||
+    typeFilters.length > 0 ||
+    airingFilters.length > 0 ||
+    genreFilters.length > 0 ||
     scoreFilter !== 'any' ||
     sort !== 'alphabetical' ||
     sortDirection !== 'natural' ||
@@ -653,8 +709,9 @@ export function MyListPage() {
 
   function clearFilters() {
     setQuery('')
-    setTypeFilter(null)
-    setAiringFilter(null)
+    setTypeFilters([])
+    setAiringFilters([])
+    setGenreFilters([])
     setScoreFilter('any')
     setSort('alphabetical')
     setSortDirection('natural')
@@ -679,7 +736,7 @@ export function MyListPage() {
   // The airing badge shows on every row while the airing filter is doing
   // something — Plan-to-watch rows always show it regardless (D11), handled
   // per-row below.
-  const airingBadgeActive = airingFilter !== null
+  const airingBadgeActive = airingFilters.length > 0
 
   function renderRow(item: MyListItemDto, rank?: number) {
     return (
@@ -729,7 +786,6 @@ export function MyListPage() {
       return (
         <div className="my-list-page__empty-block">
           <p className="my-list-page__empty-primary">Nothing matches these filters</p>
-          <p className="my-list-page__empty-secondary">Try removing a filter, or reset them all.</p>
           <button type="button" className="my-list-page__clear-filters my-list-page__clear-filters--reset" onClick={clearFilters}>
             Reset filters &amp; sort
           </button>
@@ -788,7 +844,7 @@ export function MyListPage() {
   const hasResultsLine = resultsVisible && hasRecapScope
 
   return (
-    <div className="my-list-page">
+    <div className="my-list-page" ref={pageRef} style={{ '--progress-count-ch': progressCountChars } as CSSProperties}>
       <div className="my-list-page__header">
         <h1>My list</h1>
       </div>
@@ -841,10 +897,12 @@ export function MyListPage() {
         filters={{
           query,
           onQueryChange: setQuery,
-          typeFilter,
-          onTypeFilterChange: setTypeFilter,
-          airingFilter,
-          onAiringFilterChange: setAiringFilter,
+          typeFilters,
+          onTypeFiltersChange: setTypeFilters,
+          airingFilters,
+          onAiringFiltersChange: setAiringFilters,
+          genreFilters,
+          onGenreFiltersChange: setGenreFilters,
           scoreFilter,
           onScoreFilterChange: setScoreFilter,
         }}
@@ -860,6 +918,7 @@ export function MyListPage() {
         }}
         typeOptions={typeOptions}
         airingOptions={airingOptions}
+        genreOptions={genreOptions}
         scoreOptions={scoreOptions}
         scoreDisabledLabel={scoreDisabledLabel}
       />

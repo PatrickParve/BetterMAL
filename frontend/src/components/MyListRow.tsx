@@ -46,7 +46,7 @@ export const MyListRow = memo(function MyListRow({
     <li className={`my-list-row my-list-row--${STATUS_CLASS[item.entry.status]}`}>
       {rank !== undefined && <span className="my-list-row__rank">#{rank}</span>}
       <Link to={`/anime/${item.animeId}`} className="my-list-row__link">
-        <RowPicture src={item.pictureUrl} className="my-list-row__picture" />
+        <RowPicture src={item.pictureUrl} className="my-list-row__picture" tier="tile" />
         <span className="my-list-row__info">
           <span className="my-list-row__title" title={displayTitle}>
             {displayTitle}
