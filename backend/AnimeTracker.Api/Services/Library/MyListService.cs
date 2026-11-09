@@ -47,7 +47,9 @@ public class MyListService(
                 snapshot.RankOf(e.AnimeId),
                 e.Anime.PopularityRank,
                 e.Anime.Genres ?? [],
-                e.Anime.Studios ?? []));
+                e.Anime.Studios ?? [],
+                e.Anime.Source,
+                e.Anime.AiredFrom));
         }
         return items;
     }

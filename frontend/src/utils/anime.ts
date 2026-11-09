@@ -839,3 +839,107 @@ export function formatIsoDay(isoDay: string): string {
   if (!year || !month || !day || month < 1 || month > 12) return isoDay
   return `${day} ${SHORT_MONTHS[month - 1]} ${year}`
 }
+
+// Every source value MyAnimeList's API uses for an anime's source material. Width
+// reservation and the option order for the my-list Source filter, the same role as
+// the genre list above: the filter's trigger is sized from the longest label here,
+// and it never says which sources are offered (that comes from the entries; a key
+// MyAnimeList adds later is unioned in from what the entries carry).
+export const MAL_SOURCE_KEYS = [
+  'original', 'manga', '4_koma_manga', 'web_manga', 'digital_manga', 'novel', 'light_novel', 'visual_novel', 'game',
+  'card_game', 'book', 'picture_book', 'radio', 'music', 'web_novel', 'mixed_media', 'other',
+]
+
+// The Source filter's choice for an entry with no stored source.
+export const UNKNOWN_FILTER_KEY = 'unknown'
+
+// An entry's choice in the Source filter: its stored key, or 'unknown'.
+export function sourceKeyOf(source: string | null | undefined): string {
+  return source?.trim() || UNKNOWN_FILTER_KEY
+}
+
+// The label a Source filter choice shows: the detail page's name for the source.
+export function sourceChoiceLabel(key: string): string {
+  return key === UNKNOWN_FILTER_KEY ? 'Unknown' : sourceLabel(key)
+}
+
+// Every choice the Source filter could ever offer, alphabetical by label with
+// Unknown last. Width reservation only.
+export const SOURCE_FILTER_OPTIONS: FilterMultiSelectOption[] = [
+  ...MAL_SOURCE_KEYS.map((value) => ({ value, label: sourceLabel(value) })).sort((a, b) => a.label.localeCompare(b.label)),
+  { value: UNKNOWN_FILTER_KEY, label: 'Unknown' },
+]
+
+// An entry's era: the decade of its air-start year named like "2010s", or 'unknown'
+// without a date. It is the integer decade of the stored date's year, exactly as the
+// backend's era split (TasteStatsBuilder.Eras) takes it.
+export function eraOf(airedFrom: string | null | undefined): string {
+  const year = airedFrom ? Number(airedFrom.slice(0, 4)) : NaN
+  return Number.isFinite(year) ? `${Math.floor(year / 10) * 10}s` : UNKNOWN_FILTER_KEY
+}
+
+export function eraChoiceLabel(key: string): string {
+  return key === UNKNOWN_FILTER_KEY ? 'Unknown' : key
+}
+
+// Every choice the Era filter could ever offer: the decades from the 1910s to the
+// current one, newest first, then Unknown. Width reservation only.
+export const ERA_FILTER_OPTIONS: FilterMultiSelectOption[] = [
+  ...Array.from({ length: Math.floor(new Date().getFullYear() / 10) - 190 }, (_, i) => `${(Math.floor(new Date().getFullYear() / 10) - i) * 10}s`).map(
+    (value) => ({ value, label: value }),
+  ),
+  { value: UNKNOWN_FILTER_KEY, label: 'Unknown' },
+]
+
+// Monday-first: index isoWeekday - 1.
+export const ISO_WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+// The ISO weekday (1 = Monday ... 7 = Sunday) of an ISO day.
+export function isoWeekdayOf(isoDay: string): number {
+  const [year, month, day] = isoDay.split('-').map(Number)
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay()
+  return weekday === 0 ? 7 : weekday
+}
+
+// An ISO day as "Tuesday 15 Sep 2026", spelled out like formatIsoDay.
+export function formatIsoDayWithWeekday(isoDay: string): string {
+  return `${ISO_WEEKDAY_NAMES[isoWeekdayOf(isoDay) - 1]} ${formatIsoDay(isoDay)}`
+}
+
+// An ISO day as "Tue 15 Sep 2026" (the calendar's hover text).
+export function formatIsoDayShortWeekday(isoDay: string): string {
+  return `${ISO_WEEKDAY_NAMES[isoWeekdayOf(isoDay) - 1].slice(0, 3)} ${formatIsoDay(isoDay)}`
+}
+
+// An ISO day as "Tuesday 15 September 2026" (the calendar's accessible names).
+const LONG_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December',
+]
+
+export function formatIsoDayLong(isoDay: string): string {
+  const [year, month, day] = isoDay.split('-').map(Number)
+  return `${ISO_WEEKDAY_NAMES[isoWeekdayOf(isoDay) - 1]} ${day} ${LONG_MONTHS[month - 1]} ${year}`
+}
+
+// A run of days as "3–14 Mar 2026" within a month, "28 Feb – 11 Mar 2026" across
+// months, "30 Dec 2025 – 2 Jan 2026" across years, and one date for one day.
+export function formatDayRange(startIso: string, endIso: string): string {
+  if (startIso === endIso) return formatIsoDay(startIso)
+  const [startYear, startMonth, startDay] = startIso.split('-').map(Number)
+  const [endYear, endMonth] = endIso.split('-').map(Number)
+  if (startYear === endYear && startMonth === endMonth) {
+    return `${startDay}–${formatIsoDay(endIso)}`
+  }
+  if (startYear === endYear) {
+    return `${startDay} ${SHORT_MONTHS[startMonth - 1]} – ${formatIsoDay(endIso)}`
+  }
+  return `${formatIsoDay(startIso)} – ${formatIsoDay(endIso)}`
+}
+
+// A watching day's runs for one anime: "Episodes 5–12", "Episode 7", and several
+// runs joined by a comma ("Episodes 11–12, 1–2").
+export function episodeRunsLabel(runs: { from: number; to: number }[]): string {
+  const parts = runs.map((run) => (run.from === run.to ? String(run.from) : `${run.from}–${run.to}`))
+  const single = runs.length === 1 && runs[0].from === runs[0].to
+  return `${single ? 'Episode' : 'Episodes'} ${parts.join(', ')}`
+}

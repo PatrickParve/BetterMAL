@@ -23,13 +23,18 @@ public interface IActivityLogRepository
     Task<List<ActivityLog>> GetAllAsync(CancellationToken ct = default);
 
     /// <summary>Every <see cref="ActivityChangeType.EpisodeIncremented"/> row
-    /// in range, oldest first, whose Timestamp falls in the half-open instant
-    /// range [fromUtc, toUtc) — the log holds only changes made in the app, so
-    /// every row is mine. Backs the recap's per-period logged-progress arm
-    /// (list-recaps "Dynamic time filter", design.md decision 3/5) — raw
-    /// rows, not yet reduced to a per-anime figure, since <see
-    /// cref="AnimeTracker.Api.Services.Recap.RecapWatchLog"/> does that
-    /// reduction.</summary>
+    /// in range, oldest first (Timestamp, then Id), whose Timestamp falls in the
+    /// half-open instant range [fromUtc, toUtc) — the log holds only changes made
+    /// in the app, so every row is mine. A lowering of the count is such a row too.
+    /// Also returned are the rows that start a new viewing: a <see
+    /// cref="ActivityChangeType.Removed"/> row and a <see
+    /// cref="ActivityChangeType.StatusChanged"/> row moving the entry to
+    /// Rewatching (the watching days read them, taste-stats "A period's watching
+    /// days"); every other consumer ignores rows that are not episode progress.
+    /// Backs the recap's per-period logged-progress arm (list-recaps "Dynamic time
+    /// filter", design.md decision 3/5) — raw rows, not yet reduced to a per-anime
+    /// figure, since <see cref="AnimeTracker.Api.Services.Recap.RecapWatchLog"/>
+    /// does that reduction.</summary>
     Task<List<ActivityLog>> GetEpisodeProgressInRangeAsync(DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default);
 
     /// <summary>Every record, oldest first: <see cref="GetRecentAsync"/> and

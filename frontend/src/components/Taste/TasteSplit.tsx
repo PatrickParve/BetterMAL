@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { TasteSplitDto } from '../../api/types.ts'
 import './TasteSplit.css'
 
@@ -19,17 +21,24 @@ function countTitle(count: number): string {
 // with its whole-percentage share. The segments are steps of the accent, strongest
 // for the largest, and Other is the neutral border colour; each legend entry
 // carries its segment's colour. Hovering a segment or its legend entry shows its
-// count. The box leads nowhere, its title is plain, and a split with nothing to
-// show is not drawn.
+// count. Every category leads to my list (profile-stats "Demographic, source and
+// era"): each legend entry is a link and a keyboard stop, and each segment is a link
+// that follows by pointer only, since its legend entry is the stop. Hovering or
+// focusing either highlights both, with no change of size. The box's title is plain
+// and a split with nothing to show is not drawn.
 export function TasteSplit({
   title,
   categories,
+  linkOf,
   labelOf = (label) => label,
 }: {
   title: string
   categories: TasteSplitDto[]
+  // Where a category leads: my list with the values it covers ticked.
+  linkOf: (category: TasteSplitDto) => string
   labelOf?: (label: string) => string
 }) {
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null)
   const total = categories.reduce((sum, category) => sum + category.count, 0)
   if (total === 0) return null
 
@@ -44,29 +53,53 @@ export function TasteSplit({
       count: category.count,
       percent: percentLabel(category.count, total),
       tone: isOther ? 'other' : String(step++),
+      to: linkOf(category),
     }
   })
-  const summary = entries.map((entry) => `${entry.label} ${entry.percent}`).join(', ')
+
+  // The pair of a segment and its legend entry share these, so either one lights
+  // both.
+  function hoverProps(key: string) {
+    return {
+      onPointerEnter: () => setHoveredKey(key),
+      onPointerLeave: () => setHoveredKey(null),
+      onFocus: () => setHoveredKey(key),
+      onBlur: () => setHoveredKey(null),
+    }
+  }
 
   return (
     <section className="profile-box taste-split">
       <h2>{title}</h2>
-      <div className="taste-split__bar" role="img" aria-label={`${title}: ${summary}`}>
+      <div className="taste-split__bar">
         {entries.map((entry) => (
-          <span
+          <Link
             key={entry.key}
-            className={`taste-split__segment taste-split__segment--${entry.tone}`}
+            to={entry.to}
+            tabIndex={-1}
+            aria-hidden="true"
+            className={`taste-split__segment taste-split__segment--${entry.tone}${
+              hoveredKey === entry.key ? ' taste-split__segment--hovered' : ''
+            }`}
             style={{ width: `${(entry.count / total) * 100}%` }}
             title={countTitle(entry.count)}
+            {...hoverProps(entry.key)}
           />
         ))}
       </div>
       <ul className="taste-split__legend">
         {entries.map((entry) => (
-          <li key={entry.key} className="taste-split__legend-entry" title={countTitle(entry.count)}>
-            <span className={`taste-split__swatch taste-split__segment--${entry.tone}`} aria-hidden="true" />
-            <span className="taste-split__legend-label">{entry.label}</span>
-            <span className="taste-split__legend-percent">{entry.percent}</span>
+          <li key={entry.key}>
+            <Link
+              to={entry.to}
+              className={`taste-split__legend-entry${hoveredKey === entry.key ? ' taste-split__legend-entry--hovered' : ''}`}
+              title={countTitle(entry.count)}
+              {...hoverProps(entry.key)}
+            >
+              <span className={`taste-split__swatch taste-split__segment--${entry.tone}`} aria-hidden="true" />
+              <span className="taste-split__legend-label">{entry.label}</span>
+              <span className="taste-split__legend-percent">{entry.percent}</span>
+            </Link>
           </li>
         ))}
       </ul>

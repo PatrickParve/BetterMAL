@@ -25,6 +25,7 @@ import {
   RankingSection,
 } from '../components/RankingSection.tsx'
 import { ScoreBoardOverlay, type ScoreBoardGroup } from '../components/ScoreBoardOverlay.tsx'
+import { WatchingDaysOverlay, type WatchingDaysTab } from '../components/WatchingDaysOverlay.tsx'
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreDistribution } from '../components/ScoreDistribution.tsx'
 import { ScoreValue } from '../components/ScoreValue.tsx'
@@ -349,6 +350,20 @@ function RecapPageView({
   // board open again, as a new overlay over it, rather than the board
   // surviving the navigation.
   const [boardOpen, setBoardOpen] = useRestorableState<boolean>('scoreBoard', false)
+  // The watching days overlay (list-recaps "The watching days overlay is dismissible
+  // and restored with the recap page"): the score board's pattern again. The open
+  // flag, the tab and the calendar's chosen day (an ISO day; null is the biggest day)
+  // are restorable view state, and the overlay's scroll offset is recorded by the
+  // overlay itself. Opening adds nothing to history or the address.
+  const [watchingDaysOpen, setWatchingDaysOpen] = useRestorableState<boolean>('watchingDays', false)
+  const [watchingDaysTab, setWatchingDaysTab] = useRestorableState<WatchingDaysTab>('watchingDaysTab', 'top')
+  const [watchingDaysDay, setWatchingDaysDay] = useRestorableState<string | null>('watchingDaysDay', null)
+  // Opening from the card always starts fresh: Top days, with the biggest day chosen.
+  function openWatchingDays() {
+    setWatchingDaysTab('top')
+    setWatchingDaysDay(null)
+    setWatchingDaysOpen(true)
+  }
   const { hidden } = useScoreVisibility()
 
   const filterParam = searchParams.get('filter')
@@ -939,7 +954,8 @@ function RecapPageView({
             value={`${biggestDay.episodes} ${biggestDay.episodes === 1 ? 'episode' : 'episodes'}`}
             line={formatIsoDay(biggestDay.date)}
             posters={biggestDay.posters}
-            rail="neutral"
+            rail="accent"
+            onOpen={openWatchingDays}
           />
         )}
       </div>
@@ -1286,6 +1302,18 @@ function RecapPageView({
 
       {overlay && (
         <RankingOverlay title={overlay.title} rows={overlay.rows} family={overlay.family} onClose={() => setOverlay(null)} />
+      )}
+      {watchingDaysOpen && displayedRecap?.highlights.watchingDays && (
+        <WatchingDaysOverlay
+          title={`Watching days — ${periodLabel}`}
+          watchingDays={displayedRecap.highlights.watchingDays}
+          items={displayedRecap.items}
+          tab={watchingDaysTab}
+          onTabChange={setWatchingDaysTab}
+          selectedDay={watchingDaysDay}
+          onSelectDay={setWatchingDaysDay}
+          onClose={() => setWatchingDaysOpen(false)}
+        />
       )}
       {boardOpen && (
         <ScoreBoardOverlay

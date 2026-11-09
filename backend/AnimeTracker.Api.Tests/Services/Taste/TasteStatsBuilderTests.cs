@@ -1,5 +1,6 @@
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Ranking;
+using AnimeTracker.Api.Services.Recap;
 using AnimeTracker.Api.Services.Scheduling;
 using AnimeTracker.Api.Services.Taste;
 
@@ -19,7 +20,7 @@ public class TasteStatsBuilderTests
     private static UserAnimeEntry Entry(
         int id, string[]? genres = null, string[]? studios = null, int? score = null,
         WatchStatus status = WatchStatus.Completed, int? popularity = null, string? source = null,
-        DateOnly? airedFrom = null, string? title = null, int rewatchCount = 0) =>
+        DateOnly? airedFrom = null, string? title = null, int rewatchCount = 0, int? totalEpisodes = null) =>
         new()
         {
             AnimeId = id,
@@ -33,6 +34,7 @@ public class TasteStatsBuilderTests
                 PopularityRank = popularity,
                 Source = source,
                 AiredFrom = airedFrom,
+                TotalEpisodes = totalEpisodes,
             },
             MyScore = score,
             Status = status,
@@ -55,6 +57,14 @@ public class TasteStatsBuilderTests
             ChangeDetail = $"Episode {to}",
             PreviousEpisodesWatched = from,
         };
+
+    // The rows an edit saves besides the count: a status change and a removal. Their timestamp is the
+    // edit's, so passing the same instant as a count row makes them one edit.
+    private static ActivityLog StatusRow(int animeId, DateTimeOffset at, string detail) =>
+        new() { AnimeId = animeId, Timestamp = at, ChangeType = ActivityChangeType.StatusChanged, ChangeDetail = detail };
+
+    private static ActivityLog RemovedRow(int animeId, DateTimeOffset at) =>
+        new() { AnimeId = animeId, Timestamp = at, ChangeType = ActivityChangeType.Removed, ChangeDetail = "Removed from list" };
 
     private static DateTimeOffset NoonUtc(int year, int month, int day) => new(year, month, day, 12, 0, 0, TimeSpan.Zero);
 
@@ -939,5 +949,688 @@ public class TasteStatsBuilderTests
 
         Assert.Equal([3, 4, 1], day!.Posters.Select(p => p.AnimeId));
         Assert.Equal(24, day.Episodes);
+    }
+
+    // --- Watching days -----------------------------------------------------------------------------
+
+    private static RecapWatchingDaysDto? WatchingDays(
+        List<ActivityLog> log, List<UserAnimeEntry> counted, AnimeRankingSnapshot? ranking = null) =>
+        TasteStatsBuilder.WatchingDays(log, counted, LocalTime, ranking ?? NoRanking);
+
+    // One episode of anime 1 on each of the given dates.
+    private static List<ActivityLog> OneEpisodeOn(params DateOnly[] dates) =>
+        dates.Select(d => Log(1, NoonUtc(d.Year, d.Month, d.Day), 0, 1)).ToList();
+
+    private static DateOnly[] Dates(DateOnly first, int count) =>
+        Enumerable.Range(0, count).Select(first.AddDays).ToArray();
+
+    private static IEnumerable<(int, int)> RunsOf(RecapDayAnimeDto anime) => anime.Runs.Select(r => (r.From, r.To));
+
+    [Fact]
+    public void EpisodesRaisedOneAtATimeMergeIntoOneRun()
+    {
+        // Frieren 4 to 12 one episode at a time, Dandadan 0 to 3 in one edit, all on 15 September.
+        List<UserAnimeEntry> counted = [Entry(1, title: "Frieren"), Entry(2, title: "Dandadan")];
+        List<ActivityLog> log = [.. Enumerable.Range(4, 8).Select(p => Log(1, NoonUtc(2026, 9, 15).AddMinutes(p), p, p + 1)), Log(2, NoonUtc(2026, 9, 15), 0, 3)];
+
+        var day = Assert.Single(WatchingDays(log, counted)!.Days);
+
+        Assert.Equal(11, day.Episodes);
+        var frieren = day.Anime[0];
+        Assert.Equal((1, 8), (frieren.AnimeId, frieren.Episodes));
+        Assert.Equal([(5, 12)], RunsOf(frieren));
+        var dandadan = day.Anime[1];
+        Assert.Equal((2, 3), (dandadan.AnimeId, dandadan.Episodes));
+        Assert.Equal([(1, 3)], RunsOf(dandadan));
+    }
+
+    [Fact]
+    public void AMoveToRewatchingWithAResetStartsASecondRun()
+    {
+        // 10 to 12 finishes it; one edit then moves it to Rewatching and resets the count to 0; then 0 to 2.
+        var at = NoonUtc(2026, 5, 1);
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log =
+        [
+            Log(1, at, 10, 12),
+            Log(1, at.AddMinutes(1), 12, 0), StatusRow(1, at.AddMinutes(1), "Completed -> Rewatching"),
+            Log(1, at.AddMinutes(2), 0, 2),
+        ];
+
+        var anime = Assert.Single(Assert.Single(WatchingDays(log, counted)!.Days).Anime);
+
+        Assert.Equal(4, anime.Episodes);
+        Assert.Equal([(11, 12), (1, 2)], RunsOf(anime));
+    }
+
+    [Fact]
+    public void ARewatchResetOnItsOwnDoesNotReduceTheDayItFinishedOn()
+    {
+        // The reset row sorts before the status row of its edit (lower id); it must still belong to the new viewing,
+        // or the day's 10 to 12 would read as ending on 0.
+        var at = NoonUtc(2026, 5, 1);
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, at, 10, 12), Log(1, at.AddMinutes(1), 12, 0), StatusRow(1, at.AddMinutes(1), "Completed -> Rewatching")];
+
+        var anime = Assert.Single(Assert.Single(WatchingDays(log, counted)!.Days).Anime);
+
+        Assert.Equal([(11, 12)], RunsOf(anime));
+    }
+
+    [Fact]
+    public void ARewatchResetAtTheStartOfThePeriodStartsFromItsCount()
+    {
+        // The period's first rows are the rewatch edit (reset 12 to 0, to Rewatching) and then 0 to 3.
+        var at = NoonUtc(2026, 1, 1);
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, at, 12, 0), StatusRow(1, at, "Completed -> Rewatching"), Log(1, at.AddHours(2), 0, 3)];
+
+        var anime = Assert.Single(Assert.Single(WatchingDays(log, counted)!.Days).Anime);
+
+        Assert.Equal(3, anime.Episodes);
+        Assert.Equal([(1, 3)], RunsOf(anime));
+    }
+
+    [Fact]
+    public void AMissClickDoesNotCountAnEpisodeTwice()
+    {
+        // 7 to 10, lowered to 9 by mistake, raised to 10 again: three episodes, 8 to 10.
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, NoonUtc(2026, 5, 1), 7, 10), Log(1, NoonUtc(2026, 5, 1).AddMinutes(1), 10, 9), Log(1, NoonUtc(2026, 5, 1).AddMinutes(2), 9, 10)];
+
+        var anime = Assert.Single(Assert.Single(WatchingDays(log, counted)!.Days).Anime);
+
+        Assert.Equal(3, anime.Episodes);
+        Assert.Equal([(8, 10)], RunsOf(anime));
+    }
+
+    [Fact]
+    public void ABurstOfCorrectionsAddsNothing()
+    {
+        // 4 to 12, then 11, 12, 2 and 12 again: the day is 8 episodes (5 to 12), not 24 in five runs.
+        var at = NoonUtc(2026, 7, 25);
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log =
+        [
+            Log(1, at, 4, 12), Log(1, at.AddMinutes(1), 12, 11), Log(1, at.AddMinutes(2), 11, 12),
+            Log(1, at.AddMinutes(3), 12, 2), Log(1, at.AddMinutes(4), 2, 12),
+        ];
+
+        var anime = Assert.Single(Assert.Single(WatchingDays(log, counted)!.Days).Anime);
+
+        Assert.Equal(8, anime.Episodes);
+        Assert.Equal([(5, 12)], RunsOf(anime));
+    }
+
+    [Fact]
+    public void ALoweringThatIsNeverUndoneIsNoProgress()
+    {
+        List<UserAnimeEntry> counted = [Entry(1)];
+
+        Assert.Null(WatchingDays([Log(1, NoonUtc(2026, 5, 1), 12, 9)], counted));
+        Assert.Null(WatchingDays([Log(1, NoonUtc(2026, 5, 1), 5, 8), Log(1, NoonUtc(2026, 5, 1).AddMinutes(1), 8, 3)], counted));
+    }
+
+    [Fact]
+    public void ALoweringOnALaterDayDoesNotReduceAnEarlierOne()
+    {
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, NoonUtc(2026, 5, 4), 0, 6), Log(1, NoonUtc(2026, 5, 5), 6, 5)];
+
+        var watching = WatchingDays(log, counted)!;
+
+        var day = Assert.Single(watching.Days);
+        Assert.Equal((new DateOnly(2026, 5, 4), 6), (day.Date, day.Episodes));
+    }
+
+    [Fact]
+    public void ALoweringLeftOvernightCountsTheRaiseThatFollows()
+    {
+        // The known limit (design D3): the count stood at 10, was lowered to 9 on one day and raised on the next.
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, NoonUtc(2026, 5, 4), 8, 10), Log(1, NoonUtc(2026, 5, 5), 10, 9), Log(1, NoonUtc(2026, 5, 6), 9, 10)];
+
+        var days = WatchingDays(log, counted)!.Days;
+
+        Assert.Equal([(new DateOnly(2026, 5, 4), 2), (new DateOnly(2026, 5, 6), 1)], days.Select(d => (d.Date, d.Episodes)));
+    }
+
+    [Fact]
+    public void MovingCompletedBackToWatchingIsACorrectionNotARewatch()
+    {
+        // 9 to 12 completes it; it is moved back to Watching, lowered to 11 and raised to 12 again.
+        var at = NoonUtc(2026, 5, 1);
+        List<UserAnimeEntry> counted = [Entry(1, totalEpisodes: 12)];
+        List<ActivityLog> log =
+        [
+            Log(1, at, 9, 12), StatusRow(1, at.AddMinutes(1), "Completed -> Watching"),
+            Log(1, at.AddMinutes(2), 12, 11), Log(1, at.AddMinutes(3), 11, 12),
+        ];
+
+        var anime = Assert.Single(Assert.Single(WatchingDays(log, counted)!.Days).Anime);
+
+        Assert.Equal(3, anime.Episodes);
+        Assert.Equal([(10, 12)], RunsOf(anime));
+        Assert.True(anime.Finished);
+    }
+
+    [Fact]
+    public void UndoingACompletionAndLoweringTheCountKeepsTheNetGain()
+    {
+        // 9 to 12 completed it; moved back to Watching and lowered to 10: I had only reached 10, so the day is one episode.
+        var at = NoonUtc(2026, 5, 1);
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, at, 9, 12), StatusRow(1, at.AddMinutes(1), "Completed -> Watching"), Log(1, at.AddMinutes(2), 12, 10)];
+
+        var anime = Assert.Single(Assert.Single(WatchingDays(log, counted)!.Days).Anime);
+
+        Assert.Equal([(10, 10)], RunsOf(anime));
+    }
+
+    [Fact]
+    public void RemovingTheEntryStartsANewViewing()
+    {
+        var at = NoonUtc(2026, 5, 1);
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, at, 0, 5), RemovedRow(1, at.AddMinutes(1)), Log(1, at.AddMinutes(5), 0, 2)];
+
+        var anime = Assert.Single(Assert.Single(WatchingDays(log, counted)!.Days).Anime);
+
+        Assert.Equal(7, anime.Episodes);
+        Assert.Equal([(1, 5), (1, 2)], RunsOf(anime));
+    }
+
+    [Fact]
+    public void TheFirstRowOfADayTakesItsStartFromItsPreviousCount()
+    {
+        // Nothing earlier is in the period's rows: the count it started from is the row's own previous count.
+        List<UserAnimeEntry> counted = [Entry(1)];
+
+        var anime = Assert.Single(Assert.Single(WatchingDays([Log(1, NoonUtc(2026, 1, 1), 8, 10)], counted)!.Days).Anime);
+
+        Assert.Equal([(9, 10)], RunsOf(anime));
+    }
+
+    [Fact]
+    public void RowsOfOneEditAreReadInTheOrderTheyArrive()
+    {
+        // Two count rows share one timestamp (one edit); the repository orders them by id, so 0 to 3 comes first.
+        var at = NoonUtc(2026, 5, 1);
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, at, 0, 3), Log(1, at, 3, 6)];
+
+        var anime = Assert.Single(Assert.Single(WatchingDays(log, counted)!.Days).Anime);
+
+        Assert.Equal([(1, 6)], RunsOf(anime));
+    }
+
+    [Fact]
+    public void RowsThatAreNotEpisodeProgressAreIgnored()
+    {
+        var at = NoonUtc(2026, 5, 1);
+        List<UserAnimeEntry> counted = [Entry(1)];
+        var score = new ActivityLog { AnimeId = 1, Timestamp = at.AddMinutes(1), ChangeType = ActivityChangeType.ScoreChanged, ChangeDetail = "Score 8" };
+        List<ActivityLog> log = [Log(1, at, 0, 3), score, StatusRow(1, at.AddMinutes(2), "Watching -> Completed"), Log(1, at.AddMinutes(3), 3, 5)];
+
+        var anime = Assert.Single(Assert.Single(WatchingDays(log, counted)!.Days).Anime);
+
+        Assert.Equal([(1, 5)], RunsOf(anime));
+    }
+
+    [Fact]
+    public void ACorrectionAndAReRaiseAddNothing()
+    {
+        // 5 to 8, corrected down to 6, raised to 8 again: three episodes, 6 to 8.
+        var at = NoonUtc(2026, 5, 1);
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, at, 5, 8), Log(1, at.AddMinutes(1), 8, 6), Log(1, at.AddMinutes(2), 6, 8)];
+
+        var anime = Assert.Single(Assert.Single(WatchingDays(log, counted)!.Days).Anime);
+
+        Assert.Equal(3, anime.Episodes);
+        Assert.Equal([(6, 8)], RunsOf(anime));
+    }
+
+    [Fact]
+    public void RunsOfTwoAnimeInterleavedStaySeparate()
+    {
+        List<UserAnimeEntry> counted = [Entry(1), Entry(2)];
+        List<ActivityLog> log =
+        [
+            Log(1, NoonUtc(2026, 5, 1), 0, 1), Log(2, NoonUtc(2026, 5, 1).AddMinutes(1), 0, 1),
+            Log(1, NoonUtc(2026, 5, 1).AddMinutes(2), 1, 2), Log(2, NoonUtc(2026, 5, 1).AddMinutes(3), 1, 2),
+        ];
+
+        var anime = Assert.Single(WatchingDays(log, counted)!.Days).Anime;
+
+        Assert.All(anime, a => Assert.Equal([(1, 2)], RunsOf(a)));
+    }
+
+    [Fact]
+    public void RunsDoNotCrossDays()
+    {
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, NoonUtc(2026, 5, 1), 0, 3), Log(1, NoonUtc(2026, 5, 2), 3, 6)];
+
+        var days = WatchingDays(log, counted)!.Days;
+
+        Assert.Equal([(1, 3)], RunsOf(days[0].Anime[0]));
+        Assert.Equal([(4, 6)], RunsOf(days[1].Anime[0]));
+    }
+
+    [Fact]
+    public void AnimeIsFinishedOnTheDayARunEndsOnItsTotal()
+    {
+        // 12 episodes: 9 to 12 on 2 March finishes it, 5 to 9 on 1 March does not.
+        List<UserAnimeEntry> counted = [Entry(1, totalEpisodes: 12)];
+        List<ActivityLog> log = [Log(1, NoonUtc(2026, 3, 1), 5, 9), Log(1, NoonUtc(2026, 3, 2), 9, 12)];
+
+        var days = WatchingDays(log, counted)!.Days;
+
+        Assert.False(days[0].Anime[0].Finished);
+        Assert.True(days[1].Anime[0].Finished);
+    }
+
+    [Fact]
+    public void WithoutAStoredTotalNothingIsFinished()
+    {
+        List<UserAnimeEntry> counted = [Entry(1, totalEpisodes: null), Entry(2, totalEpisodes: 0)];
+        List<ActivityLog> log = [Log(1, NoonUtc(2026, 3, 1), 0, 12), Log(2, NoonUtc(2026, 3, 1), 0, 0 + 1)];
+
+        var day = Assert.Single(WatchingDays(log, counted)!.Days);
+
+        Assert.All(day.Anime, a => Assert.False(a.Finished));
+    }
+
+    [Fact]
+    public void ADayOfOnlyDecreasesIsNotAWatchingDay()
+    {
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, NoonUtc(2026, 5, 3), 0, 4), Log(1, NoonUtc(2026, 5, 4), 4, 2)];
+
+        var watching = WatchingDays(log, counted)!;
+
+        Assert.Equal([new DateOnly(2026, 5, 3)], watching.Days.Select(d => d.Date));
+        Assert.Equal(1, watching.DaysWatched);
+    }
+
+    [Fact]
+    public void AnimeOutsideTheCountedSetAreIgnored()
+    {
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, NoonUtc(2026, 4, 1), 0, 3), Log(99, NoonUtc(2026, 4, 1), 0, 40), Log(99, NoonUtc(2026, 4, 2), 0, 40)];
+
+        var watching = WatchingDays(log, counted)!;
+
+        var day = Assert.Single(watching.Days);
+        Assert.Equal(3, day.Episodes);
+        Assert.Equal([1], day.Anime.Select(a => a.AnimeId));
+    }
+
+    [Fact]
+    public void NoRowsMeansNoWatchingDays()
+    {
+        List<UserAnimeEntry> counted = [Entry(1)];
+
+        Assert.Null(WatchingDays([], counted));
+        Assert.Null(WatchingDays([Log(1, NoonUtc(2026, 4, 1), 6, 2)], counted));
+        Assert.Null(WatchingDays([Log(99, NoonUtc(2026, 4, 1), 0, 2)], counted));
+    }
+
+    [Fact]
+    public void ADaysAnimeAreOrderedByEpisodesThenMyRankingThenTitle()
+    {
+        // C has the most episodes; A, B and D watched 5 each and my ranking puts D above A; B and E are unranked, so the title decides.
+        List<UserAnimeEntry> counted =
+        [
+            Entry(1, score: 8, title: "A"), Entry(2, title: "Zeta"), Entry(3, score: 8, title: "C"), Entry(4, score: 8, title: "D"), Entry(5, title: "Alpha"),
+        ];
+        var snapshot = RankedInOrder(counted, 4, 1, 3);
+        List<ActivityLog> log =
+        [
+            Log(1, NoonUtc(2026, 6, 1), 0, 5), Log(2, NoonUtc(2026, 6, 1), 0, 5), Log(3, NoonUtc(2026, 6, 1), 0, 9),
+            Log(4, NoonUtc(2026, 6, 1), 0, 5), Log(5, NoonUtc(2026, 6, 1), 0, 5),
+        ];
+
+        var day = Assert.Single(WatchingDays(log, counted, snapshot)!.Days);
+
+        Assert.Equal([3, 4, 1, 5, 2], day.Anime.Select(a => a.AnimeId));
+        Assert.Equal(29, day.Episodes);
+    }
+
+    [Fact]
+    public void DaysAreInDateOrderWhateverOrderTheRowsCameIn()
+    {
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, NoonUtc(2026, 3, 9), 0, 2), Log(1, NoonUtc(2026, 3, 2), 0, 5), Log(1, NoonUtc(2026, 3, 5), 0, 3)];
+
+        var days = WatchingDays(log, counted)!.Days;
+
+        Assert.Equal([(new DateOnly(2026, 3, 2), 5), (new DateOnly(2026, 3, 5), 3), (new DateOnly(2026, 3, 9), 2)], days.Select(d => (d.Date, d.Episodes)));
+    }
+
+    [Fact]
+    public void TopDaysAreTheTenBiggestBiggestFirstWithTheEarlierDayFirstOnATie()
+    {
+        // Twelve days of 1 to 12 episodes, then a thirteenth with 12 as well on a later date.
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = Enumerable.Range(1, 12).Select(n => Log(1, NoonUtc(2026, 3, n), 0, n)).ToList();
+        log.Add(Log(1, NoonUtc(2026, 3, 20), 0, 12));
+        log.Insert(0, Log(1, NoonUtc(2026, 3, 18), 0, 12)); // an earlier-listed row of a later date must not matter
+
+        var watching = WatchingDays(log, counted)!;
+
+        Assert.Equal(10, watching.TopDays.Count);
+        Assert.Equal(
+            [new DateOnly(2026, 3, 12), new DateOnly(2026, 3, 18), new DateOnly(2026, 3, 20), new DateOnly(2026, 3, 11), new DateOnly(2026, 3, 10),
+                new DateOnly(2026, 3, 9), new DateOnly(2026, 3, 8), new DateOnly(2026, 3, 7), new DateOnly(2026, 3, 6), new DateOnly(2026, 3, 5)],
+            watching.TopDays);
+        Assert.Equal(14, watching.DaysWatched);
+    }
+
+    [Fact]
+    public void TheFirstTopDayIsTheBiggestDay()
+    {
+        List<UserAnimeEntry> counted = [Entry(1), Entry(2)];
+        List<ActivityLog> log = [Log(2, NoonUtc(2026, 3, 9), 0, 20), Log(1, NoonUtc(2026, 3, 2), 0, 20), Log(1, NoonUtc(2026, 3, 4), 0, 7)];
+
+        var watching = WatchingDays(log, counted)!;
+        var biggest = TasteStatsBuilder.BiggestDay(log, counted, LocalTime, NoRanking);
+
+        Assert.Equal(biggest!.Date, watching.TopDays[0]);
+        Assert.Equal(new DateOnly(2026, 3, 2), watching.TopDays[0]);
+        Assert.Equal(biggest.Episodes, watching.Days.Single(d => d.Date == watching.TopDays[0]).Episodes);
+    }
+
+    [Fact]
+    public void DaysWatchedAndEpisodesPerDayRoundToOneDecimal()
+    {
+        // 87 watching days holding 365 episodes: 4.195... rounds to 4.2.
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = Enumerable.Range(0, 87)
+            .Select(i => Log(1, NoonUtc(2026, 1, 1).AddDays(i * 2), 0, i == 0 ? 21 : 4)).ToList();
+
+        var watching = WatchingDays(log, counted)!;
+
+        Assert.Equal(87, watching.DaysWatched);
+        Assert.Equal(365, watching.Days.Sum(d => d.Episodes));
+        Assert.Equal(4.2, watching.EpisodesPerDay);
+    }
+
+    [Fact]
+    public void AHalfwayEpisodesPerDayRoundsAwayFromZero()
+    {
+        // 17 episodes over 4 days is 4.25: away from zero gives 4.3, banker's rounding 4.2.
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log =
+        [
+            Log(1, NoonUtc(2026, 3, 1), 0, 5), Log(1, NoonUtc(2026, 3, 2), 0, 4), Log(1, NoonUtc(2026, 3, 3), 0, 4), Log(1, NoonUtc(2026, 3, 4), 0, 4),
+        ];
+
+        Assert.Equal(4.3, WatchingDays(log, counted)!.EpisodesPerDay);
+    }
+
+    [Fact]
+    public void ALongestStreakInsideAMonth()
+    {
+        // 3 to 14 March (12 days); 2 and 15 March hold nothing; a shorter run of three follows later.
+        List<UserAnimeEntry> counted = [Entry(1)];
+        var log = OneEpisodeOn([.. Dates(new DateOnly(2026, 3, 3), 12), .. Dates(new DateOnly(2026, 3, 20), 3)]);
+
+        var streak = WatchingDays(log, counted)!.LongestStreak;
+
+        Assert.Equal((12, new DateOnly(2026, 3, 3), new DateOnly(2026, 3, 14)), (streak.Days, streak.Start, streak.End));
+    }
+
+    [Fact]
+    public void ALongestStreakAcrossMonths()
+    {
+        List<UserAnimeEntry> counted = [Entry(1)];
+
+        var streak = WatchingDays(OneEpisodeOn(Dates(new DateOnly(2026, 2, 26), 6)), counted)!.LongestStreak;
+
+        Assert.Equal((6, new DateOnly(2026, 2, 26), new DateOnly(2026, 3, 3)), (streak.Days, streak.Start, streak.End));
+    }
+
+    [Fact]
+    public void ALongestStreakAcrossAYearsEnd()
+    {
+        List<UserAnimeEntry> counted = [Entry(1)];
+
+        var streak = WatchingDays(OneEpisodeOn(Dates(new DateOnly(2025, 12, 30), 4)), counted)!.LongestStreak;
+
+        Assert.Equal((4, new DateOnly(2025, 12, 30), new DateOnly(2026, 1, 2)), (streak.Days, streak.Start, streak.End));
+    }
+
+    [Fact]
+    public void TheEarliestStreakWinsATie()
+    {
+        List<UserAnimeEntry> counted = [Entry(1)];
+        // Two runs of three days, listed later one first.
+        var log = OneEpisodeOn([.. Dates(new DateOnly(2026, 6, 10), 3), .. Dates(new DateOnly(2026, 4, 1), 3), new DateOnly(2026, 5, 1)]);
+
+        var streak = WatchingDays(log, counted)!.LongestStreak;
+
+        Assert.Equal((3, new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 3)), (streak.Days, streak.Start, streak.End));
+    }
+
+    [Fact]
+    public void ASingleWatchingDayIsAStreakOfOne()
+    {
+        List<UserAnimeEntry> counted = [Entry(1)];
+
+        var streak = WatchingDays(OneEpisodeOn(new DateOnly(2026, 8, 8)), counted)!.LongestStreak;
+
+        Assert.Equal((1, new DateOnly(2026, 8, 8), new DateOnly(2026, 8, 8)), (streak.Days, streak.Start, streak.End));
+    }
+
+    [Fact]
+    public void TheBusiestWeekdayAndItsShare()
+    {
+        // 19 and 26 September 2026 are Saturdays holding 6 and 5 episodes; 15 September is a Tuesday with 4.
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, NoonUtc(2026, 9, 19), 0, 6), Log(1, NoonUtc(2026, 9, 26), 0, 5), Log(1, NoonUtc(2026, 9, 15), 0, 4)];
+
+        var weekday = WatchingDays(log, counted)!.BusiestWeekday;
+
+        Assert.Equal((6, 11, 73), (weekday.IsoWeekday, weekday.Episodes, weekday.SharePercent)); // Saturday, 11 of 15
+    }
+
+    [Fact]
+    public void ASundayIsWeekdaySeven()
+    {
+        List<UserAnimeEntry> counted = [Entry(1)];
+
+        var weekday = WatchingDays([Log(1, NoonUtc(2026, 9, 20), 0, 3)], counted)!.BusiestWeekday;
+
+        Assert.Equal((7, 100), (weekday.IsoWeekday, weekday.SharePercent));
+    }
+
+    [Fact]
+    public void ATiedWeekdayGoesToTheOneEarlierInAMondayFirstWeek()
+    {
+        // Wednesday (16 Sep), Monday (14 Sep) and Sunday (20 Sep) each hold 4: Monday is the busiest.
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, NoonUtc(2026, 9, 20), 0, 4), Log(1, NoonUtc(2026, 9, 16), 0, 4), Log(1, NoonUtc(2026, 9, 14), 0, 4)];
+
+        var weekday = WatchingDays(log, counted)!.BusiestWeekday;
+
+        Assert.Equal((1, 4, 33), (weekday.IsoWeekday, weekday.Episodes, weekday.SharePercent));
+    }
+
+    [Fact]
+    public void AHalfwayShareRoundsAwayFromZero()
+    {
+        // Monday 5 of 8 episodes is 62.5%: 63 away from zero, 62 by banker's rounding.
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, NoonUtc(2026, 9, 14), 0, 5), Log(1, NoonUtc(2026, 9, 15), 0, 3)];
+
+        Assert.Equal(63, WatchingDays(log, counted)!.BusiestWeekday.SharePercent);
+    }
+
+    [Fact]
+    public void TheBiggestBingeIsTheMostEpisodesOfOneAnimeOnOneDay()
+    {
+        List<UserAnimeEntry> counted = [Entry(1, title: "Frieren"), Entry(2)];
+        List<ActivityLog> log = [Log(1, NoonUtc(2026, 3, 2), 0, 14), Log(2, NoonUtc(2026, 3, 2), 0, 9), Log(2, NoonUtc(2026, 3, 9), 0, 13)];
+
+        var binge = WatchingDays(log, counted)!.BiggestBinge;
+
+        Assert.Equal((1, 14, new DateOnly(2026, 3, 2)), (binge.AnimeId, binge.Episodes, binge.Date));
+    }
+
+    [Fact]
+    public void ABingeIsOneAnimeOnOneDayNotTheDaysTotal()
+    {
+        // Two anime of 8 each on 2 March make a day of 16, but anime 3 has 10 of its own on 9 March.
+        List<UserAnimeEntry> counted = [Entry(1), Entry(2), Entry(3)];
+        List<ActivityLog> log = [Log(1, NoonUtc(2026, 3, 2), 0, 8), Log(2, NoonUtc(2026, 3, 2), 0, 8), Log(3, NoonUtc(2026, 3, 9), 0, 10)];
+
+        var binge = WatchingDays(log, counted)!.BiggestBinge;
+
+        Assert.Equal((3, 10), (binge.AnimeId, binge.Episodes));
+    }
+
+    [Fact]
+    public void AnEqualBingeGoesToTheEarlierDayThenMyRankingThenTheTitle()
+    {
+        List<UserAnimeEntry> counted = [Entry(1, score: 8, title: "A"), Entry(2, score: 8, title: "B"), Entry(3, title: "Zeta"), Entry(4, title: "Alpha")];
+
+        // Earlier day first, whatever the order of the rows.
+        var byDay = WatchingDays([Log(2, NoonUtc(2026, 3, 9), 0, 10), Log(1, NoonUtc(2026, 3, 2), 0, 10)], counted)!.BiggestBinge;
+        Assert.Equal((1, new DateOnly(2026, 3, 2)), (byDay.AnimeId, byDay.Date));
+
+        // One day: my ranking puts anime 2 above anime 1.
+        var snapshot = RankedInOrder(counted, 2, 1);
+        var byRank = WatchingDays([Log(1, NoonUtc(2026, 3, 2), 0, 10), Log(2, NoonUtc(2026, 3, 2), 0, 10)], counted, snapshot)!.BiggestBinge;
+        Assert.Equal(2, byRank.AnimeId);
+
+        // Two unranked anime: the title decides.
+        var byTitle = WatchingDays([Log(3, NoonUtc(2026, 3, 2), 0, 10), Log(4, NoonUtc(2026, 3, 2), 0, 10)], counted)!.BiggestBinge;
+        Assert.Equal(4, byTitle.AnimeId);
+    }
+
+    [Fact]
+    public void WatchingDaysFollowTheLocalTimeConverter()
+    {
+        // 23:30 UTC on 14 September is 02:30 on the 15th in Helsinki: it lands on the 15th.
+        List<UserAnimeEntry> counted = [Entry(1)];
+        List<ActivityLog> log = [Log(1, new DateTimeOffset(2026, 9, 14, 23, 30, 0, TimeSpan.Zero), 0, 3)];
+
+        var day = Assert.Single(WatchingDays(log, counted)!.Days);
+
+        Assert.Equal(new DateOnly(2026, 9, 15), day.Date);
+    }
+
+    // --- Split values ------------------------------------------------------------------------------
+
+    private static List<UserAnimeEntry> ElevenKindsOfSource(int alsoMalOther = 0)
+    {
+        List<UserAnimeEntry> counted = [];
+        var id = 1;
+        string[] kinds = ["manga", "original", "light_novel", "game", "visual_novel", "novel", "web_manga", "4_koma_manga", "book", "card_game", "music"];
+        int[] sizes = [11, 10, 9, 8, 1, 1, 1, 1, 1, 1, 1];
+        for (var k = 0; k < kinds.Length; k++)
+            for (var n = 0; n < sizes[k]; n++)
+                counted.Add(Entry(id++, source: kinds[k]));
+        for (var n = 0; n < alsoMalOther; n++)
+            counted.Add(Entry(id++, source: "other"));
+        return counted;
+    }
+
+    [Fact]
+    public void ANamedCategoryCoversItsOwnKey()
+    {
+        var split = TasteStatsBuilder.Sources(ElevenKindsOfSource());
+
+        foreach (var category in split.Where(s => s.Label != "other"))
+            Assert.Equal([category.Label], category.Values);
+    }
+
+    [Fact]
+    public void OtherCoversExactlyTheKeysItMerged()
+    {
+        var counted = ElevenKindsOfSource();
+
+        var other = TasteStatsBuilder.Sources(counted).Single(s => s.Label == "other");
+
+        string[] merged = ["visual_novel", "novel", "web_manga", "4_koma_manga", "book", "card_game", "music"];
+        Assert.Equal(merged.Order(), other.Values.Order());
+        Assert.Equal(other.Count, counted.Count(e => merged.Contains(e.Anime.Source!)));
+    }
+
+    [Fact]
+    public void OtherAlsoCoversMyAnimeListsOwnOtherSourceWhenItWasCounted()
+    {
+        var counted = ElevenKindsOfSource(alsoMalOther: 3);
+
+        var other = TasteStatsBuilder.Sources(counted).Single(s => s.Label == "other");
+
+        string[] merged = ["visual_novel", "novel", "web_manga", "4_koma_manga", "book", "card_game", "music", "other"];
+        Assert.Equal(merged.Order(), other.Values.Order());
+        Assert.Equal(10, other.Count);
+        Assert.Equal(other.Count, counted.Count(e => merged.Contains(e.Anime.Source!)));
+    }
+
+    [Fact]
+    public void OtherHoldsOnlyMyAnimeListsOtherWhenNothingElseWasMerged()
+    {
+        List<UserAnimeEntry> counted = [Entry(1, source: "manga"), Entry(2, source: "other"), Entry(3, source: "other")];
+
+        var split = TasteStatsBuilder.Sources(counted);
+
+        Assert.Equal(["other"], split.Single(s => s.Label == "other").Values);
+        Assert.Equal(2, split.Single(s => s.Label == "other").Count);
+        Assert.Equal(["manga"], split.Single(s => s.Label == "manga").Values);
+    }
+
+    [Fact]
+    public void ASourceSplitWithNothingMergedHasNoOther()
+    {
+        List<UserAnimeEntry> counted = [Entry(1, source: "manga"), Entry(2, source: "original")];
+
+        var split = TasteStatsBuilder.Sources(counted);
+
+        Assert.DoesNotContain(split, s => s.Label == "other");
+    }
+
+    [Fact]
+    public void TheDemographicOtherCoversOneDemographic()
+    {
+        // All five demographics; Josei is the smallest, so it is the one merged.
+        List<UserAnimeEntry> counted = [];
+        var id = 1;
+        foreach (var (name, count) in new[] { ("Shounen", 7), ("Seinen", 6), ("Shoujo", 5), ("Kids", 4), ("Josei", 2) })
+            for (var n = 0; n < count; n++)
+                counted.Add(Entry(id++, genres: [name]));
+        counted.Add(Entry(id, genres: ["Josei", "Shounen"])); // carries two: counts toward both
+
+        var split = TasteStatsBuilder.Demographics(counted);
+
+        var other = split.Single(s => s.Label == "other");
+        Assert.Equal(["Josei"], other.Values);
+        Assert.Equal(3, other.Count);
+        Assert.Equal(other.Count, counted.Count(e => e.Anime.Genres!.Contains("Josei")));
+        Assert.Equal(["Shounen"], split.Single(s => s.Label == "Shounen").Values);
+    }
+
+    [Fact]
+    public void EraValuesAreTheirLabelsAndOtherMergesTheOlderDecades()
+    {
+        // Six decades: 2020s 6, 2010s 5, 2000s 4, 1990s 3 are named; 1980s and 1970s merge.
+        List<UserAnimeEntry> counted = [];
+        var id = 1;
+        foreach (var (decade, count) in new[] { (2020, 6), (2010, 5), (2000, 4), (1990, 3), (1980, 2), (1970, 1) })
+            for (var n = 0; n < count; n++)
+                counted.Add(Entry(id++, airedFrom: new DateOnly(decade + 3, 6, 1)));
+
+        var split = TasteStatsBuilder.Eras(counted);
+
+        foreach (var category in split.Where(s => s.Label != "other"))
+            Assert.Equal([category.Label], category.Values);
+        Assert.Equal(["2020s", "2010s", "2000s", "1990s"], split.Where(s => s.Label != "other").Select(s => s.Values.Single()));
+        var other = split.Single(s => s.Label == "other");
+        Assert.Equal(["1970s", "1980s"], other.Values.Order());
+        Assert.Equal(3, other.Count);
     }
 }

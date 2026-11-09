@@ -132,17 +132,58 @@ public record RecapRowDto(
 /// then in my ranking's order.</summary>
 public record RecapBiggestDayDto(DateOnly Date, int Episodes, List<RecapRankingPosterDto> Posters);
 
+/// <summary>One run of consecutive episodes of an anime watched on one day: an
+/// increase from <c>p</c> to <c>n</c> covers <c>p + 1</c> through <c>n</c>.</summary>
+public record RecapEpisodeRunDto(int From, int To);
+
+/// <summary>One anime of a watching day, with the episodes it gained that day and
+/// the runs they fall in, in the order the runs began. <c>Finished</c> is true when
+/// one run ends on the anime's stored total episode count. The title and picture
+/// are not repeated here: every anime of a day belongs to the recap's counted set,
+/// so the client looks it up in <see cref="RecapDto.Items"/> by id.</summary>
+public record RecapDayAnimeDto(int AnimeId, int Episodes, List<RecapEpisodeRunDto> Runs, bool Finished);
+
+/// <summary>One watching day: a local day on which the log records a positive
+/// episode increase for an anime of the counted set. <c>Anime</c> is in the day's
+/// order: episodes that day, most first, then my ranking's order, then title.</summary>
+public record RecapWatchingDayDto(DateOnly Date, int Episodes, List<RecapDayAnimeDto> Anime);
+
+/// <summary>The longest run of consecutive watching days.</summary>
+public record RecapStreakDto(int Days, DateOnly Start, DateOnly End);
+
+/// <summary>The weekday holding the most episodes, <c>IsoWeekday</c> 1 (Monday)
+/// to 7 (Sunday), and its share of the period's episodes as a whole percentage.</summary>
+public record RecapWeekdayDto(int IsoWeekday, int Episodes, int SharePercent);
+
+/// <summary>The most episodes of one anime on one day.</summary>
+public record RecapBingeDto(int AnimeId, int Episodes, DateOnly Date);
+
+/// <summary>A period's watching days and the figures read from them (taste-stats
+/// "A period's watching days"). <c>Days</c> holds every watching day in date order;
+/// <c>TopDays</c> the dates of up to ten, biggest first, whose first is always the
+/// biggest day. <c>EpisodesPerDay</c> is rounded to one decimal.</summary>
+public record RecapWatchingDaysDto(
+    List<RecapWatchingDayDto> Days,
+    List<DateOnly> TopDays,
+    int DaysWatched,
+    double EpisodesPerDay,
+    RecapStreakDto LongestStreak,
+    RecapWeekdayDto BusiestWeekday,
+    RecapBingeDto BiggestBinge);
+
 /// <summary>The recap's highlights row (taste-stats design.md D9), computed over the
 /// recap's included set. <c>Genres</c> holds every genre of it in most-watched
 /// order and <c>Studios</c> every studio with a scored anime in highest-rated
 /// order; the client reads the first of each for the two cards and the whole list
-/// for the overlays they open. <c>HiddenGem</c> and <c>BiggestDay</c> are null
-/// when the period has none.</summary>
+/// for the overlays they open. <c>HiddenGem</c>, <c>BiggestDay</c> and
+/// <c>WatchingDays</c> are null when the period has none; the biggest day is the
+/// first of the watching days' top days.</summary>
 public record RecapHighlightsDto(
     List<TasteGenreDto> Genres,
     List<TasteStudioDto> Studios,
     TasteGemDto? HiddenGem,
-    RecapBiggestDayDto? BiggestDay);
+    RecapBiggestDayDto? BiggestDay,
+    RecapWatchingDaysDto? WatchingDays = null);
 
 /// <summary>Full recap payload for one period + time filter (design.md
 /// decision 1). <c>Filter</c> echoes what was actually used — always

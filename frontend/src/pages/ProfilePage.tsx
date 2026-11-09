@@ -218,11 +218,14 @@ function orderedByTasteBasis<T extends TasteGenreDto>(rows: T[], basis: TasteBas
   return rows.filter((row) => row.scoreRank !== null).sort((a, b) => a.scoreRank! - b.scoreRank!)
 }
 
-// A genre's or a studio's link into my list: that one ticked in its filter and
-// every status but Plan to watch selected, so my list holds exactly the anime its
-// count covers.
-function watchedLink(filter: 'genre' | 'studio', name: string): string {
-  return `/my-list?${new URLSearchParams({ focus: 'watched', [filter]: name }).toString()}`
+// A genre's, studio's, demographic's, source's or era's link into my list: its values
+// ticked in the matching filter and every status but Plan to watch selected, so my
+// list holds exactly the anime its count covers. A demographic ticks the genre
+// filter, which holds demographics as well as genres.
+function watchedLink(filter: 'genre' | 'studio' | 'source' | 'era', values: string[]): string {
+  const params = new URLSearchParams({ focus: 'watched' })
+  for (const value of values) params.append(filter, value)
+  return `/my-list?${params.toString()}`
 }
 
 function TasteBasisTabs({
@@ -1068,7 +1071,7 @@ export function ProfilePage() {
                 title="Top genres"
                 noun="genres"
                 rows={orderedByTasteBasis(taste.genres, genresBasis).map((genre) =>
-                  describeGenreRanking(genre, genresBasis, watchedLink('genre', genre.name)),
+                  describeGenreRanking(genre, genresBasis, watchedLink('genre', [genre.name])),
                 )}
                 onSeeAll={setRankingOverlay}
                 family="genre"
@@ -1086,7 +1089,7 @@ export function ProfilePage() {
                 title="Top studios"
                 noun="studios"
                 rows={orderedByTasteBasis(taste.studios, studiosBasis).map((studio) =>
-                  describeStudioRanking(studio, studiosBasis, watchedLink('studio', studio.name)),
+                  describeStudioRanking(studio, studiosBasis, watchedLink('studio', [studio.name])),
                 )}
                 onSeeAll={setRankingOverlay}
                 family="studio"
@@ -1105,9 +1108,18 @@ export function ProfilePage() {
 
       {taste && splitCount > 0 && (
         <div className="profile-page__splits-row" style={{ '--splits': splitCount } as CSSProperties}>
-          <TasteSplit title="Demographic" categories={taste.demographics} />
-          <TasteSplit title="Source" categories={taste.sources} labelOf={sourceLabel} />
-          <TasteSplit title="Era" categories={taste.eras} />
+          <TasteSplit
+            title="Demographic"
+            categories={taste.demographics}
+            linkOf={(category) => watchedLink('genre', category.values)}
+          />
+          <TasteSplit
+            title="Source"
+            categories={taste.sources}
+            labelOf={sourceLabel}
+            linkOf={(category) => watchedLink('source', category.values)}
+          />
+          <TasteSplit title="Era" categories={taste.eras} linkOf={(category) => watchedLink('era', category.values)} />
         </div>
       )}
 

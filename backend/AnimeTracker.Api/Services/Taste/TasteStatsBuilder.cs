@@ -1,4 +1,5 @@
 using AnimeTracker.Api.Models;
+using AnimeTracker.Api.Services.Profile;
 using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Recap;
 using AnimeTracker.Api.Services.Scheduling;
@@ -369,62 +370,239 @@ public static class TasteStatsBuilder
 
         var split = categories
             .Take(SplitNamedCategories)
-            .Select(c => new TasteSplitDto(c.Label, c.Count))
+            .Select(c => new TasteSplitDto(c.Label, c.Count, [c.Label]))
             .ToList();
 
-        var merged = categories.Skip(SplitNamedCategories).Sum(c => c.Count) + alsoOther;
+        // Other covers every value it merged, and MyAnimeList's own other source when
+        // the caller counted one, so following it reaches exactly what it counted.
+        var mergedCategories = categories.Skip(SplitNamedCategories).ToList();
+        var merged = mergedCategories.Sum(c => c.Count) + alsoOther;
         if (merged > 0)
-            split.Add(new TasteSplitDto(OtherLabel, merged));
+        {
+            var values = mergedCategories.Select(c => c.Label).ToList();
+            if (alsoOther > 0)
+                values.Add(MalOtherSource);
+            split.Add(new TasteSplitDto(OtherLabel, merged, values));
+        }
 
         return split;
     }
 
-    // --- The biggest day --------------------------------------------------------------
+    // --- Watching days and the biggest day -----------------------------------------------
 
-    /// <summary>The local calendar day on which the activity log records the most
-    /// episodes watched across anime of the counted set, or null when the log records
-    /// none for them. A day's figure is the sum of its positive episode increases,
-    /// read by the very rule the recap's per-period episode count reads
-    /// (<see cref="RecapWatchLog.PositiveIncreases"/>), so a decrease contributes
-    /// nothing and the two can never disagree. Days follow the app's local time zone;
-    /// the earlier of two equal days is the biggest. The posters are up to three of
-    /// that day's anime, most episodes that day first, then in my ranking's order.</summary>
-    public static RecapBiggestDayDto? BiggestDay(
+    /// <summary>A period's most days listed as top days.</summary>
+    public const int TopDayCount = 10;
+
+    /// <summary>A period's watching days and the figures read from them (taste-stats
+    /// "A period's watching days" and "Watching-day figures"), or null when no anime of
+    /// the counted set made net progress. One pass over the period's rows builds a day
+    /// to anime map, so the biggest day, the top days and every figure are read from one
+    /// source and can never disagree.
+    /// <para>Progress is <b>net gain per viewing</b>, not the sum of the raises: the log
+    /// records a lowering too, and a lowering followed by a raise is nearly always a
+    /// correction. Days follow the app's local time zone. Per anime, consecutive rows
+    /// with one timestamp are one edit (<c>EntryActivityRecorder</c> stamps an edit's
+    /// rows with one instant). An edit that moves the entry to Rewatching or removes it
+    /// starts a new viewing, and its own episode rows (a reset saved with it) are not
+    /// progress. Per (anime, viewing, day), the gain is the count after the last
+    /// episode row minus the count the first one started from, when positive, and is
+    /// one run. The rows must be in log order, which the repository gives (time, then
+    /// id).</para></summary>
+    public static RecapWatchingDaysDto? WatchingDays(
         IEnumerable<ActivityLog> logRows, IReadOnlyCollection<UserAnimeEntry> counted,
         IBroadcastLocalTimeConverter localTimeConverter, AnimeRankingSnapshot rankingSnapshot)
     {
         var countedById = counted.ToDictionary(e => e.AnimeId);
-        var episodesByDay = new Dictionary<DateOnly, Dictionary<int, int>>();
 
-        foreach (var (row, increase) in RecapWatchLog.PositiveIncreases(logRows))
+        // (anime, day, viewing) -> the count the viewing started the day from, and ended it on.
+        var gains = new Dictionary<(int AnimeId, DateOnly Day, int Viewing), (int Start, int End)>();
+        foreach (var animeRows in logRows.Where(r => countedById.ContainsKey(r.AnimeId)).GroupBy(r => r.AnimeId))
         {
-            if (!countedById.ContainsKey(row.AnimeId))
-                continue;
+            var viewing = 0;
+            foreach (var edit in Edits(animeRows))
+            {
+                if (edit.Any(StartsViewing))
+                {
+                    viewing++;
+                    continue;
+                }
 
-            var day = localTimeConverter.GetLocalDate(row.Timestamp);
-            if (!episodesByDay.TryGetValue(day, out var perAnime))
-                episodesByDay[day] = perAnime = [];
-            perAnime[row.AnimeId] = perAnime.GetValueOrDefault(row.AnimeId) + increase;
+                foreach (var row in edit)
+                {
+                    if (row.ChangeType != ActivityChangeType.EpisodeIncremented
+                        || ProfileService.ParseNewEpisodesWatched(row) is not { } end
+                        || row.PreviousEpisodesWatched is not { } start)
+                        continue;
+
+                    var key = (animeRows.Key, localTimeConverter.GetLocalDate(row.Timestamp), viewing);
+                    gains[key] = gains.TryGetValue(key, out var gain) ? (gain.Start, end) : (start, end);
+                }
+            }
         }
 
-        if (episodesByDay.Count == 0)
+        var byDay = new Dictionary<DateOnly, Dictionary<int, List<(int From, int To)>>>();
+        foreach (var (key, gain) in gains.Where(g => g.Value.End > g.Value.Start).OrderBy(g => g.Key.Viewing))
+        {
+            if (!byDay.TryGetValue(key.Day, out var perAnime))
+                byDay[key.Day] = perAnime = [];
+            if (!perAnime.TryGetValue(key.AnimeId, out var runs))
+                perAnime[key.AnimeId] = runs = [];
+            runs.Add((gain.Start + 1, gain.End));
+        }
+
+        if (byDay.Count == 0)
             return null;
 
-        var (date, episodesByAnime) = episodesByDay
-            .OrderByDescending(day => day.Value.Values.Sum())
-            .ThenBy(day => day.Key)
-            .First();
-
-        var posters = episodesByAnime
-            .Select(pair => (Entry: countedById[pair.Key], Episodes: pair.Value))
-            .OrderByDescending(x => x.Episodes)
-            .ThenBy(x => GroupRanking.RankKey(rankingSnapshot, x.Entry.AnimeId))
-            .ThenBy(x => x.Entry.Anime.Title, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(x => x.Entry.AnimeId)
-            .Take(GroupRanking.PosterCount)
-            .Select(x => GroupRanking.ToPoster(x.Entry))
+        var days = byDay
+            .OrderBy(day => day.Key)
+            .Select(day => new RecapWatchingDayDto(
+                day.Key,
+                day.Value.Sum(a => a.Value.Sum(r => r.To - r.From + 1)),
+                day.Value
+                    .Select(a => (Entry: countedById[a.Key], Runs: a.Value, Episodes: a.Value.Sum(r => r.To - r.From + 1)))
+                    .OrderByDescending(x => x.Episodes)
+                    .ThenBy(x => GroupRanking.RankKey(rankingSnapshot, x.Entry.AnimeId))
+                    .ThenBy(x => x.Entry.Anime.Title, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.Entry.AnimeId)
+                    .Select(x => new RecapDayAnimeDto(
+                        x.Entry.AnimeId, x.Episodes,
+                        x.Runs.Select(r => new RecapEpisodeRunDto(r.From, r.To)).ToList(),
+                        // No stored total, no finish.
+                        x.Entry.Anime.TotalEpisodes is > 0 and var total && x.Runs.Any(r => r.To == total)))
+                    .ToList()))
             .ToList();
 
-        return new RecapBiggestDayDto(date, episodesByAnime.Values.Sum(), posters);
+        var topDays = days
+            .OrderByDescending(day => day.Episodes)
+            .ThenBy(day => day.Date)
+            .Take(TopDayCount)
+            .Select(day => day.Date)
+            .ToList();
+
+        var totalEpisodes = days.Sum(day => day.Episodes);
+
+        return new RecapWatchingDaysDto(
+            days, topDays, days.Count,
+            Math.Round((double)totalEpisodes / days.Count, 1, MidpointRounding.AwayFromZero),
+            LongestStreak(days), BusiestWeekday(days, totalEpisodes), BiggestBinge(days, countedById, rankingSnapshot));
+    }
+
+    // The rows of one edit share one timestamp, so an edit is a run of consecutive rows
+    // with equal timestamps.
+    private static IEnumerable<List<ActivityLog>> Edits(IEnumerable<ActivityLog> rows)
+    {
+        List<ActivityLog>? edit = null;
+        foreach (var row in rows)
+        {
+            if (edit is not null && edit[0].Timestamp == row.Timestamp)
+            {
+                edit.Add(row);
+                continue;
+            }
+
+            if (edit is not null)
+                yield return edit;
+            edit = [row];
+        }
+
+        if (edit is not null)
+            yield return edit;
+    }
+
+    // Moving to Rewatching, or leaving the list, begins a new viewing. Moving Completed
+    // back to Watching does not: that is how a completion is undone.
+    private static bool StartsViewing(ActivityLog row) =>
+        row.ChangeType == ActivityChangeType.Removed
+        || (row.ChangeType == ActivityChangeType.StatusChanged
+            && row.ChangeDetail?.EndsWith("-> Rewatching", StringComparison.Ordinal) == true);
+
+    // Walk the dates in order, extending a run while the next day follows the last.
+    // A run replaces the best only when strictly longer, so the earliest wins a tie.
+    private static RecapStreakDto LongestStreak(List<RecapWatchingDayDto> days)
+    {
+        var best = new RecapStreakDto(1, days[0].Date, days[0].Date);
+        var runStart = days[0].Date;
+        var runLength = 1;
+
+        for (var i = 1; i < days.Count; i++)
+        {
+            if (days[i].Date == days[i - 1].Date.AddDays(1))
+                runLength++;
+            else
+            {
+                runStart = days[i].Date;
+                runLength = 1;
+            }
+
+            if (runLength > best.Days)
+                best = new RecapStreakDto(runLength, runStart, days[i].Date);
+        }
+
+        return best;
+    }
+
+    // Monday = 1 ... Sunday = 7. The highest total wins and the earlier weekday of a
+    // week starting on Monday takes a tie; the share is a whole percentage, away from zero.
+    private static RecapWeekdayDto BusiestWeekday(List<RecapWatchingDayDto> days, int totalEpisodes)
+    {
+        var (weekday, episodes) = days
+            .GroupBy(day => IsoWeekday(day.Date))
+            .Select(g => (Weekday: g.Key, Episodes: g.Sum(day => day.Episodes)))
+            .OrderByDescending(x => x.Episodes)
+            .ThenBy(x => x.Weekday)
+            .First();
+
+        var share = (int)Math.Round(100.0 * episodes / totalEpisodes, MidpointRounding.AwayFromZero);
+        return new RecapWeekdayDto(weekday, episodes, share);
+    }
+
+    private static int IsoWeekday(DateOnly date) => date.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)date.DayOfWeek;
+
+    // The most episodes of one anime on one day; then the earlier day, my ranking's
+    // order, the title.
+    private static RecapBingeDto BiggestBinge(
+        List<RecapWatchingDayDto> days, Dictionary<int, UserAnimeEntry> countedById, AnimeRankingSnapshot rankingSnapshot)
+    {
+        var best = days
+            .SelectMany(day => day.Anime.Select(a => (Day: day.Date, Anime: a)))
+            .OrderByDescending(x => x.Anime.Episodes)
+            .ThenBy(x => x.Day)
+            .ThenBy(x => GroupRanking.RankKey(rankingSnapshot, x.Anime.AnimeId))
+            .ThenBy(x => countedById[x.Anime.AnimeId].Anime.Title, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.Anime.AnimeId)
+            .First();
+
+        return new RecapBingeDto(best.Anime.AnimeId, best.Anime.Episodes, best.Day);
+    }
+
+    /// <summary>The local calendar day on which the activity log records the most
+    /// episodes watched across anime of the counted set, or null when the log records
+    /// none for them. It is the first of the <see cref="WatchingDays"/>' top days, so
+    /// the card and the overlay it opens share one source. The earlier of two equal
+    /// days is the biggest. The posters are up to three of that day's anime, most
+    /// episodes that day first, then in my ranking's order.</summary>
+    public static RecapBiggestDayDto? BiggestDay(
+        IEnumerable<ActivityLog> logRows, IReadOnlyCollection<UserAnimeEntry> counted,
+        IBroadcastLocalTimeConverter localTimeConverter, AnimeRankingSnapshot rankingSnapshot) =>
+        BiggestDay(WatchingDays(logRows, counted, localTimeConverter, rankingSnapshot), counted);
+
+    /// <summary>The biggest day of watching days already built, so a caller holding
+    /// them builds them once.</summary>
+    public static RecapBiggestDayDto? BiggestDay(
+        RecapWatchingDaysDto? watchingDays, IReadOnlyCollection<UserAnimeEntry> counted)
+    {
+        if (watchingDays is null)
+            return null;
+
+        var countedById = counted.ToDictionary(e => e.AnimeId);
+        var day = watchingDays.Days.Single(d => d.Date == watchingDays.TopDays[0]);
+
+        // The day's anime are already in the poster order.
+        var posters = day.Anime
+            .Take(GroupRanking.PosterCount)
+            .Select(a => GroupRanking.ToPoster(countedById[a.AnimeId]))
+            .ToList();
+
+        return new RecapBiggestDayDto(day.Date, day.Episodes, posters);
     }
 }

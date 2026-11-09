@@ -38,9 +38,18 @@ public class ActivityLogRepository(AnimeTrackerDbContext db) : IActivityLogRepos
 
     public Task<List<ActivityLog>> GetEpisodeProgressInRangeAsync(DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
         db.ActivityLogs.AsNoTracking()
-            .Where(l => l.ChangeType == ActivityChangeType.EpisodeIncremented
-                && l.Timestamp >= fromUtc && l.Timestamp < toUtc)
+            .Where(l => l.Timestamp >= fromUtc && l.Timestamp < toUtc
+                && (l.ChangeType == ActivityChangeType.EpisodeIncremented
+                    // The rows that start a new viewing: moving to Rewatching, and
+                    // leaving the list (taste-stats "A period's watching days").
+                    || l.ChangeType == ActivityChangeType.Removed
+                    || (l.ChangeType == ActivityChangeType.StatusChanged
+                        && l.ChangeDetail != null && l.ChangeDetail.EndsWith("-> Rewatching"))))
             .OrderBy(l => l.Timestamp)
+            // Two rows can share one timestamp, and the watching days merge an anime's
+            // increases into runs in this order (taste-stats "A period's watching days"),
+            // so the order is made total, as GetAllOldestFirstAsync's is.
+            .ThenBy(l => l.Id)
             .ToListAsync(ct);
 
     public Task<List<ActivityLog>> GetAllOldestFirstAsync(CancellationToken ct = default) =>

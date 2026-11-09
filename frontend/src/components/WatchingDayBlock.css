@@ -1,0 +1,140 @@
+/* One watching day (list-recaps "The watching days overlay"). The rows take the
+   ranking overlay's link row treatment: a bordered row that tints in the accent on
+   hover and on keyboard focus. */
+.watching-day {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.watching-day__heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.watching-day__place {
+  min-width: 1.4em;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.watching-day__total {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.watching-day__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.watching-day__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--text-h);
+  transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.watching-day__row:hover,
+.watching-day__row:focus-visible {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow);
+}
+
+.watching-day__row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.watching-day__picture {
+  /* Geometry other than the radius lives in the shared .row-picture rule; the size
+     is the recap's ranking rows' own (RankingSection.css). */
+  --row-picture-w: 30px;
+  --row-picture-h: 44px;
+  border-radius: 4px;
+}
+
+.watching-day__picture-placeholder {
+  border: 1px solid var(--border);
+}
+
+/* The title, the runs and the tail share a line where they fit and wrap under the
+   title where they do not, so a phone-width row stays fully readable. */
+.watching-day__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+}
+
+.watching-day__title {
+  flex: 1 1 140px;
+  min-width: 0;
+  font-weight: 500;
+}
+
+/* The truncating span must be a block for its ellipsis to apply. */
+.watching-day__title-text {
+  display: block;
+}
+
+.watching-day__runs {
+  flex: 0 1 auto;
+  font-size: 14px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.watching-day__tail {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 84px;
+  margin-inline-start: auto;
+}
+
+.watching-day__count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The slot is always there, so a count stays where it is whether or not the mark
+   shows; the mark's own pill is drawn only when it holds text. */
+.watching-day__finished {
+  box-sizing: border-box;
+  display: inline-flex;
+  justify-content: center;
+  min-width: 64px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.watching-day__finished:not(:empty) {
+  border: 1px solid var(--status-completed-border);
+  border-radius: 999px;
+  background: var(--status-completed-bg);
+  color: var(--status-completed);
+}

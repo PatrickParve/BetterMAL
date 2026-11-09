@@ -46,6 +46,52 @@ public class ActivityLogRepositoryTests
     }
 
     [Fact]
+    public async Task GetEpisodeProgressInRangeAlsoReturnsTheRowsThatStartAViewing()
+    {
+        // The watching days read net gain per viewing: a move to Rewatching and a removal begin a new one.
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1" });
+        var at = new DateTimeOffset(2026, 1, 5, 12, 0, 0, TimeSpan.Zero);
+        ActivityLog Row(int id, ActivityChangeType type, string detail, int minutes) =>
+            new() { Id = id, AnimeId = 1, Timestamp = at.AddMinutes(minutes), ChangeType = type, ChangeDetail = detail };
+        db.ActivityLogs.AddRange(
+            Row(1, ActivityChangeType.EpisodeIncremented, "Episode 3", 0),
+            Row(2, ActivityChangeType.StatusChanged, "Completed -> Rewatching", 1),
+            Row(3, ActivityChangeType.StatusChanged, "Completed -> Watching", 2), // not a new viewing
+            Row(4, ActivityChangeType.StatusChanged, "Watching -> Rewatching", 3),
+            Row(5, ActivityChangeType.Removed, "Removed from list", 4),
+            Row(6, ActivityChangeType.ScoreChanged, "Score 8", 5),
+            Row(7, ActivityChangeType.Completed, "Completed", 6),
+            Row(8, ActivityChangeType.Added, "Added as Watching", 7),
+            Row(9, ActivityChangeType.StatusChanged, "Completed -> Rewatching", 3 * 24 * 60)); // outside the range
+        await db.SaveChangesAsync();
+
+        var rows = await new ActivityLogRepository(db).GetEpisodeProgressInRangeAsync(at.AddDays(-1), at.AddDays(2));
+
+        Assert.Equal([1, 2, 4, 5], rows.Select(r => r.Id));
+    }
+
+    [Fact]
+    public async Task GetEpisodeProgressInRangeOrdersRowsSharingATimestampById()
+    {
+        // The watching days merge an anime's increases into runs in this order, so two rows with one
+        // timestamp must always come back the same way, whatever order they were stored in.
+        using var db = CreateDb();
+        db.AnimeMetadata.Add(new AnimeMetadata { Id = 1, Title = "Anime 1" });
+        var at = new DateTimeOffset(2026, 1, 5, 12, 0, 0, TimeSpan.Zero);
+        db.ActivityLogs.AddRange(
+            new ActivityLog { Id = 3, AnimeId = 1, Timestamp = at, ChangeType = ActivityChangeType.EpisodeIncremented, ChangeDetail = "Episode 9" },
+            new ActivityLog { Id = 1, AnimeId = 1, Timestamp = at, ChangeType = ActivityChangeType.EpisodeIncremented, ChangeDetail = "Episode 3" },
+            new ActivityLog { Id = 2, AnimeId = 1, Timestamp = at, ChangeType = ActivityChangeType.EpisodeIncremented, ChangeDetail = "Episode 6" },
+            new ActivityLog { Id = 4, AnimeId = 1, Timestamp = at.AddMinutes(-1), ChangeType = ActivityChangeType.EpisodeIncremented, ChangeDetail = "Episode 1" });
+        await db.SaveChangesAsync();
+
+        var rows = await new ActivityLogRepository(db).GetEpisodeProgressInRangeAsync(at.AddDays(-1), at.AddDays(1));
+
+        Assert.Equal([4, 1, 2, 3], rows.Select(r => r.Id));
+    }
+
+    [Fact]
     public async Task GetRecentAndGetAllReturnEveryRow()
     {
         using var db = CreateDb();

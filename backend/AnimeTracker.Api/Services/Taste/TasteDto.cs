@@ -48,8 +48,12 @@ public record TasteGemDto(
 
 /// <summary>One category of a split. <c>Label</c> is a demographic's name, a
 /// source key as MyAnimeList stores it, a decade such as "2010s", or "other" for
-/// the categories merged after the fourth.</summary>
-public record TasteSplitDto(string Label, int Count);
+/// the categories merged after the fourth. <c>Values</c> are the raw keys it covers,
+/// in the form the matching my-list filter takes: a named category its own key, and
+/// "other" every key it merged (plus MyAnimeList's own "other" source when the
+/// Source split counted one), so following any category reaches exactly the anime it
+/// counted.</summary>
+public record TasteSplitDto(string Label, int Count, List<string> Values);
 
 /// <summary>The profile's taste read (<c>GET /api/profile/taste</c>): everything
 /// the Hidden gems, Top genres, Top studios, Favourite combos and the three split

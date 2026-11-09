@@ -5,9 +5,9 @@ import './HighlightCard.css'
 
 // Which colour a card's rail and its hover treatment are drawn in
 // (list-recaps "Recap highlights row"): the genre or studio family for the cards
-// that open those lists, the accent for the card that opens an anime, and the
-// neutral stat-tile rail for the one that leads nowhere.
-export type HighlightRail = 'genre' | 'studio' | 'accent' | 'neutral'
+// that open those lists, and the accent for the cards that open an anime or the
+// watching days. Every card leads somewhere, so none takes a neutral rail.
+export type HighlightRail = 'genre' | 'studio' | 'accent'
 
 type HighlightCardProps = {
   label: string
@@ -26,8 +26,8 @@ type HighlightCardProps = {
 
 // One card of the recap's highlights row (add-genre-and-studio-stats design.md
 // D11). It shares the stat tiles' box (padding, border, corner, background) and
-// their rail: a 3px marker inside the padding box, coloured when the card leads
-// somewhere and neutral when it does not. Hovering changes only colours and a
+// their rail: a 3px marker inside the padding box, in the card's family colour.
+// Hovering changes only colours and a
 // shadow, never the card's box or position, and the same treatment shows on
 // keyboard focus.
 export function HighlightCard({ label, value, line, posters, rail, to, onOpen }: HighlightCardProps) {

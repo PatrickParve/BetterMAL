@@ -9,28 +9,38 @@
 /* A segment is exactly its share of the bar's width (set inline); the hairline
    between neighbours is an inset shadow, so it takes no width of its own. */
 .taste-split__segment {
+  display: block;
   flex: 0 0 auto;
   height: 100%;
   box-shadow: inset -1px 0 0 var(--bg);
+  cursor: pointer;
+}
+
+/* The hovered or focused pair: an inset ring and a lift in brightness, with no
+   change of width, so the bar never shifts. The swatch shares the segment's tone
+   classes but is not a link, so the rule is scoped to the bar's segments. */
+a.taste-split__segment--hovered {
+  filter: brightness(1.12);
+  box-shadow: inset -1px 0 0 var(--bg), inset 0 0 0 2px color-mix(in srgb, var(--text-h) 55%, transparent);
 }
 
 /* Steps of one colour, strongest for the largest category (profile-stats
    "Demographic, source and era"): the accent, mixed toward the page's own
    background in each theme, and the neutral border colour for Other. */
 .taste-split__segment--0 {
-  background: var(--accent);
+  background: var(--accent-step-1);
 }
 
 .taste-split__segment--1 {
-  background: color-mix(in srgb, var(--accent) 72%, var(--bg));
+  background: var(--accent-step-2);
 }
 
 .taste-split__segment--2 {
-  background: color-mix(in srgb, var(--accent) 48%, var(--bg));
+  background: var(--accent-step-3);
 }
 
 .taste-split__segment--3 {
-  background: color-mix(in srgb, var(--accent) 30%, var(--bg));
+  background: var(--accent-step-4);
 }
 
 .taste-split__segment--other {
@@ -52,6 +62,24 @@
   gap: 8px;
   font-size: 14px;
   color: var(--text-h);
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+/* The standard hover treatment in the accent, drawn outside the entry's box
+   (a background and a ring of box-shadow), so a hovered entry never changes size
+   or moves its neighbours. A segment of the bar lights the same entry. */
+.taste-split__legend-entry:hover,
+.taste-split__legend-entry:focus-visible,
+.taste-split__legend-entry--hovered {
+  background: var(--accent-bg);
+  box-shadow: 0 0 0 2px var(--accent-bg), 0 0 0 3px var(--accent-border);
+}
+
+.taste-split__legend-entry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 
 .taste-split__swatch {

@@ -419,6 +419,11 @@ export type MyListItemDto = {
   // rule (never null, empty when none are stored), so the studio filter runs over
   // the loaded list.
   studios: string[]
+  // The anime's stored source material as MyAnimeList's key ("manga", "light_novel"),
+  // and its air-start date as an ISO day, both null when unknown, so the source and
+  // era filters run over the loaded list.
+  source: string | null
+  airedFrom: string | null
 }
 
 export type TopAnimeItemDto = {
@@ -1474,10 +1479,12 @@ export type TasteComboDto = {
 
 // One category of a split: a demographic's name, a source key as MyAnimeList
 // stores it, a decade like "2010s", or "other" for the categories merged after
-// the fourth.
+// the fourth. values are the raw keys it covers, in the form the matching my-list
+// filter takes: a named category its own key, "other" every key it merged.
 export type TasteSplitDto = {
   label: string
   count: number
+  values: string[]
 }
 
 // GET /api/profile/taste (add-genre-and-studio-stats design.md D9): everything
@@ -1495,6 +1502,62 @@ export type TasteSectionDto = {
   hiddenGems: TasteGemDto[]
 }
 
+// One run of consecutive episodes of an anime watched on one day: from..to.
+export type RecapEpisodeRunDto = {
+  from: number
+  to: number
+}
+
+// One anime of a watching day. Titles and pictures are not repeated here: every
+// anime belongs to the recap's counted set, so the client looks it up in
+// RecapDto.items by animeId.
+export type RecapDayAnimeDto = {
+  animeId: number
+  episodes: number
+  runs: RecapEpisodeRunDto[]
+  finished: boolean
+}
+
+// A local day with at least one positive episode increase. date is an ISO day;
+// anime is in the day's order.
+export type RecapWatchingDayDto = {
+  date: string
+  episodes: number
+  anime: RecapDayAnimeDto[]
+}
+
+export type RecapStreakDto = {
+  days: number
+  start: string
+  end: string
+}
+
+// isoWeekday is 1 (Monday) to 7 (Sunday).
+export type RecapWeekdayDto = {
+  isoWeekday: number
+  episodes: number
+  sharePercent: number
+}
+
+export type RecapBingeDto = {
+  animeId: number
+  episodes: number
+  date: string
+}
+
+// A period's watching days and the figures read from them (taste-stats "A period's
+// watching days"). days is every watching day in date order; topDays the dates of
+// up to ten, biggest first, whose first is the biggest day.
+export type RecapWatchingDaysDto = {
+  days: RecapWatchingDayDto[]
+  topDays: string[]
+  daysWatched: number
+  episodesPerDay: number
+  longestStreak: RecapStreakDto
+  busiestWeekday: RecapWeekdayDto
+  biggestBinge: RecapBingeDto
+}
+
 // The recap's biggest day: the local calendar day with the most episodes watched
 // across the period's anime. date is an ISO day ("2026-09-15").
 export type RecapBiggestDayDto = {
@@ -1506,13 +1569,14 @@ export type RecapBiggestDayDto = {
 // The recap's highlights row (list-recaps "Recap highlights row"). genres is
 // every genre of the period in most-watched order and studios every studio with
 // a scored anime in highest-rated order: the cards read the first of each, and
-// the lists they open read the lot. hiddenGem and biggestDay are null when the
-// period has none.
+// the lists they open read the lot. hiddenGem, biggestDay and watchingDays are null
+// when the period has none.
 export type RecapHighlightsDto = {
   genres: TasteGenreDto[]
   studios: TasteStudioDto[]
   hiddenGem: TasteGemDto | null
   biggestDay: RecapBiggestDayDto | null
+  watchingDays: RecapWatchingDaysDto | null
 }
 
 // filter echoes what the server actually used — always 'aired' for a season

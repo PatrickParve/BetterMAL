@@ -18,11 +18,12 @@ its own.
 - **Series**: each franchise in watch order on a timeline, with how far behind
   you are and your scores next to MyAnimeList's.
 - **My list**: grouped by status, with sorting and filters by score, type,
-  genre, studio and more.
-- **Recap and Profile**: recap any season, year or run of years; see your
-  stats, favourite genres and studios, favourite seasons, where your scores
-  differ most from MyAnimeList's, and rank your favourites, by dragging them or
-  by picking between two at a time.
+  genre, studio, source, era and more.
+- **Recap and Profile**: recap any season, year or run of years, and open its
+  watching days to see your busiest days, streaks and a calendar of what you
+  watched; see your stats, favourite genres and studios, favourite seasons,
+  where your scores differ most from MyAnimeList's, and rank your favourites,
+  by dragging them or by picking between two at a time.
 - **My rank**: see where an anime stands in your ranking on its page, and where
   a series stands among your series on its page.
 - **Updates**: news about the shows on your list, such as a sequel announced, a

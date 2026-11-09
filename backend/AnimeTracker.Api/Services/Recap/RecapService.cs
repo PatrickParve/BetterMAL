@@ -68,10 +68,10 @@ public class RecapService(
     // the recap's own counted set — the stat block's, so the top 10's media-type
     // narrowing, which only the client applies, never changes them — ranked on the
     // whole list's mean score and the whole-list ranking snapshot, like the rankings
-    // above. The biggest day reads the period's log rows already loaded, so it makes
-    // no query of its own. Genres go out in most-watched order and studios in
-    // highest-rated order, whole: the client reads the first of each for its card and
-    // the lot for the lists those cards open.
+    // above. The biggest day and the watching days read the period's log rows already
+    // loaded, so they make no query of their own and are built once. Genres go out in
+    // most-watched order and studios in highest-rated order, whole: the client reads
+    // the first of each for its card and the lot for the lists those cards open.
     private RecapHighlightsDto BuildHighlights(
         List<UserAnimeEntry> included, List<UserAnimeEntry> wholeList, AnimeRankingSnapshot rankingSnapshot,
         List<ActivityLog> logRows)
@@ -84,9 +84,10 @@ public class RecapService(
             .OrderBy(s => s.ScoreRank)
             .ToList();
         var hiddenGem = TasteStatsBuilder.HiddenGems(included, rankingSnapshot, limit: 1).FirstOrDefault();
-        var biggestDay = TasteStatsBuilder.BiggestDay(logRows, included, localTimeConverter, rankingSnapshot);
+        var watchingDays = TasteStatsBuilder.WatchingDays(logRows, included, localTimeConverter, rankingSnapshot);
+        var biggestDay = TasteStatsBuilder.BiggestDay(watchingDays, included);
 
-        return new RecapHighlightsDto(genres, studios, hiddenGem, biggestDay);
+        return new RecapHighlightsDto(genres, studios, hiddenGem, biggestDay, watchingDays);
     }
 
     // design.md decision "Bayesian ranking of seasons and years" + tasks.md

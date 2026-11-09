@@ -1,9 +1,11 @@
 import { useRef } from 'react'
 import {
   AIRING_FILTER_OPTIONS,
+  ERA_FILTER_OPTIONS,
   GENRE_FILTER_OPTIONS,
   MEDIA_TYPE_FILTER_OPTIONS,
   SCORE_FILTER_OPTIONS,
+  SOURCE_FILTER_OPTIONS,
   STUDIO_FILTER_MAX_CHARS,
   STUDIO_FILTER_OPTIONS,
   type SortDirection,
@@ -79,6 +81,10 @@ export type MyListFiltersProps = {
   onGenreFiltersChange: (value: string[]) => void
   studioFilters: string[]
   onStudioFiltersChange: (value: string[]) => void
+  sourceFilters: string[]
+  onSourceFiltersChange: (value: string[]) => void
+  eraFilters: string[]
+  onEraFiltersChange: (value: string[]) => void
   scoreFilters: string[]
   onScoreFiltersChange: (value: string[]) => void
 }
@@ -103,6 +109,11 @@ type MyListControlsProps = {
   // `disabled` (utils/boardFilter.ts).
   genreOptions: FilterMultiSelectOption[]
   studioOptions: FilterMultiSelectOption[]
+  // The source materials and decades present among the entries the other controls
+  // leave listed (MyListPage's one-pass option memo): sources alphabetical by their
+  // label and eras newest first, each with Unknown last, like the Type filter's.
+  sourceOptions: FilterMultiSelectOption[]
+  eraOptions: FilterMultiSelectOption[]
   // The score choices that would change the list (MyListPage's one-pass option
   // memo), in presentation order — not "the score values at least one entry
   // has", since Rated/Unrated and a value are each dropped when choosing
@@ -130,6 +141,8 @@ export function MyListControls({
   airingOptions,
   genreOptions,
   studioOptions,
+  sourceOptions,
+  eraOptions,
   scoreOptions,
 }: MyListControlsProps) {
   const findInputRef = useRef<HTMLInputElement>(null)
@@ -207,6 +220,24 @@ export function MyListControls({
           layout="board"
           singleOptionIsChoice
           maxLabelChars={STUDIO_FILTER_MAX_CHARS}
+        />
+        {/* Source and Era are Type-shaped: an anime has one source and one decade, so
+            ticked choices are alternatives, and the control is unavailable when the
+            listed entries share one. Their triggers are sized from every key
+            MyAnimeList uses and every decade, not from what is on offer. */}
+        <FilterMultiSelect
+          label="Source"
+          options={sourceOptions}
+          widthOptions={SOURCE_FILTER_OPTIONS}
+          selected={filters.sourceFilters}
+          onChange={filters.onSourceFiltersChange}
+        />
+        <FilterMultiSelect
+          label="Era"
+          options={eraOptions}
+          widthOptions={ERA_FILTER_OPTIONS}
+          selected={filters.eraFilters}
+          onChange={filters.onEraFiltersChange}
         />
         {/* Several scores can be ticked: an entry has one score, so it passes when it
             matches any ticked choice. */}

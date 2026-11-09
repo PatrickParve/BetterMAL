@@ -29,6 +29,7 @@ import {
   STATUS_LABELS,
 } from '../utils/anime.ts'
 import type { AiringStatus, SortDirection, SortKey } from '../utils/anime.ts'
+import { MAL_SOURCE_KEYS, UNKNOWN_FILTER_KEY, eraChoiceLabel, eraOf, sourceChoiceLabel, sourceKeyOf } from '../utils/anime.ts'
 import { buildBoardOptions, passesTicked } from '../utils/boardFilter.ts'
 import './MyListPage.css'
 
@@ -155,6 +156,18 @@ function passesAiring(item: MyListItemDto, airingFilters: string[]): boolean {
   return airingFilters.length === 0 || airingFilters.includes(item.airingStatus ?? 'unknown')
 }
 
+// An entry has one source and one air-start decade, so with several ticked it passes
+// when it matches ANY of them, as the Type filter does; 'unknown' matches an entry
+// with no stored source, or no stored air-start date. Nothing ticked is no
+// restriction.
+function passesSource(item: MyListItemDto, sourceFilters: string[]): boolean {
+  return sourceFilters.length === 0 || sourceFilters.includes(sourceKeyOf(item.source))
+}
+
+function passesEra(item: MyListItemDto, eraFilters: string[]): boolean {
+  return eraFilters.length === 0 || eraFilters.includes(eraOf(item.airedFrom))
+}
+
 // An entry has one score, so with several choices ticked it passes when it
 // matches ANY of them: Rated (it has a score), Unrated (it has none), or a
 // number (exactly that score).
@@ -265,6 +278,16 @@ export function MyListPage() {
     'studioFilters',
     Array.from(new Set(searchParams.getAll('studio'))),
   )
+  // Source and era arrive the same way, from repeatable `source` and `era`
+  // parameters (the profile's Source and Era boxes), and are restored as left.
+  const [sourceFilters, setSourceFilters] = useRestorableState<string[]>(
+    'sourceFilters',
+    Array.from(new Set(searchParams.getAll('source'))),
+  )
+  const [eraFilters, setEraFilters] = useRestorableState<string[]>(
+    'eraFilters',
+    Array.from(new Set(searchParams.getAll('era'))),
+  )
   // Renamed from `scoreFilter` (one value) when the score filter became a
   // multi-select, for the reason `statusFilter` became `statusFilters`: a
   // snapshot holding the old string must never be read as an array.
@@ -298,6 +321,8 @@ export function MyListPage() {
     airingFilters,
     genreFilters,
     studioFilters,
+    sourceFilters,
+    eraFilters,
     scoreFilters,
     sort,
     sortDirection,
@@ -420,6 +445,8 @@ export function MyListPage() {
         'focus',
         'genre',
         'studio',
+        'source',
+        'era',
       ]) {
         params.delete(key)
       }
@@ -578,18 +605,18 @@ export function MyListPage() {
     })
   }, [statusScoped, query])
 
-  // One pass over `candidates` produces the four option lists and the
-  // matched set together (design D8): each entry is tested once against each
-  // predicate, and it counts toward a control's options exactly when it
-  // passes the *other* four — never its own, so a filter never narrows its
-  // own options (design D1) — and toward `matched` when it passes all five.
+  // One pass over `candidates` produces the option lists and the matched set
+  // together (design D8): each entry is tested once against each predicate, and
+  // it counts toward a control's options exactly when it passes the *other*
+  // six — never its own, so a filter never narrows its own options (design D1) —
+  // and toward `matched` when it passes all seven.
   // The genre and studio filters are two of the other controls to the rest
   // (design D4 of add-genre-filter-and-polish-lists). Each board is counted over
   // what the others leave, its own ticks excluded, so ticking a genre or a
   // studio never changes which ones the board holds; `matchedGenres` and
   // `matchedStudios`, from the entries still shown, only decide which of them
   // are greyed out.
-  const { matched, typeOptions, airingOptions, genreOptions, studioOptions, scoreOptions } = useMemo(() => {
+  const { matched, typeOptions, airingOptions, genreOptions, studioOptions, sourceOptions, eraOptions, scoreOptions } = useMemo(() => {
     const presentTypes = new Set<string>()
     let hasUnknownType = false
     const presentAiring = new Set<string>()
@@ -603,6 +630,10 @@ export function MyListPage() {
     let studioBaseTotal = 0
     const studioCounts = new Map<string, number>()
     const matchedStudios = new Set<string>()
+    const presentSources = new Set<string>()
+    let hasUnknownSource = false
+    const presentEras = new Set<string>()
+    let hasUnknownEra = false
     const matched: MyListItemDto[] = []
 
     for (const item of candidates) {
@@ -610,32 +641,44 @@ export function MyListPage() {
       const a = passesAiring(item, airingFilters)
       const g = passesTicked(item.genres, genreFilters)
       const st = passesTicked(item.studios, studioFilters)
+      const so = passesSource(item, sourceFilters)
+      const e = passesEra(item, eraFilters)
       const s = passesScore(item, scoreFilters)
 
-      if (a && g && st && s) {
+      if (a && g && st && so && e && s) {
         if (item.mediaType) presentTypes.add(item.mediaType)
         else hasUnknownType = true
       }
-      if (t && g && st && s) {
+      if (t && g && st && so && e && s) {
         if (item.airingStatus) presentAiring.add(item.airingStatus)
         else hasUnknownAiring = true
       }
-      if (t && a && g && st) {
+      if (t && a && g && st && e && s) {
+        const source = sourceKeyOf(item.source)
+        if (source === UNKNOWN_FILTER_KEY) hasUnknownSource = true
+        else presentSources.add(source)
+      }
+      if (t && a && g && st && so && s) {
+        const era = eraOf(item.airedFrom)
+        if (era === UNKNOWN_FILTER_KEY) hasUnknownEra = true
+        else presentEras.add(era)
+      }
+      if (t && a && g && st && so && e) {
         scoreBaseTotal++
         if (item.entry.myScore != null) {
           scoreBaseRated++
           scoreCounts.set(item.entry.myScore, (scoreCounts.get(item.entry.myScore) ?? 0) + 1)
         }
       }
-      if (t && a && st && s) {
+      if (t && a && st && so && e && s) {
         genreBaseTotal++
         for (const genre of item.genres) genreCounts.set(genre, (genreCounts.get(genre) ?? 0) + 1)
       }
-      if (t && a && g && s) {
+      if (t && a && g && so && e && s) {
         studioBaseTotal++
         for (const studio of item.studios) studioCounts.set(studio, (studioCounts.get(studio) ?? 0) + 1)
       }
-      if (t && a && g && st && s) {
+      if (t && a && g && st && so && e && s) {
         matched.push(item)
         for (const genre of item.genres) matchedGenres.add(genre)
         for (const studio of item.studios) matchedStudios.add(studio)
@@ -650,6 +693,17 @@ export function MyListPage() {
       airingFilters,
       (value) => (value === 'unknown' ? 'Unknown' : AIRING_STATUS_LABELS[value as AiringStatus]),
     )
+    // Source: every key MyAnimeList uses plus any other key an entry carries or a tick
+    // names, alphabetical by the label the detail page gives it; Unknown last. Era:
+    // the decades present or ticked, newest first; Unknown last.
+    const sourceOrder = [...new Set([...MAL_SOURCE_KEYS, ...presentSources, ...sourceFilters])]
+      .filter((value) => value !== UNKNOWN_FILTER_KEY)
+      .sort((a, b) => sourceChoiceLabel(a).localeCompare(sourceChoiceLabel(b)))
+    const sourceOptions = narrowedFilterOptions(sourceOrder, presentSources, hasUnknownSource, sourceFilters, sourceChoiceLabel)
+    const eraOrder = [...new Set([...presentEras, ...eraFilters])]
+      .filter((value) => value !== UNKNOWN_FILTER_KEY)
+      .sort((a, b) => parseInt(b, 10) - parseInt(a, 10))
+    const eraOptions = narrowedFilterOptions(eraOrder, presentEras, hasUnknownEra, eraFilters, eraChoiceLabel)
     const genreOptions = buildBoardOptions({
       counts: genreCounts,
       baseTotal: genreBaseTotal,
@@ -695,8 +749,8 @@ export function MyListPage() {
       scoreOptions.push({ value: only, label: scoreChoiceLabel(only) })
     }
 
-    return { matched, typeOptions, airingOptions, genreOptions, studioOptions, scoreOptions }
-  }, [candidates, typeFilters, airingFilters, genreFilters, studioFilters, scoreFilters])
+    return { matched, typeOptions, airingOptions, genreOptions, studioOptions, sourceOptions, eraOptions, scoreOptions }
+  }, [candidates, typeFilters, airingFilters, genreFilters, studioFilters, sourceFilters, eraFilters, scoreFilters])
 
   // Sorts and groups `matched` (design D8) — what matches, and the `shown`/
   // `total` counts, are unchanged from before this change; only where the
@@ -747,6 +801,8 @@ export function MyListPage() {
     airingFilters.length > 0 ||
     genreFilters.length > 0 ||
     studioFilters.length > 0 ||
+    sourceFilters.length > 0 ||
+    eraFilters.length > 0 ||
     scoreFilters.length > 0 ||
     sort !== 'alphabetical' ||
     sortDirection !== 'natural' ||
@@ -767,6 +823,8 @@ export function MyListPage() {
     setAiringFilters([])
     setGenreFilters([])
     setStudioFilters([])
+    setSourceFilters([])
+    setEraFilters([])
     setScoreFilters([])
     setSort('alphabetical')
     setSortDirection('natural')
@@ -960,6 +1018,10 @@ export function MyListPage() {
           onGenreFiltersChange: setGenreFilters,
           studioFilters,
           onStudioFiltersChange: setStudioFilters,
+          sourceFilters,
+          onSourceFiltersChange: setSourceFilters,
+          eraFilters,
+          onEraFiltersChange: setEraFilters,
           scoreFilters,
           onScoreFiltersChange: setScoreFilters,
         }}
@@ -977,6 +1039,8 @@ export function MyListPage() {
         airingOptions={airingOptions}
         genreOptions={genreOptions}
         studioOptions={studioOptions}
+        sourceOptions={sourceOptions}
+        eraOptions={eraOptions}
         scoreOptions={scoreOptions}
       />
 

@@ -1,7 +1,9 @@
+using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.Recap;
 using AnimeTracker.Api.Services.Scheduling;
+using Microsoft.EntityFrameworkCore;
 
 namespace AnimeTracker.Api.Tests.Services.Recap;
 
@@ -215,6 +217,96 @@ public class RecapHighlightsTests
         Assert.Empty(dto.Highlights.Studios);
         Assert.Null(dto.Highlights.HiddenGem);
         Assert.Null(dto.Highlights.BiggestDay);
+        Assert.Null(dto.Highlights.WatchingDays);
+    }
+
+    [Fact]
+    public async Task TheRecapReadCarriesTheWatchingDaysOfTheIncludedSetUnderTheAiredFilter()
+    {
+        // Anime 9 aired in 2020: outside the 2026 recap, so its day is not a watching day.
+        List<UserAnimeEntry> entries = [Entry(1, ["Action"]), Entry(9, ["Action"], airedFrom: new DateOnly(2020, 1, 1))];
+        List<ActivityLog> log =
+        [
+            Log(1, new DateTimeOffset(2026, 3, 2, 12, 0, 0, TimeSpan.Zero), 0, 6),
+            Log(1, new DateTimeOffset(2026, 3, 3, 12, 0, 0, TimeSpan.Zero), 6, 8),
+            Log(9, new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero), 0, 40),
+        ];
+
+        var highlights = (await Recap2026(CreateService(entries, log))).Highlights;
+
+        var watching = highlights.WatchingDays;
+        Assert.NotNull(watching);
+        Assert.Equal([new DateOnly(2026, 3, 2), new DateOnly(2026, 3, 3)], watching.Days.Select(d => d.Date));
+        Assert.Equal(new DateOnly(2026, 3, 2), watching.TopDays[0]);
+        Assert.Equal(highlights.BiggestDay!.Date, watching.TopDays[0]);
+        Assert.Equal(2, watching.DaysWatched);
+    }
+
+    [Fact]
+    public async Task TheRecapReadCarriesTheWatchingDaysOfTheIncludedSetUnderTheWatchedFilter()
+    {
+        // Under "watched" an entry counts when it completed in the period or has logged progress in it,
+        // whatever it aired. Anime 3 was completed in 2025 and has no progress in 2026, so it is outside.
+        var completed = Entry(1, ["Action"], airedFrom: new DateOnly(2020, 1, 1));
+        completed.CompletedAt = new DateOnly(2026, 6, 1);
+        var rewatched = Entry(2, ["Action"], airedFrom: new DateOnly(2020, 1, 1));
+        rewatched.CompletedAt = new DateOnly(2025, 6, 1);
+        var outside = Entry(3, ["Action"], airedFrom: new DateOnly(2020, 1, 1));
+        outside.CompletedAt = new DateOnly(2025, 6, 1);
+        List<ActivityLog> log =
+        [
+            Log(1, new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero), 0, 12),
+            Log(2, new DateTimeOffset(2026, 6, 2, 12, 0, 0, TimeSpan.Zero), 0, 12),
+            Log(3, new DateTimeOffset(2025, 6, 3, 12, 0, 0, TimeSpan.Zero), 0, 12), // before the period: never loaded
+        ];
+
+        var dto = await CreateService([completed, rewatched, outside], log).GetRecapAsync(RecapPeriod.Yearly(2026), RecapTimeFilter.Watched, CancellationToken.None);
+
+        var watching = dto.Highlights.WatchingDays!;
+        Assert.Equal([new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 2)], watching.Days.Select(d => d.Date));
+        Assert.Equal([1, 2], watching.Days.SelectMany(d => d.Anime).Select(a => a.AnimeId));
+        Assert.Equal(dto.Stats.EpisodesWatched, watching.Days.Sum(d => d.Episodes));
+    }
+
+    [Fact]
+    public async Task APeriodBeforeTheLogStartsHasNoWatchingDays()
+    {
+        List<UserAnimeEntry> entries = [Entry(1, ["Action"], airedFrom: new DateOnly(2015, 4, 1))];
+        List<ActivityLog> log = [Log(1, new DateTimeOffset(2026, 3, 2, 12, 0, 0, TimeSpan.Zero), 0, 6)];
+
+        var dto = await CreateService(entries, log).GetRecapAsync(RecapPeriod.Yearly(2015), RecapTimeFilter.Aired, CancellationToken.None);
+
+        Assert.Null(dto.Highlights.WatchingDays);
+        Assert.Null(dto.Highlights.BiggestDay);
+    }
+
+    [Fact]
+    public async Task TwoReadsWithNoChangeBetweenGiveIdenticalWatchingDaysEvenForRowsSharingATimestamp()
+    {
+        // Two rows of one anime share a timestamp. The real repository orders them by id, so 0 to 3 (id 1)
+        // always comes before 3 to 6 (id 2) and they merge into one run, however they were inserted.
+        using var db = new AnimeTrackerDbContext(new DbContextOptionsBuilder<AnimeTrackerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        var at = new DateTimeOffset(2026, 3, 2, 12, 0, 0, TimeSpan.Zero);
+        var second = Log(1, at, 3, 6);
+        second.Id = 2;
+        var first = Log(1, at, 0, 3);
+        first.Id = 1;
+        db.ActivityLogs.AddRange(second, first);
+        await db.SaveChangesAsync();
+        var service = new RecapService(
+            new FakeUserAnimeEntryRepository([Entry(1, ["Action"])]), new ActivityLogRepository(db),
+            new FakeTopAnimeSelectionRepository(), new FakeBroadcastLocalTimeConverter());
+
+        var firstRead = (await Recap2026(service)).Highlights.WatchingDays!;
+        var secondRead = (await Recap2026(service)).Highlights.WatchingDays!;
+
+        var anime = Assert.Single(Assert.Single(firstRead.Days).Anime);
+        Assert.Equal(6, anime.Episodes);
+        Assert.Equal([(1, 6)], anime.Runs.Select(r => (r.From, r.To)));
+        Assert.Equal(
+            System.Text.Json.JsonSerializer.Serialize(firstRead),
+            System.Text.Json.JsonSerializer.Serialize(secondRead));
     }
 
     [Fact]

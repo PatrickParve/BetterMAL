@@ -16,6 +16,14 @@
      Declared once here, not repeated in the dark block below: it resolves
      against whichever --accent :root holds, so it tracks the theme on its own. */
   --accent-hover: color-mix(in srgb, var(--accent) 85%, black);
+  /* Four steps of the accent, strongest first: the accent mixed toward the page's own
+     background. Shared by the profile's split bars and the recap's watching-days
+     calendar so the two never drift. Declared once, like --accent-hover: they resolve
+     against whichever --accent and --bg :root holds. */
+  --accent-step-1: var(--accent);
+  --accent-step-2: color-mix(in srgb, var(--accent) 72%, var(--bg));
+  --accent-step-3: color-mix(in srgb, var(--accent) 48%, var(--bg));
+  --accent-step-4: color-mix(in srgb, var(--accent) 30%, var(--bg));
   --social-bg: rgba(244, 243, 236, 0.5);
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;

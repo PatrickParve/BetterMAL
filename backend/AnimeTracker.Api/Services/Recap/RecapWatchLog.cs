@@ -24,16 +24,18 @@ public static class RecapWatchLog
         return map;
     }
 
-    /// <summary>The rows that count, each with its positive episode increase: the
-    /// one place that decides which logged rows are genuine progress. The per-anime
-    /// map above and the taste stats' biggest day both read it, so the two can
-    /// never disagree about how many episodes a period holds (taste-stats design.md
-    /// D6).</summary>
+    /// <summary>The episode rows that raise the count, each with its positive
+    /// increase. The per-anime map above reads it, for the recap's selection and
+    /// stat block. The watching days no longer do: a raise that only undoes a
+    /// lowering is not progress, so they read net gain per viewing instead
+    /// (<c>TasteStatsBuilder.WatchingDays</c>, taste-stats "A period's watching
+    /// days").</summary>
     public static IEnumerable<(ActivityLog Row, int Increase)> PositiveIncreases(IEnumerable<ActivityLog> rows)
     {
         foreach (var row in rows)
         {
-            if (ProfileService.ParseNewEpisodesWatched(row) is not { } newEpisodesWatched
+            if (row.ChangeType != ActivityChangeType.EpisodeIncremented
+                || ProfileService.ParseNewEpisodesWatched(row) is not { } newEpisodesWatched
                 || row.PreviousEpisodesWatched is not { } previous)
                 continue;
 
