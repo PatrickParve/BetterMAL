@@ -24,6 +24,31 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* The title, the buttons and the score tabs stay at the top of the box while the list
+   scrolls under them, so opening on one anime (which scrolls its row to the middle) or
+   finishing a placement never leaves the box without its top. Not while a row is being
+   dragged: the header then scrolls away on purpose to make room (see above). */
+.anime-rank__panel-header--sticky {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+}
+
+/* Rows scroll under the pinned header, so one is often cut in half at its edge, most
+   visibly when the editor opens scrolled to a row. A short fade below the border lets
+   them go under rather than being sliced by a hard line. */
+.anime-rank__panel-header--sticky::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 14px;
+  background: linear-gradient(to bottom, var(--bg), color-mix(in srgb, var(--bg) 0%, transparent));
+  pointer-events: none;
+}
+
 /* Wraps rather than squeezing on a window too narrow for the title and the
    actions to share a row: the whole actions group drops beneath the title,
    right-aligned (its margin-left: auto), so Rank my whole library stays
@@ -136,8 +161,10 @@
 /* The look of the profile's Rank button that opens this editor
    (ProfilePage.css's .profile-box__control) — written here rather than
    reusing that class, since this editor is mounted from AnimeRankContext and
-   opened from other pages too. */
-.anime-rank__whole-library {
+   opened from other pages too. Shared by every outlined button in the header:
+   Rank my whole library, This or That and Place with This or That, so the
+   three read as one family. */
+.anime-rank__action-button {
   font: inherit;
   font-size: 13px;
   padding: 6px 12px;
@@ -149,51 +176,9 @@
   flex: 0 0 auto;
 }
 
-.anime-rank__whole-library:hover {
+.anime-rank__action-button:hover {
   color: var(--text-h);
   border-color: var(--accent-border);
-}
-
-.anime-rank__score-tabs {
-  display: flex;
-  /* Wraps rather than scrolling sideways (add-anime-ranking follow-up): a
-     horizontal scrollbar on a short tab strip reads as scores being cut off
-     rather than an obvious "scroll for more" affordance, so nothing is ever
-     hidden — the wider box (.modal--rank) just makes one line the common
-     case. */
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.anime-rank__score-tab {
-  font: inherit;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-h);
-  cursor: pointer;
-  white-space: nowrap;
-  flex: 0 0 auto;
-}
-
-.anime-rank__score-tab:not(.anime-rank__score-tab--active):hover:not(:disabled) {
-  border-color: var(--accent-border);
-}
-
-.anime-rank__score-tab-count {
-  opacity: 0.65;
-  font-size: 12px;
-}
-
-.anime-rank__score-tab--active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-.anime-rank__score-tab--active .anime-rank__score-tab-count {
-  opacity: 0.85;
 }
 
 .anime-rank__empty,

@@ -29,6 +29,7 @@ import { GamesPage } from './pages/GamesPage.tsx'
 import { HigherLowerPage } from './pages/HigherLowerPage.tsx'
 import { GuessTheAnimePage } from './pages/GuessTheAnimePage.tsx'
 import { GuessTheThemePage } from './pages/GuessTheThemePage.tsx'
+import { ThisOrThatPage } from './pages/ThisOrThatPage.tsx'
 
 // Mounted once the "Connect to MAL" gate in App.tsx confirms a token is on
 // file. Providers here (score visibility, entry editor, content filter) are
@@ -70,6 +71,10 @@ export function AppShell() {
                         <Route path="/games/higher-or-lower" element={<HigherLowerPage />} />
                         <Route path="/games/guess-the-anime" element={<GuessTheAnimePage />} />
                         <Route path="/games/guess-the-theme" element={<GuessTheThemePage />} />
+                        {/* No navbar link: the ranking pop-up leads here. One route with an
+                            optional score, so /ranking and /ranking/8 are the same page
+                            instance and the address correction keeps its state. */}
+                        <Route path="/ranking/:score?" element={<ThisOrThatPage />} />
                         <Route path="*" element={<HomePage />} />
                       </Routes>
                     </main>

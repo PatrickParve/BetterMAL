@@ -1663,6 +1663,72 @@ export type HigherOrLowerEndDto = {
   streak: number
 }
 
+// This or That (add-this-or-that-ranking design.md D5): mirrors the backend's
+// ThisOrThatDtos. A ranking of one score runs on the server, so each call returns
+// the score's state as it now stands.
+
+// One tab: a score with at least two hand-orderable anime, how many, the most
+// picks a ranking of them can take, and whether one is in progress.
+export type ThisOrThatScoreSummaryDto = {
+  score: number
+  count: number
+  maxPicks: number
+  inProgress: boolean
+}
+
+export type ThisOrThatScoresDto = {
+  scores: ThisOrThatScoreSummaryDto[]
+}
+
+// One anime on a card. It carries no score of any kind.
+export type ThisOrThatCardDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  mediaType: string | null
+  year: number | null
+}
+
+// The two cards as laid out: the anime being placed is on the same side for every
+// pick of its placement.
+export type ThisOrThatPairDto = {
+  left: ThisOrThatCardDto
+  right: ThisOrThatCardDto
+}
+
+// Positions are 1-based; previousPosition is the anime's place in the score's
+// hand-ordered order when the result was read.
+export type ThisOrThatResultRowDto = {
+  animeId: number
+  title: string
+  englishTitle: string | null
+  pictureUrl: string | null
+  position: number
+  previousPosition: number
+}
+
+// A ranking in progress. Exactly one of `pair` and `result` is set. The upcoming
+// pictures are those the next pair could hold whichever way the pick goes.
+export type ThisOrThatRunStateDto = {
+  version: number
+  placed: number
+  total: number
+  picksMade: number
+  picksLeftAtMost: number
+  canUndo: boolean
+  pair: ThisOrThatPairDto | null
+  result: ThisOrThatResultRowDto[] | null
+  upcomingPictureUrls: string[]
+}
+
+export type ThisOrThatScoreStateDto = {
+  score: number
+  count: number
+  maxPicks: number
+  run: ThisOrThatRunStateDto | null
+}
+
 // Guess the Anime (add-guess-the-anime design.md D3): mirrors the backend's
 // GuessTheAnimeDtos. The answer is in no response until the game has ended.
 

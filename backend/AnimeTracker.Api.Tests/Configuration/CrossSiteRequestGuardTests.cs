@@ -173,6 +173,8 @@ public class CrossSiteRequestGuardTests
         "api/sync/held",                  // writes: clears held changes MAL already agrees with (HeldChangeService.GetHeldAsync, design D8a)
         "api/sync/reconcile/pending",
         "api/themes/search",                 // read-only: songs from the stored catalogue, no outside call, no background work, nothing written (ThemeSearchService)
+        "api/this-or-that",                  // read-only: the offered scores and their counts from stored data, nothing written (ThisOrThatService.GetScoresAsync)
+        "api/this-or-that/{score:int}",      // read-only: a ranking in progress replayed against the list as it stands, nothing written; a list change is folded in by the next write (ThisOrThatService.GetScoreAsync)
         "api/top-anime",                      // cache-only read; the refresh that used to run inline is now the separate POST api/top-anime/refresh
         "api/transfer/export",
         "api/transfer/import/status",

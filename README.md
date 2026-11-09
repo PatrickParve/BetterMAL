@@ -21,7 +21,8 @@ its own.
   genre, studio and more.
 - **Recap and Profile**: recap any season, year or run of years; see your
   stats, favourite genres and studios, favourite seasons, where your scores
-  differ most from MyAnimeList's, and rank your favourites.
+  differ most from MyAnimeList's, and rank your favourites, by dragging them or
+  by picking between two at a time.
 - **Updates**: news about the shows on your list, such as a sequel announced, a
   start date or episode count released, or a broadcast moving.
 - **Hide scores**: hide MyAnimeList's scores everywhere, so they don't sway

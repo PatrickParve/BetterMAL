@@ -1,0 +1,76 @@
+/* A grid of card, VS column, card, so the cards hug the VS. The page's cards are
+   sized from the window: 360px is everything on the page that isn't the poster
+   (navbar aside; measured at 356px, the rest is margin), so the two posters, their titles, the progress and Can't decide
+   fit a laptop window without the page scrolling; 180px is the floor, so a very
+   short window scrolls instead of shrinking the art further; 320px is the cap,
+   past which MAL's roughly 225x320 pictures look soft (the same figures Higher or
+   Lower uses). The navbar's height falls back to its one-row figure until it has
+   been measured. A phone sizes by width alone, below. */
+.this-or-that-pair {
+  --vs-col: 96px;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--card-w) var(--vs-col) var(--card-w);
+  justify-content: center;
+  align-items: stretch;
+}
+
+.this-or-that-pair--page {
+  --card-w: max(
+    180px,
+    min(
+      320px,
+      calc((100vw - 48px - var(--vs-col)) / 2),
+      calc((100svh - var(--navbar-height, 65px) - 360px) * 2 / 3)
+    )
+  );
+  --poster-h: calc(var(--card-w) * 3 / 2);
+}
+
+/* In the ranking pop-up: the poster is at most 300px tall and 38vh, and never wider
+   than the box has room for (the backdrop's 24px and the box's 24px padding, border
+   and scrollbar gutter take about 120px of the window's width on each side). */
+.this-or-that-pair--overlay {
+  --vs-col: 72px;
+  --card-w: min(calc(min(300px, 38vh) * 2 / 3), calc((100vw - 120px - var(--vs-col)) / 2));
+  --poster-h: calc(var(--card-w) * 3 / 2);
+}
+
+.this-or-that-pair__vs {
+  display: grid;
+  place-items: center;
+  height: var(--poster-h);
+}
+
+@media (max-width: 640px) {
+  /* The navbar reaches about 250px on a phone, so a height formula would shrink the
+     art for no gain: the card sizes by width, and the page scrolls a little. The VS
+     medallion overlaps the 10px gap between the cards. */
+  .this-or-that-pair {
+    --vs-col: 10px;
+  }
+
+  .this-or-that-pair--page {
+    --card-w: calc((100vw - 32px - var(--vs-col)) / 2);
+  }
+
+  .this-or-that-pair--overlay {
+    --card-w: min(calc(min(300px, 38vh) * 2 / 3), calc((100vw - 120px - var(--vs-col)) / 2));
+  }
+
+  .this-or-that-pair__vs {
+    position: relative;
+    width: 10px;
+  }
+
+  /* Centred on the gap by position rather than by the grid: a badge wider than its
+     10px cell would otherwise start at the cell's left edge and overflow to the
+     right, off the gap and onto the right-hand card. */
+  .this-or-that-pair__vs .vs-badge {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 2;
+    transform: translate(-50%, -50%);
+  }
+}

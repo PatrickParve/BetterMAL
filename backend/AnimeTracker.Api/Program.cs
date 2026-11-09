@@ -19,6 +19,7 @@ using AnimeTracker.Api.Services.Mal.Auth;
 using AnimeTracker.Api.Services.Metadata;
 using AnimeTracker.Api.Services.Profile;
 using AnimeTracker.Api.Services.Ranking;
+using AnimeTracker.Api.Services.Ranking.ThisOrThat;
 using AnimeTracker.Api.Services.Recap;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Scheduling;
@@ -287,6 +288,7 @@ builder.Services.AddScoped<ITopAnimeService, TopAnimeService>();
 
 // --- Anime ranking ---
 builder.Services.AddScoped<IAnimeRankingService, AnimeRankingService>();
+builder.Services.AddScoped<IThisOrThatService, ThisOrThatService>();
 
 // --- Profile stats ---
 builder.Services.AddScoped<IProfileService, ProfileService>();

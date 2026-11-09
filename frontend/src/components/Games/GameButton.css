@@ -30,6 +30,13 @@
   cursor: not-allowed;
 }
 
+/* aria-disabled rather than disabled, where a button must keep the focus it has
+   while a request it started is in flight (This or That's Start and Save). */
+.game-button[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .game-button--small {
   height: 36px;
   padding: 0 18px;
@@ -44,7 +51,8 @@
     color: ButtonText;
   }
 
-  .game-button:disabled {
+  .game-button:disabled,
+  .game-button[aria-disabled='true'] {
     opacity: 1;
     border-color: GrayText;
     color: GrayText;

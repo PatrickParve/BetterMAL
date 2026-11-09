@@ -21,6 +21,9 @@ const HIGHLIGHTED_SURFACES = [
   '.recap-podium__card',
   '.recap-top-ten-row',
   '.recap-hot-take',
+  // A This or That card: the one button persists when its side's anime changes, so a mouse
+  // press that focused it would light it under the next arrow key (the page picks with them).
+  '.this-or-that-card',
   '.recap-ranking-row__link',
   '.ranking-overlay__link',
   '.edit-history__row',

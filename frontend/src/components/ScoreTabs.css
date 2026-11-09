@@ -1,0 +1,53 @@
+.score-tabs {
+  display: flex;
+  /* Wraps rather than scrolling sideways (add-anime-ranking follow-up): a
+     horizontal scrollbar on a short tab strip reads as scores being cut off
+     rather than an obvious "scroll for more" affordance, so nothing is ever
+     hidden — the wider ranking box (.modal--rank) just makes one line the
+     common case. */
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.score-tab {
+  font: inherit;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.score-tab:not(.score-tab--active):hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+
+.score-tab__count {
+  opacity: 0.65;
+  font-size: 12px;
+}
+
+.score-tab--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.score-tab--active .score-tab__count {
+  opacity: 0.85;
+}
+
+/* A ranking in progress on this score: a dot in the tab's own text colour, so it
+   reads on the filled tab as well as the outlined ones. */
+.score-tab__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+}

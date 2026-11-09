@@ -1,0 +1,23 @@
+/* The placement view takes the list's place in the ranking pop-up: the pair, how many
+   picks at most are left, and the three buttons, all centred. */
+.this-or-that-placement {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0 8px;
+  outline: none;
+}
+
+.this-or-that-placement__left {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.this-or-that-placement__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}

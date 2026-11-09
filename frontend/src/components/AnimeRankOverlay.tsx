@@ -1,9 +1,14 @@
-import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { LoadFailedNotice } from './LoadFailedNotice.tsx'
 import { LoadingNotice } from './LoadingNotice.tsx'
 import { Modal } from './Modal.tsx'
 import { RowPicture } from './RowPicture.tsx'
+import { ScoreTabs } from './ScoreTabs.tsx'
+import { ThisOrThatPlacement } from './ThisOrThat/ThisOrThatPlacement.tsx'
 import { getRanking, putTopAnimeOrder } from '../api/client.ts'
 import type { AnimeRankingScoreDto, TopAnimeMediaType, TopAnimeSectionDto } from '../api/types.ts'
+import { useDelayedFlag } from '../hooks/useDelayedFlag.ts'
 import { pickDisplayTitle } from '../utils/anime.ts'
 import './AnimeRankOverlay.css'
 
@@ -120,11 +125,22 @@ export function AnimeRankOverlay(props: AnimeRankOverlayProps) {
   const onRankWholeLibrary = props.mode === 'top' ? props.onRankWholeLibrary : undefined
   const focusAnimeId = props.mode === 'all' ? props.focusAnimeId : undefined
   const focusScore = props.mode === 'all' ? props.focusScore : undefined
+  const navigate = useNavigate()
 
   const [tiers, setTiers] = useState<EditableTier[]>(props.mode === 'top' ? toEditableTiers(props.section) : [])
   const [scores, setScores] = useState<AnimeRankingScoreDto[]>([])
+  // The score the tabs show as chosen, which moves the moment a tab is pressed. The rows
+  // follow it only once its tier is in `tiers` (see `rowsScore` below), so switching to a
+  // score that has not loaded leaves the rows it was showing on screen.
   const [selectedScore, setSelectedScore] = useState<number | null>(mode === 'all' ? (focusScore ?? null) : null)
-  const [loadingTier, setLoadingTier] = useState(mode === 'all')
+  // The score whose rows were last drawn, kept for the frames in between.
+  const [shownScore, setShownScore] = useState<number | null>(null)
+  // The first read has come back, whether with rows, with nothing, or with a failure.
+  const [firstLoadDone, setFirstLoadDone] = useState(mode !== 'all')
+  // A read of a score's rows failed. Kept apart from `error`, the save's, whose Retry saves.
+  const [loadError, setLoadError] = useState<{ score: number | null; first: boolean } | null>(null)
+  // Placing the anime the editor was opened on, by picking (anime-ranking "Placing one anime by picking").
+  const [placing, setPlacing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [drag, setDrag] = useState<ActiveDrag | null>(null)
@@ -153,32 +169,35 @@ export function AnimeRankOverlay(props: AnimeRankOverlayProps) {
   // whenever the selector picks a score this session hasn't fetched yet.
   // Every tier fetched stays in `tiers` for the rest of the session (even
   // after switching away) so save can persist every score arranged, not just
-  // the one currently on screen.
-  useEffect(() => {
-    if (mode !== 'all') return
-    let cancelled = false
-    setLoadingTier(true)
-    setError(null)
-    getRanking(mediaType, focusScore)
+  // the one currently on screen. `score` undefined asks for the highest score,
+  // which only the first read does when the editor was opened on no score.
+  function loadTier(score: number | undefined, first: boolean) {
+    setLoadError(null)
+    getRanking(mediaType, score)
       .then((response) => {
-        if (cancelled) return
-        setScores(response.scores)
-        const score = response.tier?.score ?? response.scores[0]?.score ?? null
-        setSelectedScore(score)
+        if (first) {
+          setScores(response.scores)
+          setSelectedScore(response.tier?.score ?? response.scores[0]?.score ?? null)
+        }
         if (response.tier) {
           const tier: EditableTier = { score: response.tier.score, members: response.tier.members, includedCount: response.tier.members.length }
           setTiers((prev) => [...prev.filter((t) => t.score !== tier.score), tier])
+        } else if (first && response.scores.length > 0) {
+          // The score the editor was opened on has nothing to arrange: the tabs
+          // chose the highest score instead, and its rows are read now.
+          loadTier(response.scores[0].score, false)
         }
+        setFirstLoadDone(true)
       })
       .catch(() => {
-        if (!cancelled) setError('Could not load the ranking. Please try again.')
+        setLoadError({ score: score ?? null, first })
+        setFirstLoadDone(true)
       })
-      .finally(() => {
-        if (!cancelled) setLoadingTier(false)
-      })
-    return () => {
-      cancelled = true
-    }
+  }
+
+  useEffect(() => {
+    if (mode !== 'all') return
+    loadTier(focusScore, true)
     // Runs once on mount only — mediaType/focusScore never change for the
     // life of this instance (a new one mounts per `openRanking` call).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -188,16 +207,7 @@ export function AnimeRankOverlay(props: AnimeRankOverlayProps) {
     if (score === selectedScore) return
     setSelectedScore(score)
     if (tiers.some((t) => t.score === score)) return
-    setLoadingTier(true)
-    setError(null)
-    getRanking(mediaType, score)
-      .then((response) => {
-        if (!response.tier) return
-        const tier: EditableTier = { score: response.tier.score, members: response.tier.members, includedCount: response.tier.members.length }
-        setTiers((prev) => [...prev.filter((t) => t.score !== tier.score), tier])
-      })
-      .catch(() => setError('Could not load that score. Please try again.'))
-      .finally(() => setLoadingTier(false))
+    loadTier(score, false)
   }
 
   // Scrolls the focused anime's row into view and marks it, once, the first
@@ -207,6 +217,30 @@ export function AnimeRankOverlay(props: AnimeRankOverlayProps) {
     if (!focusedRowRef.current) return
     focusedRowRef.current.scrollIntoView({ block: 'center' })
     hasScrolledToFocusRef.current = true
+    // Centring lands anywhere, often with a row cut in half under the pinned header: move the
+    // list by the smaller of the two ways of making that row whole (it comes fully into view
+    // or fully under the header), as long as the marked row stays in view.
+    const container = tiersRef.current
+    const header = headerRef.current
+    const marked = focusedRowRef.current
+    if (container && header) {
+      const edge = header.getBoundingClientRect().bottom
+      for (const row of container.querySelectorAll('[data-row-index]')) {
+        const rect = row.getBoundingClientRect()
+        if (!(rect.top < edge && rect.bottom > edge)) continue
+        const down = rect.bottom - edge
+        const up = edge - rect.top
+        const start = container.scrollTop
+        for (const delta of down <= up ? [down, -up] : [-up, down]) {
+          container.scrollTop = start + delta
+          const m = marked.getBoundingClientRect()
+          const view = container.getBoundingClientRect()
+          if (m.top >= header.getBoundingClientRect().bottom - 1 && m.bottom <= view.bottom + 1) break
+          container.scrollTop = start
+        }
+        break
+      }
+    }
   })
 
   function updateDrag(next: ActiveDrag | null) {
@@ -441,8 +475,61 @@ export function AnimeRankOverlay(props: AnimeRankOverlayProps) {
     if ((await flushPendingSave()) && onRankWholeLibrary) onRankWholeLibrary()
   }
 
+  // The page ranks the whole score, so it opens on the selected score whatever the editor
+  // was scoped to. Any reorder not yet saved is saved first, so the page's result measures
+  // movement against an order that includes it; the editor then closes as the address changes.
+  async function handleOpenThisOrThat() {
+    if (selectedScore === null) return
+    if (await flushPendingSave()) navigate(`/ranking/${selectedScore}`)
+  }
+
+  // The place is found: one ordinary reorder, which the editor's own auto-save writes, and the
+  // scroll to the marked row is armed again (it fires once, on opening).
+  function handlePlaced(index: number) {
+    const tierIndex = tiers.findIndex((t) => t.score === rowsScore)
+    const from = tiers[tierIndex]?.members.findIndex((m) => m.animeId === focusAnimeId) ?? -1
+    if (tierIndex >= 0 && from >= 0) moveMember(tierIndex, from, index)
+    setPlacing(false)
+    hasScrolledToFocusRef.current = false
+  }
+
   const title = mode === 'top' ? 'Edit top anime order' : 'Rank my library'
-  const visibleTiers = mode === 'top' ? tiers : tiers.filter((t) => t.score === selectedScore)
+
+  // Which rows are drawn (anime-ranking "The ranking editor shows rows until the next rows
+  // arrive"): the selected score's once its tier is in, until then the last score's. The
+  // remembered score is adjusted while rendering, so the frame in which the new rows
+  // arrive already draws them.
+  const selectedLoaded = tiers.some((t) => t.score === selectedScore)
+  if (mode === 'all' && selectedLoaded && shownScore !== selectedScore) setShownScore(selectedScore)
+  const rowsScore = mode === 'all' ? (selectedLoaded ? selectedScore : shownScore) : null
+  const visibleTiers = mode === 'top' ? tiers : tiers.filter((t) => t.score === rowsScore)
+  // The selected score's read failed: its notice stands in for the rows.
+  const loadFailed = mode === 'all' && !selectedLoaded && loadError !== null && loadError.score === selectedScore
+  // Rows held from another score while the selected one loads: they take no drag or click,
+  // and are muted once the load has outlasted the loading indicator's delay.
+  const holding = mode === 'all' && !selectedLoaded && !loadFailed && rowsScore !== null
+  const holdingMuted = useDelayedFlag(holding)
+  // Until the first rows arrive the box is laid out but not drawn, so its first visible
+  // frame already holds them; it shows with the loading line if they are late.
+  const waitingForFirst = mode === 'all' && !firstLoadDone
+  const opened = useDelayedFlag(waitingForFirst)
+  const boxHidden = waitingForFirst && !opened
+
+  const shownTier = rowsScore === null ? undefined : tiers.find((t) => t.score === rowsScore)
+  const focusedMember = focusAnimeId === undefined ? undefined : shownTier?.members.find((m) => m.animeId === focusAnimeId)
+  const otherMembers = useMemo(
+    () => (shownTier === undefined ? [] : shownTier.members.filter((m) => m.animeId !== focusAnimeId)),
+    [shownTier, focusAnimeId],
+  )
+  // Place with This or That stands in for This or That while the editor is open on one
+  // anime and has its score selected; on any other score the button leads to the page.
+  // The page's button is decided by the tabs' own count, which is known the moment a tab
+  // is pressed, so it does not come and go while a score's rows load.
+  const selectedCount = scores.find((s) => s.score === selectedScore)?.count ?? 0
+  const canPlace =
+    mode === 'all' && focusedMember !== undefined && selectedScore === focusScore && selectedLoaded && otherMembers.length >= 1
+  const canOpenPage = mode === 'all' && !canPlace && selectedCount >= 2
+  const placingNow = placing && canPlace
   const hint =
     `Editing order for: ${mediaTypeLabel}. ` +
     (mode === 'top'
@@ -451,7 +538,11 @@ export function AnimeRankOverlay(props: AnimeRankOverlayProps) {
       : 'Drag a row, or use the arrows to send it straight to the top or bottom of its score.')
 
   return (
-    <Modal onClose={() => void handleDismiss()} labelledBy="anime-rank-title" className="modal--rank">
+    <Modal
+      onClose={() => void handleDismiss()}
+      labelledBy="anime-rank-title"
+      className={boxHidden ? 'modal--rank modal--rank-opening' : 'modal--rank'}
+    >
       <div className="anime-rank">
         {/* The header lives inside the same scrollable box as the list
             (rather than a fixed sibling above it) specifically so that
@@ -460,7 +551,7 @@ export function AnimeRankOverlay(props: AnimeRankOverlayProps) {
             dragged visibly jump, where a scroll just moves everything
             together, exactly the way scrolling this box normally does. */}
         <div className="anime-rank__tiers" ref={tiersRef}>
-          <div className="anime-rank__panel-header" ref={headerRef}>
+          <div className={dragging ? 'anime-rank__panel-header' : 'anime-rank__panel-header anime-rank__panel-header--sticky'} ref={headerRef}>
             <div className="anime-rank__header">
               <div className="anime-rank__header-left">
                 <h2 id="anime-rank-title" className="anime-rank__title">
@@ -478,8 +569,18 @@ export function AnimeRankOverlay(props: AnimeRankOverlayProps) {
                   {saving ? 'Saving…' : ''}
                 </span>
                 {mode === 'top' && (
-                  <button type="button" className="anime-rank__whole-library" onClick={() => void handleRankWholeLibrary()}>
+                  <button type="button" className="anime-rank__action-button" onClick={() => void handleRankWholeLibrary()}>
                     Rank my whole library
+                  </button>
+                )}
+                {!placingNow && canPlace && (
+                  <button type="button" className="anime-rank__action-button" onClick={() => setPlacing(true)}>
+                    Place with This or That
+                  </button>
+                )}
+                {!placingNow && canOpenPage && (
+                  <button type="button" className="anime-rank__action-button" onClick={() => void handleOpenThisOrThat()}>
+                    This or That
                   </button>
                 )}
                 {/* Every reorder saves itself (moveMember -> scheduleSave) —
@@ -496,25 +597,8 @@ export function AnimeRankOverlay(props: AnimeRankOverlayProps) {
               </div>
             </div>
 
-            {mode === 'all' && scores.length > 0 && (
-              <div className="anime-rank__score-tabs" role="tablist" aria-label="Score">
-                {scores.map((s) => (
-                  <button
-                    key={s.score}
-                    type="button"
-                    role="tab"
-                    aria-selected={selectedScore === s.score}
-                    className={
-                      selectedScore === s.score
-                        ? 'anime-rank__score-tab anime-rank__score-tab--active'
-                        : 'anime-rank__score-tab'
-                    }
-                    onClick={() => selectScore(s.score)}
-                  >
-                    {s.score} <span className="anime-rank__score-tab-count">({s.count})</span>
-                  </button>
-                ))}
-              </div>
+            {mode === 'all' && scores.length > 0 && !placingNow && (
+              <ScoreTabs tabs={scores} selected={selectedScore} onSelect={selectScore} />
             )}
 
             {error && (
@@ -527,16 +611,34 @@ export function AnimeRankOverlay(props: AnimeRankOverlayProps) {
             )}
           </div>
 
-          {mode === 'all' && scores.length === 0 && !loadingTier ? (
+          {loadFailed ? (
+            <LoadFailedNotice
+              what={loadError?.first ? 'the ranking' : 'that score'}
+              compact
+              onRetry={() => loadTier(loadError?.score ?? undefined, loadError?.first ?? false)}
+            />
+          ) : mode === 'all' && scores.length === 0 && firstLoadDone ? (
             <p className="anime-rank__empty">Nothing hand-orderable yet for {mediaTypeLabel}.</p>
-          ) : loadingTier && visibleTiers.length === 0 ? (
-            <LoadingNotice className="anime-rank__loading" />
+          ) : placingNow && focusedMember !== undefined ? (
+            <ThisOrThatPlacement
+              anime={focusedMember}
+              others={otherMembers}
+              onPlaced={handlePlaced}
+              onCancel={() => setPlacing(false)}
+            />
+          ) : visibleTiers.length === 0 ? (
+            // Only the whole-library editor reads its rows; the top-anime editor is given them.
+            mode === 'all' && <LoadingNotice className="anime-rank__loading" />
           ) : (
             visibleTiers.map((tier) => {
                 const tierIndex = tiers.indexOf(tier)
                 const boundary = promoteBoundary(tier)
                 return (
-                  <div key={tier.score} className="anime-rank__tier">
+                  <div
+                    key={tier.score}
+                    className={holdingMuted ? 'anime-rank__tier held-content--muted' : 'anime-rank__tier'}
+                    inert={holding}
+                  >
                     <h3 className="anime-rank__tier-title">Score {tier.score}</h3>
                     <ul className="anime-rank__list">
                       {tier.members.map((member, index) => {

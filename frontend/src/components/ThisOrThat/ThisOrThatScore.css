@@ -1,0 +1,131 @@
+.this-or-that-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.this-or-that-start {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 36px 0 12px;
+  text-align: center;
+}
+
+.this-or-that-start__summary {
+  margin: 0;
+  font-size: 18px;
+}
+
+.this-or-that-start__summary b {
+  color: var(--text-h);
+}
+
+.this-or-that-start__saved {
+  margin: 0;
+  font-size: 15px;
+  color: var(--game-correct-text);
+}
+
+.this-or-that-score__message {
+  margin: 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--game-wrong);
+}
+
+/* The ranking: the HUD, the pair, then Can't decide. Its width follows the pair,
+   which is centred; the HUD is held to the width of a pair at its widest. */
+.this-or-that-ranking {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+
+.this-or-that-hud {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 760px;
+  min-height: var(--control-h);
+}
+
+.this-or-that-hud__left {
+  justify-self: start;
+}
+
+.this-or-that-hud__right {
+  justify-self: end;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.this-or-that-hud__progress {
+  margin: 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Start over's confirm takes the HUD's place, at the same height. */
+.this-or-that-hud--confirm {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 16px;
+}
+
+.this-or-that-hud__question {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.this-or-that-hud__buttons {
+  display: flex;
+  gap: 8px;
+}
+
+/* Centred under the VS: the pair is centred on the page and so is this. */
+.this-or-that-ranking__under {
+  display: flex;
+  justify-content: center;
+}
+
+/* One line's room under Can't decide, the one a message about a failed action
+   takes, so the pair never moves when it appears. */
+.this-or-that-score__note {
+  min-height: 1.45em;
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .this-or-that-hud {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 8px;
+  }
+
+  .this-or-that-hud__left,
+  .this-or-that-hud__right {
+    justify-self: center;
+  }
+
+  .this-or-that-hud__right {
+    justify-content: center;
+  }
+
+  /* An empty left cell would still take a row's gap. */
+  .this-or-that-hud__left:empty {
+    display: none;
+  }
+}

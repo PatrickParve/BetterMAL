@@ -1057,6 +1057,45 @@ namespace AnimeTracker.Api.Migrations
                     b.ToTable("StudioLinks");
                 });
 
+            modelBuilder.Entity("AnimeTracker.Api.Models.ThisOrThatRun", b =>
+                {
+                    b.Property<int>("Score")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<List<int>>("AnswerChallengerIds")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.PrimitiveCollection<List<int>>("AnswerOtherIds")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.PrimitiveCollection<List<int>>("AnswerOutcomes")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.PrimitiveCollection<List<int>>("QueueIds")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.Property<int>("Seed")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Score");
+
+                    b.ToTable("ThisOrThatRuns");
+                });
+
             modelBuilder.Entity("AnimeTracker.Api.Models.TmdbMovieImage", b =>
                 {
                     b.Property<int>("MovieId")

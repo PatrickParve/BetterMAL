@@ -50,6 +50,8 @@ import type {
   SetupStatusDto,
   TasteSectionDto,
   ThemeSearchResponseDto,
+  ThisOrThatScoresDto,
+  ThisOrThatScoreStateDto,
   TimeSpentSeriesSectionDto,
   TopAnimeItemDto,
   TopAnimeMediaType,
@@ -786,6 +788,66 @@ export function pickHigherOrLower(runId: number, round: number, animeId: number)
 
 export function endHigherOrLower(runId: number): Promise<HigherOrLowerEndDto> {
   return fetchJson<HigherOrLowerEndDto>(`/api/games/higher-or-lower/runs/${runId}/end`, { method: 'POST' })
+}
+
+// This or That (add-this-or-that-ranking design.md D5). A ranking of one score
+// runs on the server, so every call that changes it returns the state it left it
+// in. A pick names the pair it was made on; Undo, Save, Keep and Start over name
+// the version of the ranking. A 404 (no ranking, or the score isn't offered) and a
+// 409 (the ranking has moved on) throw ApiError, and the page re-reads on either.
+export function getThisOrThatScores(): Promise<ThisOrThatScoresDto> {
+  return fetchJson<ThisOrThatScoresDto>('/api/this-or-that')
+}
+
+export function getThisOrThatScore(score: number): Promise<ThisOrThatScoreStateDto> {
+  return fetchJson<ThisOrThatScoreStateDto>(`/api/this-or-that/${score}`)
+}
+
+// Starts a ranking, or starts it over when `replacingVersion` names the one in
+// progress. 400 for a score with fewer than two anime.
+export function startThisOrThat(score: number, replacingVersion?: number): Promise<ThisOrThatScoreStateDto> {
+  return fetchJson<ThisOrThatScoreStateDto>(`/api/this-or-that/${score}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ replacingVersion: replacingVersion ?? null }),
+  })
+}
+
+// A null winner is Can't decide.
+export function pickThisOrThat(
+  score: number,
+  leftId: number,
+  rightId: number,
+  winnerId: number | null,
+): Promise<ThisOrThatScoreStateDto> {
+  return fetchJson<ThisOrThatScoreStateDto>(`/api/this-or-that/${score}/picks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ leftId, rightId, winnerId }),
+  })
+}
+
+export function undoThisOrThat(score: number, version: number): Promise<ThisOrThatScoreStateDto> {
+  return fetchJson<ThisOrThatScoreStateDto>(`/api/this-or-that/${score}/undo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version }),
+  })
+}
+
+// Writes the finished order into my ranking and ends the ranking.
+export function saveThisOrThat(score: number, version: number): Promise<void> {
+  return fetchVoid(`/api/this-or-that/${score}/save`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version }),
+  })
+}
+
+// Ends the ranking and leaves my ranking as it was (Keep my old order, Done). The
+// version rides on the query string, since a DELETE carries no body.
+export function discardThisOrThat(score: number, version: number): Promise<void> {
+  return fetchVoid(`/api/this-or-that/${score}?version=${version}`, { method: 'DELETE' })
 }
 
 // Guess the Anime (add-guess-the-anime design.md D3). The game runs on the server,

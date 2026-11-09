@@ -44,6 +44,28 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* The box's top edge stays where a full-height box has it today, whatever the
+     score: a box with fewer rows is shorter from the bottom and never moves down.
+     The base .modal is content-box with a max-height of 85vh, 24px padding and a
+     1px border, so a full box is 85vh + 50px tall; centred in the backdrop's
+     100vh - 48px content box it starts (15vh - 98px) / 2 = 7.5vh - 49px below it.
+     That figure is the margin, reproducing today's full-height position at every
+     window height, short windows included, where it goes negative: today's centring
+     overflows the padding by the same amount there. */
+  align-self: flex-start;
+  margin-top: calc(7.5vh - 49px);
+  /* Safari floors a vh calc to a 64th of a pixel (4.984px where 5px is meant), which
+     moves the painted top edge by a whole device pixel at some window heights. Snapping
+     the figure to the nearest 64th gives the value today's centring lands on. A browser
+     without round() keeps the line above. */
+  margin-top: round(nearest, calc(7.5vh - 49px), 0.015625px);
+}
+
+/* Until the editor's first rows arrive the box is laid out but not drawn, so its
+   height is already right on the first visible frame and it never appears as a
+   header that then grows. The backdrop is drawn at once. */
+.modal--rank-opening {
+  visibility: hidden;
 }
 
 /* The same "only the content scrolls" treatment `.modal--rank` carries,

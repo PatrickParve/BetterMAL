@@ -1,0 +1,109 @@
+.this-or-that-result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* The title and the buttons share a line while they fit and wrap beneath each
+   other when they don't, so a phone shows every button whole. */
+.this-or-that-result__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.this-or-that-result__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+
+.this-or-that-result__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.this-or-that-result__same {
+  margin: 0;
+  font-size: 15px;
+}
+
+.this-or-that-result__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.this-or-that-result__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px 6px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.this-or-that-result__position {
+  flex: 0 0 auto;
+  min-width: 2.5em;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.this-or-that-result__picture {
+  /* Geometry (other than the radius, which is genuinely its own) lives in the
+     shared .row-picture rule (RowPicture.css, artwork-presentation). */
+  --row-picture-w: 36px;
+  --row-picture-h: 50px;
+  border-radius: 4px;
+}
+
+.this-or-that-result__picture--placeholder {
+  border: 1px solid var(--border);
+}
+
+.this-or-that-result__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Up, down or the same, by a symbol and a number as well as a colour. */
+.this-or-that-result__moved {
+  flex: 0 0 auto;
+  min-width: 3.2em;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.this-or-that-result__moved--up {
+  color: var(--game-correct-text);
+}
+
+.this-or-that-result__moved--down {
+  color: var(--game-wrong);
+}
+
+.this-or-that-result__moved--same {
+  opacity: 0.6;
+}

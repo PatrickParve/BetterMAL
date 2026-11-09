@@ -1,0 +1,149 @@
+.this-or-that-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The pick: the picture, the title and the meta line. The minimum height holds
+   both cards to the same size whatever their titles run to, and whether a meta
+   line is there. */
+.this-or-that-card__pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  min-height: calc(var(--poster-h) + 78px);
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+}
+
+.this-or-that-card__pick:focus-visible {
+  outline: none;
+}
+
+.this-or-that-card__pick[aria-disabled='true'] {
+  cursor: default;
+}
+
+.this-or-that-card__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+
+.this-or-that-card__frame {
+  position: relative;
+  display: block;
+  width: var(--card-w);
+  height: var(--poster-h);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--shadow);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.18s ease;
+}
+
+.this-or-that-card__picture {
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+}
+
+.this-or-that-card__picture--placeholder {
+  background: var(--code-bg);
+}
+
+.this-or-that-card__pick:not([aria-disabled='true']):hover .this-or-that-card__frame {
+  transform: translateY(-4px);
+  box-shadow:
+    0 0 0 2px var(--accent),
+    var(--shadow);
+}
+
+.this-or-that-card__pick:focus-visible .this-or-that-card__frame {
+  box-shadow:
+    0 0 0 3px var(--accent),
+    var(--shadow);
+}
+
+/* The pick's mark: a ring and a lift, for a moment. It outranks the hover rule
+   above, which a locked card no longer matches anyway. */
+.this-or-that-card--marked .this-or-that-card__frame {
+  transform: translateY(-4px);
+  box-shadow:
+    0 0 0 3px var(--accent),
+    var(--shadow);
+}
+
+.this-or-that-card__title {
+  margin-top: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-h);
+  overflow-wrap: anywhere;
+}
+
+.this-or-that-card__meta {
+  font-size: 13px;
+}
+
+/* The anime on this side has changed: it fades in. The keyed content mounts
+   anew, so this runs once per change and not on a re-render. */
+.this-or-that-card__content--entering {
+  animation: this-or-that-card-enter 0.15s ease both;
+}
+
+@keyframes this-or-that-card-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .this-or-that-card__pick {
+    min-height: calc(var(--poster-h) + 66px);
+  }
+
+  .this-or-that-card__title {
+    font-size: 14px;
+  }
+}
+
+/* Reduced motion: the mark and the new card simply appear. */
+@media (prefers-reduced-motion: reduce) {
+  .this-or-that-card__content--entering {
+    animation: none;
+  }
+
+  .this-or-that-card__frame {
+    transition: none;
+  }
+}
+
+/* Forced colours drop box-shadows, so the focus, the hover and the mark are an outline. */
+@media (forced-colors: active) {
+  .this-or-that-card__frame {
+    border: 1px solid CanvasText;
+  }
+
+  .this-or-that-card__pick:focus-visible .this-or-that-card__frame,
+  .this-or-that-card__pick:not([aria-disabled='true']):hover .this-or-that-card__frame {
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  .this-or-that-card--marked .this-or-that-card__frame {
+    border-color: Highlight;
+    outline: 4px solid Highlight;
+    outline-offset: 2px;
+  }
+}

@@ -48,6 +48,7 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
     public DbSet<TmdbMovieImageSet> TmdbMovieImageSets => Set<TmdbMovieImageSet>();
     public DbSet<TmdbMovieImage> TmdbMovieImages => Set<TmdbMovieImage>();
     public DbSet<StudioLink> StudioLinks => Set<StudioLink>();
+    public DbSet<ThisOrThatRun> ThisOrThatRuns => Set<ThisOrThatRun>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -445,6 +446,22 @@ public class AnimeTrackerDbContext(DbContextOptions<AnimeTrackerDbContext> optio
         modelBuilder.Entity<StudioLink>(entity =>
         {
             entity.HasKey(e => e.Name);
+        });
+
+        // A This or That ranking in progress, one row per score
+        // (add-this-or-that-ranking design.md D4). The score is the key, supplied
+        // by the service, never DB-generated. No foreign keys: the ids live in
+        // arrays, and an anime gone from the database is just one that has left
+        // the score. QueueIds and the three parallel answer lists
+        // (AnswerChallengerIds, AnswerOtherIds, AnswerOutcomes) are integer[]
+        // from the List<int> properties, as ShownAnimeIds is. Every write bumps
+        // Version, so a double submit or a tab behind the ranking finds it moved
+        // and fails on the token.
+        modelBuilder.Entity<ThisOrThatRun>(entity =>
+        {
+            entity.HasKey(e => e.Score);
+            entity.Property(e => e.Score).ValueGeneratedNever();
+            entity.Property(e => e.Version).IsConcurrencyToken();
         });
     }
 }
