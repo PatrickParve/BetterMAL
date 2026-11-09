@@ -29,7 +29,8 @@ public class SeriesServiceThemesTests
     private static SeriesService CreateService(AnimeTrackerDbContext db, IAnimeThemesReads? themes = null) =>
         new(db, graphBuilder: null!, new RefreshGate(), new FakeEpisodeScheduleService(), new NoOpAnimeRankingService(),
             TmdbTestData.ArtworkService(db, new FakeTmdbClient(), apiKey: ""), TestIdMappings.Resolver(db),
-            ScoreHistoryServiceTestKit.Create(db), themes ?? AnimeThemesReadsTestKit.Create(db));
+            ScoreHistoryServiceTestKit.Create(db), themes ?? AnimeThemesReadsTestKit.Create(db),
+            SeriesRankServiceTestKit.Create(db));
 
     private static void AddAnime(AnimeTrackerDbContext db, params int[] ids)
     {

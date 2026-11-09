@@ -2,6 +2,7 @@ using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Services.Artwork;
 using AnimeTracker.Api.Services.Detail;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.ScoreHistory;
 using AnimeTracker.Api.Services.Tmdb;
 using Microsoft.AspNetCore.Mvc;
@@ -15,7 +16,8 @@ public class AnimeDetailController(
     IArtworkSelectionService artworkSelectionService,
     IPictureRefreshService pictureRefreshService,
     ITmdbArtworkService tmdbArtwork,
-    IAnimeMetadataRepository metadataRepository) : ControllerBase
+    IAnimeMetadataRepository metadataRepository,
+    IAnimeRankingService rankingService) : ControllerBase
 {
     /// <summary>Single anime detail page read — picture, title, scores, my
     /// entry, info fields, synopsis/background, and prequel/sequel links.</summary>
@@ -32,6 +34,17 @@ public class AnimeDetailController(
             return NotFound();
         }
     }
+
+    /// <summary>Where one anime stands in my ranking and how many anime it
+    /// holds (add-my-rank-badges design.md D3) — what the rank tile on the detail
+    /// page fetches again after a change that can move it, instead of reading the
+    /// anime afresh. A read of stored entries: no outside call, nothing written.
+    /// An anime with no rank — unknown, not in my list, unscored, at Plan to watch,
+    /// not yet aired — answers a null rank with a 200, since the page asks right
+    /// after a change that may just have taken its rank away.</summary>
+    [HttpGet("api/anime/{animeId:int}/my-rank")]
+    public async Task<IActionResult> GetMyRank(int animeId, CancellationToken ct) =>
+        Ok(MyRankDto.From(await rankingService.GetSnapshotAsync(ct), animeId));
 
     /// <summary>One anime's MAL score history as dated points (add-score-history-graph
     /// design.md D6). A stored-data read: it makes no MyAnimeList request and

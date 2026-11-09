@@ -29,7 +29,7 @@ public class SeriesServiceScoreHistoryTests
         new(db, graphBuilder: null!, new RefreshGate(), new FakeEpisodeScheduleService(), new NoOpAnimeRankingService(),
             TmdbTestData.ArtworkService(db, new FakeTmdbClient(), apiKey: ""), TestIdMappings.Resolver(db),
             ScoreHistoryServiceTestKit.Create(db),
-            AnimeThemesReadsTestKit.Create(db));
+            AnimeThemesReadsTestKit.Create(db), SeriesRankServiceTestKit.Create(db));
 
     // Series 1: a main line of anime 1 and 2 (all finished) and an extra, anime 3.
     private static void SeedSeries(AnimeTrackerDbContext db)

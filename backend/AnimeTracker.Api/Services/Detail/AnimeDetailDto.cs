@@ -2,6 +2,7 @@ using AnimeTracker.Api.Models;
 using AnimeTracker.Api.Services.AnimeThemes;
 using AnimeTracker.Api.Services.Dashboard;
 using AnimeTracker.Api.Services.Entries;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.Season;
 using AnimeTracker.Api.Services.Tmdb;
@@ -98,7 +99,14 @@ public record AnimeDetailDto(
     // (anime-themes spec): a local read, never a request to AnimeThemes, for any
     // anime in my list or not. Ready is false until a catalogue refresh has
     // finished, which is what tells "not loaded yet" from "this anime has none".
-    AnimeThemesDto Themes)
+    AnimeThemesDto Themes,
+    // Where this anime stands in my ranking and how many anime it holds
+    // (add-my-rank-badges): what the rank tile beside my box draws. MyRank is
+    // null when the anime holds none — not in my list, unscored, at Plan to
+    // watch or not yet aired — and both fields are null/0 without a ranking
+    // read when the anime has no score of mine to rank.
+    int? MyRank,
+    int MyRankedCount)
 {
     public static AnimeDetailDto FromEntity(
         AnimeMetadata anime,
@@ -114,7 +122,8 @@ public record AnimeDetailDto(
         bool tmdbFetchPending,
         List<string> imdbIds,
         bool hasScoreHistory,
-        AnimeThemesDto themes)
+        AnimeThemesDto themes,
+        MyRankDto myRank)
     {
         (int Year, string Season)? season = anime.AiredFrom is { } airedFrom
             ? SeasonCalendar.GetSeasonFor(airedFrom)
@@ -160,6 +169,8 @@ public record AnimeDetailDto(
             ResolvedRelationDto.FromResolved(relations.Sequel),
             ResolvedRelationDto.FromResolved(relations.ParentStory),
             hasScoreHistory,
-            themes);
+            themes,
+            myRank.Rank,
+            myRank.RankedCount);
     }
 }

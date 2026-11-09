@@ -597,7 +597,13 @@ function seriesNullsLast(
 // title tie-break. Two series that both have no my-average compare equal at
 // the first step and continue down the chain rather than jumping straight
 // to the title.
-const compareByMyScore = seriesNullsLast((item) => item.mineMain.value, 'descending')
+//
+// This chain plus sortSeries' title step is also my series ranking: a series'
+// rank on its page is its place in this order (add-my-rank-badges). The server
+// holds a copy, backend/AnimeTracker.Api/Services/Series/SeriesMyRank.cs — a
+// change to a step here must be made there too, or the badge and this sort
+// disagree.
+const compareByMyScore =seriesNullsLast((item) => item.mineMain.value, 'descending')
 const compareByAverageRank = seriesNullsLast((item) => item.mainLineAverageRank, 'ascending')
 const compareByAiredEpisodes = seriesNullsLast((item) => item.mainLineAiredEpisodes, 'descending')
 const compareMyScoreChain = (a: SeriesListItemDto, b: SeriesListItemDto): number =>

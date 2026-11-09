@@ -1,3 +1,4 @@
+using AnimeTracker.Api.Controllers;
 using AnimeTracker.Api.Data;
 using AnimeTracker.Api.Data.Repositories;
 using AnimeTracker.Api.Models;
@@ -7,11 +8,13 @@ using AnimeTracker.Api.Services.Detail;
 using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.IdMapping;
 using AnimeTracker.Api.Services.Tmdb;
 using AnimeTracker.Api.Tests.Services.IdMapping;
 using AnimeTracker.Api.Tests.Services.Tmdb;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using static AnimeTracker.Api.Tests.Services.Tmdb.TmdbTestData;
@@ -41,7 +44,7 @@ public class AnimeDetailServiceTests
     // see it. The ones that are pass their own, over the same db.
     private static AnimeDetailService CreateService(
         AnimeTrackerDbContext db, FakeMetadataRefreshService refreshService, ITmdbArtworkService? tmdb = null,
-        ICustomIdMappings? custom = null, IAnimeThemesReads? themes = null) =>
+        ICustomIdMappings? custom = null, IAnimeThemesReads? themes = null, IAnimeRankingService? ranking = null) =>
         new(
             new AnimeMetadataRepository(db),
             refreshService,
@@ -54,6 +57,7 @@ public class AnimeDetailServiceTests
             TestIdMappings.Resolver(db, custom),
             ScoreHistoryServiceTestKit.Create(db),
             themes ?? AnimeThemesReadsTestKit.Create(db),
+            ranking ?? new AnimeRankingService(new UserAnimeEntryRepository(db), new TopAnimeSelectionRepository(db)),
             NullLogger<AnimeDetailService>.Instance);
 
     private static AnimeMetadata Anime(
@@ -674,6 +678,102 @@ public class AnimeDetailServiceTests
         Assert.DoesNotContain(typeof(IHttpClientFactory), parameters);
     }
 
+    // --- add-my-rank-badges 1.2/1.4: the anime's rank rides the detail read ---
+
+    // Five anime that hold a rank — 1 (a 10), 2 and 3 (9s, tied, so title order), 4 (a Music
+    // entry, a 6) and 5 (a dropped 3) — and four that hold none: 6 is scored but at Plan to
+    // watch, 7 is in my list unscored, 8 is scored but has not aired, 9 is not in my list.
+    private static async Task SeedRankingAsync(AnimeTrackerDbContext db)
+    {
+        void Add(int id, int? score, WatchStatus? status, string mediaType = "tv", string airing = "finished_airing")
+        {
+            var anime = Anime(id, DateTimeOffset.UtcNow, airingStatus: airing);
+            anime.MediaType = mediaType;
+            db.AnimeMetadata.Add(anime);
+            if (status is { } s)
+                db.UserAnimeEntries.Add(new UserAnimeEntry { AnimeId = id, Anime = anime, Status = s, MyScore = score });
+        }
+
+        Add(1, 10, WatchStatus.Completed);
+        Add(2, 9, WatchStatus.Completed);
+        Add(3, 9, WatchStatus.Completed);
+        Add(4, 6, WatchStatus.Completed, mediaType: "music");
+        Add(5, 3, WatchStatus.Dropped);
+        Add(6, 7, WatchStatus.PlanToWatch);
+        Add(7, null, WatchStatus.Completed);
+        Add(8, 5, WatchStatus.Completed, airing: "not_yet_aired");
+        Add(9, null, null);
+        await db.SaveChangesAsync();
+    }
+
+    // RankedCount is the ranking's size for an anime that carries a score of mine (6 and 8 hold
+    // no rank but are scored, so the ranking is read for them); an anime with no score has
+    // nothing to rank, so the read does not build the ranking and sends 0.
+    [Theory]
+    [InlineData(1, 1, 5)]    // the top score
+    [InlineData(2, 2, 5)]    // a tied 9, first by title
+    [InlineData(3, 3, 5)]    // a tied 9, second by title
+    [InlineData(4, 4, 5)]    // a Music entry holds a rank like any other
+    [InlineData(5, 5, 5)]    // a dropped anime holds a rank
+    [InlineData(6, null, 5)] // scored, but at Plan to watch
+    [InlineData(7, null, 0)] // in my list, unscored
+    [InlineData(8, null, 5)] // scored, but not yet aired
+    [InlineData(9, null, 0)] // not in my list
+    public async Task TheDetailReadCarriesTheAnimesRankAndTheRankingsSize(int animeId, int? expectedRank, int expectedCount)
+    {
+        using var db = CreateDb();
+        await SeedRankingAsync(db);
+
+        var dto = await CreateService(db, new FakeMetadataRefreshService(db)).GetDetailAsync(animeId);
+
+        Assert.Equal(expectedRank, dto.MyRank);
+        Assert.Equal(expectedCount, dto.MyRankedCount);
+    }
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(3, 3)]
+    [InlineData(4, 4)]
+    [InlineData(5, 5)]
+    [InlineData(6, null)]
+    [InlineData(7, null)]
+    [InlineData(8, null)]
+    [InlineData(9, null)]
+    public async Task TheMyRankEndpointAnswersWhatTheDetailReadDoes(int animeId, int? expectedRank)
+    {
+        using var db = CreateDb();
+        await SeedRankingAsync(db);
+        var ranking = new AnimeRankingService(new UserAnimeEntryRepository(db), new TopAnimeSelectionRepository(db));
+        var controller = new AnimeDetailController(
+            detailService: null!, scoreHistoryService: null!, artworkSelectionService: null!, pictureRefreshService: null!,
+            tmdbArtwork: null!, metadataRepository: null!, rankingService: ranking);
+
+        var body = Assert.IsType<MyRankDto>(Assert.IsType<OkObjectResult>(await controller.GetMyRank(animeId, CancellationToken.None)).Value);
+        var detail = await CreateService(db, new FakeMetadataRefreshService(db)).GetDetailAsync(animeId);
+
+        Assert.Equal(expectedRank, body.Rank);
+        // The endpoint always reports the ranking's size, the detail read only for a scored anime.
+        Assert.Equal(5, body.RankedCount);
+        Assert.Equal(body.Rank, detail.MyRank);
+    }
+
+    [Fact]
+    public async Task TheDetailReadBuildsTheRankingOnlyForAScoredAnime()
+    {
+        using var db = CreateDb();
+        await SeedRankingAsync(db);
+        var counting = new CountingRankingService(new AnimeRankingService(new UserAnimeEntryRepository(db), new TopAnimeSelectionRepository(db)));
+        var service = CreateService(db, new FakeMetadataRefreshService(db), ranking: counting);
+
+        foreach (var unscoredId in new[] { 7, 9 })
+            await service.GetDetailAsync(unscoredId);
+        Assert.Equal(0, counting.SnapshotCalls);
+
+        await service.GetDetailAsync(1);
+        Assert.Equal(1, counting.SnapshotCalls);
+    }
+
     private sealed class CountingThemesReads(IAnimeThemesReads inner) : IAnimeThemesReads
     {
         public List<int> AnimeCalls { get; } = [];
@@ -729,6 +829,27 @@ public class AnimeDetailServiceTests
             Task.FromResult(new Dictionary<int, int>());
         public Task<Dictionary<int, int>> EpisodesAiredAsOfAsync(IReadOnlyCollection<int> animeIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
             Task.FromResult(new Dictionary<int, int>());
+    }
+
+    private sealed class CountingRankingService(IAnimeRankingService inner) : IAnimeRankingService
+    {
+        public int SnapshotCalls { get; private set; }
+
+        public Task<AnimeRankingSnapshot> GetSnapshotAsync(CancellationToken ct = default)
+        {
+            SnapshotCalls++;
+            return inner.GetSnapshotAsync(ct);
+        }
+        public Task<List<AnimeRankingScoreCountDto>> GetScoreCountsAsync(string mediaTypeScope, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task<AnimeRankingTierDto?> GetTierAsync(int score, string mediaTypeScope, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task ApplyTierOrderAsync(List<AnimeRankingTierOrderRequest> tiers, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task MoveAdjacentAsync(int promotedAnimeId, int demotedAnimeId, CancellationToken ct = default) =>
+            throw new NotImplementedException();
+        public Task PlaceLastInTierAsync(int animeId, int score, CancellationToken ct = default) =>
+            throw new NotImplementedException();
     }
 
     private sealed class FakeAiringWatchStatusService : IAiringWatchStatusService

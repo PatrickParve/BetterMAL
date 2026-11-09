@@ -26,7 +26,8 @@ public class AnimeDetailControllerTmdbTests
     // the other actions, which these tests never call.
     private static AnimeDetailController CreateController(AnimeTrackerDbContext db, FakeTmdbClient client, string apiKey = "test-key") =>
         new(detailService: null!, scoreHistoryService: null!, artworkSelectionService: null!, pictureRefreshService: null!,
-            tmdbArtwork: ArtworkService(db, client, apiKey), metadataRepository: new AnimeMetadataRepository(db));
+            tmdbArtwork: ArtworkService(db, client, apiKey), metadataRepository: new AnimeMetadataRepository(db),
+            rankingService: null!);
 
     // The action answers with an anonymous { tmdb, tmdbFetchPending }, as its
     // neighbours answer; reading it back by property name is what the

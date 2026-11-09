@@ -35,7 +35,7 @@ public class SeriesServiceTmdbTests
         new(db, graphBuilder: null!, new RefreshGate(), new FakeEpisodeScheduleService(), new NoOpAnimeRankingService(),
             ArtworkService(db, client, apiKey, custom: custom), TestIdMappings.Resolver(db, custom),
             ScoreHistoryServiceTestKit.Create(db),
-            AnimeThemesReadsTestKit.Create(db));
+            AnimeThemesReadsTestKit.Create(db), SeriesRankServiceTestKit.Create(db));
 
     // Series 1: a main line of two seasons of TV 1429 (anime 1 is the root),
     // and the film 635302 among the extras.

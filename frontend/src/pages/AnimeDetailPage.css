@@ -212,6 +212,20 @@
   gap: 16px;
 }
 
+/* anime-detail "My rank stands beside my box" (add-my-rank-badges design.md D7):
+   the boxes' grid and the rank tile side by side. align-items: stretch gives the
+   tile the grid's height whether the boxes sit side by side or stack at 1024px
+   and below (then it spans both), and flex-wrap drops it below the boxes when the
+   column is too narrow for both, rather than squeezing the boxes or scrolling the
+   page sideways. The grid's own rules below are untouched, so the boxes' size
+   cannot change. */
+.anime-detail-page__score-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 16px;
+}
+
 /* anime-detail "The two score boxes share one size" (design.md D7): a grid
    under a max-content constraint (width: fit-content) gives every 1fr track
    the largest track's max-content contribution, so both boxes come out at
@@ -314,5 +328,21 @@
 
   .anime-detail-page__score-boxes {
     grid-auto-flow: row;
+  }
+}
+
+/* Phones (add-my-rank-badges 7.3): the stacked boxes are about 222px wide when my
+   box holds a finish date, and the tile with a 16px gap and 16px padding needs 335px,
+   10px more than a 375px screen's 325px column. A little less gap and padding puts
+   the tile beside the boxes there (85px + 10px, about 5px of room to spare for a
+   wider date); narrower columns, or a box wider still, drop it below, as the spec
+   says. */
+@media (max-width: 480px) {
+  .anime-detail-page__score-row {
+    column-gap: 10px;
+  }
+
+  .anime-detail-page__score-row .rank-badge--tile {
+    padding-inline: 10px;
   }
 }

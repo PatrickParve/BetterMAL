@@ -28,7 +28,7 @@ public class SeriesControllerTmdbTests
     private static SeriesController CreateController(AnimeTrackerDbContext db, FakeTmdbClient client, string apiKey = "test-key") =>
         new(seriesService: new FakeSeriesService(db), scoreHistoryService: null!, seriesListService: null!, bulkBuildTrigger: null!, bulkBuildProgress: null!,
             artworkSelectionService: null!, pictureRefreshService: null!,
-            tmdbArtwork: ArtworkService(db, client, apiKey), metadataRepository: null!);
+            tmdbArtwork: ArtworkService(db, client, apiKey), metadataRepository: null!, seriesRankService: null!);
 
     private static SeriesTmdbPicturesDto Body(IActionResult result) =>
         Assert.IsType<SeriesTmdbPicturesDto>(Assert.IsType<OkObjectResult>(result).Value);

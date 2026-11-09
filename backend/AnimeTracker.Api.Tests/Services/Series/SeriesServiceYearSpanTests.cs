@@ -32,7 +32,7 @@ public class SeriesServiceYearSpanTests
         new(db, graphBuilder: null!, new RefreshGate(), new FakeEpisodeScheduleService(), new NoOpAnimeRankingService(),
             TmdbTestData.ArtworkService(db, new FakeTmdbClient(), apiKey: ""), TestIdMappings.Resolver(db),
             ScoreHistoryServiceTestKit.Create(db),
-            AnimeThemesReadsTestKit.Create(db));
+            AnimeThemesReadsTestKit.Create(db), SeriesRankServiceTestKit.Create(db));
 
     private static void AddAnime(AnimeTrackerDbContext db, int id, DateOnly? airedFrom, DateOnly? airedTo) =>
         db.AnimeMetadata.Add(new AnimeMetadata

@@ -32,7 +32,8 @@ public class SeriesService(
     ITmdbArtworkService tmdbArtwork,
     IAnimeIdMappingResolver idMappings,
     IScoreHistoryService scoreHistory,
-    IAnimeThemesReads animeThemes) : ISeriesService
+    IAnimeThemesReads animeThemes,
+    SeriesRankService seriesRank) : ISeriesService
 {
     private static readonly TimeSpan StaleAfter = TimeSpan.FromDays(30);
 
@@ -219,6 +220,10 @@ public class SeriesService(
         var rankingSnapshot = await rankingService.GetSnapshotAsync(ct);
         var globalRankByAnimeId = allAnime.ToDictionary(a => a.Id, a => rankingSnapshot.RankOf(a.Id));
 
+        // The series' own rank (add-my-rank-badges design.md D4), from the same
+        // snapshot so the ranking is not loaded twice.
+        var myRank = await seriesRank.GetAsync(series.Id, rankingSnapshot, ct);
+
         var pictureOptions = SeriesPicturePool.Build(mainLineMembers);
         // A stored MAL choice is never re-validated away (design.md D9). A TMDB
         // one is not part of this MyAnimeList list: the TMDB sections offer it,
@@ -280,7 +285,9 @@ public class SeriesService(
             // main-line order, so a route switch is the client's filter and needs no
             // request. mainLineMembers holds no extra, and a version neighbour is
             // one. One local query however large the series, never AnimeThemes.
-            await animeThemes.GetForSeriesAsync(mainLineMembers.Select(m => m.AnimeId).ToList(), ct));
+            await animeThemes.GetForSeriesAsync(mainLineMembers.Select(m => m.AnimeId).ToList(), ct),
+            myRank.Rank,
+            myRank.RankedCount);
     }
 
     // --- Version slots (design.md D4/D5/D6, tasks 7.2-7.3) ---

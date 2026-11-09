@@ -74,7 +74,8 @@ public class SeriesServiceSetupBuildTests
             TmdbTestData.ArtworkService(db, new FakeTmdbClient(), apiKey: ""),
             TestIdMappings.Resolver(db),
             ScoreHistoryServiceTestKit.Create(db),
-            AnimeThemesReadsTestKit.Create(db));
+            AnimeThemesReadsTestKit.Create(db),
+            SeriesRankServiceTestKit.Create(db));
 
     private static async Task SeedAsync(DbContextOptions<AnimeTrackerDbContext> store, params AnimeMetadata[] anime)
     {

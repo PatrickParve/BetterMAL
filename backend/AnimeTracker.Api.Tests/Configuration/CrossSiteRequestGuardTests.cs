@@ -134,6 +134,7 @@ public class CrossSiteRequestGuardTests
     [
         "api/airing",
         "api/anime/{animeId:int}",
+        "api/anime/{animeId:int}/my-rank",   // read-only: where the anime stands in the ranking built from stored entries, no outside call, nothing written (AnimeRankingService.GetSnapshotAsync)
         "api/anime/{animeId:int}/score-history", // read-only: stored records, no outside call, nothing written (ScoreHistoryService)
         "api/anime/search",                  // writes: may enqueue a background series build (AnimeSearchService.ScheduleSeriesBuildForTopMatch)
         "api/anime/search/page",             // writes: may enqueue a background series build (AnimeSearchService.ScheduleSeriesBuildForTopMatch)
@@ -167,6 +168,7 @@ public class CrossSiteRequestGuardTests
         "api/season/{year:int}/{season}",
         "api/series/by-anime/{animeId:int}", // writes: builds/refreshes the series from MAL when missing, partial, or stale (SeriesService.GetSeriesAsync)
         "api/series/list",
+        "api/series/{seriesId:int}/my-rank", // read-only: where the series stands in the My average order, computed from stored members, no build, no outside call, nothing written (SeriesRankService)
         "api/series/{seriesId:int}/score-history", // read-only: stored records, no outside call, nothing written (ScoreHistoryService)
         "api/setup/status",                  // read-only: counts and the coordinator's in-memory state, no outside call (SetupStatusService)
         "api/studios/open",                  // writes: a studio nothing has taught the app yet costs one AniList read and a derived StudioLinks row; no MyAnimeList change, no list entry touched, no unsent edit lost (StudioLinkResolver)

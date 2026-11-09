@@ -174,6 +174,7 @@ builder.Services.AddScoped<SeriesRankingLookup>();
 
 // --- Series list (Series page) ---
 builder.Services.AddScoped<SeriesListService>();
+builder.Services.AddScoped<SeriesRankService>();
 
 // --- Main dashboard ---
 builder.Services.AddScoped<IMainDashboardService, MainDashboardService>();

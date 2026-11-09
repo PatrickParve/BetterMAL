@@ -1117,6 +1117,12 @@ export type SeriesDto = {
   // The main line's openings and endings, every alternative of a version slot
   // included and nothing from the extras.
   themes: SeriesThemesDto
+  // This series' place in my series ranking — the Series page's My average
+  // order — and how many series hold one (add-my-rank-badges): what the badge
+  // beside the title draws. myRank is null for a series with no my-average and
+  // for one the Series page does not list.
+  myRank: number | null
+  myRankedCount: number
 }
 
 // One point of a score history: a local calendar date as yyyy-MM-dd, which is
@@ -1269,6 +1275,22 @@ export type AnimeDetailDto = {
   // The anime's openings and endings, for every anime whether or not it is on
   // my list.
   themes: AnimeThemesDto
+  // Where this anime stands in my ranking, and how many anime the ranking
+  // holds (add-my-rank-badges): what the rank tile beside my box draws. null
+  // when the anime holds no rank — not in my list, unscored, at Plan to watch
+  // or not yet aired. myRankedCount is 0 when the anime carries no score of
+  // mine (the read did not build the ranking for it).
+  myRank: number | null
+  myRankedCount: number
+}
+
+// Where one anime or one series stands in my ranking, and how many the ranking
+// holds (add-my-rank-badges): the answer of the two my-rank endpoints, which a
+// page asks for after a change that can move the rank instead of reading the
+// anime or the series again. rank is null when it holds none.
+export type MyRankDto = {
+  rank: number | null
+  rankedCount: number
 }
 
 // Mirrors backend Services/Recap/RecapPeriod.cs / RecapEntrySelector.cs.

@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import {
   ApiError,
   getAnimeDetail,
+  getAnimeMyRank,
   getAnimeScoreHistory,
   refreshAnime,
   refreshAnimePictures,
@@ -11,6 +12,7 @@ import {
   setAnimePicture,
   updateEntry,
 } from "../api/client.ts";
+import { useRankingChanged } from "../api/rankingChanges.ts";
 import type {
   AnimeDetailDto,
   IncrementTarget,
@@ -26,6 +28,7 @@ import {
   pickerOptionCount,
 } from "../components/picturePickerSections.ts";
 import { ProgressBar } from "../components/ProgressBar.tsx";
+import { RankBadge } from "../components/RankBadge.tsx";
 import { RelatedAnimeOverlay } from "../components/RelatedAnimeOverlay.tsx";
 import { RevealControl } from "../components/RevealControl.tsx";
 import { ScoreHistoryOverlay } from "../components/ScoreHistoryOverlay.tsx";
@@ -259,6 +262,29 @@ export function AnimeDetailPage() {
   const increment = useEpisodeIncrement();
   const setEpisodesWatched = useSetEpisodesWatched();
   const reportFailure = useActionFailure();
+
+  // The rank tile follows every change that can move this anime's rank
+  // (add-my-rank-badges design.md D6): an entry save or removal, a ranking-editor
+  // reorder, a This or That placement, wherever it was made. Only the rank is
+  // fetched, never the anime again (anime-detail "Detail page reads itself once
+  // per visit"), and the answer is written into the page's own data so back and
+  // forward show the rank last shown. The counter makes the latest request win,
+  // and the id check drops an answer for an anime this page has since left. A
+  // failed fetch removes the tile rather than leave a rank that may no longer hold.
+  const rankRequestRef = useRef(0);
+  useRankingChanged(() => {
+    const requestId = ++rankRequestRef.current;
+    const forAnimeId = animeId;
+    const apply = (rank: { myRank: number | null; myRankedCount?: number }) => {
+      if (requestId !== rankRequestRef.current) return;
+      setDetail((prev) => (prev && prev.animeId === forAnimeId ? { ...prev, ...rank } : prev));
+    };
+    getAnimeMyRank(forAnimeId).then(
+      ({ rank, rankedCount }) => apply({ myRank: rank, myRankedCount: rankedCount }),
+      () => apply({ myRank: null }),
+    );
+  });
+
   // The header picture downloads at the hero width, with the original as the
   // fallback (tmdb-artwork, design D9). The landscape check reads the displayed
   // <img>: a rendition keeps the original's proportions, and a fallback swap
@@ -788,38 +814,47 @@ export function AnimeDetailPage() {
         </div>
 
         <div className="anime-detail-page__main">
-          <div className="anime-detail-page__score-boxes">
-            <section className="detail-box">
-              <p>
-                MAL score:{" "}
-                <span className="score--mal">
-                  <ScoreValue value={detail.malScore} completed={isScoreRevealableStatus(detail.entry?.status)} />
-                </span>
-              </p>
-              <p>
-                Rank: <RankValue rank={detail.rank} completed={isScoreRevealableStatus(detail.entry?.status)} />
-              </p>
-              <p>
-                Popularity:{" "}
-                {detail.popularityRank ? `#${detail.popularityRank}` : "—"}
-              </p>
-            </section>
-            {detail.entry && detail.entry.myScore != null && (
+          <div className="anime-detail-page__score-row">
+            <div className="anime-detail-page__score-boxes">
               <section className="detail-box">
                 <p>
-                  My score: <span className="score--mine">{detail.entry.myScore}</span>
+                  MAL score:{" "}
+                  <span className="score--mal">
+                    <ScoreValue value={detail.malScore} completed={isScoreRevealableStatus(detail.entry?.status)} />
+                  </span>
                 </p>
-                {detail.entry.rewatchCount !== 0 && (
-                  <p>Rewatch count: {detail.entry.rewatchCount}</p>
-                )}
-                {/* Completed keeps its "No info" placeholder unchanged; Rewatching shows the
-                    line only when a date is stored — a rewatch is a rewatch of a viewing that
-                    was already finished, so the stored date is neither lost nor made wrong by it. */}
-                {(detail.entry.status === "Completed" ||
-                  (detail.entry.status === "Rewatching" && detail.entry.completedAt !== null)) && (
-                  <p>Completed: {formatDate(detail.entry.completedAt)}</p>
-                )}
+                <p>
+                  Rank: <RankValue rank={detail.rank} completed={isScoreRevealableStatus(detail.entry?.status)} />
+                </p>
+                <p>
+                  Popularity:{" "}
+                  {detail.popularityRank ? `#${detail.popularityRank}` : "—"}
+                </p>
               </section>
+              {detail.entry && detail.entry.myScore != null && (
+                <section className="detail-box">
+                  <p>
+                    My score: <span className="score--mine">{detail.entry.myScore}</span>
+                  </p>
+                  {detail.entry.rewatchCount !== 0 && (
+                    <p>Rewatch count: {detail.entry.rewatchCount}</p>
+                  )}
+                  {/* Completed keeps its "No info" placeholder unchanged; Rewatching shows the
+                      line only when a date is stored — a rewatch is a rewatch of a viewing that
+                      was already finished, so the stored date is neither lost nor made wrong by it. */}
+                  {(detail.entry.status === "Completed" ||
+                    (detail.entry.status === "Rewatching" && detail.entry.completedAt !== null)) && (
+                    <p>Completed: {formatDate(detail.entry.completedAt)}</p>
+                  )}
+                </section>
+              )}
+            </div>
+            {/* My rank (anime-detail "My rank stands beside my box"): shown whenever the
+                ranking holds this anime, which is the ranking's coverage and nothing
+                else — a dropped or Music entry shows its rank too. It joins the boxes'
+                row rather than the boxes' grid, so the two boxes keep sharing one size. */}
+            {detail.myRank != null && (
+              <RankBadge rank={detail.myRank} rankedCount={detail.myRankedCount} subject="anime" form="tile" />
             )}
           </div>
 

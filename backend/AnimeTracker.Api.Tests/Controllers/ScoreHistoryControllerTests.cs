@@ -23,12 +23,12 @@ public class ScoreHistoryControllerTests
 
     private static AnimeDetailController AnimeController(AnimeTrackerDbContext db) =>
         new(detailService: null!, scoreHistoryService: ScoreHistoryServiceTestKit.Create(db), artworkSelectionService: null!,
-            pictureRefreshService: null!, tmdbArtwork: null!, metadataRepository: null!);
+            pictureRefreshService: null!, tmdbArtwork: null!, metadataRepository: null!, rankingService: null!);
 
     private static SeriesController SeriesController(AnimeTrackerDbContext db) =>
         new(seriesService: null!, scoreHistoryService: ScoreHistoryServiceTestKit.Create(db), seriesListService: null!,
             bulkBuildTrigger: null!, bulkBuildProgress: null!, artworkSelectionService: null!, pictureRefreshService: null!,
-            tmdbArtwork: null!, metadataRepository: null!);
+            tmdbArtwork: null!, metadataRepository: null!, seriesRankService: null!);
 
     private static async Task SeedAsync(AnimeTrackerDbContext db)
     {

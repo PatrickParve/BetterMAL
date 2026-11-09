@@ -18,7 +18,8 @@ public class SeriesController(
     IArtworkSelectionService artworkSelectionService,
     IPictureRefreshService pictureRefreshService,
     ITmdbArtworkService tmdbArtwork,
-    IAnimeMetadataRepository metadataRepository) : ControllerBase
+    IAnimeMetadataRepository metadataRepository,
+    SeriesRankService seriesRankService) : ControllerBase
 {
     /// <summary>The Series page's whole-list read (add-series-browser
     /// design.md D1). Builds nothing, refreshes nothing, and makes no MAL
@@ -43,6 +44,17 @@ public class SeriesController(
             return NotFound();
         }
     }
+
+    /// <summary>Where one series stands in my series ranking — the Series page's
+    /// My average order — and how many series hold a rank (add-my-rank-badges
+    /// design.md D4): what the series page's badge fetches again after a change
+    /// that can move it, instead of reading the series afresh. A read of stored
+    /// members: it builds nothing, makes no MyAnimeList request and writes
+    /// nothing. A series with no rank — no my-average, or not listed — answers a
+    /// null rank with a 200.</summary>
+    [HttpGet("api/series/{seriesId:int}/my-rank")]
+    public async Task<IActionResult> GetMyRank(int seriesId, CancellationToken ct) =>
+        Ok(await seriesRankService.GetAsync(seriesId, ranking: null, ct));
 
     /// <summary>A series' MAL score history: its main line's average over
     /// time, with a marker for each entry that first aired while it was

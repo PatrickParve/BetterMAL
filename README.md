@@ -23,6 +23,8 @@ its own.
   stats, favourite genres and studios, favourite seasons, where your scores
   differ most from MyAnimeList's, and rank your favourites, by dragging them or
   by picking between two at a time.
+- **My rank**: see where an anime stands in your ranking on its page, and where
+  a series stands among your series on its page.
 - **Updates**: news about the shows on your list, such as a sequel announced, a
   start date or episode count released, or a broadcast moving.
 - **Hide scores**: hide MyAnimeList's scores everywhere, so they don't sway

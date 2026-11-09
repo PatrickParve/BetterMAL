@@ -30,6 +30,7 @@ import type {
   HigherOrLowerStateDto,
   JobStatusDto,
   MainDashboardDto,
+  MyRankDto,
   MyListItemDto,
   PendingReconciliationDiffDto,
   ProfileDto,
@@ -66,6 +67,7 @@ import type {
   YearRefreshResultDto,
 } from './types.ts'
 import { reportReachable, reportUnreachable } from './connectionStatus.ts'
+import { notifyRankingChanged } from './rankingChanges.ts'
 
 // GETs in flight, keyed by URL: a GET issued while an identical one is still
 // outstanding joins it instead of opening a second request (kills React
@@ -80,9 +82,13 @@ import { reportReachable, reportUnreachable } from './connectionStatus.ts'
 // previous one completed is a fresh request.
 const inFlightGets = new Map<string, Promise<Response>>()
 
-async function fetchRaw(input: string, init?: RequestInit): Promise<Response> {
+// `joinInFlight: false` opts one GET out of the above: it always opens its own request,
+// and is not offered to others to join. For a read that follows a write and must see
+// it (the rank badges' reads after a save), since joining a read that began before
+// the write would hand back an answer from before it.
+async function fetchRaw(input: string, init?: RequestInit, joinInFlight = true): Promise<Response> {
   const isGet = !init?.method || init.method.toUpperCase() === 'GET'
-  if (!isGet) return performFetch(input, init)
+  if (!isGet || !joinInFlight) return performFetch(input, init)
 
   const existing = inFlightGets.get(input)
   if (existing) return (await existing).clone()
@@ -165,8 +171,8 @@ async function readErrorReason(res: Response): Promise<string | null> {
   }
 }
 
-async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
-  const res = await fetchRaw(input, init)
+async function fetchJson<T>(input: string, init?: RequestInit, joinInFlight = true): Promise<T> {
+  const res = await fetchRaw(input, init, joinInFlight)
   if (!res.ok) throw new ApiError(input, res.status, await readErrorReason(res))
   return res.json() as Promise<T>
 }
@@ -263,16 +269,24 @@ export function searchThemes(query: string, limit: number, signal?: AbortSignal)
   return fetchJson<ThemeSearchResponseDto>(`/api/themes/search?q=${encodeURIComponent(query)}&limit=${limit}`, { signal })
 }
 
-export function updateEntry(animeId: number, request: UserAnimeEntryEditRequest): Promise<UserAnimeEntryDto> {
-  return fetchJson<UserAnimeEntryDto>(`/api/anime/${animeId}/entry`, {
+// updateEntry, deleteEntry, putTopAnimeOrder, moveFavouriteAdjacent and
+// saveThisOrThat each tell the rank badges the ranking may have moved, once the
+// save has succeeded (add-my-rank-badges design.md D6). Done here, in the client
+// layer, so every caller — the app-root overlays included — is covered with no
+// prop threading. A failed save changed nothing and tells no one.
+export async function updateEntry(animeId: number, request: UserAnimeEntryEditRequest): Promise<UserAnimeEntryDto> {
+  const entry = await fetchJson<UserAnimeEntryDto>(`/api/anime/${animeId}/entry`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   })
+  notifyRankingChanged()
+  return entry
 }
 
-export function deleteEntry(animeId: number): Promise<void> {
-  return fetchVoid(`/api/anime/${animeId}/entry`, { method: 'DELETE' })
+export async function deleteEntry(animeId: number): Promise<void> {
+  await fetchVoid(`/api/anime/${animeId}/entry`, { method: 'DELETE' })
+  notifyRankingChanged()
 }
 
 export function getDashboard(): Promise<MainDashboardDto> {
@@ -428,19 +442,36 @@ export function getRanking(mediaType: TopAnimeMediaType, score?: number): Promis
 
 // Supersedes the old `/api/top-anime/order` (add-anime-ranking design.md
 // D4/D7) — same payload and merge semantics, new home next to getRanking.
-export function putTopAnimeOrder(
+export async function putTopAnimeOrder(
   mediaType: TopAnimeMediaType,
   tiers: { score: number; animeIds: number[] }[],
 ): Promise<void> {
-  return fetchVoid('/api/rankings/order', {
+  await fetchVoid('/api/rankings/order', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ mediaType, tiers }),
   })
+  notifyRankingChanged()
 }
 
 export function getAnimeDetail(animeId: number): Promise<AnimeDetailDto> {
   return fetchJson<AnimeDetailDto>(`/api/anime/${animeId}`)
+}
+
+// Where one anime stands in my ranking and how many anime it holds
+// (add-my-rank-badges design.md D3). What the detail page's rank tile asks for
+// after a change that can move the rank: only the rank, never the anime again.
+export function getAnimeMyRank(animeId: number): Promise<MyRankDto> {
+  // Never joins a rank read already in flight: when two saves land close together,
+  // the later read must be its own request, or it would be handed the earlier read's
+  // answer, from before the later save (add-my-rank-badges 7.4).
+  return fetchJson<MyRankDto>(`/api/anime/${animeId}/my-rank`, undefined, false)
+}
+
+// The series twin: a series' place in the Series page's My average order and how
+// many series hold a rank (design.md D4), for the series page's badge.
+export function getSeriesMyRank(seriesId: number): Promise<MyRankDto> {
+  return fetchJson<MyRankDto>(`/api/series/${seriesId}/my-rank`, undefined, false) // as getAnimeMyRank
 }
 
 // Stored-data reads of an anime's or a series' MAL score history: no MAL call,
@@ -540,12 +571,13 @@ export function rebuildSeries(animeId: number): Promise<SeriesDto> {
 // immediately after promotedAnimeId in the whole-library ranking's shared
 // score tier, so the favourite list a series page shows — sorted by that
 // same ranking — agrees with the ranking editor everywhere else it's read.
-export function moveFavouriteAdjacent(promotedAnimeId: number, demotedAnimeId: number): Promise<void> {
-  return fetchVoid('/api/rankings/move-adjacent', {
+export async function moveFavouriteAdjacent(promotedAnimeId: number, demotedAnimeId: number): Promise<void> {
+  await fetchVoid('/api/rankings/move-adjacent', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ promotedAnimeId, demotedAnimeId }),
   })
+  notifyRankingChanged()
 }
 
 // series-identity: the D8 contiguous-trim rule is enforced server-side and
@@ -836,12 +868,13 @@ export function undoThisOrThat(score: number, version: number): Promise<ThisOrTh
 }
 
 // Writes the finished order into my ranking and ends the ranking.
-export function saveThisOrThat(score: number, version: number): Promise<void> {
-  return fetchVoid(`/api/this-or-that/${score}/save`, {
+export async function saveThisOrThat(score: number, version: number): Promise<void> {
+  await fetchVoid(`/api/this-or-that/${score}/save`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ version }),
   })
+  notifyRankingChanged()
 }
 
 // Ends the ranking and leaves my ranking as it was (Keep my old order, Done). The

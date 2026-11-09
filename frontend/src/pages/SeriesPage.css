@@ -102,8 +102,38 @@
 
 .series-page__header-info h1 {
   margin: 0;
-  font-size: 28px;
+  font-size: var(--series-title-size);
   letter-spacing: normal;
+}
+
+/* The title and my rank badge (add-my-rank-badges design.md D8). The h1 takes
+   only the width it needs, so a short title leaves the badge right after its last
+   word, and shrinks and wraps beside the badge when it is long. The badge sits in
+   a slot with the h1's own font size and line height, exactly one line high, which
+   centres the pill on the title's first line without making that line any taller;
+   the slot never grows with a wrapped title because its height is fixed, and the
+   pill is set in rem, so the heading's size does not move it. The same header-info
+   block serves the landscape picture's arrangement, so no second rule is needed. */
+.series-page__title-row {
+  --series-title-size: 28px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.series-page__title-row h1 {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.series-page__rank-slot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  height: 1lh;
+  font-size: var(--series-title-size);
+  line-height: inherit;
 }
 
 .series-page__header-meta {

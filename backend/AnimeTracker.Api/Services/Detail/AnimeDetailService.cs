@@ -8,6 +8,7 @@ using AnimeTracker.Api.Services.Entries;
 using AnimeTracker.Api.Services.IdMapping;
 using AnimeTracker.Api.Services.Infrastructure;
 using AnimeTracker.Api.Services.Metadata;
+using AnimeTracker.Api.Services.Ranking;
 using AnimeTracker.Api.Services.Relations;
 using AnimeTracker.Api.Services.ScoreHistory;
 using AnimeTracker.Api.Services.Tmdb;
@@ -32,6 +33,7 @@ public class AnimeDetailService(
     IAnimeIdMappingResolver idMappings,
     IScoreHistoryService scoreHistory,
     IAnimeThemesReads animeThemes,
+    IAnimeRankingService rankingService,
     ILogger<AnimeDetailService> logger) : IAnimeDetailService
 {
     public async Task<AnimeDetailDto> GetDetailAsync(int animeId, CancellationToken ct = default)
@@ -138,9 +140,18 @@ public class AnimeDetailService(
         // unchanged.
         var themes = await animeThemes.GetForAnimeAsync(animeId, ct);
 
+        // My rank (spec anime-detail "The my-rank tile stays current", design.md
+        // D3): the ranking is built only for an anime whose entry carries a
+        // score, since nothing else can hold a rank, so the read costs an anime
+        // outside my list nothing. Read after the settle above, so an entry it
+        // just moved is ranked as it now stands.
+        var myRank = anime.UserEntry is { MyScore: not null }
+            ? MyRankDto.From(await rankingService.GetSnapshotAsync(ct), animeId)
+            : new MyRankDto(null, 0);
+
         return AnimeDetailDto.FromEntity(
             anime, episodesAired, nextEpisode, aniListId, relatedMetadataByAnimeId, inSeries, refreshFailed, relations,
-            picturesFetchPending, tmdb, tmdbFetchPending, imdbIds, hasScoreHistory, themes);
+            picturesFetchPending, tmdb, tmdbFetchPending, imdbIds, hasScoreHistory, themes, myRank);
     }
 
     private static bool NeedsFullDetailFetch(AnimeMetadata? anime) =>

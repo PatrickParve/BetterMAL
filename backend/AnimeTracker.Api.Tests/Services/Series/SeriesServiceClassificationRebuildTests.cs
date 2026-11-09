@@ -46,7 +46,8 @@ public class SeriesServiceClassificationRebuildTests
             TmdbTestData.ArtworkService(db, new FakeTmdbClient(), apiKey: ""),
             TestIdMappings.Resolver(db),
             ScoreHistoryServiceTestKit.Create(db),
-            AnimeThemesReadsTestKit.Create(db));
+            AnimeThemesReadsTestKit.Create(db),
+            SeriesRankServiceTestKit.Create(db));
 
     [Fact]
     public async Task SeriesBuiltBeforeClassificationRevisionIsRebuiltOnRead()

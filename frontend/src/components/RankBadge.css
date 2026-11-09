@@ -1,0 +1,158 @@
+/* The rank badge (add-my-rank-badges design.md D1, D2, D9). Border, tint and
+   number are each written once, against three local aliases (--rank,
+   --rank-bg, --rank-border) that each band sets from the colour tokens the
+   Top anime page, the recap podium and the recap score board already read
+   (--medal-*, --tier-*), so a change to one of those changes the badge with
+   it and no colour is repeated here. */
+.rank-badge {
+  /* The plain band (rank 51 and below): the page's ordinary border and text
+     colours with no tint, like .detail-box. */
+  --rank: var(--text);
+  --rank-bg: transparent;
+  --rank-border: var(--border);
+
+  position: relative;
+  /* Keeps the first-place drift's layer (z-index 0) inside the badge, under
+     its text, instead of joining the page's stacking order. */
+  isolation: isolate;
+  overflow: hidden;
+  box-sizing: border-box;
+  display: inline-flex;
+  border: 1px solid var(--rank-border);
+  background: var(--rank-bg);
+  white-space: nowrap;
+  /* A label, not a control: no pointer affordance, no hover state, no focus. */
+  cursor: default;
+}
+
+.rank-badge--gold {
+  --rank: var(--medal-gold);
+  --rank-bg: var(--medal-gold-bg);
+  --rank-border: var(--medal-gold-border);
+}
+.rank-badge--silver {
+  --rank: var(--medal-silver);
+  --rank-bg: var(--medal-silver-bg);
+  --rank-border: var(--medal-silver-border);
+}
+.rank-badge--bronze {
+  --rank: var(--medal-bronze);
+  --rank-bg: var(--medal-bronze-bg);
+  --rank-border: var(--medal-bronze-border);
+}
+/* Rank 4-10 uses the score board's 10 colour flat (border, tint and number),
+   not its purple-to-white sheen: that gradient is drawn for a wide header bar,
+   and on a pill it would make the number hard to read at the sheen's peak. */
+.rank-badge--apex {
+  --rank: var(--tier-apex);
+  --rank-bg: var(--tier-apex-bg);
+  --rank-border: var(--tier-apex-border);
+}
+.rank-badge--red {
+  --rank: var(--tier-red);
+  --rank-bg: var(--tier-red-bg);
+  --rank-border: var(--tier-red-border);
+}
+.rank-badge--blue {
+  --rank: var(--tier-blue);
+  --rank-bg: var(--tier-blue-bg);
+  --rank-border: var(--tier-blue-border);
+}
+
+/* Text sits above the first-place drift's layer. */
+.rank-badge > span {
+  position: relative;
+  z-index: 1;
+}
+
+.rank-badge__number {
+  color: var(--rank);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The tile: label, number, "of M", centred, one coloured border and tint over
+   the whole tile. Its width fits its content, and the number's floor of four
+   characters (#999) keeps a three digit rank and total from wrapping or from
+   changing the tile's width as ranks change. As a flex item beside the score
+   boxes it is stretched to their height by the row (AnimeDetailPage.css). */
+.rank-badge--tile {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.rank-badge--tile .rank-badge__label,
+.rank-badge--tile .rank-badge__total {
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.rank-badge--tile .rank-badge__number {
+  min-width: 4ch;
+  font-size: 1.5rem;
+}
+
+/* The inline pill: only #N, at a fixed size in rem so it does not follow the
+   heading it sits beside. The page centres it on the heading's first line in a
+   wrapper one line high, so it never makes that line taller. */
+.rank-badge--inline {
+  align-items: center;
+  justify-content: center;
+  height: 1.625rem;
+  padding: 0 0.625rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+/* First place drifts: the Top anime #1 card's slow, continuous passing of light
+   (TopAnimePage.css .top-anime-showcase__item--rank-1::after), scaled to a
+   badge. The same two repeat-x gradient layers at about a third of the widths
+   (56px and 84px, so travel = LCM = 168px) and the same pace, 24px a second
+   (7s a cycle). Gold only, so it can never read as another band's colour, and
+   gentler than the card's (12% and 8% against 22% and 14%): it passes behind a
+   number, not a poster, so the number's contrast has to hold at the peak.
+   The layer is clipped by the badge's overflow, overhangs it by more than the
+   travel on each side so no uncovered edge slides into view, and moves by
+   transform only, so nothing resizes, reflows or shifts. It is a pseudo-element,
+   so it has no place in the accessibility tree, and pointer-events: none keeps
+   it from ever taking a click. */
+@keyframes rank-badge-wave {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(168px, 0, 0);
+  }
+}
+
+.rank-badge--gold::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  inset: 0 -200px;
+  background-image:
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--rank) 12%, transparent), transparent),
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--rank) 8%, transparent), transparent);
+  background-size: 56px 100%, 84px 100%;
+  background-position: 0 0, 0 0;
+  background-repeat: repeat-x, repeat-x;
+  /* 168px = LCM(56, 84): a whole number of periods of both tiled layers, so the
+     end frame is pixel-identical to the start and `infinite` loops with no seam. */
+  animation: rank-badge-wave 7s linear infinite;
+  pointer-events: none;
+}
+
+/* Reduced motion: the drift is switched off, not merely stopped, so the badge is
+   plain gold — a stopped layer would leave a band of light parked on it. */
+@media (prefers-reduced-motion: reduce) {
+  .rank-badge--gold::after {
+    display: none;
+  }
+}

@@ -28,7 +28,8 @@ public class SeriesControllerBulkBuildTests
         var listService = new SeriesListService(new SeriesRankingLookup(db), new UnusedEpisodeScheduleService(), new UnusedAnimeRankingService());
         return new SeriesController(
             new UnusedSeriesService(), new UnusedScoreHistoryService(), listService, trigger, tracker, new UnusedArtworkSelectionService(),
-            new UnusedPictureRefreshService(), new FakeTmdbArtworkService(), new UnusedAnimeMetadataRepository());
+            new UnusedPictureRefreshService(), new FakeTmdbArtworkService(), new UnusedAnimeMetadataRepository(),
+            seriesRankService: null!);
     }
 
     [Fact]

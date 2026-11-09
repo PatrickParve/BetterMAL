@@ -8,6 +8,7 @@ using AnimeTracker.Api.Services.Series;
 using AnimeTracker.Api.Tests.Services.AnimeThemes;
 using AnimeTracker.Api.Tests.Services.IdMapping;
 using AnimeTracker.Api.Tests.Services.ScoreHistory;
+using AnimeTracker.Api.Tests.Services.Series;
 using AnimeTracker.Api.Tests.Services.Tmdb;
 using Microsoft.EntityFrameworkCore;
 using SeriesModel = AnimeTracker.Api.Models.Series;
@@ -30,7 +31,8 @@ public class SeriesSearchMalScoreTests
     private static SeriesService CreateSeriesService(AnimeTrackerDbContext db) =>
         new(db, graphBuilder: null!, new RefreshGate(), new FakeEpisodeScheduleService(), new NoOpAnimeRankingService(),
             TmdbTestData.ArtworkService(db, new FakeTmdbClient(), apiKey: ""), TestIdMappings.Resolver(db),
-            ScoreHistoryServiceTestKit.Create(db), AnimeThemesReadsTestKit.Create(db));
+            ScoreHistoryServiceTestKit.Create(db), AnimeThemesReadsTestKit.Create(db),
+            SeriesRankServiceTestKit.Create(db));
 
     private static SeriesMember Member(
         int animeId, int order, bool mainLine = true, int? slotKey = null, int? branchHead = null,

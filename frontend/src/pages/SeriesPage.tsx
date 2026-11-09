@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   ApiError,
   getSeries,
+  getSeriesMyRank,
   getSeriesScoreHistory,
   moveFavouriteAdjacent,
   rebuildSeries,
@@ -12,6 +13,7 @@ import {
   setSeriesPicture,
   setSeriesTitle,
 } from '../api/client.ts'
+import { useRankingChanged } from '../api/rankingChanges.ts'
 import type {
   SeriesAverageDto,
   SeriesDto,
@@ -29,6 +31,7 @@ import { LoadingNotice } from '../components/LoadingNotice.tsx'
 import { PicturePickerOverlay } from '../components/PicturePickerOverlay.tsx'
 import { malSections, pickerOptionCount, seriesTmdbSections } from '../components/picturePickerSections.ts'
 import { ProgressBar } from '../components/ProgressBar.tsx'
+import { RankBadge } from '../components/RankBadge.tsx'
 import { RevealControl } from '../components/RevealControl.tsx'
 import { ScoreChip } from '../components/ScoreChip.tsx'
 import { ScoreHistoryOverlay } from '../components/ScoreHistoryOverlay.tsx'
@@ -477,6 +480,34 @@ export function SeriesPage() {
   // D12). It is separate from the highest-MAL stat's reveal above.
   const [showScoreHistory, setShowScoreHistory] = useState(false)
   const [historyRevealed, revealHistory] = useScoreReveal()
+
+  // The rank badge follows every change that can move this series' rank
+  // (add-my-rank-badges design.md D6; series-page "The series rank badge stays
+  // current"): an entry editor or completion prompt save, a favourite reorder, a
+  // ranking-editor reorder, a This or That placement, wherever it was made. Only
+  // the rank is fetched, never the series again, and it is written into the page's
+  // own data so back and forward show the rank last shown. The counter makes the
+  // latest request win, and the id check drops an answer for a series this page has
+  // since left. A failed fetch removes the badge rather than leave a rank that may
+  // no longer hold. What the stats box recomputes in place is not touched.
+  const rankRequestRef = useRef(0)
+  useRankingChanged(() => {
+    if (!data?.found) return
+    const forSeriesId = data.series.seriesId
+    const requestId = ++rankRequestRef.current
+    const apply = (rank: { myRank: number | null; myRankedCount?: number }) => {
+      if (requestId !== rankRequestRef.current) return
+      setData((prev) =>
+        prev && prev.found && prev.series.seriesId === forSeriesId
+          ? { found: true, series: { ...prev.series, ...rank } }
+          : prev,
+      )
+    }
+    getSeriesMyRank(forSeriesId).then(
+      ({ rank, rankedCount }) => apply({ myRank: rank, myRankedCount: rankedCount }),
+      () => apply({ myRank: null }),
+    )
+  })
 
   // Bounded pool backfill (design D6) — mirrors the anime detail page's
   // picture backfill: fire once per series while members remain unfetched,
@@ -1182,7 +1213,17 @@ export function SeriesPage() {
         )}
         <div className="series-page__header-info">
           <span className="series-page__label">Series</span>
-          <h1>{displayTitle}</h1>
+          {/* The badge sits beside the title, outside the <h1>, so the heading's text and
+              copied text stay the title alone (series-page "The series page shows my rank
+              for the series beside its title"). */}
+          <div className="series-page__title-row">
+            <h1>{displayTitle}</h1>
+            {series.myRank != null && (
+              <span className="series-page__rank-slot">
+                <RankBadge rank={series.myRank} rankedCount={series.myRankedCount} subject="series" form="inline" />
+              </span>
+            )}
+          </div>
           <div className="series-page__header-meta">
             <SeriesStatusPill status={series.status} />
             <SeriesCompletionBadge badge={badge} behindEpisodes={behind} />

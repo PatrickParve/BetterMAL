@@ -240,4 +240,10 @@ public record SeriesDto(
     // switching the picked route is the client's filter and costs no request.
     // Extras are never here, and a version neighbour is an extra. A local read,
     // never a request to AnimeThemes, however large the series.
-    SeriesThemesDto Themes);
+    SeriesThemesDto Themes,
+    // This series' place in my series ranking — the Series page's My average
+    // order — and how many series hold one (add-my-rank-badges): what the badge
+    // beside the title draws. MyRank is null for a series with no my-average and
+    // for one the Series page does not list.
+    int? MyRank,
+    int MyRankedCount);
