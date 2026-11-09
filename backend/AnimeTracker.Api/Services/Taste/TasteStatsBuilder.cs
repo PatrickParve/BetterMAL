@@ -279,11 +279,12 @@ public static class TasteStatsBuilder
     /// <summary>The anime of the counted set I scored 8 or higher that are outside
     /// MyAnimeList's 1,000 most popular, least popular first: ties fall to my score,
     /// then my ranking's order, then the title. An anime with no stored popularity
-    /// rank does not qualify.</summary>
+    /// rank does not qualify, and neither does a music video, PV or CM.</summary>
     public static List<TasteGemDto> HiddenGems(
         IReadOnlyList<UserAnimeEntry> counted, AnimeRankingSnapshot rankingSnapshot, int limit) =>
         counted
-            .Where(e => e.MyScore is >= HiddenGemMinimumScore && e.Anime.PopularityRank is > HiddenGemPopularityFloor)
+            .Where(e => e.MyScore is >= HiddenGemMinimumScore && e.Anime.PopularityRank is > HiddenGemPopularityFloor
+                && !RankBandResolver.IsShortFormMediaType(e.Anime.MediaType))
             .OrderByDescending(e => e.Anime.PopularityRank!.Value)
             .ThenByDescending(e => e.MyScore!.Value)
             .ThenBy(e => GroupRanking.RankKey(rankingSnapshot, e.AnimeId))

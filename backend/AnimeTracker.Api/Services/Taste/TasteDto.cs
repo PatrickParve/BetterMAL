@@ -36,7 +36,7 @@ public record TasteStudioDto(
 public record TasteComboDto(List<string> Genres, int AnimeCount);
 
 /// <summary>A hidden gem: an anime I scored 8 or higher outside MyAnimeList's
-/// 1,000 most popular. <c>PopularityRank</c> is MyAnimeList's own rank for it,
+/// 1,000 most popular, other than a music video, PV or CM. <c>PopularityRank</c> is MyAnimeList's own rank for it,
 /// shown in full — it is not derived from the community score.</summary>
 public record TasteGemDto(
     int AnimeId,

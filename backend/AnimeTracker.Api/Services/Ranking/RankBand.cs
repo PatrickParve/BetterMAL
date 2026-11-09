@@ -25,6 +25,13 @@ public static class RankBandResolver
         "music", "cm", "pv",
     };
 
+    /// <summary>Whether a media type is one of the short forms (music video, PV,
+    /// CM) the ranking sets apart from hand-ordered anime. Anything else that
+    /// needs to treat these as not-real-series material, such as the hidden
+    /// gems, asks here so the list of types lives in one place.</summary>
+    public static bool IsShortFormMediaType(string? mediaType) =>
+        mediaType is not null && ShortFormMediaTypes.Contains(mediaType);
+
     /// <summary>Dropped is checked before short form (design.md D2), which
     /// settles the dropped-music-video case in favour of the very bottom.
     /// The aired test reuses <see cref="AiredEpisodeGate.HasAired"/> with no
@@ -47,7 +54,7 @@ public static class RankBandResolver
         if (entry.Status == WatchStatus.Dropped)
             return RankBand.Dropped;
 
-        if (entry.Anime.MediaType is { } mediaType && ShortFormMediaTypes.Contains(mediaType))
+        if (IsShortFormMediaType(entry.Anime.MediaType))
             return RankBand.ShortForm;
 
         return RankBand.HandOrdered;

@@ -20,7 +20,8 @@ public class TasteStatsBuilderTests
     private static UserAnimeEntry Entry(
         int id, string[]? genres = null, string[]? studios = null, int? score = null,
         WatchStatus status = WatchStatus.Completed, int? popularity = null, string? source = null,
-        DateOnly? airedFrom = null, string? title = null, int rewatchCount = 0, int? totalEpisodes = null) =>
+        DateOnly? airedFrom = null, string? title = null, int rewatchCount = 0, int? totalEpisodes = null,
+        string? mediaType = null) =>
         new()
         {
             AnimeId = id,
@@ -35,6 +36,7 @@ public class TasteStatsBuilderTests
                 Source = source,
                 AiredFrom = airedFrom,
                 TotalEpisodes = totalEpisodes,
+                MediaType = mediaType,
             },
             MyScore = score,
             Status = status,
@@ -612,6 +614,40 @@ public class TasteStatsBuilderTests
         List<UserAnimeEntry> counted = [Entry(1, score: 10, popularity: null), Entry(2, score: null, popularity: 5000)];
 
         Assert.Empty(TasteStatsBuilder.HiddenGems(counted, NoRanking, limit: 10));
+    }
+
+    [Theory]
+    [InlineData("music")]
+    [InlineData("pv")]
+    [InlineData("cm")]
+    [InlineData("MUSIC")]
+    public void AMusicVideoPvOrCmIsNeverAHiddenGem(string mediaType)
+    {
+        List<UserAnimeEntry> counted =
+        [
+            Entry(1, score: 10, popularity: 30000, mediaType: mediaType),
+            Entry(2, score: 8, popularity: 20000, mediaType: "tv"),
+        ];
+
+        var gem = Assert.Single(TasteStatsBuilder.HiddenGems(counted, NoRanking, limit: 10));
+
+        Assert.Equal(2, gem.AnimeId);
+    }
+
+    [Fact]
+    public void TheOtherMediaTypesAndAnUnknownOneStillQualify()
+    {
+        List<UserAnimeEntry> counted =
+        [
+            Entry(1, score: 9, popularity: 5000, mediaType: "tv"),
+            Entry(2, score: 9, popularity: 5000, mediaType: "movie"),
+            Entry(3, score: 9, popularity: 5000, mediaType: "ova"),
+            Entry(4, score: 9, popularity: 5000, mediaType: "ona"),
+            Entry(5, score: 9, popularity: 5000, mediaType: "special"),
+            Entry(6, score: 9, popularity: 5000, mediaType: null),
+        ];
+
+        Assert.Equal(6, TasteStatsBuilder.HiddenGems(counted, NoRanking, limit: 10).Count);
     }
 
     [Fact]
